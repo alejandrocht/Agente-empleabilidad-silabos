@@ -169,8 +169,7 @@ def generate_cypher(question: str, schema_text: str, previous_error: str | None 
 def run_neo4j_read_query(cypher: str) -> list[dict]:
     validate_read_only_cypher(cypher)
     with neo4j_driver().session() as session:
-        records = session.execute_read(lambda tx: tx.run(cypher))
-        return [dict(record) for record in records]
+        return session.execute_read(lambda tx: [dict(record) for record in tx.run(cypher)])
 
 
 @tool
