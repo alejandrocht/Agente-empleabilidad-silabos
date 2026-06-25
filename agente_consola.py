@@ -103,6 +103,7 @@ def build_schema_text() -> str:
     lines.append("REGLAS IMPORTANTES")
     lines.append("- Todos los IDs son hashes con prefijo y ya existen en las propiedades id_*.")
     lines.append("- Para buscar texto usa SIEMPRE la clausula CONTAINS con nombre_norm (ej: c.nombre_norm CONTAINS 'sistemas') en lugar de igual (=). Pon el texto en minusculas y sin tildes.")
+    lines.append("- IMPORTANTE: Si el usuario te pregunta sobre una entidad específica (ej. una Carrera, un Puesto), PRIMERO usa la herramienta para hacer una consulta Cypher exploratoria y validar el nombre real en la base de datos. Luego, haz la consulta final.")
     lines.append("- No inventes labels, relaciones ni propiedades fuera de este schema.")
     lines.append("- Solo genera consultas de lectura: MATCH/WITH/RETURN/CALL db.*.")
     lines.append("- Usa LIMIT 25 salvo que el usuario pida conteo, promedio o ranking especifico.")
