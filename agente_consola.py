@@ -231,7 +231,9 @@ def assistant_node(state: AgentState) -> dict:
     system_prompt = f"""
     Eres el agente de consola CIAR.
 
-    Responde en espanol claro y breve. Para preguntas sobre datos, usa SIEMPRE
+    RESPONDE EXCLUSIVAMENTE EN ESPAÑOL. ESTÁ TOTALMENTE PROHIBIDO USAR CHINO, INGLÉS U OTRO IDIOMA.
+
+    Responde claro y breve. Para preguntas sobre datos, usa SIEMPRE
     la tool buscar_grafo_ciar. Para preguntas sobre estructura del grafo, usa
     describir_ontologia_ciar. No inventes cifras: si Neo4j devuelve vacio, dilo.
 
@@ -337,7 +339,10 @@ def run_console(model_name: str | None = None) -> None:
                             try:
                                 data = json.loads(msg.content)
                                 if "cypher" in data:
-                                    print(f"  [Razonamiento] 🔍 Cypher generado para Neo4j:\n    \033[96m{data['cypher']}\033[0m")
+                                    path_match = re.findall(r'[:]([A-Za-z_]+)(?=[\]\)\s{])', data['cypher'].split('RETURN')[0].split('WHERE')[0])
+                                    if path_match:
+                                        print(f"  [Razonamiento] 🗺️  Recorrido de la IA: \033[93m{' ➔ '.join(path_match)}\033[0m")
+                                    print(f"  [Razonamiento] 🔍 Código exacto en Neo4j:\n    \033[96m{data['cypher']}\033[0m")
                                     print(f"  [Razonamiento] 📊 Neo4j devolvió {data.get('row_count', 0)} resultados.")
                                     if data.get("rows"):
                                         muestra = str(data["rows"][0])[:150]
