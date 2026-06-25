@@ -323,11 +323,24 @@ def run_console(model_name: str | None = None) -> None:
                     tool_calls = getattr(message, "tool_calls", None)
                     if tool_calls:
                         names = ", ".join(call["name"] for call in tool_calls)
-                        print(f"  LangGraph -> tools: {names}")
+                        print(f"  [Camino] 🤖 El agente decidió usar la herramienta: {names}")
                     elif message.content:
                         final_answer = str(message.content)
                 if "tools" in update:
-                    print("  Neo4j -> resultado recibido")
+                    messages = update["tools"]["messages"]
+                    for msg in messages:
+                        if msg.name == "buscar_grafo_ciar":
+                            try:
+                                data = json.loads(msg.content)
+                                if "cypher" in data:
+                                    print(f"  [Razonamiento] 🔍 Cypher generado para Neo4j:\n    \033[96m{data['cypher']}\033[0m")
+                                    print(f"  [Razonamiento] 📊 Neo4j devolvió {data.get('row_count', 0)} resultados.")
+                                elif "error" in data:
+                                    print(f"  [Error] ❌ {data['error']}")
+                            except Exception:
+                                pass
+                        elif msg.name == "describir_ontologia_ciar":
+                            print("  [Razonamiento] 📖 El agente revisó la estructura completa de la ontología.")
             print(f"\n{final_answer.strip()}\n")
         except Exception as exc:
             print(f"\nError del agente: {exc}\n")
