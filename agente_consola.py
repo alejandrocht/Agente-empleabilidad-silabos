@@ -102,7 +102,7 @@ def build_schema_text() -> str:
     lines.append("")
     lines.append("REGLAS IMPORTANTES")
     lines.append("- Todos los IDs son hashes con prefijo y ya existen en las propiedades id_*.")
-    lines.append("- Para buscar por nombre usa nombre_norm cuando exista: texto en minusculas y sin tildes.")
+    lines.append("- Para buscar texto usa SIEMPRE la clausula CONTAINS con nombre_norm (ej: c.nombre_norm CONTAINS 'sistemas') en lugar de igual (=). Pon el texto en minusculas y sin tildes.")
     lines.append("- No inventes labels, relaciones ni propiedades fuera de este schema.")
     lines.append("- Solo genera consultas de lectura: MATCH/WITH/RETURN/CALL db.*.")
     lines.append("- Usa LIMIT 25 salvo que el usuario pida conteo, promedio o ranking especifico.")
