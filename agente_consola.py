@@ -106,8 +106,7 @@ def build_schema_text() -> str:
     lines.append("- IMPORTANTE: Si el usuario te pregunta sobre una entidad específica (ej. una Carrera, un Puesto), PRIMERO usa la herramienta para hacer una consulta Cypher exploratoria y validar el nombre real en la base de datos. Luego, haz la consulta final.")
     lines.append("- No inventes labels, relaciones ni propiedades fuera de este schema.")
     lines.append("- Solo genera consultas de lectura: MATCH/WITH/RETURN/CALL db.*.")
-    lines.append("- Usa LIMIT 25 salvo que el usuario pida conteo, promedio o ranking especifico.")
-    lines.append("- Si necesitas contar, usa count(...). Si necesitas ranking, ordena con ORDER BY y LIMIT.")
+    lines.append("- Si necesitas contar, usa count(...). Si necesitas ranking, ordena con ORDER BY.")
     lines.append("- Silabo se escribe sin tilde como label: :Silabo.")
     lines.append("- EvalDesempeno es el label de evaluacion de desempeno.")
     return "\n".join(lines)
@@ -186,8 +185,7 @@ def buscar_grafo_ciar(pregunta: str) -> str:
             return json.dumps({
                 "cypher": cypher,
                 "row_count": len(rows),
-                "rows": rows[:50],
-                "truncated": len(rows) > 50,
+                "rows": rows,
                 "attempt": attempt + 1,
             }, ensure_ascii=False, default=str)
         except Exception as exc:
