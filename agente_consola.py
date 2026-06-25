@@ -317,7 +317,13 @@ def run_console(model_name: str | None = None) -> None:
         final_answer = ""
 
         try:
+            print(f"  [LangSmith] 🌐 Rastreando ejecución en el proyecto: {os.getenv('LANGSMITH_PROJECT', 'ciar-local-langgraph')}")
+            print("  [Flujo LangGraph] 🚀 Iniciando recorrido por los nodos del agente...")
+            
             for update in graph.stream(inputs, config=config, stream_mode="updates"):
+                for node_name in update.keys():
+                    print(f"  [Flujo LangGraph] 📍 El agente ejecutó y salió del nodo: '{node_name}'")
+
                 if "assistant" in update:
                     message = update["assistant"]["messages"][-1]
                     tool_calls = getattr(message, "tool_calls", None)
