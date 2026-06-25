@@ -340,6 +340,9 @@ def run_console(model_name: str | None = None) -> None:
                                 if "cypher" in data:
                                     print(f"  [Razonamiento] 🔍 Cypher generado para Neo4j:\n    \033[96m{data['cypher']}\033[0m")
                                     print(f"  [Razonamiento] 📊 Neo4j devolvió {data.get('row_count', 0)} resultados.")
+                                    if data.get("rows"):
+                                        muestra = str(data["rows"][0])[:150]
+                                        print(f"  [Neo4j Data] 🗂️  Ejemplo del primer nodo extraído: {muestra}...")
                                 elif "error" in data:
                                     print(f"  [Error] ❌ {data['error']}")
                             except Exception:
