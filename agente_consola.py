@@ -78,13 +78,6 @@ def neo4j_driver():
     return driver
 
 
-def csv_headers(csv_name: str) -> list[str]:
-    path = BASE_DIR / csv_name
-    with path.open(encoding="utf-8-sig") as file:
-        first_line = file.readline().strip()
-    return [header.strip() for header in first_line.split(",") if header.strip()]
-
-
 @traceable(run_type="chain", name="build_ciar_schema_text")
 def build_schema_text() -> str:
     data = ontology()
@@ -96,12 +89,9 @@ def build_schema_text() -> str:
     ]
 
     for entity in data["entidades"]:
-        source = entity["fuente"]
-        headers = csv_headers(source["csv"])
-        if source.get("nombre_col"):
-            headers = [*headers, "nombre_norm"]
+        props = entity.get("propiedades", [])
         lines.append(
-            f"- :{entity['label']} pk={entity['pk']} props={', '.join(dict.fromkeys(headers))}"
+            f"- :{entity['label']} pk={entity['pk']} props={', '.join(props)}"
         )
 
     lines.append("")

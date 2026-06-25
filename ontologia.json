@@ -11,85 +11,247 @@
       "label": "Facultad",
       "grupo": "ac",
       "pk": "id_facultad",
-      "fuente": { "csv": "facultad.csv", "nombre_col": "nombre_facultad" }
+      "fuente": {
+        "csv": "facultad.csv",
+        "nombre_col": "nombre_facultad"
+      },
+      "propiedades": [
+        "id_facultad",
+        "nombre_facultad",
+        "decano",
+        "descripcion_breve_facultad",
+        "codigo_facultad",
+        "nombre_norm"
+      ]
     },
     {
       "label": "Carrera",
       "grupo": "ac",
       "pk": "id_carrera",
-      "fuente": { "csv": "carrera.csv", "nombre_col": "nombre_carrera" }
+      "fuente": {
+        "csv": "carrera.csv",
+        "nombre_col": "nombre_carrera"
+      },
+      "propiedades": [
+        "id_carrera",
+        "nombre_carrera",
+        "codigo_carrera",
+        "coordinador",
+        "descripcion_breve_carrera",
+        "id_facultad",
+        "nombre_norm"
+      ]
     },
     {
       "label": "Curso",
       "grupo": "ac",
       "pk": "id_curso",
-      "fuente": { "csv": "curso.csv", "nombre_col": "nombre_curso" }
+      "fuente": {
+        "csv": "curso.csv",
+        "nombre_col": "nombre_curso"
+      },
+      "propiedades": [
+        "id_curso",
+        "nombre_curso",
+        "coordinador",
+        "creditos",
+        "nivel",
+        "tipo_curso",
+        "codigo_curso",
+        "id_carrera",
+        "nombre_norm"
+      ]
     },
     {
       "label": "Silabo",
       "grupo": "ac",
       "pk": "id_silabo",
-      "fuente": { "csv": "silabo.csv", "nombre_col": null }
+      "fuente": {
+        "csv": "silabo.csv",
+        "nombre_col": null
+      },
+      "propiedades": [
+        "id_silabo",
+        "codigo_silabo",
+        "sumilla",
+        "id_curso"
+      ]
     },
     {
       "label": "EvalDesempeno",
       "grupo": "ev",
       "pk": "id_eva_desempenio",
-      "fuente": { "csv": "evaluacion_desempenio.csv", "nombre_col": null }
+      "fuente": {
+        "csv": "evaluacion_desempenio.csv",
+        "nombre_col": null
+      },
+      "propiedades": [
+        "id_eva_desempenio",
+        "fecha_evaluacion",
+        "periodo",
+        "puntaje_general",
+        "recomendaciones",
+        "fecha_inicio",
+        "fecha_fin",
+        "id_carrera",
+        "id_requerimiento_laboral",
+        "id_empresa"
+      ]
     },
     {
       "label": "Competencia",
       "grupo": "kn",
       "pk": "id_competencia",
-      "fuente": { "csv": "catalogo_competencias.csv", "nombre_col": "nombre_competencia" }
+      "fuente": {
+        "csv": "catalogo_competencias.csv",
+        "nombre_col": "nombre_competencia"
+      },
+      "propiedades": [
+        "id_competencia",
+        "nombre_competencia",
+        "descripcion_breve_competencia",
+        "tipo_competencia",
+        "nombre_norm"
+      ]
     },
     {
       "label": "Habilidad",
       "grupo": "kn",
       "pk": "id_habilidad",
-      "fuente": { "csv": "catalogo_habilidades.csv", "nombre_col": "nombre_habilidad" }
+      "fuente": {
+        "csv": "catalogo_habilidades.csv",
+        "nombre_col": "nombre_habilidad"
+      },
+      "propiedades": [
+        "id_habilidad",
+        "nombre_habilidad",
+        "descripcion_breve",
+        "nombre_norm"
+      ]
     },
     {
       "label": "Herramienta",
       "grupo": "kn",
       "pk": "id_herramienta",
-      "fuente": { "csv": "catalogo_herramientas.csv", "nombre_col": "nombre_herramienta" }
+      "fuente": {
+        "csv": "catalogo_herramientas.csv",
+        "nombre_col": "nombre_herramienta"
+      },
+      "propiedades": [
+        "id_herramienta",
+        "nombre_herramienta",
+        "descripcion_breve_herramienta",
+        "nombre_norm"
+      ]
     },
     {
       "label": "Empresa",
       "grupo": "me",
       "pk": "id_empresa",
-      "fuente": { "csv": "empresa.csv", "nombre_col": "nombre" }
+      "fuente": {
+        "csv": "empresa.csv",
+        "nombre_col": "nombre"
+      },
+      "propiedades": [
+        "id_empresa",
+        "nombre",
+        "ruc",
+        "razon_social",
+        "tipo",
+        "descripcion_breve",
+        "id_industria",
+        "nombre_norm"
+      ]
     },
     {
       "label": "Industria",
       "grupo": "me",
       "pk": "id_industria",
-      "fuente": { "csv": "industria.csv", "nombre_col": "nombre" }
+      "fuente": {
+        "csv": "industria.csv",
+        "nombre_col": "nombre"
+      },
+      "propiedades": [
+        "id_industria",
+        "nombre",
+        "ciiu",
+        "sector_macro",
+        "descripcion_breve",
+        "nombre_norm"
+      ]
     },
     {
       "label": "OfertaLaboral",
       "grupo": "me",
       "pk": "id_ofe_laboral",
-      "fuente": { "csv": "oferta_laboral.csv", "nombre_col": "cargo" }
+      "fuente": {
+        "csv": "oferta_laboral.csv",
+        "nombre_col": "cargo"
+      },
+      "propiedades": [
+        "id_ofe_laboral",
+        "fecha_publicacion",
+        "fecha_finalizacion",
+        "area",
+        "area_especifica",
+        "cargo",
+        "descripcion_breve",
+        "id_carrera",
+        "id_empresa",
+        "nombre_norm"
+      ]
     },
     {
       "label": "Puesto",
       "grupo": "me",
       "pk": "id_puesto",
-      "fuente": { "csv": "puesto.csv", "nombre_col": "nombre" }
+      "fuente": {
+        "csv": "puesto.csv",
+        "nombre_col": "nombre"
+      },
+      "propiedades": [
+        "id_puesto",
+        "nombre",
+        "ciclo_requerido",
+        "id_ofe_laboral",
+        "nombre_norm"
+      ]
     },
     {
       "label": "RequerimientoLaboral",
       "grupo": "me",
       "pk": "id_req_laboral",
-      "fuente": { "csv": "requerimiento_laboral.csv", "nombre_col": null }
+      "fuente": {
+        "csv": "requerimiento_laboral.csv",
+        "nombre_col": null
+      },
+      "propiedades": [
+        "id_req_laboral",
+        "id_oferta_laboral",
+        "id_puesto",
+        "id_empresa",
+        "id_competencia",
+        "id_habilidad",
+        "id_herramienta",
+        "tipo"
+      ]
     },
     {
       "label": "CoberturaCurricular",
       "grupo": "ac",
       "pk": "id_cob_curricular",
-      "fuente": { "csv": "cobertura_curricular.csv", "nombre_col": null }
+      "fuente": {
+        "csv": "cobertura_curricular.csv",
+        "nombre_col": null
+      },
+      "propiedades": [
+        "id_cob_curricular",
+        "id_curso",
+        "id_silabo",
+        "id_competencia",
+        "id_habilidad",
+        "id_herramienta"
+      ]
     }
   ],
   "relaciones": [
@@ -97,115 +259,191 @@
       "tipo": "OFRECE",
       "source": "Facultad",
       "target": "Carrera",
-      "fuente": { "csv": "carrera.csv", "source_pk_col": "id_facultad", "target_pk_col": "id_carrera" }
+      "fuente": {
+        "csv": "carrera.csv",
+        "source_pk_col": "id_facultad",
+        "target_pk_col": "id_carrera"
+      }
     },
     {
       "tipo": "CONTIENE",
       "source": "Carrera",
       "target": "Curso",
-      "fuente": { "csv": "curso.csv", "source_pk_col": "id_carrera", "target_pk_col": "id_curso" }
+      "fuente": {
+        "csv": "curso.csv",
+        "source_pk_col": "id_carrera",
+        "target_pk_col": "id_curso"
+      }
     },
     {
       "tipo": "TIENE",
       "source": "Curso",
       "target": "Silabo",
-      "fuente": { "csv": "silabo.csv", "source_pk_col": "id_curso", "target_pk_col": "id_silabo" }
+      "fuente": {
+        "csv": "silabo.csv",
+        "source_pk_col": "id_curso",
+        "target_pk_col": "id_silabo"
+      }
     },
     {
       "tipo": "DESARROLLA",
       "source": "Curso",
       "target": "Competencia",
-      "fuente": { "csv": "cobertura_curricular.csv", "source_pk_col": "id_curso", "target_pk_col": "id_competencia" }
+      "fuente": {
+        "csv": "cobertura_curricular.csv",
+        "source_pk_col": "id_curso",
+        "target_pk_col": "id_competencia"
+      }
     },
     {
       "tipo": "DECLARA",
       "source": "Silabo",
       "target": "Competencia",
-      "fuente": { "csv": "cobertura_curricular.csv", "source_pk_col": "id_silabo", "target_pk_col": "id_competencia" }
+      "fuente": {
+        "csv": "cobertura_curricular.csv",
+        "source_pk_col": "id_silabo",
+        "target_pk_col": "id_competencia"
+      }
     },
     {
       "tipo": "TIENE_COBERTURA",
       "source": "Curso",
       "target": "CoberturaCurricular",
-      "fuente": { "csv": "cobertura_curricular.csv", "source_pk_col": "id_curso", "target_pk_col": "id_cob_curricular" }
+      "fuente": {
+        "csv": "cobertura_curricular.csv",
+        "source_pk_col": "id_curso",
+        "target_pk_col": "id_cob_curricular"
+      }
     },
     {
       "tipo": "DECLARA_COBERTURA",
       "source": "Silabo",
       "target": "CoberturaCurricular",
-      "fuente": { "csv": "cobertura_curricular.csv", "source_pk_col": "id_silabo", "target_pk_col": "id_cob_curricular" }
+      "fuente": {
+        "csv": "cobertura_curricular.csv",
+        "source_pk_col": "id_silabo",
+        "target_pk_col": "id_cob_curricular"
+      }
     },
     {
       "tipo": "CUBRE_COMPETENCIA",
       "source": "CoberturaCurricular",
       "target": "Competencia",
-      "fuente": { "csv": "cobertura_curricular.csv", "source_pk_col": "id_cob_curricular", "target_pk_col": "id_competencia" }
+      "fuente": {
+        "csv": "cobertura_curricular.csv",
+        "source_pk_col": "id_cob_curricular",
+        "target_pk_col": "id_competencia"
+      }
     },
     {
       "tipo": "ENSEÑA_HABILIDAD",
       "source": "CoberturaCurricular",
       "target": "Habilidad",
-      "fuente": { "csv": "cobertura_curricular.csv", "source_pk_col": "id_cob_curricular", "target_pk_col": "id_habilidad" }
+      "fuente": {
+        "csv": "cobertura_curricular.csv",
+        "source_pk_col": "id_cob_curricular",
+        "target_pk_col": "id_habilidad"
+      }
     },
     {
       "tipo": "ENSEÑA_HERRAMIENTA",
       "source": "CoberturaCurricular",
       "target": "Herramienta",
-      "fuente": { "csv": "cobertura_curricular.csv", "source_pk_col": "id_cob_curricular", "target_pk_col": "id_herramienta" }
+      "fuente": {
+        "csv": "cobertura_curricular.csv",
+        "source_pk_col": "id_cob_curricular",
+        "target_pk_col": "id_herramienta"
+      }
     },
     {
       "tipo": "AGRUPA",
       "source": "Industria",
       "target": "Empresa",
-      "fuente": { "csv": "empresa.csv", "source_pk_col": "id_industria", "target_pk_col": "id_empresa" }
+      "fuente": {
+        "csv": "empresa.csv",
+        "source_pk_col": "id_industria",
+        "target_pk_col": "id_empresa"
+      }
     },
     {
       "tipo": "PUBLICA",
       "source": "Empresa",
       "target": "OfertaLaboral",
-      "fuente": { "csv": "oferta_laboral.csv", "source_pk_col": "id_empresa", "target_pk_col": "id_ofe_laboral" }
+      "fuente": {
+        "csv": "oferta_laboral.csv",
+        "source_pk_col": "id_empresa",
+        "target_pk_col": "id_ofe_laboral"
+      }
     },
     {
       "tipo": "PIDE_REQUERIMIENTO",
       "source": "Empresa",
       "target": "RequerimientoLaboral",
-      "fuente": { "csv": "requerimiento_laboral.csv", "source_pk_col": "id_empresa", "target_pk_col": "id_req_laboral" }
+      "fuente": {
+        "csv": "requerimiento_laboral.csv",
+        "source_pk_col": "id_empresa",
+        "target_pk_col": "id_req_laboral"
+      }
     },
     {
       "tipo": "TIENE_REQUERIMIENTO",
       "source": "OfertaLaboral",
       "target": "RequerimientoLaboral",
-      "fuente": { "csv": "requerimiento_laboral.csv", "source_pk_col": "id_oferta_laboral", "target_pk_col": "id_req_laboral" }
+      "fuente": {
+        "csv": "requerimiento_laboral.csv",
+        "source_pk_col": "id_oferta_laboral",
+        "target_pk_col": "id_req_laboral"
+      }
     },
     {
       "tipo": "DIRIGE_A",
       "source": "OfertaLaboral",
       "target": "Carrera",
-      "fuente": { "csv": "oferta_laboral.csv", "source_pk_col": "id_ofe_laboral", "target_pk_col": "id_carrera" }
+      "fuente": {
+        "csv": "oferta_laboral.csv",
+        "source_pk_col": "id_ofe_laboral",
+        "target_pk_col": "id_carrera"
+      }
     },
     {
       "tipo": "REQUIERE_COMPETENCIA",
       "source": "RequerimientoLaboral",
       "target": "Competencia",
-      "fuente": { "csv": "requerimiento_laboral.csv", "source_pk_col": "id_req_laboral", "target_pk_col": "id_competencia" }
+      "fuente": {
+        "csv": "requerimiento_laboral.csv",
+        "source_pk_col": "id_req_laboral",
+        "target_pk_col": "id_competencia"
+      }
     },
     {
       "tipo": "REQUIERE_HABILIDAD",
       "source": "RequerimientoLaboral",
       "target": "Habilidad",
-      "fuente": { "csv": "requerimiento_laboral.csv", "source_pk_col": "id_req_laboral", "target_pk_col": "id_habilidad" }
+      "fuente": {
+        "csv": "requerimiento_laboral.csv",
+        "source_pk_col": "id_req_laboral",
+        "target_pk_col": "id_habilidad"
+      }
     },
     {
       "tipo": "REQUIERE_HERRAMIENTA",
       "source": "RequerimientoLaboral",
       "target": "Herramienta",
-      "fuente": { "csv": "requerimiento_laboral.csv", "source_pk_col": "id_req_laboral", "target_pk_col": "id_herramienta" }
+      "fuente": {
+        "csv": "requerimiento_laboral.csv",
+        "source_pk_col": "id_req_laboral",
+        "target_pk_col": "id_herramienta"
+      }
     },
     {
       "tipo": "REALIZA",
       "source": "Empresa",
       "target": "EvalDesempeno",
-      "fuente": { "csv": "evaluacion_desempenio.csv", "source_pk_col": "id_empresa", "target_pk_col": "id_eva_desempenio" }
+      "fuente": {
+        "csv": "evaluacion_desempenio.csv",
+        "source_pk_col": "id_empresa",
+        "target_pk_col": "id_eva_desempenio"
+      }
     },
     {
       "tipo": "MIDE",
@@ -263,19 +501,31 @@
       "tipo": "EVALUA_CARRERA",
       "source": "EvalDesempeno",
       "target": "Carrera",
-      "fuente": { "csv": "evaluacion_desempenio.csv", "source_pk_col": "id_eva_desempenio", "target_pk_col": "id_carrera" }
+      "fuente": {
+        "csv": "evaluacion_desempenio.csv",
+        "source_pk_col": "id_eva_desempenio",
+        "target_pk_col": "id_carrera"
+      }
     },
     {
       "tipo": "OFRECE_PUESTO",
       "source": "OfertaLaboral",
       "target": "Puesto",
-      "fuente": { "csv": "puesto.csv", "source_pk_col": "id_ofe_laboral", "target_pk_col": "id_puesto" }
+      "fuente": {
+        "csv": "puesto.csv",
+        "source_pk_col": "id_ofe_laboral",
+        "target_pk_col": "id_puesto"
+      }
     },
     {
       "tipo": "DEFINE_REQUERIMIENTO",
       "source": "Puesto",
       "target": "RequerimientoLaboral",
-      "fuente": { "csv": "requerimiento_laboral.csv", "source_pk_col": "id_puesto", "target_pk_col": "id_req_laboral" }
+      "fuente": {
+        "csv": "requerimiento_laboral.csv",
+        "source_pk_col": "id_puesto",
+        "target_pk_col": "id_req_laboral"
+      }
     }
   ]
 }
