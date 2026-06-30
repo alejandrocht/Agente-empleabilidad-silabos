@@ -27,6 +27,11 @@ JSON: {"entidades": [{"texto": "python", "label": "Herramienta"}]}
 Pregunta: cuantas carreras hay
 JSON: {"entidades": []}
 
+Turnos anteriores de la conversacion (usalos SOLO si la pregunta actual hace referencia
+implicita a algo ya mencionado, ej: "esa carrera", "esa empresa", "ese curso". Si la
+pregunta ya es clara por si sola, ignora este historial):
+{historial}
+
 Pregunta del usuario:
 {pregunta}
 

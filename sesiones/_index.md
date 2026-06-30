@@ -1,0 +1,1 @@
+- [agente-langgraph.md](agente-langgraph.md) — arquitectura del agente LangGraph de consola (8 nodos) + `utils/llm.py` multi-proveedor (nvidia/ollama/google_genai, switch por .env)
