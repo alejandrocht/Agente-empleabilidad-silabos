@@ -29,4 +29,14 @@ class DevuelveResultado(Nodo):
         respuesta = estado.get("respuesta", "")
         if not respuesta:
             respuesta = "No encontre una respuesta para tu pregunta."
-        return {"respuesta": respuesta}
+        cambios: dict = {"respuesta": respuesta}
+
+        # Si hubo una consulta real al grafo (no saludo, no error), guardamos el turno
+        # en el historial para que preguntas siguientes resuelvan referencias implicitas
+        # ("esa carrera", "esa empresa"). Guardamos solo los ultimos 2 turnos.
+        if estado.get("cypher"):
+            historial = list(estado.get("historial", []))
+            historial.append({"pregunta": estado.get("pregunta", ""), "respuesta": respuesta})
+            cambios["historial"] = historial[-2:]
+
+        return cambios

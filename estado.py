@@ -40,3 +40,7 @@ class EstadoAgente(TypedDict, total=False):
 
     # Mensaje de error si algo fallo (ej. Cypher invalido). None/ausente si todo va bien.
     error: str
+
+    # Ultimos turnos de la conversacion (pregunta+respuesta), para resolver referencias
+    # tipo "esa carrera". Persiste entre preguntas via el checkpointer (MemorySaver).
+    historial: list[dict]

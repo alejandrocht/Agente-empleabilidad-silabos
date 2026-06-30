@@ -37,10 +37,13 @@ class ObtienePregunta(Nodo):
         pregunta_limpia = pregunta.strip()
         # Normalizamos para comparar: minusculas y sin signos al inicio/fin.
         normal = pregunta_limpia.lower().strip("¿?¡!.,")
+        # MemorySaver persiste el estado entre preguntas: reseteamos TODO lo del turno
+        # anterior (cypher, entidades, filas, intentos) menos "historial", que es lo
+        # unico que debe sobrevivir entre preguntas.
+        reset_turno = {"cypher": "", "entidades": [], "filas": [], "intentos": 0}
+
         # Si es saludo o entrada muy corta: respondemos con ayuda y NO vamos a Neo4j.
-        # (Reseteamos error: el grafo enrutara directo a devolver esta respuesta.)
         if normal in SALUDOS or len(normal) < 3:
-            return {"pregunta": pregunta_limpia, "respuesta": AYUDA, "error": None}
-        # Pregunta normal: reseteamos respuesta/error del turno anterior (MemorySaver
-        # persiste el estado) para no arrastrar resultados viejos.
-        return {"pregunta": pregunta_limpia, "respuesta": "", "error": None}
+            return {"pregunta": pregunta_limpia, "respuesta": AYUDA, "error": None, **reset_turno}
+        # Pregunta normal: sigue el pipeline completo.
+        return {"pregunta": pregunta_limpia, "respuesta": "", "error": None, **reset_turno}

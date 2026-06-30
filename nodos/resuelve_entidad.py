@@ -18,6 +18,7 @@ import unicodedata
 
 from estado import EstadoAgente
 from nodos.nodo import NodoLLM
+from utils.historial import formatear_historial
 from utils.neo4j import introspeccionar_schema, obtener_driver
 
 
@@ -73,7 +74,11 @@ class ResuelveEntidad(NodoLLM):
         # --- Parte 1: el LLM extrae que entidades menciono el usuario ---
         # Armamos el prompt reemplazando el hueco {pregunta} por la pregunta real.
         # Usamos replace (no format) porque el prompt tiene llaves { } literales de JSON.
-        prompt = self.prompt.replace("{pregunta}", estado.get("pregunta", ""))
+        prompt = (
+            self.prompt
+            .replace("{historial}", formatear_historial(estado.get("historial")))
+            .replace("{pregunta}", estado.get("pregunta", ""))
+        )
         # Le pedimos al LLM que conteste.
         respuesta = self.llm.invoke(prompt)
         # Sacamos el JSON con la lista de entidades detectadas.
