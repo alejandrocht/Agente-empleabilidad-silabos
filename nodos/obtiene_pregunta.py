@@ -21,5 +21,7 @@ class ObtienePregunta(Nodo):
         pregunta = estado.get("pregunta", "")
         # Le quitamos espacios sobrantes al inicio y al final.
         pregunta_limpia = pregunta.strip()
-        # Devolvemos solo la clave que modificamos: la pregunta ya limpia.
-        return {"pregunta": pregunta_limpia}
+        # IMPORTANTE: como el grafo recuerda el estado entre preguntas (MemorySaver),
+        # reiniciamos el contador de intentos y el error en CADA pregunta nueva.
+        # Si no, el contador se acumularia y el reintento dejaria de funcionar.
+        return {"pregunta": pregunta_limpia, "intentos": 0, "error": None}
