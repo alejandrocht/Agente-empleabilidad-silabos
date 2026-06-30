@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-Agente CIAR de consola con LangGraph + LangSmith + LLM local por Ollama.
+Agente CIAR de consola con LangGraph + LangSmith + LLM por NVIDIA NIM
+(API compatible con OpenAI, modelos grandes del catalogo NVIDIA).
 
 Uso:
+  export NVIDIA_API_KEY=tu_key   (o ponla en .env)
   python3 agente_consola.py
-  python3 agente_consola.py --model qwen3-coder:30b
+  python3 agente_consola.py --model qwen/qwen2.5-coder-32b-instruct
 """
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ from typing import Annotated, Literal, TypedDict
 
 from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
-from langchain_ollama import ChatOllama
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
@@ -199,12 +201,15 @@ def build_schema_text() -> str:
     return "\n".join(lines)
 
 
-def llm() -> ChatOllama:
-    return ChatOllama(
-        model=os.getenv("OLLAMA_MODEL", "qwen3:14b"),
-        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-        temperature=float(os.getenv("OLLAMA_TEMPERATURE", "0")),
-        num_ctx=int(os.getenv("OLLAMA_NUM_CTX", "32768")),
+def llm() -> ChatNVIDIA:
+    # NVIDIA NIM expone una API compatible con OpenAI. Sin base_url, ChatNVIDIA
+    # apunta al catalogo hospedado (https://integrate.api.nvidia.com/v1) y lee
+    # NVIDIA_API_KEY del entorno. num_ctx no aplica: NIM gestiona el contexto.
+    return ChatNVIDIA(
+        model=os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct"),
+        base_url=os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
+        api_key=os.getenv("NVIDIA_API_KEY"),
+        temperature=float(os.getenv("NVIDIA_TEMPERATURE", "0")),
     )
 
 
@@ -333,7 +338,7 @@ Cypher: MATCH (e:EvalDesempeno)-[:EVALUA_CARRERA]-(c:Carrera) RETURN c.nombre_ca
 """.strip()
 
 
-@traceable(run_type="llm", name="generate_cypher_with_local_llm")
+@traceable(run_type="llm", name="generate_cypher_with_nvidia_nim")
 def generate_cypher(question: str, schema_text: str, previous_error: str | None = None) -> str:
     repair = ""
     if previous_error:
@@ -569,7 +574,7 @@ def assistant_node(state: AgentState) -> dict:
 
     response = model.invoke(messages_to_invoke)
 
-    # Parche de rescate: Si Ollama devuelve el Tool Call como texto JSON crudo en vez del formato nativo
+    # Parche de rescate: si el modelo devuelve el Tool Call como texto JSON crudo en vez del formato nativo
     if not getattr(response, "tool_calls", []) and response.content:
         text = str(response.content).strip()
         
@@ -642,7 +647,7 @@ def print_langsmith_status() -> None:
 
 def run_console(model_name: str | None = None) -> None:
     if model_name:
-        os.environ["OLLAMA_MODEL"] = model_name
+        os.environ["NVIDIA_MODEL"] = model_name
 
     graph = build_graph()
     save_mermaid(graph)
@@ -650,7 +655,7 @@ def run_console(model_name: str | None = None) -> None:
     session_id = f"ciar-console-{uuid.uuid4().hex[:8]}"
 
     print("Agente CIAR consola")
-    print(f"Ollama: {os.getenv('OLLAMA_MODEL', 'qwen3:14b')} | {os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')}")
+    print(f"NVIDIA NIM: {os.getenv('NVIDIA_MODEL', 'meta/llama-3.3-70b-instruct')} | {os.getenv('NVIDIA_BASE_URL', 'https://integrate.api.nvidia.com/v1')}")
     print_langsmith_status()
     print(f"LangGraph Mermaid: {MERMAID_PATH}")
     print("Comandos: /schema, /salir\n")
@@ -672,7 +677,7 @@ def run_console(model_name: str | None = None) -> None:
 
         config = {
             "configurable": {"thread_id": session_id},
-            "tags": ["ciar", "console", "langgraph", "ollama", os.getenv("OLLAMA_MODEL", "local")],
+            "tags": ["ciar", "console", "langgraph", "nvidia-nim", os.getenv("NVIDIA_MODEL", "nvidia")],
             "metadata": {
                 "ontology": "graficosnodos-full",
                 "app": "ciar-console-agent",
@@ -745,7 +750,7 @@ def run_console(model_name: str | None = None) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", help="Modelo local de Ollama, ej. qwen3-coder:30b o qwen3:14b")
+    parser.add_argument("--model", help="Modelo NVIDIA NIM, ej. meta/llama-3.3-70b-instruct o qwen/qwen2.5-coder-32b-instruct")
     args = parser.parse_args()
     load_env()
     run_console(args.model)

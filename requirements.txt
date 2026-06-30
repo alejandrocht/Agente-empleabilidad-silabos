@@ -1,6 +1,6 @@
 neo4j>=5.28.0
 python-dotenv>=1.0.1
 langchain-core>=0.3.79
-langchain-ollama>=0.3.8
+langchain-nvidia-ai-endpoints>=0.3.0
 langgraph>=0.6.10
 langsmith>=0.4.30
