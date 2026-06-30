@@ -1,0 +1,32 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	obtiene_pregunta(obtiene_pregunta)
+	obtiene_grafo(obtiene_grafo)
+	resuelve_entidad(resuelve_entidad)
+	genera_cypher(genera_cypher)
+	valida_cypher(valida_cypher)
+	ejecuta_cypher(ejecuta_cypher)
+	analiza_resultado(analiza_resultado)
+	devuelve_resultado(devuelve_resultado)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> obtiene_pregunta;
+	analiza_resultado --> devuelve_resultado;
+	ejecuta_cypher -.-> analiza_resultado;
+	ejecuta_cypher -.-> devuelve_resultado;
+	ejecuta_cypher -.-> genera_cypher;
+	genera_cypher --> valida_cypher;
+	obtiene_grafo --> resuelve_entidad;
+	obtiene_pregunta --> obtiene_grafo;
+	resuelve_entidad --> genera_cypher;
+	valida_cypher -.-> devuelve_resultado;
+	valida_cypher -.-> ejecuta_cypher;
+	valida_cypher -.-> genera_cypher;
+	devuelve_resultado --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
