@@ -1,38 +1,47 @@
 """
 Fabrica del LLM (modelo de lenguaje) configurable.
 
-Aqui aislamos COMO se crea el modelo de IA. La gracia es que NO sabemos todavia que
-proveedor usaremos (Gemini, Groq, OpenAI/GPT, Together...). Por eso usamos
-init_chat_model de LangChain, que con una sola linea soporta muchos proveedores.
-
-Para cambiar de proveedor solo se edita el .env (LLM_PROVIDER y LLM_MODEL), nunca el codigo.
+Soporta 3 proveedores para poder testear con cualquiera sin tocar codigo,
+solo cambiando LLM_PROVIDER en el .env: "nvidia", "ollama" o "google_genai".
+Cada rama importa su paquete solo si ese proveedor esta activo, asi no hace
+falta tener instalados los 3 paquetes a la vez.
 """
 from __future__ import annotations
 
 import os
 
-# init_chat_model es la funcion "universal" de LangChain: le dices el proveedor y el
-# modelo, y te devuelve el objeto de chat listo para usar (.invoke(...)).
-from langchain.chat_models import init_chat_model
-
 
 def obtener_llm():
-    """Crea y devuelve el modelo de lenguaje segun lo configurado en el .env."""
-    # Proveedor: de donde sale la IA. Por defecto Google Gemini ("google_genai").
-    # Otros valores validos: "groq", "openai", "together", etc.
-    proveedor = os.getenv("LLM_PROVIDER", "google_genai")
-
-    # Modelo concreto dentro de ese proveedor. Por defecto un Gemini rapido.
-    modelo = os.getenv("LLM_MODEL", "gemini-2.0-flash")
-
-    # Temperatura: que tan "creativa" es la IA. 0 = respuestas precisas y estables,
-    # que es justo lo que queremos para generar Cypher correcto.
+    """Crea y devuelve el modelo de lenguaje segun LLM_PROVIDER en el .env."""
+    proveedor = os.getenv("LLM_PROVIDER", "nvidia").lower()
     temperatura = float(os.getenv("LLM_TEMPERATURE", "0"))
 
-    # Construimos el modelo. init_chat_model lee solo la API key del proveedor desde
-    # las variables de entorno (ej. GOOGLE_API_KEY para Gemini).
-    return init_chat_model(
-        model=modelo,
-        model_provider=proveedor,
-        temperature=temperatura,
+    if proveedor == "nvidia":
+        from langchain_nvidia_ai_endpoints import ChatNVIDIA
+
+        return ChatNVIDIA(
+            model=os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct"),
+            base_url=os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
+            temperature=float(os.getenv("NVIDIA_TEMPERATURE", temperatura)),
+        )
+
+    if proveedor == "ollama":
+        from langchain_ollama import ChatOllama
+
+        return ChatOllama(
+            model=os.getenv("OLLAMA_MODEL", "llama3.1"),
+            base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+            temperature=float(os.getenv("OLLAMA_TEMPERATURE", temperatura)),
+        )
+
+    if proveedor == "google_genai":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        return ChatGoogleGenerativeAI(
+            model=os.getenv("LLM_MODEL", "gemini-2.0-flash"),
+            temperature=float(os.getenv("LLM_TEMPERATURE", temperatura)),
+        )
+
+    raise ValueError(
+        f"LLM_PROVIDER desconocido: {proveedor!r}. Usa 'nvidia', 'ollama' o 'google_genai'."
     )
