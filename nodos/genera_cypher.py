@@ -15,8 +15,10 @@ from nodos.nodo import NodoLLM
 
 
 def _limpiar_cypher(texto: str) -> str:
-    """Quita adornos (```cypher ... ```) y deja solo la consulta."""
+    """Quita adornos (```cypher```, bloques <think>, prosa) y deja solo la consulta."""
     cypher = (texto or "").strip()
+    # Modelos locales (qwen3) emiten razonamiento en <think>...</think>: lo quitamos.
+    cypher = re.sub(r"<think>.*?</think>", "", cypher, flags=re.IGNORECASE | re.DOTALL).strip()
     # Si viene en un bloque de codigo markdown, nos quedamos con el contenido del bloque.
     if "```" in cypher:
         bloques = cypher.split("```")
@@ -24,7 +26,14 @@ def _limpiar_cypher(texto: str) -> str:
     # Quitamos la palabra "cypher" si quedo al inicio (ej: "```cypher").
     cypher = re.sub(r"^\s*cypher\s*", "", cypher, flags=re.IGNORECASE).strip()
     # Quitamos comillas invertidas sueltas y espacios.
-    return cypher.strip("`").strip()
+    cypher = cypher.strip("`").strip()
+    # Si aun queda prosa antes del Cypher, cortamos desde la primera palabra de lectura.
+    if not cypher.lower().startswith(("match", "with", "return", "call", "unwind")):
+        patron = r"\b(match|with|return|call|unwind)\b"
+        m = re.search(r"(?im)^\s*" + patron, cypher) or re.search(patron, cypher, re.IGNORECASE)
+        if m:
+            cypher = cypher[m.start():].strip()
+    return cypher
 
 
 class GeneraCypher(NodoLLM):
