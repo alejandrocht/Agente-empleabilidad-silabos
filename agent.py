@@ -47,6 +47,13 @@ RUTA_MERMAID = Path(__file__).resolve().parent / "langgraph_agent.mmd"
 MAX_INTENTOS = 2
 
 
+def _ruta_tras_pregunta(estado: EstadoAgente) -> str:
+    """Si la entrada fue un saludo/trivial (ya hay respuesta), salta directo a responder."""
+    if estado.get("respuesta"):
+        return "devuelve_resultado"
+    return "obtiene_grafo"
+
+
 def _ruta_tras_validar(estado: EstadoAgente) -> str:
     """Decide el camino tras valida_cypher: ejecutar, reintentar o rendirse."""
     # Sin error: el Cypher es valido, lo ejecutamos.
@@ -88,7 +95,15 @@ def construir_grafo():
 
     # 3) Conectamos los nodos con flechas (el orden del flujo).
     builder.add_edge(START, "obtiene_pregunta")
-    builder.add_edge("obtiene_pregunta", "obtiene_grafo")
+    # Tras obtener la pregunta: si fue saludo/trivial saltamos a responder; si no, seguimos.
+    builder.add_conditional_edges(
+        "obtiene_pregunta",
+        _ruta_tras_pregunta,
+        {
+            "obtiene_grafo": "obtiene_grafo",
+            "devuelve_resultado": "devuelve_resultado",
+        },
+    )
     builder.add_edge("obtiene_grafo", "resuelve_entidad")
     builder.add_edge("resuelve_entidad", "genera_cypher")
     builder.add_edge("genera_cypher", "valida_cypher")

@@ -73,6 +73,9 @@ def run_console() -> None:
                     print(f"  [Flujo] Paso por el nodo: '{nombre_nodo}'")
                     # Vamos acumulando los cambios para tener el estado final.
                     if cambios:
+                        # Si este nodo genero un Cypher, lo mostramos (util para depurar).
+                        if cambios.get("cypher"):
+                            print(f"  [Cypher] {cambios['cypher']}")
                         estado_final.update(cambios)
 
             # Mostramos la respuesta final que quedo en el estado.
