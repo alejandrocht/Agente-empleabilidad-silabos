@@ -73,13 +73,16 @@ def run_console() -> None:
                     print(f"  [Flujo] Paso por el nodo: '{nombre_nodo}'")
                     # Vamos acumulando los cambios para tener el estado final.
                     if cambios:
-                        # Si este nodo genero un Cypher, lo mostramos (util para depurar).
+                        # Si este nodo genero un Cypher, lo mostramos (el comando que crea).
                         if cambios.get("cypher"):
                             print(f"  [Cypher] {cambios['cypher']}")
+                        # Si un nodo marco error (ej: valida_cypher lo bloqueo), lo mostramos.
+                        if cambios.get("error"):
+                            print(f"  [Bloqueado] {cambios['error']}")
                         estado_final.update(cambios)
 
             # Mostramos la respuesta final que quedo en el estado.
-            print(f"\n{estado_final.get('respuesta', '(sin respuesta)')}\n")
+            print(f"\n[Respuesta] {estado_final.get('respuesta', '(sin respuesta)')}\n")
         except Exception as exc:
             # Si algo explota, lo mostramos sin tumbar la consola.
             print(f"\nError del agente: {exc}\n")
