@@ -35,7 +35,24 @@ class ObtienePregunta(Nodo):
         pregunta = estado.get("pregunta", "")
         # Le quitamos espacios sobrantes al inicio y al final.
         pregunta_limpia = pregunta.strip()
-        # IMPORTANTE: como el grafo recuerda el estado entre preguntas (MemorySaver),
-        # reiniciamos el contador de intentos y el error en CADA pregunta nueva.
-        # Si no, el contador se acumularia y el reintento dejaria de funcionar.
-        return {"pregunta": pregunta_limpia, "intentos": 0, "error": None}
+
+        # IMPORTANTE: el grafo recuerda el estado entre preguntas (MemorySaver).
+        # Reseteamos en CADA turno los campos que llenan los nodos de una consulta previa;
+        # si no, la respuesta/cypher viejos se filtran y el enrutado los reusa (haciendo
+        # que toda pregunta a partir de la 2da repita la respuesta anterior).
+        # No tocamos 'historial' a proposito: es la memoria entre turnos que si queremos.
+        cambios: dict = {
+            "pregunta": pregunta_limpia,
+            "intentos": 0,
+            "error": None,
+            "respuesta": None,
+            "cypher": None,
+        }
+
+        # Si la entrada es un saludo/cortesia, respondemos con la ayuda y cortocircuitamos:
+        # dejar 'respuesta' seteada hace que _ruta_tras_pregunta salte a devuelve_resultado.
+        clave = pregunta_limpia.lower().strip("¿?¡!.")
+        if clave in SALUDOS:
+            cambios["respuesta"] = AYUDA
+
+        return cambios
