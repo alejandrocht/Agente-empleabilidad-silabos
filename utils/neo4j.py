@@ -117,6 +117,7 @@ def introspeccionar_schema() -> dict:
         "props": props_por_label,
         "topology": topologia,
         "samples": ejemplos,
+        "name_props": prop_nombre_por_label,
     }
 
 
@@ -133,10 +134,25 @@ def construir_schema_texto() -> str:
     ]
 
     # Una linea por cada label con su conteo y sus propiedades.
+    # Marcamos inline cual propiedad es el "nombre" visible del label.
+    name_props = intro.get("name_props", {})
     for label, total in intro["labels"].items():
         props = intro["props"].get(label, [])
         props_str = ", ".join(props) if props else "(sin propiedades indexadas)"
-        lineas.append(f"- :{label} ({total} nodos) props: {props_str}")
+        prop_nombre = name_props.get(label)
+        marca = f"  [NOMBRE = {prop_nombre}]" if prop_nombre else ""
+        lineas.append(f"- :{label} ({total} nodos) props: {props_str}{marca}")
+
+    # Bloque explicito de propiedad-nombre por label.
+    # Sin esto el LLM asume ".nombre" (que NO existe) y devuelve nulls.
+    if name_props:
+        lineas.append("")
+        lineas.append(
+            "PROPIEDAD DE NOMBRE POR LABEL "
+            "(para mostrar o filtrar por nombre usa EXACTAMENTE esta propiedad; NUNCA uses .nombre)"
+        )
+        for label, prop in name_props.items():
+            lineas.append(f"- {label}.{prop}")
 
     # Bloque de relaciones (sin direccion, para evitar errores de flecha invertida).
     lineas.append("")
