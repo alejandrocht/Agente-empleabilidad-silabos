@@ -60,8 +60,8 @@ def run_console() -> None:
             "recursion_limit": 15,
         }
 
-        # Estado inicial: solo metemos la pregunta. Los nodos van llenando el resto.
-        entrada = {"pregunta": pregunta}
+        # Estado inicial: pregunta + id de sesion para cargar la memoria conversacional.
+        entrada = {"pregunta": pregunta, "id_sesion": id_sesion}
 
         try:
             # Ejecutamos el grafo paso a paso y mostramos por que nodo va pasando.

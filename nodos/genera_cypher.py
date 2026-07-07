@@ -12,7 +12,6 @@ import re
 
 from estado import EstadoAgente
 from nodos.nodo import NodoLLM
-from utils.historial import formatear_historial
 
 
 def _limpiar_cypher(texto: str) -> str:
@@ -59,7 +58,7 @@ class GeneraCypher(NodoLLM):
             .replace("{schema_texto}", estado.get("schema_texto", ""))
             .replace("{entidades}", entidades_texto)
             .replace("{reparacion}", reparacion)
-            .replace("{historial}", formatear_historial(estado.get("historial")))
+            .replace("{memoria}", estado.get("memoria_texto", "(sin memoria previa de esta sesion)"))
             .replace("{pregunta}", estado.get("pregunta", ""))
         )
 

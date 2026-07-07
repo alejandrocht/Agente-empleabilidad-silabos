@@ -19,6 +19,12 @@ class EstadoAgente(TypedDict, total=False):
     # La pregunta original del usuario (texto en espanol).
     pregunta: str
 
+    # Identificador de la sesion conversacional. Lo usa la cache de memoria en RAM.
+    id_sesion: str
+
+    # Memoria ya formateada para prompts: resumen compacto + ventana reciente.
+    memoria_texto: str
+
     # El schema del grafo en texto, para darselo al LLM. Lo llena obtiene_grafo.
     schema_texto: str
 
@@ -42,5 +48,6 @@ class EstadoAgente(TypedDict, total=False):
     error: str
 
     # Ultimos turnos de la conversacion (pregunta+respuesta), para resolver referencias
-    # tipo "esa carrera". Persiste entre preguntas via el checkpointer (MemorySaver).
+    # tipo "esa carrera". Se mantiene por compatibilidad; la memoria nueva usa
+    # memoria_texto, generada desde utils.memoria.
     historial: list[dict]

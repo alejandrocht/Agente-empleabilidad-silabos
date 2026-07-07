@@ -18,7 +18,6 @@ import unicodedata
 
 from estado import EstadoAgente
 from nodos.nodo import NodoLLM
-from utils.historial import formatear_historial
 from utils.neo4j import introspeccionar_schema, obtener_driver
 
 
@@ -76,7 +75,7 @@ class ResuelveEntidad(NodoLLM):
         # Usamos replace (no format) porque el prompt tiene llaves { } literales de JSON.
         prompt = (
             self.prompt
-            .replace("{historial}", formatear_historial(estado.get("historial")))
+            .replace("{memoria}", estado.get("memoria_texto", "(sin memoria previa de esta sesion)"))
             .replace("{pregunta}", estado.get("pregunta", ""))
         )
         # Le pedimos al LLM que conteste.

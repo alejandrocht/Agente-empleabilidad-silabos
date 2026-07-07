@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from estado import EstadoAgente
 from nodos.nodo import Nodo
+from utils.memoria import formatear_memoria, obtener_memoria
 
 # Saludos y cortesias que NO son preguntas de grafo: respondemos sin tocar Neo4j.
 SALUDOS = {
@@ -36,17 +37,26 @@ class ObtienePregunta(Nodo):
         # Le quitamos espacios sobrantes al inicio y al final.
         pregunta_limpia = pregunta.strip()
 
+        id_sesion = estado.get("id_sesion")
+        memoria = obtener_memoria(id_sesion)
+
         # IMPORTANTE: el grafo recuerda el estado entre preguntas (MemorySaver).
         # Reseteamos en CADA turno los campos que llenan los nodos de una consulta previa;
         # si no, la respuesta/cypher viejos se filtran y el enrutado los reusa (haciendo
         # que toda pregunta a partir de la 2da repita la respuesta anterior).
-        # No tocamos 'historial' a proposito: es la memoria entre turnos que si queremos.
+        # La memoria conversacional vive aparte, en utils.memoria, y entra como texto acotado.
         cambios: dict = {
             "pregunta": pregunta_limpia,
+            "id_sesion": id_sesion,
+            "memoria_texto": formatear_memoria(memoria),
             "intentos": 0,
             "error": None,
             "respuesta": None,
             "cypher": None,
+            "schema_texto": None,
+            "entidades": [],
+            "filas": [],
+            "historial": [],
         }
 
         # Si la entrada es un saludo/cortesia, respondemos con la ayuda y cortocircuitamos:

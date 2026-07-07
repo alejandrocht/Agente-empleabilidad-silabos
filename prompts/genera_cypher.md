@@ -34,10 +34,10 @@ Cypher: MATCH (e:Empresa)-[:PUBLICA]-(o:OfertaLaboral) RETURN e.nombre AS empres
 
 {reparacion}
 
-Turnos anteriores de la conversacion (usalos SOLO si la pregunta actual hace referencia
-implicita a algo ya mencionado, ej: "esa carrera", "esa empresa", "ese curso". Si la
-pregunta ya es clara por si sola, ignora este historial):
-{historial}
+Memoria de la sesion (usala SOLO si la pregunta actual hace referencia implicita a algo
+ya mencionado, ej: "esa carrera", "esa empresa", "ese curso". Si la pregunta ya es clara
+por si sola, ignora esta memoria):
+{memoria}
 
 Devuelve UNICAMENTE el Cypher, sin markdown ni explicaciones.
 
