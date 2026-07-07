@@ -1,0 +1,37 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #1f2933;
+  background: #f5f6f8;
+  font-family: "Source Sans 3", "Avenir Next", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: #ffe3d4;
+  color: #1f2933;
+}
+
+.app-bg {
+  background:
+    linear-gradient(180deg, rgba(242, 106, 33, 0.07), rgba(245, 246, 248, 0) 18rem),
+    #f5f6f8;
+}
