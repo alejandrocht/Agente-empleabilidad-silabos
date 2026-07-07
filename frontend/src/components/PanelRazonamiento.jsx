@@ -1,10 +1,10 @@
-import { CheckCircle2, Clipboard, ShieldAlert } from "lucide-react";
+import { Clipboard, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 
-export default function PanelRazonamiento({ pasos, cypher, entidades, error }) {
+export default function PanelRazonamiento({ cypher, entidades, error, errorRed }) {
   const [abierto, setAbierto] = useState(false);
   const [copiado, setCopiado] = useState(false);
-  const tieneDetalle = pasos.length > 0 || cypher || entidades.length > 0 || error;
+  const tieneDetalle = cypher || entidades.length > 0 || error || errorRed;
 
   if (!tieneDetalle) return null;
 
@@ -31,25 +31,6 @@ export default function PanelRazonamiento({ pasos, cypher, entidades, error }) {
             <div className="flex gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
               <ShieldAlert size={18} />
               Consulta no permitida. El agente conserva la politica de solo lectura.
-            </div>
-          ) : null}
-
-          {pasos.length > 0 ? (
-            <div>
-              <p className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-muted">
-                Nodos recorridos
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {pasos.map((paso, index) => (
-                  <span
-                    key={`${paso}-${index}`}
-                    className="inline-flex items-center gap-1 rounded-full border border-ulima/20 bg-orange-50 px-3 py-1 font-mono text-xs text-ink"
-                  >
-                    <CheckCircle2 size={13} />
-                    {paso}
-                  </span>
-                ))}
-              </div>
             </div>
           ) : null}
 

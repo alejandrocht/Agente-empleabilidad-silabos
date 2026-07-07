@@ -41,6 +41,12 @@ export default function Burbuja({ mensaje }) {
           </div>
         ) : null}
 
+        {!esUsuario && mensaje.errorRed ? (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+            Error de conexion/API: {mensaje.errorRed}
+          </div>
+        ) : null}
+
         {!esUsuario ? <TablaFilas filas={mensaje.filas ?? []} /> : null}
 
         {!esUsuario ? (
@@ -49,6 +55,7 @@ export default function Burbuja({ mensaje }) {
             cypher={mensaje.cypher}
             entidades={mensaje.entidades ?? []}
             error={mensaje.error}
+            errorRed={mensaje.errorRed}
           />
         ) : null}
       </article>

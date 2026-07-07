@@ -73,21 +73,35 @@ def chat(body: ChatIn) -> dict[str, Any]:
 
     pasos: list[str] = []
     estado_final: dict[str, Any] = {}
+    depuracion: dict[str, Any] = {
+        "cypher": None,
+        "entidades": [],
+        "filas": [],
+        "error": None,
+    }
 
     try:
         for paso in grafo.stream(entrada, config=config, stream_mode="updates"):
             for nombre_nodo, cambios in paso.items():
                 pasos.append(nombre_nodo)
                 if cambios:
+                    if cambios.get("cypher"):
+                        depuracion["cypher"] = cambios["cypher"]
+                    if cambios.get("entidades"):
+                        depuracion["entidades"] = cambios["entidades"]
+                    if cambios.get("filas"):
+                        depuracion["filas"] = cambios["filas"]
+                    if cambios.get("error"):
+                        depuracion["error"] = cambios["error"]
                     estado_final.update(cambios)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error del agente: {exc}") from exc
 
     return {
         "respuesta": _json_safe(estado_final.get("respuesta", "(sin respuesta)")),
-        "cypher": _json_safe(estado_final.get("cypher")),
-        "entidades": _json_safe(estado_final.get("entidades", [])),
-        "filas": _json_safe(estado_final.get("filas", [])),
+        "cypher": _json_safe(depuracion["cypher"]),
+        "entidades": _json_safe(depuracion["entidades"]),
+        "filas": _json_safe(depuracion["filas"]),
         "pasos": pasos,
-        "error": _json_safe(estado_final.get("error")),
+        "error": _json_safe(depuracion["error"]),
     }

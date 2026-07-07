@@ -33,7 +33,7 @@ export function useChat({ conversacion, agregarMensaje }) {
       agregarMensaje(conversacion.id, {
         rol: "agente",
         texto: "No se pudo contactar al agente.",
-        error: mensaje,
+        errorRed: mensaje,
         pasos: [],
         filas: [],
         entidades: [],
