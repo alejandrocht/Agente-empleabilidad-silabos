@@ -1,8 +1,13 @@
 .venv/
 __pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 *.csv
 .env
 .serena
 .claude
 frontend/.next/
 frontend/node_modules/
+backend/.venv/
+*.egg-info/

@@ -12,16 +12,22 @@ export default function ChatWindow({ conversacion, agregarMensaje }) {
   }, [conversacion?.mensajes.length, enviando]);
 
   return (
-    <div className="flex flex-1 flex-col">
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-5 sm:px-6">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-4 py-6 sm:px-6 lg:py-8">
         {errorRed ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 shadow-sm">
             {errorRed}
           </div>
         ) : null}
 
-        <ListaMensajes mensajes={conversacion?.mensajes ?? []} enviando={enviando} />
+        <ListaMensajes
+          mensajes={conversacion?.mensajes ?? []}
+          enviando={enviando}
+          onSugerencia={enviar}
+        />
         <div ref={finRef} />
+        </div>
       </div>
 
       <BarraInput onEnviar={enviar} disabled={enviando} />

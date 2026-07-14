@@ -1,0 +1,8 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "agente_ciar": "./src/agente_ciar/grafo/constructor.py:construir_grafo"
+  },
+  "env": ".env"
+}
+

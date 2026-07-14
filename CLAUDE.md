@@ -7,32 +7,36 @@ Agente de consola para consultar el grafo Neo4j del CIAR en lenguaje natural. Co
 - Primero manda el código actual de esta carpeta.
 - Luego este `CLAUDE.md`, `sesiones/_index.md` y `sesiones/agente-langgraph.md`.
 - No usar Supabase: este agente trabaja con Neo4j + LLMs.
-- Usar el harness global desde `/Users/alejandromcht/CLAUDE.md` y `Obsidian Vault/AI_HARNESS.md`.
 
 ## Stack real
 - Python
 - LangGraph
 - Neo4j driver
 - LangChain Core
-- `langchain-neo4j`
 - `langchain-openai`
-- `langchain-google-genai`
-- `langchain-nvidia-ai-endpoints`
-- `langchain-ollama`
 - LangSmith disponible por dependencia
 
 ## Flujo del agente
-`START → obtiene_pregunta → obtiene_grafo → resuelve_entidad → genera_cypher → valida_cypher → ejecuta_cypher → analiza_resultado → devuelve_resultado → END`
+`START → obtiene_pregunta → obtiene_grafo → selecciona_estrategia → caché | plantilla | flujo dinámico → valida/ejecuta → analiza_resultado → devuelve_resultado → END`
 
 ## Estructura clave
-- `main.py` — loop de consola.
-- `agent.py` — construye el grafo LangGraph.
-- `estado.py` — `EstadoAgente`.
-- `nodos/` — nodos del flujo.
-- `utils/neo4j.py` — driver, introspección de schema vivo, validación y consultas de lectura.
-- `utils/llm.py` — fábrica multi-proveedor con fallback.
-- `prompts/` — prompts de resolución de entidad, generación Cypher y análisis de resultado.
-- `PREGUNTAS_EJEMPLO.md` — casos manuales de prueba.
+```
+proyecto/
+├── backend/          ← todo el código Python del agente
+│   ├── pyproject.toml — dependencias y configuración de calidad
+│   ├── langgraph.json — factoría del grafo para LangGraph
+│   ├── src/agente_ciar/ — paquete instalable con grafo, nodos, guardas y memoria
+│   ├── scripts/consola.py — loop de consola
+│   ├── tests/unit/   — pruebas aisladas
+│   ├── tests/integration/ — auditoría del flujo
+│   ├── .env          — variables de entorno (no versionado)
+│   └── PREGUNTAS_EJEMPLO.md — casos manuales de prueba
+├── frontend/         ← aplicación Next.js
+└── sesiones/         — histórico técnico del agente
+```
+- `backend/src/agente_ciar/db/neo4j.py` — driver, schema vivo y transacciones de lectura.
+- `backend/src/agente_ciar/guardas/cypher.py` — validador único de solo lectura.
+- `backend/src/agente_ciar/llm/fabrica.py` — fábrica OpenAI con modelo por rol.
 - `sesiones/agente-langgraph.md` — histórico técnico del agente.
 
 ## Reglas específicas
@@ -47,22 +51,20 @@ Agente de consola para consultar el grafo Neo4j del CIAR en lenguaje natural. Co
 ## Configuración
 El `.env` define:
 - Neo4j: `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`
-- LLM principal: `LLM_PROVIDER`
-- Fallbacks: `LLM_FALLBACK`
-- Modelos por proveedor: `OPENAI_MODEL`, `GEMINI_MODEL`, `NVIDIA_MODEL`, `OLLAMA_MODEL`
+- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL`
+- Modelos por rol: `OPENAI_MODEL_ENTIDAD`, `OPENAI_MODEL_CYPHER`, `OPENAI_MODEL_ANALISIS`, `OPENAI_MODEL_RESUMEN`, `OPENAI_MODEL_INSPECTOR`
+- TTL y límite: `MEMORIA_TTL_SEGUNDOS`, `CACHE_TTL_SEGUNDOS`, `CACHE_MAX_ENTRADAS`
 
-Proveedores soportados:
-- `openai`
-- `google_genai`
-- `nvidia`
-- `ollama`
+Proveedor soportado: solo `openai`.
 
 ## Verificación
-- Activar el entorno si existe: `source .venv/bin/activate`
-- Instalar deps si falta: `pip install -r requirements.txt`
-- Ejecutar: `python main.py`
+- Instalar el paquete: `cd backend && python -m pip install -e ".[dev]"`
+- Ejecutar el agente: `cd backend && python scripts/consola.py`
+- Ejecutar la API: `cd backend && uvicorn agente_ciar.api.servidor:app --reload --port 8001`
+- Calidad: `cd backend && python -m ruff check src tests scripts && python -m mypy src && python -m pytest`
+- Frontend: `cd frontend && npm run check && npm audit --omit=dev`
 - Probar al menos una pregunta real contra Neo4j.
-- Para cambios en prompts/generación Cypher, probar preguntas en `PREGUNTAS_EJEMPLO.md`.
+- Para cambios en prompts/generación Cypher, probar preguntas en `backend/PREGUNTAS_EJEMPLO.md`.
 
 ## Memoria
 - Índice: `sesiones/_index.md`

@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { enviarPregunta } from "../api/agente";
 
 export function useChat({ conversacion, agregarMensaje }) {
   const [enviando, setEnviando] = useState(false);
   const [errorRed, setErrorRed] = useState(null);
+  const bloqueo = useRef(false);
 
   const enviar = async (texto) => {
     const pregunta = texto.trim();
-    if (!pregunta || enviando || !conversacion) return;
+    if (!pregunta || bloqueo.current || !conversacion) return;
 
+    bloqueo.current = true;
     setErrorRed(null);
-    agregarMensaje(conversacion.id, { rol: "usuario", texto: pregunta });
+    agregarMensaje(conversacion.id, { rol: "usuario", texto: pregunta, creado: Date.now() });
     setEnviando(true);
 
     try {
@@ -26,6 +28,7 @@ export function useChat({ conversacion, agregarMensaje }) {
         filas: data.filas ?? [],
         pasos: data.pasos ?? [],
         error: data.error ?? null,
+        creado: Date.now(),
       });
     } catch (err) {
       const mensaje = err.message || "No se pudo contactar al agente.";
@@ -38,8 +41,10 @@ export function useChat({ conversacion, agregarMensaje }) {
         filas: [],
         entidades: [],
         cypher: null,
+        creado: Date.now(),
       });
     } finally {
+      bloqueo.current = false;
       setEnviando(false);
     }
   };

@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Agente Ciar",
+  title: "Agente CIAR",
   description: "Interfaz web para consultar el agente CIAR sobre Neo4j.",
 };
 

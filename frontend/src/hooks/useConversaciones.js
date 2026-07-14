@@ -3,6 +3,7 @@ import { crearId } from "../lib/ids";
 
 const CLAVE = "ciar.conversaciones";
 const LIMITE_CONVERSACIONES = 30;
+const LIMITE_MENSAJES = 100;
 const ESTADO_VACIO = { conversaciones: [], activa: null };
 
 function crearConversacion() {
@@ -11,7 +12,7 @@ function crearConversacion() {
   return {
     id,
     id_sesion: crearId("sesion"),
-    titulo: "Nueva conversacion",
+    titulo: "Nueva conversación",
     creada: ahora,
     actualizada: ahora,
     mensajes: [],
@@ -32,7 +33,7 @@ function cargar() {
 
 function titular(texto) {
   const limpio = texto.trim().replace(/\s+/g, " ");
-  if (!limpio) return "Nueva conversacion";
+  if (!limpio) return "Nueva conversación";
   return limpio.length > 42 ? `${limpio.slice(0, 42)}...` : limpio;
 }
 
@@ -46,7 +47,12 @@ export function useConversaciones() {
   }, []);
 
   useEffect(() => {
-    if (listo) localStorage.setItem(CLAVE, JSON.stringify(estado));
+    if (!listo) return;
+    try {
+      localStorage.setItem(CLAVE, JSON.stringify(estado));
+    } catch {
+      // La conversación sigue disponible en RAM si el navegador agotó su almacenamiento.
+    }
   }, [estado, listo]);
 
   const nuevaConversacion = () => {
@@ -73,7 +79,7 @@ export function useConversaciones() {
             ...conv,
             titulo: primerMensaje ? titular(mensaje.texto) : conv.titulo,
             actualizada: Date.now(),
-            mensajes: [...conv.mensajes, mensaje],
+            mensajes: [...conv.mensajes, mensaje].slice(-LIMITE_MENSAJES),
           };
         })
         .sort((a, b) => b.actualizada - a.actualizada)

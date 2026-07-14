@@ -4,10 +4,6 @@
 
 Agente principal y objetivo final actual del proyecto CIAR. Convierte preguntas en español a Cypher, valida que sean de solo lectura, consulta Neo4j y redacta respuestas sobre datos académicos y de empleabilidad.
 
-## Ruta local
-
-- `/Users/alejandromcht/Desktop/PRUEBA NEO4J/Agente-empleabilidad-silabos`
-
 ## Fuente de verdad
 
 1. Código actual de esta carpeta.
@@ -21,8 +17,8 @@ Agente principal y objetivo final actual del proyecto CIAR. Convierte preguntas 
 - LangGraph
 - Neo4j driver
 - LangChain Core
-- `langchain-neo4j`
-- proveedores LLM intercambiables
+- `langchain-openai`
+- OpenAI como proveedor LLM único
 
 ## Reglas firmes
 
@@ -33,6 +29,6 @@ Agente principal y objetivo final actual del proyecto CIAR. Convierte preguntas 
 
 ## Verificación
 
-- `python main.py`
+- `cd backend && python scripts/consola.py`
 - Probar al menos una pregunta real contra Neo4j
 - Si se toca generación/validación de Cypher, probar casos de `PREGUNTAS_EJEMPLO.md`

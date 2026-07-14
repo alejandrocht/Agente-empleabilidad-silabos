@@ -67,3 +67,18 @@ Variables por proveedor (todas en `.env.example`):
 `requirements.txt`: se quitó `langchain` (base, ya sin uso) y se agregó `langchain-ollama` (usado en el código pero faltaba declarado).
 
 Verificado: `obtener_llm()` instancia correctamente `ChatNVIDIA` y `ChatOllama`; `python main.py` corrió end-to-end con NVIDIA contra Neo4j real (pregunta "cuantos nodos hay en total" → respuesta correcta, recorrido completo de los 8 nodos).
+
+## CIAR v2 implementado (2026-07-13)
+
+Se ejecutó `docs/plan_implementacion.md` y el backend migró al layout instalable
+`backend/src/agente_ciar/`, con `pyproject.toml` y `langgraph.json`. La fábrica anterior quedó
+reemplazada por OpenAI por rol; las llamadas son perezosas y LangSmith se configura por entorno.
+
+El flujo incorpora logs JSON por nodo, guarda de entrada, guarda Cypher central, sesiones Neo4j
+`READ_ACCESS`, memoria viva con TTL, resumen cada 12 turnos, caché con TTL, 20 plantillas y el nodo
+`selecciona_estrategia`. Las plantillas usan el schema vivo real (`Oferta_Laboral`,
+`Requerimiento_Laboral`, `DEFIINE`) y las parametrizadas resuelven ids sin LLM.
+
+Verificación: 27 pruebas, Ruff y mypy strict en verde; las 20 plantillas pasan `EXPLAIN` contra
+Neo4j y se probaron consultas reales generales y parametrizadas. El `.env` local todavía requiere
+`OPENAI_API_KEY` para probar la rama dinámica.

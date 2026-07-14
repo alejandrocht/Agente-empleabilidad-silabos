@@ -10,6 +10,10 @@
   font-family: "Source Sans 3", "Avenir Next", sans-serif;
 }
 
+html {
+  height: 100%;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -18,6 +22,8 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
+  overflow: hidden;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -32,6 +38,68 @@ textarea {
 
 .app-bg {
   background:
-    linear-gradient(180deg, rgba(242, 106, 33, 0.07), rgba(245, 246, 248, 0) 18rem),
-    #f5f6f8;
+    radial-gradient(circle at 75% -15%, rgba(242, 106, 33, 0.12), transparent 32rem),
+    linear-gradient(180deg, #fbfbfc 0%, #f5f6f8 100%);
+}
+
+.icon-button {
+  display: inline-flex;
+  height: 2.5rem;
+  width: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  color: #64748b;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.icon-button:hover {
+  background: #f5f6f8;
+  color: #1f2933;
+}
+
+.icon-button:focus-visible {
+  outline: 2px solid rgba(242, 106, 33, 0.45);
+  outline-offset: 2px;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 260ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+* {
+  scrollbar-color: rgba(100, 116, 139, 0.45) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35);
+  border-radius: 999px;
 }

@@ -1,27 +1,38 @@
 "use client";
 
-import BotAvatar from "./components/BotAvatar";
+import { useState } from "react";
 import ChatWindow from "./components/ChatWindow";
 import Sidebar from "./components/Sidebar";
+import Topbar from "./components/Topbar";
 import { useConversaciones } from "./hooks/useConversaciones";
 
 export default function App() {
   const conversaciones = useConversaciones();
+  const [menuAbierto, setMenuAbierto] = useState(false);
 
   return (
-    <main className="app-bg min-h-screen text-ink">
-      <div className="flex min-h-screen flex-col lg:flex-row">
-        <Sidebar {...conversaciones} />
-        <section className="flex min-h-screen flex-1 flex-col">
-          <header className="border-b border-line bg-white px-5 py-4">
-            <div className="mx-auto flex w-full max-w-5xl items-center gap-3">
-              <BotAvatar />
-              <div>
-                <h1 className="text-2xl font-extrabold tracking-tight">Agente Ciar</h1>
-                <p className="text-sm text-muted">Consulta académica y empleabilidad con Neo4j</p>
-              </div>
-            </div>
-          </header>
+    <main className="app-bg h-[100dvh] overflow-hidden text-ink">
+      <div className="flex h-full overflow-hidden">
+        {menuAbierto ? (
+          <button
+            type="button"
+            aria-label="Cerrar menú"
+            className="fixed inset-0 z-40 bg-ink/30 backdrop-blur-[2px] lg:hidden"
+            onClick={() => setMenuAbierto(false)}
+          />
+        ) : null}
+
+        <Sidebar
+          {...conversaciones}
+          abierto={menuAbierto}
+          onCerrar={() => setMenuAbierto(false)}
+        />
+
+        <section className="flex min-w-0 flex-1 flex-col">
+          <Topbar
+            conversacion={conversaciones.activa}
+            onAbrirMenu={() => setMenuAbierto(true)}
+          />
           <ChatWindow
             conversacion={conversaciones.activa}
             agregarMensaje={conversaciones.agregarMensaje}
