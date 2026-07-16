@@ -1,13 +1,13 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Roboto:wght@400;500;600;700;800&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  color: #1f2933;
-  background: #f5f6f8;
-  font-family: "Source Sans 3", "Avenir Next", sans-serif;
+  color: #26201b;
+  background: #faf8f5;
+  font-family: "Roboto", "Helvetica Neue", sans-serif;
 }
 
 html {
@@ -33,13 +33,17 @@ textarea {
 
 ::selection {
   background: #ffe3d4;
-  color: #1f2933;
+  color: #26201b;
 }
 
 .app-bg {
-  background:
-    radial-gradient(circle at 75% -15%, rgba(242, 106, 33, 0.12), transparent 32rem),
-    linear-gradient(180deg, #fbfbfc 0%, #f5f6f8 100%);
+  background: #faf8f5;
+}
+
+/* Retícula de puntos: papel de grafo */
+.canvas-dots {
+  background-image: radial-gradient(rgba(38, 32, 27, 0.075) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
 }
 
 .icon-button {
@@ -49,13 +53,13 @@ textarea {
   align-items: center;
   justify-content: center;
   border-radius: 0.75rem;
-  color: #64748b;
+  color: #7a6f66;
   transition: background-color 160ms ease, color 160ms ease;
 }
 
 .icon-button:hover {
-  background: #f5f6f8;
-  color: #1f2933;
+  background: #f4efe9;
+  color: #26201b;
 }
 
 .icon-button:focus-visible {
@@ -78,6 +82,30 @@ textarea {
   animation: fade-in 260ms ease-out both;
 }
 
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-girar {
+  animation: girar 3.2s linear infinite;
+}
+
+@keyframes pulso {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.animate-pulso {
+  animation: pulso 2.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -90,7 +118,7 @@ textarea {
 }
 
 * {
-  scrollbar-color: rgba(100, 116, 139, 0.45) transparent;
+  scrollbar-color: rgba(122, 111, 102, 0.45) transparent;
   scrollbar-width: thin;
 }
 
@@ -100,6 +128,6 @@ textarea {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.35);
+  background: rgba(122, 111, 102, 0.35);
   border-radius: 999px;
 }

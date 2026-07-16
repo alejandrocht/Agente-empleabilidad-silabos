@@ -9,6 +9,15 @@ import { useConversaciones } from "./hooks/useConversaciones";
 export default function App() {
   const conversaciones = useConversaciones();
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
+
+  const alternarMenu = () => {
+    if (window.innerWidth >= 1024) {
+      setSidebarVisible((valor) => !valor);
+    } else {
+      setMenuAbierto(true);
+    }
+  };
 
   return (
     <main className="app-bg h-[100dvh] overflow-hidden text-ink">
@@ -25,13 +34,14 @@ export default function App() {
         <Sidebar
           {...conversaciones}
           abierto={menuAbierto}
+          visible={sidebarVisible}
           onCerrar={() => setMenuAbierto(false)}
         />
 
         <section className="flex min-w-0 flex-1 flex-col">
           <Topbar
             conversacion={conversaciones.activa}
-            onAbrirMenu={() => setMenuAbierto(true)}
+            onAbrirMenu={alternarMenu}
           />
           <ChatWindow
             conversacion={conversaciones.activa}

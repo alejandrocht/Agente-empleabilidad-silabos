@@ -8,7 +8,9 @@ describe("interfaz del chat", () => {
     const enviar = vi.fn();
     render(<BarraInput onEnviar={enviar} disabled={false} />);
 
-    const campo = screen.getByPlaceholderText("Escribe tu pregunta...");
+    const campo = screen.getByPlaceholderText(
+      "Pregunta sobre carreras, cursos, empresas o empleabilidad…",
+    );
     fireEvent.change(campo, { target: { value: "¿Cuántas carreras hay?" } });
     fireEvent.click(screen.getByRole("button", { name: "Enviar pregunta" }));
 

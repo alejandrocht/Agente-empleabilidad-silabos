@@ -21,63 +21,54 @@ export default function Burbuja({ mensaje }) {
 
   if (mensaje.cargando) {
     return (
-      <div className="flex animate-fade-in justify-start gap-3">
-        <BotAvatar />
-        <div className="w-full max-w-2xl rounded-2xl border border-line bg-white p-5 shadow-sm">
-          <p className="font-mono text-xs font-semibold text-ulima">Consultando el grafo…</p>
-          <div className="mt-4 space-y-3">
-            <div className="h-3 w-4/5 animate-pulse rounded-full bg-slate-200" />
-            <div className="h-3 w-2/3 animate-pulse rounded-full bg-slate-200" />
-            <div className="h-3 w-1/2 animate-pulse rounded-full bg-slate-200" />
-          </div>
+      <div className="flex animate-fade-in items-center gap-3 text-muted">
+        <img src="/logo-ulima.png" alt="" className="h-6 w-6 animate-girar object-contain" />
+        <p className="text-sm font-medium">Recorriendo el grafo…</p>
+      </div>
+    );
+  }
+
+  if (esUsuario) {
+    return (
+      <div className="flex w-full animate-fade-in justify-end">
+        <div className="max-w-[70%] rounded-[16px] rounded-br-[4px] bg-ulima px-4 py-3 text-[15px] leading-relaxed text-white shadow-sm">
+          <p className="whitespace-pre-wrap">{mensaje.texto}</p>
+          {hora ? <time className="mt-1.5 block text-right text-[11px] text-white/70">{hora}</time> : null}
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`flex w-full animate-fade-in ${esUsuario ? "justify-end" : "justify-start gap-3"}`}>
-      {!esUsuario ? <BotAvatar /> : null}
-      <article
-        className={`min-w-0 rounded-2xl px-4 py-3.5 sm:px-5 sm:py-4 ${
-          esUsuario
-            ? "max-w-[min(38rem,88%)] rounded-br-md bg-ulima text-white shadow-sm"
-            : "w-full max-w-3xl rounded-tl-md border border-line bg-white text-ink shadow-sm"
-        }`}
-      >
-        <p className="whitespace-pre-wrap text-[1.02rem] leading-relaxed">{mensaje.texto}</p>
+    <div className="flex w-full animate-fade-in justify-start gap-3">
+      <BotAvatar />
+      <article className="min-w-0 flex-1">
+        <p className="whitespace-pre-wrap text-[15.5px] leading-[1.65] text-ink">{mensaje.texto}</p>
 
-        {!esUsuario && mensaje.error ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+        {mensaje.error ? (
+          <div className="mt-4 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
             Consulta bloqueada por seguridad: {mensaje.error}
           </div>
         ) : null}
 
-        {!esUsuario && mensaje.errorRed ? (
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+        {mensaje.errorRed ? (
+          <div className="mt-4 rounded-[10px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
             Error de conexión/API: {mensaje.errorRed}
           </div>
         ) : null}
 
-        {!esUsuario ? <TablaFilas filas={mensaje.filas ?? []} /> : null}
+        <TablaFilas filas={mensaje.filas ?? []} />
 
-        {!esUsuario ? (
-          <PanelRazonamiento
-            pasos={mensaje.pasos ?? []}
-            cypher={mensaje.cypher}
-            entidades={mensaje.entidades ?? []}
-            error={mensaje.error}
-            errorRed={mensaje.errorRed}
-          />
-        ) : null}
+        <PanelRazonamiento
+          pasos={mensaje.pasos ?? []}
+          cypher={mensaje.cypher}
+          entidades={mensaje.entidades ?? []}
+          error={mensaje.error}
+          errorRed={mensaje.errorRed}
+        />
 
-        <div className={`mt-3 flex items-center gap-2 ${esUsuario ? "justify-end" : "justify-between"}`}>
-          {hora ? (
-            <time className={`text-[11px] ${esUsuario ? "text-white/70" : "text-muted"}`}>{hora}</time>
-          ) : (
-            <span />
-          )}
-          {!esUsuario && mensaje.texto ? (
+        <div className="mt-3 flex items-center gap-2">
+          {mensaje.texto ? (
             <button
               type="button"
               onClick={copiar}
@@ -88,6 +79,7 @@ export default function Burbuja({ mensaje }) {
               {copiado ? "Copiado" : "Copiar"}
             </button>
           ) : null}
+          {hora ? <time className="ml-auto text-[11px] text-muted">{hora}</time> : null}
         </div>
       </article>
     </div>

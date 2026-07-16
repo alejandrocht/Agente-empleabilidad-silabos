@@ -16,27 +16,32 @@ export default function TablaFilas({ filas }) {
 
   if (unaFila && valorSimple(unicoValor)) {
     return (
-      <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50 px-5 py-4 text-ink">
-        <p className="font-mono text-xs font-semibold text-ulima">{titulo(columnas[0])}</p>
-        <p className="mt-1 text-4xl font-extrabold">{String(unicoValor)}</p>
+      <div className="mt-4 rounded-[12px] border border-ulima/25 bg-ulima/5 px-5 py-4 text-ink">
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ulima">
+          {titulo(columnas[0])}
+        </p>
+        <p className="mt-1 font-mono text-4xl font-bold tabular-nums">{String(unicoValor)}</p>
       </div>
     );
   }
 
   return (
-    <div className="mt-4 overflow-hidden rounded-xl border border-line bg-white">
-      <div className="flex items-center justify-between border-b border-line bg-ash/70 px-3 py-2">
-        <p className="text-xs font-semibold text-muted">Resultados</p>
-        <span className="rounded-full bg-white px-2 py-0.5 font-mono text-[10px] text-muted">
+    <div className="mt-4 overflow-hidden rounded-[12px] border border-line bg-paper">
+      <div className="flex items-center justify-between border-b border-line bg-ash px-4 py-2">
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-muted">Resultados</p>
+        <span className="rounded-full bg-paper px-2 py-0.5 font-mono text-[10px] text-muted">
           {filas.length} {filas.length === 1 ? "fila" : "filas"}
         </span>
       </div>
       <div className="max-h-80 overflow-auto">
         <table className="min-w-full border-collapse text-sm">
-          <thead className="sticky top-0 bg-orange-50 text-left text-ink shadow-[0_1px_0_#fed7aa]">
+          <thead className="sticky top-0 bg-ash text-left shadow-[0_1px_0_#EAE2D9]">
             <tr>
               {columnas.map((columna) => (
-                <th key={columna} className="px-3 py-2 font-mono text-xs font-semibold">
+                <th
+                  key={columna}
+                  className="px-4 py-2.5 text-[10.5px] font-bold uppercase tracking-[0.12em] text-muted"
+                >
                   {titulo(columna)}
                 </th>
               ))}
@@ -44,9 +49,14 @@ export default function TablaFilas({ filas }) {
           </thead>
           <tbody>
             {filas.map((fila, index) => (
-              <tr key={index} className="border-t border-line transition hover:bg-orange-50/40">
+              <tr key={index} className="border-t border-line transition hover:bg-ash/50">
                 {columnas.map((columna) => (
-                  <td key={columna} className="px-3 py-2 align-top text-ink">
+                  <td
+                    key={columna}
+                    className={`px-4 py-2.5 align-top text-ink ${
+                      typeof fila[columna] === "number" ? "text-right font-mono tabular-nums" : ""
+                    }`}
+                  >
                     {valorSimple(fila[columna])
                       ? String(fila[columna] ?? "—")
                       : JSON.stringify(fila[columna])}
