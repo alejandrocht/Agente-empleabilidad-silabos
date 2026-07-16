@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import logging
 
-from agente_ciar.observabilidad.logger import log_paso
+from agente.observabilidad.logger import log_paso
 
 
 def test_log_paso_emite_json_con_claves(caplog) -> None:
-    caplog.set_level(logging.INFO, logger="agente_ciar")
+    caplog.set_level(logging.INFO, logger="agente")
     log_paso("prueba", "inicio", "sesion-1", {"cantidad": 2})
 
     entrada = json.loads(caplog.records[-1].message)

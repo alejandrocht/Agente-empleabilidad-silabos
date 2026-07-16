@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from agente_ciar.plantillas import motor
-from agente_ciar.plantillas.catalogo import PLANTILLAS
-from agente_ciar.plantillas.motor import buscar_intencion, buscar_plantilla, renderizar
+from agente.plantillas import motor
+from agente.plantillas.catalogo import PLANTILLAS
+from agente.plantillas.motor import buscar_intencion, buscar_plantilla, renderizar
 
 
 def test_catalogo_contiene_veinte_plantillas() -> None:

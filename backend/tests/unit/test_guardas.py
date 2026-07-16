@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from agente_ciar.guardas.cypher import (
+from agente.guardas.cypher import (
     PALABRAS_BLOQUEADAS,
     validar_consulta,
     validar_seguridad_basica,
 )
-from agente_ciar.guardas.entrada import validar_entrada
+from agente.guardas.entrada import validar_entrada
 
 
 def test_input_guard_rechaza_inyeccion_y_texto_largo() -> None:
@@ -38,7 +38,7 @@ def test_guard_rechaza_call_peligroso_despues_de_match() -> None:
 
 
 def test_guard_valida_el_par_de_labels_de_la_relacion(monkeypatch) -> None:
-    import agente_ciar.db.neo4j as neo4j
+    import agente.db.neo4j as neo4j
 
     monkeypatch.setattr(
         neo4j,

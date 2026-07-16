@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from agente_ciar.cache import consultas
+from agente.cache import consultas
 
 
 def test_guardar_y_buscar_resultado_completo() -> None:

@@ -25,7 +25,7 @@ proyecto/
 ├── backend/          ← todo el código Python del agente
 │   ├── pyproject.toml — dependencias y configuración de calidad
 │   ├── langgraph.json — factoría del grafo para LangGraph
-│   ├── src/agente_ciar/ — paquete instalable con grafo, nodos, guardas y memoria
+│   ├── src/agente/ — paquete instalable con grafo, nodos, guardas y memoria
 │   ├── scripts/consola.py — loop de consola
 │   ├── tests/unit/   — pruebas aisladas
 │   ├── tests/integration/ — auditoría del flujo
@@ -34,9 +34,9 @@ proyecto/
 ├── frontend/         ← aplicación Next.js
 └── sesiones/         — histórico técnico del agente
 ```
-- `backend/src/agente_ciar/db/neo4j.py` — driver, schema vivo y transacciones de lectura.
-- `backend/src/agente_ciar/guardas/cypher.py` — validador único de solo lectura.
-- `backend/src/agente_ciar/llm/fabrica.py` — fábrica OpenAI con modelo por rol.
+- `backend/src/agente/db/neo4j.py` — driver, schema vivo y transacciones de lectura.
+- `backend/src/agente/guardas/cypher.py` — validador único de solo lectura.
+- `backend/src/agente/llm/fabrica.py` — fábrica OpenAI con modelo por rol.
 - `sesiones/agente-langgraph.md` — histórico técnico del agente.
 
 ## Reglas específicas
@@ -60,7 +60,7 @@ Proveedor soportado: solo `openai`.
 ## Verificación
 - Instalar el paquete: `cd backend && python -m pip install -e ".[dev]"`
 - Ejecutar el agente: `cd backend && python scripts/consola.py`
-- Ejecutar la API: `cd backend && uvicorn agente_ciar.api.servidor:app --reload --port 8001`
+- Ejecutar la API: `cd backend && python -m uvicorn agente.api.servidor:app --reload --port 8001`
 - Calidad: `cd backend && python -m ruff check src tests scripts && python -m mypy src && python -m pytest`
 - Frontend: `cd frontend && npm run check && npm audit --omit=dev`
 - Probar al menos una pregunta real contra Neo4j.

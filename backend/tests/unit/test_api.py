@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from agente_ciar.api import servidor
+from agente.api import servidor
 
 
 class GrafoFalso:

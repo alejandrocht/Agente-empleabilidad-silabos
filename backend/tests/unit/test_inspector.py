@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agente_ciar.nodos.devuelve_resultado import _inspeccionar
+from agente.nodos.devuelve_resultado import _inspeccionar
 
 
 def test_inspector_rechaza_respuestas_invalidas() -> None:
