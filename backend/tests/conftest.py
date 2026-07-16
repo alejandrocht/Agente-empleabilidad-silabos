@@ -18,9 +18,9 @@ sys.path.insert(0, str(SRC))
 @pytest.fixture(autouse=True)
 def limpiar_estado_ram() -> None:
     """Aísla caché y memorias efímeras entre casos de prueba."""
-    from agente_ciar.cache.consultas import limpiar as limpiar_cache
-    from agente_ciar.memoria.bloques import limpiar as limpiar_bloques
-    from agente_ciar.memoria.conversacional import limpiar as limpiar_conversacional
+    from agente.cache.consultas import limpiar as limpiar_cache
+    from agente.memoria.bloques import limpiar as limpiar_bloques
+    from agente.memoria.conversacional import limpiar as limpiar_conversacional
 
     limpiar_cache()
     limpiar_bloques()

@@ -7,10 +7,10 @@ import uuid
 
 import pytest
 
-from agente_ciar.grafo.constructor import construir_grafo
-from agente_ciar.guardas.cypher import validar_consulta
-from agente_ciar.memoria.conversacional import actualizar_entidades
-from agente_ciar.nodos.valida_cypher import ValidaCypher
+from agente.grafo.constructor import construir_grafo
+from agente.guardas.cypher import validar_consulta
+from agente.memoria.conversacional import actualizar_entidades
+from agente.nodos.valida_cypher import ValidaCypher
 
 
 def _ejecutar(grafo, pregunta: str, sesion: str | None = None) -> tuple[list[str], dict]:
@@ -33,17 +33,18 @@ def _ejecutar(grafo, pregunta: str, sesion: str | None = None) -> tuple[list[str
 @pytest.fixture
 def fronteras_falsas(monkeypatch):
     """Reemplaza schema, EXPLAIN, ejecución y cualquier LLM accidental."""
-    import agente_ciar.nodos.base as base
-    import agente_ciar.nodos.ejecuta_cypher as nodo_ejecuta
-    import agente_ciar.nodos.obtiene_grafo as nodo_schema
-    import agente_ciar.nodos.valida_cypher as nodo_valida
+    import agente.nodos.base as base
+    import agente.nodos.ejecuta_cypher as nodo_ejecuta
+    import agente.nodos.obtiene_grafo as nodo_schema
+    import agente.nodos.valida_cypher as nodo_valida
 
-    contador = {"ejecuciones": 0}
+    contador = {"ejecuciones": 0, "cyphers": []}
     monkeypatch.setattr(nodo_schema, "construir_schema_texto", lambda: "schema de prueba")
     monkeypatch.setattr(nodo_valida, "validar_consulta", lambda cypher: None)
 
     def ejecutar(_cypher: str):
         contador["ejecuciones"] += 1
+        contador["cyphers"].append(_cypher)
         return [{"total": 14}]
 
     monkeypatch.setattr(nodo_ejecuta, "ejecutar_lectura", ejecutar)
@@ -56,7 +57,7 @@ def fronteras_falsas(monkeypatch):
 
 
 def test_saludo_cortocircuita_sin_neo4j_ni_llm(monkeypatch) -> None:
-    import agente_ciar.nodos.obtiene_grafo as nodo_schema
+    import agente.nodos.obtiene_grafo as nodo_schema
 
     monkeypatch.setattr(
         nodo_schema,
@@ -70,7 +71,7 @@ def test_saludo_cortocircuita_sin_neo4j_ni_llm(monkeypatch) -> None:
 
 
 def test_entrada_adversarial_se_rechaza_antes_del_schema(monkeypatch) -> None:
-    import agente_ciar.nodos.obtiene_grafo as nodo_schema
+    import agente.nodos.obtiene_grafo as nodo_schema
 
     monkeypatch.setattr(
         nodo_schema,
@@ -84,7 +85,7 @@ def test_entrada_adversarial_se_rechaza_antes_del_schema(monkeypatch) -> None:
 
 
 def test_plantilla_y_repeticion_cacheada_no_usan_llm(fronteras_falsas) -> None:
-    from agente_ciar.cache import consultas
+    from agente.cache import consultas
 
     grafo = construir_grafo()
     sesion = "sesion-cache"
@@ -103,16 +104,45 @@ def test_plantilla_y_repeticion_cacheada_no_usan_llm(fronteras_falsas) -> None:
     assert consultas._CACHE[clave]["creado_en"] == creado_en
 
 
-def test_referencia_implicita_usa_entidad_activa(fronteras_falsas) -> None:
+@pytest.mark.parametrize("referencia", ["esa carrera", "esta carrera", "la última"])
+def test_referencia_implicita_usa_entidad_activa(fronteras_falsas, referencia: str) -> None:
     actualizar_entidades(
         "sesion-ref",
         [{"label": "Carrera", "id": "CAR_1", "nombre": "INGENIERIA DE SISTEMAS"}],
     )
-    pasos, estado = _ejecutar(construir_grafo(), "¿Cuántos cursos tiene esa carrera?", "sesion-ref")
+    pasos, estado = _ejecutar(
+        construir_grafo(), f"¿Cuántos cursos tiene {referencia}?", "sesion-ref"
+    )
 
     assert "resuelve_entidad" not in pasos
     assert "genera_cypher" not in pasos
     assert estado["respuesta"]
+
+
+def test_referencia_anterior_recupera_la_carrera_previa(fronteras_falsas) -> None:
+    actualizar_entidades(
+        "sesion-historial",
+        [{"label": "Carrera", "id": "CAR_SISTEMAS", "nombre": "INGENIERIA DE SISTEMAS"}],
+    )
+    actualizar_entidades(
+        "sesion-historial",
+        [{"label": "Carrera", "id": "CAR_INDUSTRIAL", "nombre": "INGENIERIA INDUSTRIAL"}],
+    )
+    grafo = construir_grafo()
+
+    pasos_activa, _ = _ejecutar(
+        grafo, "¿Cuántos cursos tiene esa carrera?", "sesion-historial"
+    )
+    cypher_activa = fronteras_falsas["cyphers"][-1]
+    pasos_anterior, _ = _ejecutar(
+        grafo, "¿Cuántos cursos tiene la anterior?", "sesion-historial"
+    )
+    cypher_anterior = fronteras_falsas["cyphers"][-1]
+
+    assert "resuelve_entidad" not in pasos_activa
+    assert "resuelve_entidad" not in pasos_anterior
+    assert "CAR_INDUSTRIAL" in cypher_activa
+    assert "CAR_SISTEMAS" in cypher_anterior
 
 
 def test_cypher_create_es_bloqueado_sin_conectar() -> None:
@@ -123,7 +153,7 @@ def test_cypher_create_es_bloqueado_sin_conectar() -> None:
 
 
 def test_cada_nodo_visitado_emite_log(fronteras_falsas, caplog) -> None:
-    caplog.set_level(logging.INFO, logger="agente_ciar")
+    caplog.set_level(logging.INFO, logger="agente")
     pasos, _ = _ejecutar(construir_grafo(), "¿Cuántas carreras hay?")
 
     nodos_log = {getattr(registro, "message", "") for registro in caplog.records}

@@ -19,7 +19,7 @@ Completa `OPENAI_API_KEY` y las credenciales de Neo4j. Para habilitar trazas, co
 
 ```powershell
 python scripts/consola.py
-uvicorn agente_ciar.api.servidor:app --reload --port 8001
+uvicorn agente.api.servidor:app --reload --port 8001
 python -m pytest
 ruff check src tests scripts
 mypy src

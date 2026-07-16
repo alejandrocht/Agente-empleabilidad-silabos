@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from agente_ciar.llm import fabrica
+from agente.llm import fabrica
 
 
 class ChatOpenAIFalso:

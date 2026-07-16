@@ -6,9 +6,9 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from agente_ciar.config import settings as _settings  # noqa: F401
-from agente_ciar.grafo.constructor import construir_grafo
-from agente_ciar.observabilidad.logger import log_fin_turno
+from agente.config import settings as _settings  # noqa: F401
+from agente.grafo.constructor import construir_grafo
+from agente.observabilidad.logger import log_fin_turno
 
 
 def run_console() -> None:
