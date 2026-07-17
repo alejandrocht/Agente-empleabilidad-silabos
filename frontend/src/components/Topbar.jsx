@@ -1,7 +1,6 @@
 import { Menu } from "lucide-react";
 
 export default function Topbar({ conversacion, onAbrirMenu }) {
-
   return (
     <header className="z-20 shrink-0 border-b border-line bg-paper/85 px-4 backdrop-blur-xl sm:px-6">
       <div className="flex h-16 w-full items-center justify-between gap-4">
@@ -9,8 +8,8 @@ export default function Topbar({ conversacion, onAbrirMenu }) {
           <button
             type="button"
             onClick={onAbrirMenu}
-            className="icon-button"
-            aria-label="Mostrar u ocultar menú"
+            className="icon-button lg:hidden"
+            aria-label="Abrir menú"
             title="Menú"
           >
             <Menu size={19} />
