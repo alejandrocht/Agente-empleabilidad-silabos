@@ -36,6 +36,7 @@ export default function App() {
           abierto={menuAbierto}
           visible={sidebarVisible}
           onCerrar={() => setMenuAbierto(false)}
+          onAlternar={alternarMenu}
         />
 
         <section className="flex min-w-0 flex-1 flex-col">

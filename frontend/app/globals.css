@@ -5,8 +5,8 @@
 @tailwind utilities;
 
 :root {
-  color: #26201b;
-  background: #faf8f5;
+  color: #161616;
+  background: #fafafa;
   font-family: "Roboto", "Helvetica Neue", sans-serif;
 }
 
@@ -32,17 +32,17 @@ textarea {
 }
 
 ::selection {
-  background: #ffe3d4;
-  color: #26201b;
+  background: #ffd8cc;
+  color: #161616;
 }
 
 .app-bg {
-  background: #faf8f5;
+  background: #fafafa;
 }
 
 /* Retícula de puntos: papel de grafo */
 .canvas-dots {
-  background-image: radial-gradient(rgba(38, 32, 27, 0.075) 1.2px, transparent 1.2px);
+  background-image: radial-gradient(rgba(20, 20, 20, 0.05) 1.2px, transparent 1.2px);
   background-size: 22px 22px;
 }
 
@@ -53,13 +53,13 @@ textarea {
   align-items: center;
   justify-content: center;
   border-radius: 0.75rem;
-  color: #7a6f66;
+  color: #64646a;
   transition: background-color 160ms ease, color 160ms ease;
 }
 
 .icon-button:hover {
-  background: #f4efe9;
-  color: #26201b;
+  background: #f1f1f3;
+  color: #161616;
 }
 
 .icon-button:focus-visible {
@@ -118,7 +118,7 @@ textarea {
 }
 
 * {
-  scrollbar-color: rgba(122, 111, 102, 0.45) transparent;
+  scrollbar-color: rgba(100, 100, 106, 0.45) transparent;
   scrollbar-width: thin;
 }
 
@@ -128,6 +128,6 @@ textarea {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(122, 111, 102, 0.35);
+  background: rgba(100, 100, 106, 0.35);
   border-radius: 999px;
 }

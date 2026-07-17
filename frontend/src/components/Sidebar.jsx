@@ -1,5 +1,5 @@
-import { Plus, Search, Trash2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { PanelLeft, Plus, SquarePen, Trash2, X } from "lucide-react";
+import { useMemo } from "react";
 
 function fechaCorta(timestamp) {
   return new Intl.DateTimeFormat("es-PE", {
@@ -42,10 +42,12 @@ export default function Sidebar({
   abierto,
   visible,
   onCerrar,
+  onAlternar,
 }) {
-  const [busqueda, setBusqueda] = useState("");
+  const activaVacia = !activa || activa.mensajes.length === 0;
 
   const crear = () => {
+    if (activaVacia) return;
     nuevaConversacion();
     onCerrar();
   };
@@ -63,20 +65,47 @@ export default function Sidebar({
     if (window.confirm("¿Eliminar todo el historial local?")) limpiar();
   };
 
-  const filtradas = useMemo(() => {
-    const termino = busqueda.trim().toLowerCase();
-    if (!termino) return estado.conversaciones;
-    return estado.conversaciones.filter((conv) => conv.titulo.toLowerCase().includes(termino));
-  }, [estado.conversaciones, busqueda]);
-
-  const grupos = useMemo(() => agruparPorFecha(filtradas), [filtradas]);
+  const grupos = useMemo(() => agruparPorFecha(estado.conversaciones), [estado.conversaciones]);
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 flex w-[min(20rem,88vw)] shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-line bg-ash px-4 py-4 shadow-2xl transition-all duration-300 lg:static lg:z-auto lg:translate-x-0 lg:shadow-none ${
+      className={`fixed inset-y-0 left-0 z-50 flex w-[min(20rem,88vw)] shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-line bg-ash px-4 py-4 shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 lg:shadow-none lg:[transition:width_.2s_ease-out,padding_.2s_ease-out] ${
         abierto ? "translate-x-0" : "-translate-x-full"
-      } ${visible ? "lg:w-[17.5rem] lg:px-4" : "lg:w-0 lg:border-r-0 lg:px-0"}`}
+      } ${visible ? "lg:w-[17.5rem] lg:px-4" : "lg:w-16 lg:items-center lg:px-0"}`}
     >
+      {/* Rail colapsado: solo escritorio cuando el sidebar está oculto */}
+      <div className={`hidden flex-col items-center gap-1 ${visible ? "lg:hidden" : "lg:flex"}`}>
+        <button
+          type="button"
+          onClick={onAlternar}
+          className="group relative flex h-11 w-11 items-center justify-center rounded-xl transition hover:bg-paper"
+          aria-label="Mostrar barra lateral"
+          title="Mostrar barra lateral"
+        >
+          <img
+            src="/logo-ulima.png"
+            alt="Universidad de Lima"
+            className="h-8 w-8 object-contain transition-opacity duration-150 group-hover:opacity-0"
+          />
+          <PanelLeft
+            size={20}
+            className="absolute text-ink opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+          />
+        </button>
+        <button
+          type="button"
+          onClick={crear}
+          className="flex h-11 w-11 items-center justify-center rounded-xl text-ink transition hover:bg-paper focus:outline-none focus:ring-2 focus:ring-ulima/40"
+          aria-label="Nueva conversación"
+          aria-disabled={activaVacia}
+          title={activaVacia ? "Ya estás en una conversación nueva" : "Nueva conversación"}
+        >
+          <SquarePen size={19} />
+        </button>
+      </div>
+
+      {/* Panel expandido: móvil siempre; escritorio solo cuando visible */}
+      <div className={`flex min-h-0 w-full flex-1 flex-col ${visible ? "lg:flex" : "lg:hidden"}`}>
       <div className="flex items-center justify-between gap-3 px-1">
         <div className="flex min-w-0 items-center gap-3">
           <img src="/logo-ulima.png" alt="Universidad de Lima" className="h-9 w-9 shrink-0 object-contain" />
@@ -87,27 +116,26 @@ export default function Sidebar({
             </p>
           </div>
         </div>
-        <button type="button" onClick={onCerrar} className="icon-button lg:hidden" aria-label="Cerrar menú">
-          <X size={18} />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={onAlternar}
+            className="icon-button hidden lg:inline-flex"
+            aria-label="Ocultar barra lateral"
+            title="Ocultar barra lateral"
+          >
+            <PanelLeft size={18} />
+          </button>
+          <button type="button" onClick={onCerrar} className="icon-button lg:hidden" aria-label="Cerrar menú">
+            <X size={18} />
+          </button>
+        </div>
       </div>
-
-      <label className="mt-4 flex items-center gap-2 rounded-[10px] border border-line bg-paper px-3 py-2 text-sm text-muted focus-within:border-ulima/50">
-        <Search size={14} className="shrink-0" />
-        <input
-          type="text"
-          value={busqueda}
-          onChange={(event) => setBusqueda(event.target.value)}
-          placeholder="Buscar conversaciones…"
-          className="w-full min-w-0 bg-transparent text-ink outline-none placeholder:text-muted"
-          aria-label="Buscar conversaciones"
-        />
-      </label>
 
       <button
         type="button"
         onClick={crear}
-        className="mt-2.5 flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-ulima px-4 text-sm font-bold text-white transition hover:-translate-y-px hover:shadow-[0_6px_18px_rgba(242,106,33,0.35)] focus:outline-none focus:ring-2 focus:ring-ulima/40"
+        className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-ulima px-4 text-sm font-bold text-white transition hover:-translate-y-px hover:shadow-[0_6px_18px_rgba(255,81,23,0.35)] focus:outline-none focus:ring-2 focus:ring-ulima/40"
       >
         <Plus size={16} strokeWidth={2.6} />
         Nueva conversación
@@ -171,6 +199,7 @@ export default function Sidebar({
           Limpiar historial
         </button>
         <span className="font-mono text-[11px] text-muted">v2.0</span>
+      </div>
       </div>
     </aside>
   );
