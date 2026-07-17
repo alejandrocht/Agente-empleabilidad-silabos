@@ -82,6 +82,13 @@ class DevuelveResultado(Nodo):
         if not valida:
             log_paso(self.nombre, "inspector_rechazo", sesion, {"motivo": motivo}, "warning")
             respuesta = "No pude generar una respuesta confiable para esta consulta."
+        else:
+            log_paso(
+                self.nombre,
+                "inspector_determinista_aprobado",
+                sesion,
+                {"respuesta_evaluada": respuesta},
+            )
 
         # El juez remoto es optativo y nunca impide devolver el resultado determinista válido.
         if booleano("INSPECTOR_LLM"):
@@ -112,9 +119,42 @@ class DevuelveResultado(Nodo):
                     list(estado.get("filas", [])),
                     respuesta,
                 )
+                log_paso(
+                    "cache",
+                    "resultado_guardado",
+                    sesion,
+                    {
+                        "pregunta": estado.get("pregunta", ""),
+                        "entidades": entidades,
+                        "cypher": cypher,
+                        "filas": estado.get("filas", []),
+                        "respuesta": respuesta,
+                    },
+                )
             actualizar_entidades(sesion, entidades)
             registrar_mensaje(sesion, str(estado.get("pregunta", "")), respuesta)
-            log_paso(self.nombre, "memoria_actualizada", sesion)
+            log_paso(
+                self.nombre,
+                "persistencia_completada",
+                sesion,
+                {
+                    "cache_actualizada": estado.get("estrategia") != "cache",
+                    "memoria_entidades_actualizada": bool(entidades),
+                    "turno_agregado_a_memoria": True,
+                },
+            )
 
-        log_paso(self.nombre, "respuesta_lista", sesion, {"chars": len(respuesta)})
-        return {"respuesta": respuesta, "memoria_texto": formatear(sesion), **_limpieza_turno()}
+        memoria_final = formatear(sesion)
+        log_paso(
+            self.nombre,
+            "respuesta_lista",
+            sesion,
+            {
+                "respuesta": respuesta,
+                "chars": len(respuesta),
+                "estrategia": estado.get("estrategia"),
+                "plantilla_id": estado.get("plantilla_id"),
+                "memoria_despues_del_turno": memoria_final,
+            },
+        )
+        return {"respuesta": respuesta, "memoria_texto": memoria_final, **_limpieza_turno()}

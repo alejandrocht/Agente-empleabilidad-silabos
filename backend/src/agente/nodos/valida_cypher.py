@@ -20,7 +20,25 @@ class ValidaCypher(Nodo):
         log_paso(self.nombre, "inicio", sesion)
         error = validar_consulta(str(estado.get("cypher", "") or ""))
         if error:
-            log_paso(self.nombre, "cypher_rechazado", sesion, {"error": error[:200]}, "warning")
+            log_paso(
+                self.nombre,
+                "cypher_rechazado",
+                sesion,
+                {
+                    "cypher": estado.get("cypher"),
+                    "motivo": error,
+                    "intento": estado.get("intentos", 0),
+                },
+                "warning",
+            )
         else:
-            log_paso(self.nombre, "cypher_valido", sesion)
+            log_paso(
+                self.nombre,
+                "cypher_valido",
+                sesion,
+                {
+                    "cypher": estado.get("cypher"),
+                    "validaciones": ["solo lectura", "schema", "EXPLAIN"],
+                },
+            )
         return {"error": error}

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from fastapi import HTTPException
 
@@ -40,3 +42,30 @@ def test_chat_oculta_error_de_cuota(monkeypatch) -> None:
     assert capturada.value.status_code == 503
     assert "detalle secreto" not in capturada.value.detail
     assert "cuota" in capturada.value.detail
+
+
+def test_dashboard_expone_carreras_y_error_de_filtros(monkeypatch) -> None:
+    monkeypatch.setattr(
+        servidor.dashboard,
+        "listar_carreras",
+        lambda: [{"id": "CAR_1", "nombre": "Sistemas", "cobertura_disponible": True}],
+    )
+
+    salida = servidor.dashboard_carreras()
+
+    assert salida["carreras"][0]["id"] == "CAR_1"
+
+    def demanda_invalida(*_args, **_kwargs):
+        raise servidor.dashboard.ErrorDashboard("Dimensión no válida.")
+
+    monkeypatch.setattr(servidor.dashboard, "demanda_dimension", demanda_invalida)
+    with pytest.raises(HTTPException) as capturada:
+        servidor.dashboard_demanda(
+            "invalida",
+            "CAR_1",
+            date(2025, 1, 1),
+            date(2025, 1, 31),
+        )
+
+    assert capturada.value.status_code == 400
+    assert capturada.value.detail == "Dimensión no válida."

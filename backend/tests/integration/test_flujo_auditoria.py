@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 
@@ -159,3 +160,12 @@ def test_cada_nodo_visitado_emite_log(fronteras_falsas, caplog) -> None:
     nodos_log = {getattr(registro, "message", "") for registro in caplog.records}
     for paso in pasos:
         assert any(f'"nodo": "{paso}"' in mensaje for mensaje in nodos_log)
+
+    eventos = {
+        json.loads(registro.message).get("evento")
+        for registro in caplog.records
+        if str(getattr(registro, "message", "")).startswith("{")
+    }
+    assert "memoria.contexto_cargado" in eventos
+    assert "selecciona_estrategia.estrategia_seleccionada" in eventos
+    assert "decision.ruta_seleccionada" in eventos

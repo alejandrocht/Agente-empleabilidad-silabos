@@ -47,13 +47,28 @@ class ObtienePregunta(Nodo):
         log_inicio_turno(sesion, pregunta)
         log_paso(self.nombre, "inicio", sesion)
 
+        memoria_texto = formatear(sesion)
+        contexto_entidades = entidades_activas(sesion)
+        historial = historial_entidades(sesion)
+        log_paso(
+            "memoria",
+            "contexto_cargado",
+            sesion,
+            {
+                "contexto_entregado_al_agente": memoria_texto,
+                "entidades_activas": contexto_entidades,
+                "historial_entidades": historial,
+                "labels_activos": [entidad.get("label") for entidad in contexto_entidades],
+            },
+        )
+
         # Cada turno parte limpio; la memoria útil se carga explícitamente desde la sesión.
         cambios: dict[str, Any] = {
             "pregunta": pregunta,
             "id_sesion": sesion,
-            "memoria_texto": formatear(sesion),
-            "entidades_contexto": entidades_activas(sesion),
-            "entidades_historial": historial_entidades(sesion),
+            "memoria_texto": memoria_texto,
+            "entidades_contexto": contexto_entidades,
+            "entidades_historial": historial,
             "entidades": [],
             "schema_texto": None,
             "cypher": None,

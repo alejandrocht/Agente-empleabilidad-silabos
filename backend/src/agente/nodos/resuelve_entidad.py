@@ -58,12 +58,19 @@ class ResuelveEntidad(NodoLLM):
             "{memoria}", str(estado.get("memoria_texto", "(sin memoria)"))
         ).replace("{pregunta}", str(estado.get("pregunta", "")))
         candidatos = _extraer_json(str(self.llm.invoke(prompt).content)).get("entidades", [])
+        log_paso(
+            self.nombre,
+            "candidatos_detectados",
+            sesion,
+            {"candidatos": candidatos, "memoria_usada": estado.get("memoria_texto", "")},
+        )
         if not isinstance(candidatos, list) or not candidatos:
             log_paso(self.nombre, "sin_entidades", sesion)
             return {"entidades": []}
 
         intro = introspeccionar_schema()
         resueltas: list[dict[str, Any]] = []
+        busquedas: list[dict[str, Any]] = []
         for candidato in candidatos:
             if not isinstance(candidato, dict):
                 continue
@@ -96,6 +103,14 @@ class ResuelveEntidad(NodoLLM):
                 )
                 parametros = {f"q{i}": palabra for i, palabra in enumerate(palabras)}
                 filas = ejecutar_lectura(cypher, parametros)
+                busquedas.append(
+                    {
+                        "texto": texto,
+                        "label": label,
+                        "parametros": parametros,
+                        "coincidencias": len(filas),
+                    }
+                )
                 if filas:
                     resueltas.append(
                         {
@@ -108,5 +123,15 @@ class ResuelveEntidad(NodoLLM):
                     break
 
         actualizar_entidades(sesion, resueltas)
-        log_paso(self.nombre, "entidades_resueltas", sesion, {"cantidad": len(resueltas)})
+        log_paso(
+            self.nombre,
+            "entidades_resueltas",
+            sesion,
+            {
+                "cantidad": len(resueltas),
+                "entidades": resueltas,
+                "busquedas_realizadas": busquedas,
+                "candidatos_sin_resolver": max(0, len(candidatos) - len(resueltas)),
+            },
+        )
         return {"entidades": resueltas}

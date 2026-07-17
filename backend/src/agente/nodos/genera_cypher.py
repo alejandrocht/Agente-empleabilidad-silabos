@@ -45,7 +45,20 @@ class GeneraCypher(NodoLLM):
         )
         cypher = _limpiar_cypher(str(self.llm.invoke(prompt).content))
         intentos = estado.get("intentos", 0) + 1
-        log_paso(self.nombre, "cypher_generado", sesion, {"chars": len(cypher)})
+        log_paso(
+            self.nombre,
+            "cypher_generado",
+            sesion,
+            {
+                "cypher": cypher,
+                "chars": len(cypher),
+                "intento": intentos,
+                "entidades_usadas": estado.get("entidades", []),
+                "memoria_usada": estado.get("memoria_texto", ""),
+                "reparacion_solicitada": bool(error),
+                "error_anterior": error,
+            },
+        )
         return {
             "cypher": cypher,
             "error": None,

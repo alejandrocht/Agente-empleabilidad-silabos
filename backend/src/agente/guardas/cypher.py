@@ -7,6 +7,7 @@ Así un uso directo del cliente Neo4j tampoco puede saltarse el bloqueo de escri
 from __future__ import annotations
 
 import re
+from typing import Any
 
 # Se usa ``frozenset`` porque estas reglas son constantes de seguridad del proceso.
 PALABRAS_BLOQUEADAS: frozenset[str] = frozenset(
@@ -102,7 +103,10 @@ def _patrones_schema(cypher: str) -> set[tuple[str, str, str]]:
     return triples
 
 
-def validar_consulta(cypher: str) -> str | None:
+def validar_consulta(
+    cypher: str,
+    parametros: dict[str, Any] | None = None,
+) -> str | None:
     """Valida seguridad, schema vivo y sintaxis mediante ``EXPLAIN`` sin ejecutar datos."""
     problemas = validar_seguridad_basica(cypher)
     if problemas:
@@ -144,7 +148,11 @@ def validar_consulta(cypher: str) -> str | None:
     if problemas:
         return "Cypher inválido: " + " | ".join(problemas)
 
-    error_sintaxis = validar_sintaxis(cypher)
+    error_sintaxis = (
+        validar_sintaxis(cypher, parametros)
+        if parametros is not None
+        else validar_sintaxis(cypher)
+    )
     if error_sintaxis:
         return "Cypher con error de sintaxis: " + error_sintaxis
     return None

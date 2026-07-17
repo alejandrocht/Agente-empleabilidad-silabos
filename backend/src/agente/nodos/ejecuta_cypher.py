@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from agente.db.neo4j import ejecutar_lectura
@@ -18,11 +19,33 @@ class EjecutaCypher(Nodo):
     def __call__(self, estado: EstadoAgente) -> dict[str, Any]:
         sesion = str(estado.get("id_sesion", "") or "")
         log_paso(self.nombre, "inicio", sesion)
+        cypher = str(estado.get("cypher", "") or "")
+        inicio = time.perf_counter()
         try:
-            filas = ejecutar_lectura(str(estado.get("cypher", "") or ""))
+            filas = ejecutar_lectura(cypher)
         except Exception as exc:
             error = f"Error al ejecutar en Neo4j: {exc}"
-            log_paso(self.nombre, "error", sesion, {"error": error[:200]}, "error")
+            log_paso(
+                self.nombre,
+                "error",
+                sesion,
+                {
+                    "cypher": cypher,
+                    "error": error,
+                    "duracion_ms": round((time.perf_counter() - inicio) * 1000, 2),
+                },
+                "error",
+            )
             return {"filas": [], "error": error}
-        log_paso(self.nombre, "filas_obtenidas", sesion, {"cantidad": len(filas)})
+        log_paso(
+            self.nombre,
+            "filas_obtenidas",
+            sesion,
+            {
+                "cypher": cypher,
+                "cantidad": len(filas),
+                "filas": filas,
+                "duracion_ms": round((time.perf_counter() - inicio) * 1000, 2),
+            },
+        )
         return {"filas": filas, "error": None}

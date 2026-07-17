@@ -38,13 +38,23 @@ class AnalizaResultado(NodoLLM):
 
         # Un hit de caché ya conserva la respuesta auditada del turno original.
         if estado.get("estrategia") == "cache" and estado.get("respuesta"):
-            log_paso(self.nombre, "respuesta_cache", sesion)
+            log_paso(
+                self.nombre,
+                "respuesta_cache",
+                sesion,
+                {"respuesta": estado["respuesta"], "filas": estado.get("filas", [])},
+            )
             return {"respuesta": estado["respuesta"]}
 
         filas = list(estado.get("filas", []))
         if estado.get("estrategia") == "plantilla":
             respuesta = _redactar_determinista(filas)
-            log_paso(self.nombre, "respuesta_determinista", sesion)
+            log_paso(
+                self.nombre,
+                "respuesta_determinista",
+                sesion,
+                {"filas_recibidas": filas, "respuesta_generada": respuesta},
+            )
             return {"respuesta": respuesta}
 
         # El flujo dinámico conserva el redactor LLM para preguntas no cubiertas por plantillas.
@@ -52,5 +62,14 @@ class AnalizaResultado(NodoLLM):
             "{filas}", json.dumps(filas, ensure_ascii=False, default=str)
         )
         respuesta = str(self.llm.invoke(prompt).content).strip()
-        log_paso(self.nombre, "respuesta_llm", sesion, {"chars": len(respuesta)})
+        log_paso(
+            self.nombre,
+            "respuesta_llm",
+            sesion,
+            {
+                "filas_entregadas_al_modelo": filas,
+                "respuesta_generada": respuesta,
+                "chars": len(respuesta),
+            },
+        )
         return {"respuesta": respuesta}

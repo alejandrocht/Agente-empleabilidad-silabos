@@ -59,7 +59,17 @@ class SeleccionaEstrategia(Nodo):
         pregunta = str(estado.get("pregunta", ""))
         sesion = str(estado.get("id_sesion", "") or "")
         entidades = list(estado.get("entidades", []))
-        log_paso(self.nombre, "inicio", sesion)
+        log_paso(
+            self.nombre,
+            "evaluacion_iniciada",
+            sesion,
+            {
+                "pregunta": pregunta,
+                "entidades_recibidas": entidades,
+                "entidades_en_memoria": estado.get("entidades_contexto", []),
+                "historial_en_memoria": estado.get("entidades_historial", {}),
+            },
+        )
 
         # Una referencia usa el historial; sin referencia, un nombre nuevo debe ganar.
         referenciadas = _resolver_referencia(estado, pregunta)
@@ -69,23 +79,63 @@ class SeleccionaEstrategia(Nodo):
                 self.nombre,
                 "referencia_resuelta",
                 sesion,
-                {"cantidad": len(entidades)},
+                {
+                    "tipo": (
+                        "anterior"
+                        if _REFERENCIA_ANTERIOR.search(pregunta)
+                        else "primera"
+                        if _REFERENCIA_PRIMERA.search(pregunta)
+                        else "activa"
+                    ),
+                    "entidades_seleccionadas": entidades,
+                },
             )
 
         entrada_cache = buscar_cache(pregunta, entidades)
         if entrada_cache:
-            log_paso(self.nombre, "cache_hit", sesion)
+            log_paso(
+                self.nombre,
+                "estrategia_seleccionada",
+                sesion,
+                {
+                    "estrategia": "cache",
+                    "motivo": "coincidencia exacta de pregunta y entidades",
+                    "entidades": entidades,
+                    "cypher_cacheado": entrada_cache.get("cypher"),
+                    "filas_cacheadas": len(entrada_cache.get("filas", [])),
+                },
+            )
             return {**entrada_cache, "entidades": entidades, "estrategia": "cache"}
-        log_paso(self.nombre, "cache_miss", sesion)
+        log_paso(
+            self.nombre,
+            "cache_descartada",
+            sesion,
+            {"motivo": "sin coincidencia vigente", "entidades_usadas_en_clave": entidades},
+        )
 
         # Primero se intenta una plantilla ya parametrizada, incluyendo referencias de memoria.
         plantilla = buscar_plantilla(pregunta, entidades)
         if not plantilla:
             intencion = buscar_intencion(pregunta)
             if intencion:
+                log_paso(
+                    self.nombre,
+                    "intencion_plantilla_detectada",
+                    sesion,
+                    {
+                        "plantilla_id": intencion["id"],
+                        "parametros_requeridos": intencion["params"],
+                    },
+                )
                 try:
                     entidades = resolver_entidades(intencion, pregunta, entidades)
                     plantilla = buscar_plantilla(pregunta, entidades)
+                    log_paso(
+                        self.nombre,
+                        "entidades_plantilla_resueltas",
+                        sesion,
+                        {"entidades": entidades, "plantilla_habilitada": bool(plantilla)},
+                    )
                 except Exception as exc:
                     # Si la resolución barata falla, el flujo dinámico conserva la funcionalidad.
                     log_paso(
@@ -100,11 +150,33 @@ class SeleccionaEstrategia(Nodo):
             # Tras resolver ids se revisa otra vez la caché con su clave completa.
             entrada_cache = buscar_cache(pregunta, entidades)
             if entrada_cache:
-                log_paso(self.nombre, "cache_hit", sesion)
+                log_paso(
+                    self.nombre,
+                    "estrategia_seleccionada",
+                    sesion,
+                    {
+                        "estrategia": "cache",
+                        "motivo": "hit después de resolver entidades de plantilla",
+                        "entidades": entidades,
+                        "cypher_cacheado": entrada_cache.get("cypher"),
+                        "filas_cacheadas": len(entrada_cache.get("filas", [])),
+                    },
+                )
                 return {**entrada_cache, "entidades": entidades, "estrategia": "cache"}
             cypher = renderizar(plantilla, entidades)
             actualizar_entidades(sesion, entidades)
-            log_paso(self.nombre, "plantilla_usada", sesion, {"id": plantilla["id"]})
+            log_paso(
+                self.nombre,
+                "estrategia_seleccionada",
+                sesion,
+                {
+                    "estrategia": "plantilla",
+                    "motivo": "intención determinista y parámetros completos",
+                    "plantilla_id": plantilla["id"],
+                    "entidades": entidades,
+                    "cypher_renderizado": cypher,
+                },
+            )
             return {
                 "cypher": cypher,
                 "entidades": entidades,
@@ -112,5 +184,14 @@ class SeleccionaEstrategia(Nodo):
                 "plantilla_id": plantilla["id"],
             }
 
-        log_paso(self.nombre, "generacion_dinamica", sesion)
+        log_paso(
+            self.nombre,
+            "estrategia_seleccionada",
+            sesion,
+            {
+                "estrategia": "dinamica",
+                "motivo": "sin cache ni plantilla aplicable",
+                "entidades_descartadas": entidades,
+            },
+        )
         return {"entidades": [], "estrategia": "dinamica"}

@@ -8,6 +8,7 @@ from threading import RLock
 from typing import Any, cast
 
 from agente.config.settings import entero
+from agente.observabilidad.logger import log_paso
 
 # La memoria es deliberadamente efímera; al vencer evita reutilizar referencias antiguas.
 _TTL = entero("MEMORIA_TTL_SEGUNDOS", 1800)
@@ -46,6 +47,17 @@ def _vigente(clave: str) -> dict[str, Any]:
     memoria.setdefault("historial_entidades", {})
     antiguedad = (_ahora() - datetime.fromisoformat(memoria["updated_at"])).total_seconds()
     if antiguedad > _TTL:
+        log_paso(
+            "memoria",
+            "ttl_vencido",
+            clave,
+            {
+                "edad_segundos": round(antiguedad, 2),
+                "ttl_segundos": _TTL,
+                "entidades_descartadas": len(memoria["entidades_activas"]),
+                "labels_historial_descartados": list(memoria["historial_entidades"]),
+            },
+        )
         memoria = _CACHE[clave] = _nueva()
     return memoria
 
@@ -73,14 +85,36 @@ def obtener(id_sesion: str | None) -> dict[str, Any]:
     """Devuelve una copia del estado vivo y lo reinicia primero si ya venció."""
     clave = _clave(id_sesion)
     with _LOCK:
-        return deepcopy(_vigente(clave))
+        memoria = deepcopy(_vigente(clave))
+    log_paso(
+        "memoria",
+        "leida",
+        clave,
+        {
+            "entidades_activas": memoria["entidades_activas"],
+            "labels_historial": {
+                label: len(entidades)
+                for label, entidades in memoria["historial_entidades"].items()
+            },
+        },
+        nivel="debug",
+    )
+    return memoria
 
 
 def actualizar_entidades(id_sesion: str | None, entidades: list[dict[str, Any]]) -> None:
     """Activa entidades y registra cambios reales en el historial de cada label."""
     if not entidades:
+        log_paso(
+            "memoria",
+            "actualizacion_omitida",
+            _clave(id_sesion),
+            {"motivo": "no se recibieron entidades"},
+            nivel="debug",
+        )
         return
     clave = _clave(id_sesion)
+    cambios: list[dict[str, Any]] = []
     with _LOCK:
         memoria = _vigente(clave)
         for entidad in entidades:
@@ -88,15 +122,45 @@ def actualizar_entidades(id_sesion: str | None, entidades: list[dict[str, Any]])
             if not label:
                 continue
             limpia = _limpiar_entidad(entidad, label)
+            anterior = deepcopy(memoria["entidades_activas"].get(label))
             memoria["entidades_activas"][label] = limpia
             historial = memoria["historial_entidades"].setdefault(label, [])
+            descartadas = 0
             if historial and _firma(historial[-1]) == _firma(limpia):
                 historial[-1] = limpia
+                accion = "refrescada"
             else:
                 historial.append(limpia)
                 limite = max(1, _LIMITE_HISTORIAL)
+                descartadas = max(0, len(historial) - limite)
                 del historial[:-limite]
+                accion = "activada" if anterior is None else "reemplazada"
+            cambios.append(
+                {
+                    "label": label,
+                    "accion": accion,
+                    "anterior": anterior,
+                    "actual": limpia,
+                    "historial_tamano": len(historial),
+                    "historial_descartadas": descartadas,
+                }
+            )
         memoria["updated_at"] = _ahora().isoformat()
+        estado_final = {
+            "entidades_activas": deepcopy(memoria["entidades_activas"]),
+            "historial_entidades": deepcopy(memoria["historial_entidades"]),
+            "updated_at": memoria["updated_at"],
+        }
+    log_paso(
+        "memoria",
+        "entidades_actualizadas",
+        clave,
+        {
+            "entidades_recibidas": entidades,
+            "cambios": cambios,
+            "estado_final": estado_final,
+        },
+    )
 
 
 def entidades_activas(id_sesion: str | None) -> list[dict[str, Any]]:
@@ -151,3 +215,10 @@ def limpiar(id_sesion: str | None = None) -> None:
             _CACHE.clear()
         else:
             _CACHE.pop(_clave(id_sesion), None)
+    log_paso(
+        "memoria",
+        "limpiada",
+        _clave(id_sesion),
+        {"alcance": "global" if id_sesion is None else "sesion"},
+        nivel="debug",
+    )

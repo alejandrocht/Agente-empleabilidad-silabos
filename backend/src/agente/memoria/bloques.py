@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import UTC, datetime
 from threading import RLock
-from typing import Any
+from typing import Any, cast
 
 from agente.config.settings import entero
 from agente.llm.fabrica import obtener_llm
@@ -39,6 +39,17 @@ def _estado_vigente(clave: str) -> dict[str, Any]:
     estado = _CACHE.setdefault(clave, _nuevo_estado())
     edad = (datetime.now(UTC) - datetime.fromisoformat(estado["updated_at"])).total_seconds()
     if edad > _TTL:
+        log_paso(
+            "memoria_bloques",
+            "ttl_vencido",
+            clave,
+            {
+                "edad_segundos": round(edad, 2),
+                "ttl_segundos": _TTL,
+                "turnos_pendientes_descartados": len(estado["pendientes"]),
+                "bloques_descartados": len(estado["bloques"]),
+            },
+        )
         estado = _CACHE[clave] = _nuevo_estado()
     return estado
 
@@ -62,6 +73,15 @@ def registrar_mensaje(id_sesion: str | None, pregunta: str, respuesta: str) -> N
             pendientes_resumen = list(estado["pendientes"])
             estado["pendientes"] = []
             estado["contador"] = 0
+        detalle_registro = {
+            "pregunta_guardada": pregunta,
+            "respuesta_guardada": respuesta,
+            "turnos_pendientes": len(estado["pendientes"]),
+            "umbral_resumen": _CADA,
+            "resumen_programado": bool(pendientes_resumen),
+            "bloques_existentes": len(estado["bloques"]),
+        }
+    log_paso("memoria_bloques", "turno_registrado", clave, detalle_registro)
 
     # La llamada remota no bloquea actualizaciones de memoria de otras sesiones.
     if pendientes_resumen:
@@ -70,7 +90,7 @@ def registrar_mensaje(id_sesion: str | None, pregunta: str, respuesta: str) -> N
         except Exception as exc:
             # Un fallo de resumen no invalida una respuesta que ya fue obtenida correctamente.
             log_paso(
-                "resumen_memoria",
+                "memoria_bloques",
                 "error",
                 clave,
                 {"error": str(exc)[:200]},
@@ -81,19 +101,45 @@ def registrar_mensaje(id_sesion: str | None, pregunta: str, respuesta: str) -> N
                 estado["pendientes"] = pendientes_resumen + estado["pendientes"]
                 estado["contador"] = len(estado["pendientes"])
                 estado["updated_at"] = datetime.now(UTC).isoformat()
+                pendientes_repuestos = len(estado["pendientes"])
+            log_paso(
+                "memoria_bloques",
+                "turnos_repuestos",
+                clave,
+                {"turnos_pendientes": pendientes_repuestos},
+                nivel="warning",
+            )
             return
         with _LOCK:
             estado = _estado_vigente(clave)
             estado["bloques"].append(resumen)
             estado["updated_at"] = datetime.now(UTC).isoformat()
-        log_paso("resumen_memoria", "bloque_creado", clave, {"turnos": len(pendientes_resumen)})
+            total_bloques = len(estado["bloques"])
+        log_paso(
+            "memoria_bloques",
+            "bloque_creado",
+            clave,
+            {
+                "turnos_resumidos": len(pendientes_resumen),
+                "resumen_guardado": resumen,
+                "total_bloques": total_bloques,
+            },
+        )
 
 
 def obtener_bloques(id_sesion: str | None) -> list[str]:
     """Devuelve una copia de los resúmenes ya consolidados para la sesión."""
     with _LOCK:
         estado = _estado_vigente(_clave(id_sesion))
-        return deepcopy(estado["bloques"])
+        resultado = cast(list[str], deepcopy(estado["bloques"]))
+    log_paso(
+        "memoria_bloques",
+        "leidos",
+        _clave(id_sesion),
+        {"cantidad": len(resultado), "bloques": resultado},
+        nivel="debug",
+    )
+    return resultado
 
 
 def limpiar(id_sesion: str | None = None) -> None:

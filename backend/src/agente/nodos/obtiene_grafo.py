@@ -19,5 +19,10 @@ class ObtieneGrafo(Nodo):
         sesion = str(estado.get("id_sesion", "") or "")
         log_paso(self.nombre, "inicio", sesion)
         schema_texto = construir_schema_texto()
-        log_paso(self.nombre, "schema_obtenido", sesion, {"chars": len(schema_texto)})
+        log_paso(
+            self.nombre,
+            "schema_obtenido",
+            sesion,
+            {"chars": len(schema_texto), "schema_entregado_al_agente": schema_texto},
+        )
         return {"schema_texto": schema_texto}

@@ -1,4 +1,5 @@
-import { Menu } from "lucide-react";
+import Link from "next/link";
+import { BarChart3, Menu } from "lucide-react";
 
 export default function Topbar({ conversacion, onAbrirMenu }) {
 
@@ -24,6 +25,13 @@ export default function Topbar({ conversacion, onAbrirMenu }) {
             </p>
           </div>
         </div>
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-ink px-3 py-2 text-xs font-bold text-white transition hover:bg-ulima focus:outline-none focus:ring-2 focus:ring-ulima/40"
+        >
+          <BarChart3 size={14} />
+          Dashboard
+        </Link>
       </div>
     </header>
   );

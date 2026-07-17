@@ -145,11 +145,14 @@ def ejecutar_lectura(cypher: str, parametros: dict[str, Any] | None = None) -> l
         return resultado
 
 
-def validar_sintaxis(cypher: str) -> str | None:
+def validar_sintaxis(
+    cypher: str,
+    parametros: dict[str, Any] | None = None,
+) -> str | None:
     """Compila la consulta con ``EXPLAIN`` sin ejecutarla y devuelve el error si existe."""
     try:
         with obtener_driver().session(**_sesion_kwargs()) as sesion:
-            sesion.run("EXPLAIN " + cypher).consume()
+            sesion.run("EXPLAIN " + cypher, parametros or {}).consume()
         return None
     except Exception as exc:  # Neo4j expone varias subclases según el tipo de fallo.
         return str(exc)

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from datetime import date
+from typing import Any, TypeVar
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from agente.config import settings as _settings  # noqa: F401
+from agente.dashboard import servicio as dashboard
 from agente.db.neo4j import obtener_driver
 from agente.grafo.constructor import construir_grafo
 from agente.guardas.entrada import MAX_CHARS, validar_entrada
@@ -16,6 +19,7 @@ from agente.observabilidad.logger import log_fin_turno, log_paso
 # Construir el grafo no conecta Neo4j ni crea clientes OpenAI; ambos recursos son perezosos.
 grafo = construir_grafo()
 app = FastAPI(title="CIAR Agente API", version="2.0.0")
+ResultadoDashboard = TypeVar("ResultadoDashboard")
 
 
 class ChatIn(BaseModel):
@@ -60,6 +64,27 @@ def _error_estado_publico(error: Any) -> str | None:
     return "La consulta no pudo completarse de forma segura."
 
 
+def _operacion_dashboard(
+    nombre: str,
+    operacion: Callable[[], ResultadoDashboard],
+) -> ResultadoDashboard:
+    """Ejecuta una lectura de dashboard sin exponer errores internos del driver."""
+
+    try:
+        return operacion()
+    except dashboard.ErrorDashboard as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        codigo, detalle = _error_externo(exc)
+        log_paso(
+            "api.dashboard",
+            "consulta_error",
+            data={"operacion": nombre, "tipo": type(exc).__name__},
+            nivel="error",
+        )
+        raise HTTPException(status_code=codigo, detail=detalle) from exc
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     """Comprueba conectividad real sin ejecutar consultas de datos."""
@@ -69,6 +94,97 @@ def health() -> dict[str, Any]:
         log_paso("api", "health_error", data={"tipo": type(exc).__name__}, nivel="error")
         raise HTTPException(status_code=503, detail="Neo4j no está disponible.") from exc
     return {"ok": True, "servicio": "ciar-agente", "neo4j": "conectado"}
+
+
+@app.get("/dashboard/filtros/carreras")
+def dashboard_carreras() -> dict[str, Any]:
+    """Lista carreras e indica si su cobertura curricular está disponible."""
+
+    carreras = _operacion_dashboard("filtros_carreras", dashboard.listar_carreras)
+    return {"carreras": carreras}
+
+
+@app.get("/dashboard/metadata")
+def dashboard_metadata() -> dict[str, Any]:
+    """Entrega rango de datos y dimensiones disponibles para inicializar filtros."""
+
+    return _operacion_dashboard("metadata", dashboard.metadatos)
+
+
+@app.get("/dashboard/ofertas/tendencia")
+def dashboard_tendencia(
+    desde: date = Query(..., description="Inicio inclusivo en formato YYYY-MM-DD."),
+    hasta: date = Query(..., description="Fin inclusivo en formato YYYY-MM-DD."),
+    carrera_id: str | None = Query(default=None, min_length=1, max_length=120),
+) -> dict[str, Any]:
+    """Serie mensual de ofertas global o dirigida a una carrera."""
+
+    return _operacion_dashboard(
+        "ofertas_tendencia",
+        lambda: dashboard.tendencia_ofertas(desde, hasta, carrera_id),
+    )
+
+
+@app.get("/dashboard/dimensiones/{tipo}/demanda")
+def dashboard_demanda(
+    tipo: str,
+    carrera_id: str = Query(..., min_length=1, max_length=120),
+    desde: date = Query(...),
+    hasta: date = Query(...),
+    limite: int = Query(default=10, ge=1, le=dashboard.MAX_LIMITE),
+) -> dict[str, Any]:
+    """Ranking de elementos solicitados por el mercado para una carrera."""
+
+    return _operacion_dashboard(
+        "demanda",
+        lambda: dashboard.demanda_dimension(tipo, carrera_id, desde, hasta, limite),
+    )
+
+
+@app.get("/dashboard/dimensiones/{tipo}/cobertura")
+def dashboard_cobertura(
+    tipo: str,
+    carrera_id: str = Query(..., min_length=1, max_length=120),
+    limite: int = Query(default=10, ge=1, le=dashboard.MAX_LIMITE),
+) -> dict[str, Any]:
+    """Ranking de presencia declarada en los cursos de una carrera."""
+
+    return _operacion_dashboard(
+        "cobertura",
+        lambda: dashboard.cobertura_dimension(tipo, carrera_id, limite),
+    )
+
+
+@app.get("/dashboard/dimensiones/{tipo}/brechas")
+def dashboard_brechas(
+    tipo: str,
+    carrera_id: str = Query(..., min_length=1, max_length=120),
+    desde: date = Query(...),
+    hasta: date = Query(...),
+    limite: int = Query(default=10, ge=1, le=dashboard.MAX_LIMITE),
+) -> dict[str, Any]:
+    """Índices de demanda y cobertura comparables para una carrera."""
+
+    return _operacion_dashboard(
+        "brechas",
+        lambda: dashboard.brechas_dimension(tipo, carrera_id, desde, hasta, limite),
+    )
+
+
+@app.get("/dashboard/dimensiones/{tipo}/industrias")
+def dashboard_industrias(
+    tipo: str,
+    elemento_id: str = Query(..., min_length=1, max_length=120),
+    desde: date = Query(...),
+    hasta: date = Query(...),
+    limite: int = Query(default=10, ge=1, le=dashboard.MAX_LIMITE),
+) -> dict[str, Any]:
+    """Contexto por industria para una competencia, habilidad o herramienta."""
+
+    return _operacion_dashboard(
+        "industrias",
+        lambda: dashboard.industrias_elemento(tipo, elemento_id, desde, hasta, limite),
+    )
 
 
 @app.post("/chat")
