@@ -27,3 +27,15 @@ mypy src
 
 Todas las consultas pasan por una guarda central y se ejecutan en sesiones Neo4j de lectura.
 La caché y la memoria son efímeras, tienen TTL y permanecen acotadas por proceso.
+
+## Logs
+
+Los eventos aparecen en la terminal en un formato legible. También se registra la entrada,
+salida y duración de cada función del paquete `agente`, sin incluir argumentos ni valores de
+retorno. Se controla desde `.env`:
+
+```dotenv
+LOG_FORMATO=legible  # usa json para ingestión por máquinas
+LOG_NIVEL=INFO
+LOG_FUNCIONES=true   # usa false en producción si se necesita menos volumen
+```

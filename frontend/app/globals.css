@@ -63,7 +63,7 @@ textarea {
 }
 
 .icon-button:focus-visible {
-  outline: 2px solid rgba(242, 106, 33, 0.45);
+  outline: 2px solid rgba(255, 81, 23, 0.45);
   outline-offset: 2px;
 }
 

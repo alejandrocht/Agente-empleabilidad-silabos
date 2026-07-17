@@ -5,8 +5,8 @@ const COLOR_LABEL = {
   empresa: "#3D7A9E",
   herramienta: "#2E8C7F",
   puesto: "#8A6FB8",
-  carrera: "#F26A21",
-  curso: "#F26A21",
+  carrera: "#FF5117",
+  curso: "#FF5117",
   oferta: "#7A6F66",
 };
 
@@ -20,7 +20,7 @@ const TOKEN_CYPHER =
 function claseDeToken(token) {
   if (/^['"]/.test(token) || /^\d/.test(token)) return "text-nodo-empresa";
   if (token.startsWith(":")) return "text-nodo-herramienta";
-  return "font-semibold text-[#C24D12]";
+  return "font-semibold text-[#D9410C]";
 }
 
 function resaltarCypher(cypher) {

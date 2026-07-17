@@ -1,13 +1,15 @@
+const backendUrl = process.env.API_URL || "http://127.0.0.1:8001";
+
 const nextConfig = {
   async rewrites() {
     return [
       {
         source: "/chat",
-        destination: "http://127.0.0.1:8001/chat",
+        destination: `${backendUrl}/chat`,
       },
       {
         source: "/health",
-        destination: "http://127.0.0.1:8001/health",
+        destination: `${backendUrl}/health`,
       },
     ];
   },

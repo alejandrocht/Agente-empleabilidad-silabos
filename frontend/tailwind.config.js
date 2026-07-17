@@ -5,7 +5,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        ulima: "#F26A21",
+        // Paleta institucional Universidad de Lima.
+        ulima: "#FF5117",
+        institucional: {
+          naranja: "#FF5117",
+          negro: "#000000",
+          gris: "#97999B",
+        },
+        secundario: {
+          turquesa: "#00C5D6",
+          naranja: "#FFA000",
+          verde: "#00C78B",
+          gris: "#C3C8C8",
+          beige: "#DAC9B5",
+          rosa: "#F3BBCE",
+        },
         ink: "#26201B",
         ash: "#F4EFE9",
         fondo: "#FAF8F5",

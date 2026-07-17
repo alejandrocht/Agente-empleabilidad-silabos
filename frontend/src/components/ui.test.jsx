@@ -32,4 +32,5 @@ describe("interfaz del chat", () => {
     expect(screen.getByText("Ofertas")).toBeTruthy();
     expect(screen.getByText("—")).toBeTruthy();
   });
+
 });
