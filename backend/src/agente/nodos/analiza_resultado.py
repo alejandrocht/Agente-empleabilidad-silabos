@@ -9,6 +9,35 @@ from agente.grafo.estado import EstadoAgente
 from agente.nodos.base import NodoLLM
 from agente.observabilidad.logger import log_paso
 
+_ETIQUETAS_PLURAL = {
+    "carrera": "carreras",
+    "curso": "cursos",
+    "empresa": "empresas",
+    "herramienta": "herramientas",
+    "competencia": "competencias",
+    "habilidad": "habilidades",
+    "puesto": "puestos",
+    "industria": "industrias",
+    "oferta": "ofertas",
+}
+
+
+def _resumen_tabla(filas: list[dict[str, Any]]) -> str:
+    """Describe una tabla sin repetir sus filas en texto plano."""
+    primera_fila = filas[0] if filas else {}
+    primera_columna = next(iter(primera_fila), "")
+    etiqueta = _ETIQUETAS_PLURAL.get(primera_columna.lower(), "resultados")
+    cantidad = len(filas)
+    verbo = "Se encontró" if cantidad == 1 else "Se encontraron"
+    sustantivo = (
+        "resultado"
+        if cantidad == 1 and etiqueta == "resultados"
+        else etiqueta[:-1]
+        if cantidad == 1
+        else etiqueta
+    )
+    return f"{verbo} {cantidad} {sustantivo}. Revisa el detalle en la tabla."
+
 
 def _redactar_determinista(filas: list[dict[str, Any]]) -> str:
     """Convierte resultados comunes en español legible sin costo ni alucinaciones."""
@@ -19,12 +48,7 @@ def _redactar_determinista(filas: list[dict[str, Any]]) -> str:
         etiqueta = clave.replace("_", " ")
         return f"El total es {valor}." if clave == "total" else f"{etiqueta.capitalize()}: {valor}."
 
-    # Cada fila se limita para mantener la respuesta bajo el máximo del inspector.
-    lineas = ["Estos son los resultados:"]
-    for fila in filas[:25]:
-        detalle = ", ".join(f"{k.replace('_', ' ')}: {v}" for k, v in fila.items())
-        lineas.append(f"- {detalle[:160]}")
-    return "\n".join(lineas)[:2000]
+    return _resumen_tabla(filas)
 
 
 class AnalizaResultado(NodoLLM):
