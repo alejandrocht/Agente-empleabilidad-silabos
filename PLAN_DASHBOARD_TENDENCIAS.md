@@ -1,298 +1,228 @@
-# Plan — Dashboard de tendencias: currículo CIAR y mercado laboral
+﻿# Dashboard CIAR: preguntas, métricas y consultas fijas
 
-## Propósito
+## Decisión
 
-Construir un dashboard para comparar, con evidencia de Neo4j, **lo que las carreras enseñan** frente a **lo que las ofertas laborales solicitan**. Debe permitir descubrir tendencias temporales de la demanda y priorizar elementos curriculares que vale la pena revisar.
+El producto será un **dashboard general con filtros progresivos y drill-down**, organizado en tres secciones: **Panorama laboral**, **Alineación curricular** y **Empresas y funciones**.
 
-El dashboard no es un explorador genérico del grafo ni un panel de salud de la base. Se excluyen métricas como número total de nodos, densidad del grafo, empresas con más registros o relaciones por etiqueta, salvo que aporten contexto directo a una comparación currículo--mercado.
+La vista inicial debe explicar el panorama sin configuración. Los filtros refinan el mismo contexto y el clic sobre una entidad abre un detalle acotado. El dashboard no ejecutará preguntas libres ni Cypher generado por un LLM: cada visualización consumirá uno de los 12 datasets fijos definidos en `backend/src/agente/dashboard/`.
 
-## Fuente de verdad y alcance de la ontología
+## Quick path
 
-La imagen adjunta organiza el dominio en cuatro grupos:
+1. Abrir el dashboard sin filtros para leer tendencias macro acotadas.
+2. Elegir período, facultad, carrera, industria o dimensión cuando el gráfico lo permita.
+3. Seleccionar una barra, punto o entidad para solicitar la vista específica de la misma pregunta.
+4. Revisar numeradores, denominadores y estado de disponibilidad antes de interpretar el resultado.
 
-| Dominio | Entidades que intervienen | Papel en el dashboard |
+> **Regla de producto:** general primero, contexto después, detalle bajo demanda. Ninguna vista general devuelve matrices exhaustivas.
+
+## Qué puede afirmar el dashboard
+
+| El grafo sí permite observar | El grafo no permite afirmar |
+| --- | --- |
+| Ofertas publicadas y dirigidas a carreras | Empleo efectivo o trayectoria de egresados |
+| Industria y tipo de la empresa publicadora | Tamaño de empresa |
+| Títulos publicados en `Puesto.nombre` | Funciones ocupacionales normalizadas |
+| Competencias, habilidades y herramientas requeridas | Conocimientos de una persona |
+| Cobertura curricular declarada por curso | Dominio adquirido, calidad o profundidad formativa |
+| Correspondencias entre currículo y publicaciones | Causalidad entre un curso y una contratación |
+
+No existen entidades `Persona`, `Estudiante`, `Egresado`, contrato ni postulación. `Puesto.nombre` se presenta siempre como **título publicado**. La dimensión “conocimiento” reúne `Competencia`, `Habilidad` y `Herramienta`, pero mantiene visible el tipo de cada elemento.
+
+## Filtros progresivos
+
+| Nivel | Filtros | Comportamiento |
 | --- | --- | --- |
-| Académico | **Facultad**, **Carrera**, **Curso**, **Silabo**, **Cobertura_Curricular** | Define qué cursos y coberturas componen una carrera. |
-| Competencias | **Competencia**, **Habilidad**, **Herramienta** | Es el vocabulario común que permite contrastar oferta formativa y demanda. |
-| Mercado laboral | **Industria**, **Empresa**, **Oferta_Laboral**, **Requerimiento_Laboral**, **Puesto** | Aporta las ofertas publicadas, sus requerimientos y el contexto laboral. |
-| Evaluación | **Evaluacion_Desempenio** | Puede servir para validar resultados más adelante; no es una métrica principal de la primera versión. |
+| Global | Período | La vista general temporal usa los últimos 12 meses relativos a `max(fecha_publicacion)`, no al reloj del navegador. |
+| Académico | Facultad → Carrera | Carrera depende de Facultad. Las vistas curriculares exigen una carrera con currículo conectado. |
+| Mercado | Industria → Empresa | Industria restringe el contexto de ofertas; Empresa habilita comparaciones A/B. |
+| Analítico | Competencia / Habilidad / Herramienta | Cambia la dimensión sin mezclar denominadores. |
+| Drill-down | Entidad seleccionada | Ejecuta el Cypher específico con `desde` y `hasta` explícitos cuando la pregunta usa tiempo. |
 
-La cabecera de la imagen indica 16 entidades y 27 relaciones. Sin embargo, el schema vivo consultado por el backend actual expone 14 etiquetas y 21 tipos de relación. Las 14 entidades con nombre que se distinguen en la imagen coinciden con esas etiquetas. También hay diferencias de nomenclatura: por ejemplo, el schema vivo usa **ENSENIA** entre **Carrera** y **Curso** y **DEFIINE** entre **Puesto** y **Requerimiento_Laboral**.
+Los filtros incompatibles con una pregunta no deben enviarse ni simularse en el frontend. El catálogo declara los parámetros exactos de cada vista específica.
 
-**Decisión:** la imagen se toma como modelo conceptual y guía del producto; el schema vivo de Neo4j y las relaciones validadas por el guard son la fuente ejecutable. Antes de implementar cada plantilla se ejecutará una auditoría de topología y propiedades. No se inventarán las dos entidades ni las seis relaciones que no estén presentes en el schema vivo.
+**Alcance actual:** este work unit entrega una vista macro sin parámetros y un drill-down
+completamente filtrado por pregunta. El runner no acepta combinaciones opcionales intermedias.
+Las combinaciones progresivas —por ejemplo, carrera sin industria o facultad con período— serán
+variantes tipadas del work unit de API; no se resolverán interpolando filtros ni enviando `null`.
 
-### Recorridos que sí sustentan la comparación
+## Las 12 preguntas del dashboard
 
-~~~text
-Carrera --ENSENIA--> Curso --TIENE--> Cobertura_Curricular
-                                      |--CUBRE--> Competencia
-                                      |--ENSENIA--> Habilidad / Herramienta
+### 1. Panorama laboral
 
-Oferta_Laboral --TIENE--> Requerimiento_Laboral --REQUIERE-->
-                                      Competencia / Habilidad / Herramienta
-Oferta_Laboral --DIRIGE_A--> Carrera
-Oferta_Laboral --PUBLICA--> Empresa --AGRUPA--> Industria
-~~~
+Esta sección responde qué está ocurriendo en el mercado publicado antes de incorporar el currículo.
 
-La comparación principal se hará por separado para competencias, habilidades y herramientas. No se mezclarán sus conteos en una sola lista: son entidades con semánticas y relaciones curriculares distintas.
+| Slug | Pregunta | Definición medible | Gráfico | Filtros específicos | Vista macro | Drill-down |
+| --- | --- | --- | --- | --- | --- | --- |
+| `tendencia_ofertas` | ¿Cómo cambia mes a mes la cantidad de ofertas publicadas? | Ofertas únicas por mes. | Línea | Carrera, industria, desde, hasta | 12 meses relativos al último dato. | Hasta 20 meses del contexto. |
+| `carreras_con_mayor_demanda` | ¿Qué carreras concentran más ofertas dirigidas? | Ofertas únicas y participación por carrera. | Barras ordenadas | Facultad, industria, desde, hasta | Las 14 carreras. | Carreras de la facultad e industria. |
+| `industrias_por_carrera` | ¿En qué industrias se concentran las ofertas dirigidas a cada carrera? | Industria líder por carrera; top industrias al seleccionar una. | Barras con drill-down | Carrera, desde, hasta | Una fila por carrera. | Top 10 industrias. |
+| `conocimientos_mas_demandados` | ¿Qué competencias, habilidades y herramientas aparecen más en las ofertas del contexto seleccionado? | Proporción de ofertas únicas que requiere cada elemento. | Barras por pestaña | Carrera, industria, dimensión, desde, hasta | Top 5 por dimensión, máximo 15. | Top 20 del contexto. |
 
-### Hallazgo de disponibilidad en los datos actuales
+### 2. Alineación curricular
 
-La auditoría de la instancia actual encontró 14 carreras, pero solo **Ingeniería de Sistemas** tiene cursos enlazados mediante **Carrera-ENSENIA-Curso**: 73 cursos, 455 coberturas curriculares y 52 competencias con cobertura. Las otras 13 carreras devuelven cero cursos por ese recorrido.
+Esta sección compara demanda publicada con cobertura declarada. Sus resultados son **señales de revisión**, no juicios automáticos sobre una carrera o curso.
 
-Esto no prueba que esas carreras no enseñen cursos; prueba que la relación necesaria para medir su cobertura no está cargada o no está conectada en el grafo actual. Por ello:
+| Slug | Pregunta | Definición medible | Gráfico | Filtros específicos | Vista macro | Drill-down |
+| --- | --- | --- | --- | --- | --- | --- |
+| `cobertura_curricular` | Para la carrera seleccionada, ¿qué elementos tienen mayor cobertura curricular declarada? | Cursos que cubren el elemento / cursos conectados de la carrera. | Estado + barras | Carrera, dimensión | Disponibilidad y flag independiente para cada dimensión en las 14 carreras. | Top 20 elementos. |
+| `brechas_demanda_alta` | ¿En qué elementos la demanda relativa supera más a la cobertura? | Diferencia, sin umbral, entre proporción de ofertas y proporción de cursos. | Cuadrantes o barras agrupadas | Carrera, industria, dimensión, desde, hasta | Top 20 solo entre dimensiones comparables. | Top 20 del contexto. |
+| `senales_revision_vigencia` | ¿En cuáles la cobertura supera más a la demanda reciente? | Diferencia, sin umbral, entre proporción de cursos y proporción de ofertas recientes. | Barras divergentes | Carrera, industria, dimensión, desde, hasta | Top 20 solo entre dimensiones comparables. | Top 20 o estado `no_market_data`. |
+| `cursos_con_mayor_correspondencia` | ¿Qué cursos comparten más conocimientos con las ofertas del contexto seleccionado? | Ofertas únicas y conocimientos compartidos por curso. | Barras ordenadas | Carrera, industria, dimensión, desde, hasta | Top 20 solo entre carreras comparables. | Top 20 del contexto. |
 
-- La tendencia y los rankings de **demanda laboral** pueden mostrarse para cualquier carrera que tenga ofertas dirigidas.
-- La comparación currículo--mercado y sus brechas solo se habilitan cuando la carrera tiene al menos un curso conectado y la consulta devuelve un denominador curricular válido.
-- Para las carreras sin esa relación, la interfaz mostrará “cobertura curricular no disponible en el grafo” y enlazará a la auditoría de datos. Nunca pintará cobertura 0 % ni una brecha como si fuese una conclusión.
+### 3. Empresas y funciones
 
-## Preguntas que el dashboard debe responder
+Esta sección explica patrones de publicaciones empresariales. No se presenta como información interna de las empresas ni como headhunting de personas.
 
-1. ¿Cómo evoluciona, mes a mes, la cantidad de ofertas en el período elegido?
-2. Para una carrera, ¿qué competencias, habilidades y herramientas aparecen con más frecuencia en sus ofertas dirigidas?
-3. ¿En cuántos cursos de esa carrera existe una cobertura que declara cada elemento?
-4. ¿Qué elementos tienen alta presencia en las ofertas y baja presencia en los cursos de la carrera? Esas son **señales de revisión curricular**, no una afirmación de que la carrera sea insuficiente.
-5. ¿Qué elementos reciben mucha cobertura y tienen poca demanda registrada? Son candidatos a revisión por vigencia o a análisis cualitativo, no a una eliminación automática.
+| Slug | Pregunta | Definición medible | Gráfico | Filtros específicos | Vista macro | Drill-down |
+| --- | --- | --- | --- | --- | --- | --- |
+| `empresas_y_conocimientos` | ¿Qué empresas concentran las ofertas del contexto y qué conocimientos solicitan? | Ofertas únicas por empresa y conocimiento líder. | Barras con detalle | Carrera, industria, desde, hasta | Top 20 empresas. | Top 20 del contexto. |
+| `diferenciadores_empresas` | ¿Qué conocimientos aparecen proporcionalmente más en las ofertas de Empresa A que de Empresa B? | Lift con soporte mínimo en macro; diferencias positivas A−B en detalle. | Barras divergentes | Empresas A/B distintas, desde, hasta | Top 20 lifts con soporte mínimo 5. | Top 20 diferencias positivas; ambas empresas requieren soporte. |
+| `conocimientos_liderazgo` | ¿Qué conocimientos aparecen con mayor frecuencia en ofertas cuyos títulos tienen señal textual de liderazgo? | Heurística sobre términos inequívocos del título y conocimiento requerido. | Barras con drill-down | Industria, desde, hasta | Top 20 industrias. | Top 10 conocimientos. |
+| `funciones_por_tipo_empresa` | ¿Cómo cambia la distribución de títulos de puesto para una carrera según el tipo de empresa? | Ofertas con título no vacío por tipo y texto normalizado. | Barras agrupadas | Carrera, desde, hasta | Top 4 tipos y top 5 títulos, máximo 20. | La misma población para una carrera. |
 
-No se mostrará una conclusión causal del tipo “el curso X causa empleabilidad”: la ontología contiene asociaciones y cobertura declarada, no resultados longitudinales de inserción laboral atribuibles a un curso.
+## Contrato de datos
 
-### Exploración ampliada: trayectorias, pertinencia y mercado
+Cada entrada del catálogo publica:
 
-La interfaz se organiza como un **observatorio de correspondencias**, no como un formulario de preguntas. Sus filtros de facultad, carrera, industria, empresa de referencia, empresa comparada y función cambian el contexto de las visualizaciones. Así permite explorar de forma indirecta estas decisiones:
+- sección, slug, pregunta, definición medible y limitación semántica;
+- `cypher_general`, sin referencias `$param`;
+- `cypher_especifica` y su conjunto exacto de parámetros;
+- granularidad macro y específica;
+- métrica principal, límite de filas, `chart_hint` y `requiere_curricula`;
+- nombres exactos y separados de salida para general y específica.
 
-| Decisión que se quiere explorar | Vista indirecta | Qué representa realmente |
+Las salidas usan IDs y nombres para navegación. Toda razón expone `numerator_n` y
+`denominator_n`; las comparaciones currículo--mercado usan pares con prefijo `demand_` y
+`coverage_`. Los shares de recorridos muchos-a-muchos se llaman `assignment_share` y publican
+`total_assignments`: no se presentan como participación de ofertas únicas. Toda demanda usa
+`count(DISTINCT oferta)` para evitar que varios requerimientos inflen la métrica.
+
+### Límites de cardinalidad
+
+- General: máximo 20 filas.
+- Excepciones: `carreras_con_mayor_demanda` y disponibilidad curricular, máximo 14.
+- Detalle: top 10 o 20 según el contrato de la pregunta.
+- No se devuelven matrices carrera × industria × conocimiento completas.
+
+## Calidad y disponibilidad curricular
+
+La instancia auditada contiene 14 carreras, pero solo **Ingeniería de Sistemas** tiene currículo conectado por `Carrera-ENSENIA-Curso`. Esto es una limitación de disponibilidad, no evidencia de cobertura cero en las otras 13 carreras.
+
+| Estado | Condición | Presentación |
 | --- | --- | --- |
-| Orientación por sector | Afinidad por industria y pulso de oportunidades | Ofertas vinculadas a una carrera, no el empleo efectivo de sus egresados. |
-| Priorización de cursos para una empresa y función | Cursos para priorizar | Correspondencia entre requerimientos del mercado y cobertura declarada por curso. |
-| Preparación comparada | Índice de preparación por carrera | Cobertura relativa frente a señales de una industria; no un ranking absoluto de calidad. |
-| Brechas y diseño curricular | Cobertura/demanda, vigencia y mapa de espacios de diseño | Señales para investigar actualización o creación de experiencias formativas; no recomendaciones automáticas. |
-| Reclutamiento desde la academia | Densidad formativa y cursos con correspondencia | Evidencia de oferta curricular identificable, nunca datos de personas, candidatos o dominio individual. |
-| Competencia y evolución del mercado | Perfil comparativo de empresas, núcleo de función y matriz por estructura organizacional | Patrones de requerimientos por empresa, función y tipo de organización. |
+| `available` | Existen cursos conectados y un denominador curricular válido. | Habilitar cobertura, brechas, vigencia y cursos. |
+| `unavailable` | No existen cursos/coberturas conectados. | Mostrar “Cobertura curricular no disponible en el grafo”. |
+| Sin ofertas | El período/contexto no contiene ofertas. | Mostrar “No hay ofertas en el contexto seleccionado”. |
+| Soporte bajo | El denominador es insuficiente para una lectura estable. | Mostrar numerador y denominador; no ocultarlos. |
+| Dimensión sin resultados | No hay elementos del tipo elegido. | Mostrar estado vacío, nunca convertirlo en 0 %. |
 
-#### Límite semántico obligatorio
+La comparabilidad se evalúa por dimensión: debe haber cursos y coberturas válidas de la
+dimensión seleccionada. El macro publica `competencia_comparable`, `habilidad_comparable` y
+`herramienta_comparable`; la ausencia de una dimensión nunca bloquea otra. Cursos sin cobertura
+de la dimensión elegida producen `incomplete`, métricas nulas e `is_comparable=false`. Sin ofertas, las comparaciones temporales producen
+`no_market_data`, no porcentajes cero. El frontend debe respetar ese estado antes de graficar.
 
-El schema actual no contiene una entidad de **Persona**, **Estudiante**, **Egresado**, contrato, postulación ni relación de empleo. Por tanto, no es válido afirmar con esta base:
+En brechas, una dimensión perfilada habilita el universo combinado de elementos demandados y
+curriculares. Un elemento demandado sin cobertura puede tener cobertura 0 %; eso es una
+medición válida dentro de una dimensión disponible, no un dato faltante. Vigencia usa únicamente
+el universo curricular.
 
-- en qué industrias trabajan los graduados;
-- de qué carrera egresan personas con conocimientos exactos;
-- qué curso causó una contratación, desempeño o empleabilidad.
+Si `Oferta_Laboral` está vacío, la serie P1 devuelve `no_data`. Las demás plantillas temporales
+críticas protegen `fecha_corte` nula y devuelven un dataset vacío, que el API deberá traducir al
+mismo estado `no_data` sin fabricar períodos o rankings.
 
-Para soportar esas afirmaciones haría falta incorporar datos de trayectoria laboral y consentimiento/controles de privacidad apropiados. Hasta entonces, los nombres de las vistas deben conservar “oportunidades vinculadas”, “afinidad”, “cobertura declarada” y “señales”, en vez de “empleabilidad comprobada”, “talento disponible” o “colocación de egresados”.
+## Arquitectura del catálogo
 
-La versión actual del frontend usa datos simulados y los identifica como **Modo demostración**. Las consultas reales deberán replicar estas unidades de medida y no sustituirlas por inferencias personales.
+```text
+backend/src/agente/dashboard/
+├── consultas_modelo.py          # contrato tipado
+├── consultas_panorama.py        # P1-P4
+├── consultas_alineacion.py      # A1-A4
+├── consultas_empresas.py        # E1-E4
+└── consultas_estrategicas.py    # registry y re-export compatible
 
-## Métricas y gráficos seleccionados
+backend/scripts/
+└── ejecutar_consultas_estrategicas.py
+```
 
-Los gráficos se ordenan por valor analítico. Todos incluyen filtros de período y de carrera cuando el recorrido lo permite. La medida de demanda es siempre **count(DISTINCT oferta)** para no inflar valores cuando una oferta tiene varios requerimientos iguales o relacionados.
+El runner mantiene `--listar`, `--vista general|especifica` y `--mostrar-query`. Ejecuta Neo4j directamente en modo lectura; no usa LangGraph, OpenAI ni APOC.
 
-| Prioridad | Métrica | Gráfico recomendado | Motivo de la elección | Interacción |
-| --- | --- | --- | --- | --- |
-| 1 | Ofertas publicadas por mes | Línea | Es la lectura más clara para tendencia, picos y variación mensual. Un área rellenada ocultaría comparaciones si se agregan series. | Período; carrera e industria opcionales; tooltip con mes y ofertas. |
-| 1 | Demanda de competencias, habilidades o herramientas para una carrera | Barras horizontales ordenadas | Las etiquetas suelen ser largas y se requiere comparar un ranking exacto. Es más legible que un donut. | Pestañas por dimensión; Top 10/20; clic filtra la tabla de detalle. |
-| 1 | Cobertura curricular declarada de la misma dimensión | Barras horizontales ordenadas | Expone en cuántos cursos se declara cada elemento sin sugerir una equivalencia de calidad u horas. | Misma carrera; tooltip con cursos y porcentaje de cursos. |
-| 1 | Brecha currículo--mercado por elemento | Barras agrupadas horizontales con índices porcentuales | Muestra lado a lado demanda y cobertura sobre una escala común de 0 a 100. Evita comparar directamente conteos de ofertas y cursos, que no comparten denominador. | Ordenar por prioridad; seleccionar elemento; enlace a cursos y ofertas de soporte. |
-| 2 | Mapa de priorización de brechas | Dispersión | Ubica cada elemento por demanda relativa (Y) y cobertura relativa (X). El cuadrante superior izquierdo identifica demanda alta con cobertura baja. | Filtros por carrera/dimensión; etiquetar solo puntos seleccionados para no saturar. |
-| 2 | Composición de demanda por industria | Barras horizontales apiladas, solo para el elemento seleccionado | Permite saber en qué industrias aparece una brecha concreta. No se muestra como ranking general de empresas. | Visible al seleccionar una competencia, habilidad o herramienta. |
+## Plan de entrega por work units
 
-### Métrica de brecha normalizada
+### WU1 — Contrato de producto y catálogo fijo
 
-Para una carrera y un período determinados, cada elemento tendrá:
+**Incluye:** este documento, los cuatro módulos del catálogo, el registry compatible y el runner.
 
-~~~text
-índice_demanda   = ofertas dirigidas a la carrera que lo requieren
-                   / total de ofertas dirigidas a la carrera
+**No incluye:** endpoints, integración del dashboard ni componentes de visualización.
 
-índice_cobertura = cursos de la carrera que lo cubren o enseñan
-                   / total de cursos de la carrera
+**Verificación:** tipos, lint, guarda de solo lectura, parámetros, `EXPLAIN` y ejecución controlada contra Neo4j.
 
-brecha           = índice_demanda - índice_cobertura
-~~~
+**Rollback:** eliminar `consultas_modelo.py`, `consultas_panorama.py`, `consultas_alineacion.py` y `consultas_empresas.py`; restaurar este plan, `consultas_estrategicas.py` y el runner. API y frontend permanecen intactos.
 
-Los gráficos usarán ambos índices expresados como porcentajes. La tabla mostrará además los numeradores y denominadores para que la comparación sea auditable. No se clasificará una brecha como prioritaria si hay muy pocas ofertas: el umbral mínimo se definirá con usuarios funcionales tras medir la distribución real de datos, y se mostrará como filtro explícito.
+### WU2 — API tipada del dashboard
 
-**Cobertura_Curricular** representa presencia declarada en un curso, no profundidad, créditos, calidad pedagógica ni dominio alcanzado por estudiantes. Por esa razón el dashboard denominará el eje “cobertura declarada”, no “competencia adquirida”.
+- Exponer únicamente slugs permitidos y filtros tipados.
+- Validar IDs, dimensión y rangos temporales.
+- Añadir timeout transaccional y presupuesto de filas/costo por plantilla; el runner de este
+  work unit no modifica el servicio de base de datos.
+- `diferenciadores_empresas` macro no será apto para request síncrono si su medición permanece
+  por encima de 5 s: WU2 deberá precalcularlo o servirlo desde caché con invalidación explícita.
+- Devolver estados de disponibilidad y soporte sin reinterpretarlos.
+- Añadir pruebas de contrato y cardinalidad.
 
-## Plantillas Cypher de solo lectura
+### WU3 — Panorama laboral
 
-Las consultas se implementarán como plantillas con nombre en un módulo separado del catálogo conversacional. El frontend nunca enviará Cypher; enviará filtros tipados y el backend elegirá una plantilla permitida. Todas pasan por el guard de solo lectura y se ejecutan con parámetros, sin interpolar valores de usuario.
+- Implementar filtros persistentes y las cuatro visualizaciones de Panorama.
+- Incorporar tablas accesibles y estados vacíos.
+- Validar macro → drill-down con datos reales.
 
-| Id de plantilla | Uso | Recorrido validado | Parámetros |
-| --- | --- | --- | --- |
-| **dashboard_ofertas_por_mes** | Tendencia global de ofertas | **Oferta_Laboral.fecha_publicacion** | **desde**, **hasta** |
-| **dashboard_ofertas_por_mes_carrera** | Tendencia para una carrera | **Carrera-DIRIGE_A-Oferta_Laboral** | **carrera_id**, **desde**, **hasta** |
-| **dashboard_demanda_competencias_carrera** | Ranking de competencias demandadas | **Carrera-DIRIGE_A-Oferta-TIENE-Requerimiento-REQUIERE-Competencia** | **carrera_id**, **desde**, **hasta**, **limite** |
-| **dashboard_cobertura_competencias_carrera** | Ranking de cobertura de competencias | **Carrera-ENSENIA-Curso-TIENE-Cobertura-CUBRE-Competencia** | **carrera_id**, **limite** |
-| **dashboard_brechas_competencias_carrera** | Índices comparables y brecha | Unión de los dos recorridos anteriores | **carrera_id**, **desde**, **hasta**, **limite** |
-| **dashboard_demanda_habilidades_carrera**, **dashboard_cobertura_habilidades_carrera**, **dashboard_brechas_habilidades_carrera** | Misma lectura para habilidades | En currículo usa **Cobertura_Curricular-ENSENIA-Habilidad** | mismos parámetros |
-| **dashboard_demanda_herramientas_carrera**, **dashboard_cobertura_herramientas_carrera**, **dashboard_brechas_herramientas_carrera** | Misma lectura para herramientas | En currículo usa **Cobertura_Curricular-ENSENIA-Herramienta** | mismos parámetros |
-| **dashboard_industrias_elemento** | Contexto laboral de un elemento seleccionado | **Industria-AGRUPA-Empresa-PUBLICA-Oferta-TIENE-Requerimiento-REQUIERE-elemento** | **tipo**, **elemento_id**, **desde**, **hasta**, **limite** |
-| **dashboard_catalogo_filtros** | Selectores de carreras e industrias | etiquetas correspondientes | sin filtros o búsqueda limitada |
+### WU4 — Alineación curricular
 
-### Consulta de tendencia mensual
+- Añadir el gate de disponibilidad antes de ejecutar comparaciones.
+- Implementar cobertura, brechas, vigencia y correspondencia.
+- Mostrar numeradores, denominadores y advertencias.
 
-**fecha_publicacion** está almacenada como DateTime en el schema vivo. Se agrupará por sus componentes temporales y el backend entregará **anio** y **mes** para que la interfaz los formatee según el locale.
+### WU5 — Empresas y funciones
 
-~~~cypher
-MATCH (o:Oferta_Laboral)
-WHERE o.fecha_publicacion >= datetime($desde)
-  AND o.fecha_publicacion < datetime($hasta)
-RETURN o.fecha_publicacion.year AS anio,
-       o.fecha_publicacion.month AS mes,
-       count(DISTINCT o) AS ofertas
-ORDER BY anio, mes
-~~~
+- Implementar selección de empresas A/B.
+- Etiquetar liderazgo como aproximación por título.
+- Presentar `Puesto.nombre` como título publicado.
 
-La variante por carrera añade el patrón **(:Carrera {id_carrera: $carrera_id})-[:DIRIGE_A]-(o)** al MATCH. Se mantiene como plantilla distinta para no obligar al recorrido global a depender de esa relación.
+### WU6 — Validación funcional
 
-### Consulta de brecha de competencias por carrera
+- Revisar preguntas y umbrales con usuarios académicos y de empleabilidad.
+- Medir tiempos y soportes reales.
+- Ajustar top-N y advertencias sin cambiar la semántica de las métricas.
 
-Esta plantilla es la referencia para las tres dimensiones. Para habilidades y herramientas se cambia exclusivamente la etiqueta, la propiedad de nombre y la relación curricular según el schema vivo.
+## Criterios de aceptación de WU1
 
-~~~cypher
-MATCH (ca:Carrera {id_carrera: $carrera_id})
-OPTIONAL MATCH (ca)-[:DIRIGE_A]-(o_total:Oferta_Laboral)
-WHERE o_total.fecha_publicacion >= datetime($desde)
-  AND o_total.fecha_publicacion < datetime($hasta)
-WITH ca, count(DISTINCT o_total) AS total_ofertas
-OPTIONAL MATCH (ca)-[:ENSENIA]-(cu_total:Curso)
-WITH ca, total_ofertas, count(DISTINCT cu_total) AS total_cursos
-MATCH (co:Competencia)
-OPTIONAL MATCH (ca)-[:ENSENIA]-(cu_cobertura:Curso)-[:TIENE]
-               -(cc:Cobertura_Curricular)-[:CUBRE]-(co)
-WITH ca, co, total_cursos, total_ofertas,
-     count(DISTINCT cu_cobertura) AS cursos_con_cobertura
-OPTIONAL MATCH (ca)-[:DIRIGE_A]-(o_requerida:Oferta_Laboral)-[:TIENE]
-               -(r:Requerimiento_Laboral)-[:REQUIERE]-(co)
-WHERE o_requerida.fecha_publicacion >= datetime($desde)
-  AND o_requerida.fecha_publicacion < datetime($hasta)
-WITH co, total_cursos, total_ofertas, cursos_con_cobertura,
-     count(DISTINCT o_requerida) AS ofertas_que_requieren
-WHERE cursos_con_cobertura > 0 OR ofertas_que_requieren > 0
-WITH co, total_cursos, total_ofertas, cursos_con_cobertura,
-     ofertas_que_requieren,
-     CASE WHEN total_cursos = 0 THEN 0.0
-          ELSE toFloat(cursos_con_cobertura) / total_cursos END AS cobertura,
-     CASE WHEN total_ofertas = 0 THEN 0.0
-          ELSE toFloat(ofertas_que_requieren) / total_ofertas END AS demanda
-RETURN co.id_competencia AS id,
-       co.nombre_competencia AS elemento,
-       cursos_con_cobertura,
-       total_cursos,
-       ofertas_que_requieren,
-       total_ofertas,
-       cobertura,
-       demanda,
-       demanda - cobertura AS brecha
-ORDER BY brecha DESC, ofertas_que_requieren DESC
-LIMIT $limite
-~~~
+- [ ] Existen exactamente 12 slugs únicos, cuatro por sección.
+- [ ] Cada general contiene cero referencias a parámetros y respeta su límite declarado.
+- [ ] Cada específica referencia exactamente los parámetros declarados.
+- [ ] Las 24 consultas pasan la guarda de solo lectura y `EXPLAIN` sin APOC.
+- [ ] Las 12 generales se ejecutan contra Neo4j sin OOM y dentro de su cardinalidad.
+- [ ] Se prueban además P1 general, P3 para Ingeniería de Sistemas y una consulta curricular real.
+- [ ] `--listar` y `--mostrar-query` funcionan sin conectarse a Neo4j.
+- [ ] `py_compile`, Ruff y mypy strict pasan sobre catálogo y runner.
+- [ ] No se modifican endpoints ni frontend en este work unit.
 
-La secuencia de OPTIONAL MATCH y WITH agrega cada lado antes de recorrer el siguiente: así evita multiplicar cursos por ofertas. La enumeración de Competencia es intencional y pequeña; las agregaciones DISTINCT conservan una unidad clara: cursos únicos y ofertas únicas. Esta forma no usa CALL, que la guarda actual reserva para procedimientos de metadatos de lectura. Antes de usarla en producción se verifican el plan de ejecución, índices sobre IDs y la cardinalidad real.
+## Referencia operativa
 
-## Diseño del dashboard
+```powershell
+cd backend
 
-### Filtros persistentes
+# Descubrir el catálogo
+python scripts/ejecutar_consultas_estrategicas.py --listar
 
-- Carrera: obligatorio para cualquier comparación currículo--mercado.
-- Período: obligatorio para demanda; valor inicial sugerido: últimos 12 meses con datos disponibles, no la fecha de navegador si no hay datos recientes.
-- Dimensión: **Competencias**, **Habilidades** o **Herramientas**.
-- Industria: filtro opcional que restringe el lado de mercado; nunca modifica artificialmente la cobertura curricular.
-- Mínimo de ofertas: opcional y visible para evitar interpretar muestras pequeñas.
+# Ver un Cypher general sin conectarse
+python scripts/ejecutar_consultas_estrategicas.py `
+  --consulta industrias_por_carrera --vista general --mostrar-query
 
-El selector indicará qué carreras tienen cobertura curricular disponible. Si no la tienen, conservará las vistas puramente laborales y deshabilitará las de cobertura y brecha con una explicación del dato faltante.
-
-### Orden de contenido
-
-1. Encabezado de filtros y la definición visible de “cobertura declarada”.
-2. Línea de evolución de ofertas para el contexto temporal.
-3. Dos rankings paralelos: demanda laboral y cobertura curricular.
-4. Gráfico de barras agrupadas de brechas y tabla accesible con valores exactos.
-5. Dispersión de priorización y desglose por industria solo al seleccionar un elemento.
-
-En estados sin datos se mostrará por qué falta información: “no hay ofertas dirigidas a la carrera en este período”, “no hay cobertura declarada” o “el elemento no pertenece al vocabulario de esta dimensión”. No se representará un cero ambiguo como si fuera una observación confirmada.
-
-## Implementación con shadcn/ui Charts
-
-La implementación usará [shadcn/ui Charts](https://ui.shadcn.com/charts), que ofrece componentes que se copian al proyecto y están construidos sobre Recharts. Su **ChartContainer**, configuración de etiquetas y colores (**ChartConfig**), tooltips y leyendas permiten reutilizar el sistema visual existente sin adoptar la paleta de otro producto. La documentación también permite activar **accessibilityLayer** para interacción por teclado y lectores de pantalla.
-
-El frontend actual usa Next 16, React 19 y Tailwind 3, y todavía no declara shadcn/ui ni Recharts. La fase de preparación debe:
-
-1. Inicializar shadcn/ui dentro de **frontend** sin reemplazar los tokens, tipografías ni colores ya definidos en **tailwind.config.js** y los estilos globales.
-2. Añadir el componente chart con **npx shadcn@latest add chart**; este provee el archivo local de composición de gráficos y su dependencia Recharts.
-3. Definir los colores de cada serie mediante variables CSS de la marca en **ChartConfig**. No se usarán los colores de ejemplo de la documentación.
-4. Definir una altura o clase **min-h-*** en cada **ChartContainer**, requisito para que el contenedor responsive mida correctamente en el primer render.
-5. Activar **accessibilityLayer**, tooltips con valores y denominadores, y una tabla alternativa para cada gráfico.
-
-Propuesta de componentes reutilizables:
-
-~~~text
-frontend/src/components/dashboard/
-  FiltrosTendencias.jsx           # carrera, período, industria y dimensión
-  TarjetaGrafico.jsx              # título, definición, carga, error y tabla alternativa
-  TendenciaOfertasChart.jsx       # LineChart
-  RankingDimensionChart.jsx       # BarChart horizontal
-  BrechaCurriculoMercadoChart.jsx # BarChart agrupado horizontal
-  MapaPriorizacionChart.jsx       # ScatterChart
-  TablaBrechas.jsx                # valores y navegación accesible
-  dashboard-api.js                # cliente de endpoints del backend
-~~~
-
-Cada componente de visualización recibe datos ya agregados, un ChartConfig y callbacks de selección; no contiene Cypher ni reglas de negocio.
-
-## Diseño del backend y seguridad
-
-1. Crear un módulo **agente/dashboard/consultas.py** con las plantillas anteriores y una lista cerrada de dimensiones permitidas. No reutilizar el LLM ni el flujo de LangGraph para responder al dashboard.
-2. Crear un servicio que valide IDs, fechas, límite máximo y rango temporal; después ejecuta solamente las plantillas permitidas mediante el driver Neo4j.
-3. Aplicar el validador de solo lectura y de schema ya existente a cada consulta durante pruebas. No habilitar APOC, escrituras ni Cypher suministrado por el cliente.
-4. Exponer endpoints de lectura con contratos estables, por ejemplo:
-
-~~~text
-GET /dashboard/filtros/carreras
-GET /dashboard/ofertas/tendencia?desde&hasta&carrera_id?
-GET /dashboard/dimensiones/{tipo}/demanda?carrera_id&desde&hasta&limite
-GET /dashboard/dimensiones/{tipo}/cobertura?carrera_id&limite
-GET /dashboard/dimensiones/{tipo}/brechas?carrera_id&desde&hasta&limite
-GET /dashboard/dimensiones/{tipo}/industrias?elemento_id&desde&hasta
-~~~
-
-5. Aplicar timeout, límite de resultados, caché breve por combinación de filtros y logs estructurados con plantilla, filtros no sensibles, duración y número de filas. No registrar texto completo de ofertas ni datos personales.
-
-## Fases de entrega y criterios de aceptación
-
-### Fase 0 — Auditoría de datos
-
-- Ejecutar **introspeccionar_schema()** y un EXPLAIN por plantilla.
-- Confirmar que **fecha_publicacion**, los IDs, nombres y todas las relaciones de los recorridos existan en el entorno objetivo.
-- Documentar divergencias entre la imagen y el schema; posponer todo elemento no verificable.
-
-**Aceptación:** cada consulta pasa la guarda de solo lectura, no produce escrituras y devuelve una unidad de medida definida.
-
-### Fase 1 — Núcleo analítico
-
-- Implementar catálogo de filtros, tendencia mensual y las tres familias de demanda/cobertura/brecha por carrera.
-- Añadir pruebas unitarias para parámetros, denominadores en cero, ausencia de datos y prevención de duplicados por múltiples requerimientos.
-- Contrastar al menos una carrera real contra resultados de Cypher ejecutados en Neo4j.
-
-**Aceptación:** para una carrera y período seleccionados, el gráfico y la tabla reportan exactamente los mismos numeradores, denominadores y porcentajes.
-
-### Fase 2 — Interfaz shadcn/ui
-
-- Integrar los componentes de charts sin alterar la identidad visual existente.
-- Construir filtros, estados de carga/vacío/error, tooltips y tabla alternativa.
-- Verificar responsive, teclado, lector de pantalla y contraste con los tokens de marca definidos.
-
-**Aceptación:** la selección de filtros actualiza continuamente los cuatro gráficos principales; ningún gráfico queda sin texto alternativo o acceso a los valores tabulares.
-
-### Fase 3 — Priorización y validación funcional
-
-- Añadir dispersión de priorización y desglose por industria bajo demanda.
-- Acordar el mínimo de ofertas y el período por defecto con responsables académicos y de empleabilidad.
-- Validar una muestra de resultados con usuarios antes de rotular una señal como prioridad de revisión.
-
-**Aceptación:** cada señal de brecha permite navegar a sus cursos de cobertura y a la cantidad de ofertas que la sustentan; el dashboard no presenta inferencias causales ni recomendaciones automáticas.
-
-## Elementos deliberadamente pospuestos
-
-- Métricas de **Evaluacion_Desempenio**: solo se consideran si la auditoría confirma sus relaciones y propiedades para las tres dimensiones. No se mezclarán con cobertura o demanda sin una definición estadística validada.
-- Predicciones, recomendaciones automáticas y uso de LLM: no son necesarios para responder las preguntas del dashboard y añadirían interpretaciones no sustentadas por la ontología.
-- Visualización completa de la red y KPIs de volumen de la base: son útiles para administración técnica, no para detectar la alineación entre enseñanza y mercado laboral.
+# Ver un drill-down sin ejecutarlo
+python scripts/ejecutar_consultas_estrategicas.py `
+  --consulta industrias_por_carrera --vista especifica `
+  --param carrera_id=CAR_01375f53651cff38 `
+  --param desde=2025-01-01T00:00:00Z `
+  --param hasta=2026-01-01T00:00:00Z `
+  --mostrar-query
+```

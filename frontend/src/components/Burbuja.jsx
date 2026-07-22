@@ -2,15 +2,21 @@ import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import BotAvatar from "./BotAvatar";
 import PanelRazonamiento from "./PanelRazonamiento";
-import TablaFilas from "./TablaFilas";
+import TablaFilas, { resumenFilas } from "./TablaFilas";
+
+function esListadoDuplicado(texto) {
+  return /^estos son los resultados:\s*/i.test(String(texto || ""));
+}
 
 export default function Burbuja({ mensaje }) {
   const esUsuario = mensaje.rol === "usuario";
   const [copiado, setCopiado] = useState(false);
+  const filas = mensaje.filas ?? [];
+  const textoVisible = esListadoDuplicado(mensaje.texto) ? resumenFilas(filas) || mensaje.texto : mensaje.texto;
 
   const copiar = async () => {
-    if (!mensaje.texto) return;
-    await navigator.clipboard?.writeText(mensaje.texto);
+    if (!textoVisible) return;
+    await navigator.clipboard?.writeText(textoVisible);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 1400);
   };
@@ -43,7 +49,7 @@ export default function Burbuja({ mensaje }) {
     <div className="flex w-full animate-fade-in justify-start gap-3">
       <BotAvatar />
       <article className="min-w-0 flex-1">
-        <p className="whitespace-pre-wrap text-[15.5px] leading-[1.65] text-ink">{mensaje.texto}</p>
+        {textoVisible ? <p className="whitespace-pre-wrap text-[15.5px] leading-[1.65] text-ink">{textoVisible}</p> : null}
 
         {mensaje.error ? (
           <div className="mt-4 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
@@ -57,7 +63,7 @@ export default function Burbuja({ mensaje }) {
           </div>
         ) : null}
 
-        <TablaFilas filas={mensaje.filas ?? []} />
+        <TablaFilas filas={filas} />
 
         <PanelRazonamiento
           pasos={mensaje.pasos ?? []}
@@ -68,7 +74,7 @@ export default function Burbuja({ mensaje }) {
         />
 
         <div className="mt-3 flex items-center gap-2">
-          {mensaje.texto ? (
+          {textoVisible ? (
             <button
               type="button"
               onClick={copiar}

@@ -18,11 +18,10 @@ describe("interfaz del chat", () => {
     expect(campo.value).toBe("");
   });
 
-  it("presenta una métrica única como tarjeta", () => {
+  it("no duplica un valor único que ya se presenta en la respuesta", () => {
     render(<TablaFilas filas={[{ total: 14 }]} />);
 
-    expect(screen.getByText("Total")).toBeTruthy();
-    expect(screen.getByText("14")).toBeTruthy();
+    expect(screen.queryByLabelText("Detalle de resultados")).toBeNull();
   });
 
   it("presenta tablas con encabezados legibles y nulos explícitos", () => {
@@ -31,6 +30,16 @@ describe("interfaz del chat", () => {
     expect(screen.getByText("Nombre puesto")).toBeTruthy();
     expect(screen.getByText("Ofertas")).toBeTruthy();
     expect(screen.getByText("—")).toBeTruthy();
+  });
+
+  it("muestra las tablas extensas de forma progresiva", () => {
+    const filas = Array.from({ length: 10 }, (_, indice) => ({ herramienta: `Herramienta ${indice + 1}`, ofertas: indice + 1 }));
+    render(<TablaFilas filas={filas} />);
+
+    expect(screen.getByRole("button", { name: "Ver 2 resultados más" })).toBeTruthy();
+    expect(screen.queryByText("Herramienta 10")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Ver 2 resultados más" }));
+    expect(screen.getByText("Herramienta 10")).toBeTruthy();
   });
 
 });
