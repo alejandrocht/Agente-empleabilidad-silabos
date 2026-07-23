@@ -1,25 +1,18 @@
-# Consultas listas para validar las 12 preguntas del dashboard en Neo4j
+# Queries de ejemplo para validar el dashboard en Neo4j
 
-Este documento permite copiar, pegar y ejecutar el catálogo fijo del dashboard directamente en Neo4j Browser. Cada pregunta incluye una vista general para descubrir la tendencia y una vista específica para profundizar con filtros reales.
+Estas son **proyecciones visuales** del catálogo fijo: conservan su lógica de cálculo, pero el `RETURN` final muestra únicamente las columnas que necesita cada gráfico. Los campos técnicos del catálogo (`value`, numeradores, denominadores, soporte, disponibilidad y avisos) se usan dentro de la subconsulta para validar el resultado y no se devuelven en estas pruebas.
 
-## Inicio rápido en Neo4j Browser
+## Uso rápido en Neo4j Browser
 
-1. Limpie el editor cuando cambie de prueba:
+1. Para una **query general**, copie solo el bloque Cypher: no requiere parámetros.
+2. Para una **query específica**, ejecute primero su bloque `:param` y luego el Cypher.
+3. Una tabla vacía **no es cero**: esta proyección omite los estados sin datos o sin cobertura (`availability <> 'available'`). Revise la calidad y los avisos en el catálogo o dashboard antes de concluir que no existe demanda o cobertura.
 
-   ```cypher
-   :clear
-   ```
+> Los rangos de fechas son semiabiertos: `[desde, hasta)`. Incluyen `desde` y excluyen `hasta`.
 
-2. Para una **query general**, pegue y ejecute solamente el bloque Cypher. No requiere parámetros.
-3. Para una **query específica**, ejecute primero su bloque `:param` y después el bloque Cypher. Neo4j Browser conserva los parámetros hasta que los cambie o cierre la sesión.
-4. Lea `availability` antes de interpretar métricas. `available` habilita la comparación; otros estados explican por qué faltan datos.
+## Entidades reales de los ejemplos
 
-> [!NOTE]
-> Los rangos usan el intervalo semiabierto `[desde, hasta)`: incluyen `desde` y excluyen `hasta`. Los ejemplos usan 12 meses, por debajo del máximo permitido de 20 buckets mensuales.
-
-### Entidades reales utilizadas
-
-| Parámetro | Valor real usado | Entidad |
+| Parámetro | Valor | Entidad |
 |---|---|---|
 | `carrera_id` | `CAR_01375f53651cff38` | Ingeniería de Sistemas |
 | `facultad_id` | `FAC_7ae410ba957c79d1` | Facultad de Ingeniería |
@@ -30,41 +23,27 @@ Este documento permite copiar, pegar y ejecutar el catálogo fijo del dashboard 
 
 ## Límites de interpretación
 
-> [!IMPORTANT]
-> El grafo no contiene egresados ni personas. Las consultas miden ofertas publicadas y relaciones declaradas; no permiten afirmar dónde trabajan los graduados ni quién fue contratado.
-
-> [!CAUTION]
-> En la instancia validada, solo Ingeniería de Sistemas tiene currículo conectado. Para otras carreras, la ausencia de currículo debe mostrarse como `unavailable` o `incomplete`, nunca como cobertura de 0 %.
-
-> [!WARNING]
-> `Puesto.nombre` es un título publicado, no una función normalizada. Además, liderazgo se detecta mediante términos del título; es una heurística y puede producir falsos positivos o negativos.
-
-> [!NOTE]
-> Ausencia de datos de mercado o currículo no equivale a valor cero. Respete `availability`, `warning` e `is_comparable` antes de graficar o comparar.
-
-## Índice
-
-| Sección | Preguntas |
-|---|---|
-| Panorama laboral | 1-4 |
-| Alineación curricular | 5-8 |
-| Empresas y funciones | 9-12 |
+- El grafo mide ofertas publicadas y relaciones declaradas, no egresados, contrataciones ni empleo efectivo.
+- Solo Ingeniería de Sistemas tiene currículo conectado en la instancia validada. Falta de currículo no equivale a 0 % de cobertura.
+- `Puesto.nombre` es un título publicado; no es una función normalizada ni existe tamaño empresarial.
 
 ## Panorama laboral
 
 ### 1. ¿Cómo cambia mes a mes la cantidad de ofertas publicadas?
 
-**Qué busca mostrar.** La evolución mensual de publicaciones y los meses de aceleración, caída o estabilidad dentro del contexto elegido.
+**Qué busca mostrar.** Serie mensual de ofertas únicas; el macro usa los últimos 12 meses con datos.
 
-**Cómo leer el resultado.** `value` y `ofertas` son ofertas únicas del mes. Los meses sin publicaciones se conservan con cero; `availability` distingue una serie válida. No existe denominador porcentual para esta métrica.
+**Cómo leer el resultado.** Cada fila es un mes. `ofertas` es el total de publicaciones únicas del período.
 
 **Advertencia semántica.** Mide publicaciones, no contrataciones ni empleo efectivo.
 
 #### Query general
 
+**Columnas visuales:** `periodo`, `ofertas`.
 **Alcance:** Un mes por fila, máximo 12 meses.
 
 ```cypher
+CALL () {
 MATCH (oferta:Oferta_Laboral)
 WHERE oferta.fecha_publicacion IS NOT NULL
 WITH max(oferta.fecha_publicacion) AS fecha_corte
@@ -90,6 +69,12 @@ RETURN toString(periodo) AS periodo_id,
        CASE WHEN ofertas = 0 THEN 'no_data' ELSE 'available' END AS availability
 ORDER BY periodo
 LIMIT 12
+}
+WITH *
+WHERE availability = 'available'
+RETURN periodo,
+       ofertas
+ORDER BY periodo
 ```
 
 #### Query específica
@@ -105,7 +90,11 @@ LIMIT 12
 }
 ```
 
+**Columnas visuales:** `periodo`, `ofertas`.
+**Alcance:** Un mes por fila para carrera, industria y período.
+
 ```cypher
+CALL () {
 WITH date(datetime($desde)) AS desde,
      date(datetime($hasta)) AS hasta
 WITH desde, hasta,
@@ -137,23 +126,32 @@ RETURN $carrera_id AS carrera_id,
        CASE WHEN ofertas = 0 THEN 'no_data' ELSE 'available' END AS availability
 ORDER BY periodo
 LIMIT 20
+}
+WITH *
+WHERE availability = 'available'
+RETURN periodo,
+       ofertas
+ORDER BY periodo
 ```
 
-**Resultado esperado.** La vista general devuelve hasta **12 filas** y la específica hasta **20 filas**. Con los parámetros anteriores, la ejecución verificada devolvió **12 filas** con estado **`available`**. Gráfico sugerido: **línea**.
+**Gráfico sugerido:** `line`. Límite: general 12 filas; específica 20 filas.
+
 
 ### 2. ¿Qué carreras concentran más ofertas dirigidas?
 
-**Qué busca mostrar.** Qué carreras reciben más asignaciones de ofertas y cuánto pesa cada una dentro de la demanda observada.
+**Qué busca mostrar.** Ranking por ofertas únicas dirigidas y participación del total.
 
-**Cómo leer el resultado.** `rank` ordena carreras por `ofertas`. `assignment_share = numerator_n / denominator_n` mide participación sobre asignaciones carrera-oferta, no sobre personas ni contrataciones.
+**Cómo leer el resultado.** `participacion` es el peso de la carrera sobre las asignaciones carrera-oferta del contexto; no representa personas ni contrataciones.
 
 **Advertencia semántica.** Una oferta dirigida expresa demanda declarada; no prueba inserción laboral.
 
 #### Query general
 
+**Columnas visuales:** `carrera_id`, `carrera`, `ofertas`, `participacion`, `rank`.
 **Alcance:** Una carrera por fila, máximo las 14 carreras.
 
 ```cypher
+CALL () {
 MATCH (oferta:Oferta_Laboral)
 WHERE oferta.fecha_publicacion IS NOT NULL
 WITH max(oferta.fecha_publicacion) AS fecha_corte
@@ -183,6 +181,15 @@ RETURN fila.carrera_id AS carrera_id,
        'available' AS availability
 ORDER BY rank
 LIMIT 14
+}
+WITH *
+WHERE availability = 'available'
+RETURN carrera_id,
+       carrera,
+       ofertas,
+       assignment_share AS participacion,
+       rank
+ORDER BY rank
 ```
 
 #### Query específica
@@ -198,7 +205,11 @@ LIMIT 14
 }
 ```
 
+**Columnas visuales:** `carrera_id`, `carrera`, `ofertas`, `participacion`, `rank`.
+**Alcance:** Carreras de una facultad e industria en el período.
+
 ```cypher
+CALL () {
 MATCH (f:Facultad)-[:OFRECE]-(ca:Carrera)-[:DIRIGE_A]-(o:Oferta_Laboral)
       -[:PUBLICA]-(:Empresa)-[:AGRUPA]-(i:Industria)
 WHERE f.id_facultad = $facultad_id
@@ -229,23 +240,35 @@ RETURN f.id_facultad AS facultad_id,
        'available' AS availability
 ORDER BY rank
 LIMIT 14
+}
+WITH *
+WHERE availability = 'available'
+RETURN carrera_id,
+       carrera,
+       ofertas,
+       assignment_share AS participacion,
+       rank
+ORDER BY rank
 ```
 
-**Resultado esperado.** La vista general devuelve hasta **14 filas** y la específica hasta **14 filas**. Con los parámetros anteriores, la ejecución verificada devolvió **3 filas** con estado **`available`**. Gráfico sugerido: **barras ordenadas**.
+**Gráfico sugerido:** `ranked_bar`. Límite: general 14 filas; específica 14 filas.
+
 
 ### 3. ¿En qué industrias se concentran las ofertas dirigidas a cada carrera?
 
-**Qué busca mostrar.** La industria líder de cada carrera en la vista macro y la concentración industrial de una carrera al profundizar.
+**Qué busca mostrar.** Industria líder por carrera en macro y top 10 de industrias en detalle.
 
-**Cómo leer el resultado.** `rank` ordena industrias por ofertas; `assignment_share` usa como denominador todas las asignaciones industria-oferta de la carrera. `empresas` da soporte adicional y `industrias_activas` solo aparece en la vista macro.
+**Cómo leer el resultado.** `participacion` es el peso de cada industria dentro de las ofertas dirigidas a la carrera. La macro conserva la industria líder por carrera.
 
 **Advertencia semántica.** Describe industrias de empresas publicadoras, no industrias donde trabajan egresados.
 
 #### Query general
 
+**Columnas visuales:** `carrera_id`, `carrera`, `industria_id`, `industria`, `ofertas`, `participacion`, `rank`.
 **Alcance:** Una industria líder por carrera, máximo 14 filas.
 
 ```cypher
+CALL () {
 MATCH (oferta:Oferta_Laboral)
 WHERE oferta.fecha_publicacion IS NOT NULL
 WITH max(oferta.fecha_publicacion) AS fecha_corte
@@ -286,6 +309,17 @@ RETURN fila.carrera_id AS carrera_id,
        fila.industrias_activas AS industrias_activas
 ORDER BY rank
 LIMIT 14
+}
+WITH *
+WHERE availability = 'available'
+RETURN carrera_id,
+       carrera,
+       industria_id,
+       industria,
+       ofertas,
+       assignment_share AS participacion,
+       rank
+ORDER BY rank
 ```
 
 #### Query específica
@@ -300,7 +334,11 @@ LIMIT 14
 }
 ```
 
+**Columnas visuales:** `industria_id`, `industria`, `ofertas`, `participacion`, `rank`.
+**Alcance:** Top 10 industrias de una carrera.
+
 ```cypher
+CALL () {
 MATCH (ca:Carrera)-[:DIRIGE_A]-(o:Oferta_Laboral)
       -[:PUBLICA]-(e:Empresa)-[:AGRUPA]-(i:Industria)
 WHERE ca.id_carrera = $carrera_id
@@ -328,23 +366,35 @@ RETURN ca.id_carrera AS carrera_id,
        total_asignaciones AS total_assignments,
        'available' AS availability
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN industria_id,
+       industria,
+       ofertas,
+       assignment_share AS participacion,
+       rank
+ORDER BY rank
 ```
 
-**Resultado esperado.** La vista general devuelve hasta **14 filas** y la específica hasta **10 filas**. Con los parámetros anteriores, la ejecución verificada devolvió **10 filas** con estado **`available`**. Gráfico sugerido: **barras con detalle**.
+**Gráfico sugerido:** `bar_drilldown`. Límite: general 14 filas; específica 10 filas.
+
 
 ### 4. ¿Qué competencias, habilidades y herramientas aparecen más en las ofertas del contexto seleccionado?
 
-**Qué busca mostrar.** Los conocimientos más repetidos en las ofertas, separados en competencias, habilidades y herramientas.
+**Qué busca mostrar.** Top 5 por dimensión en macro y top 20 de la dimensión seleccionada en detalle.
 
-**Cómo leer el resultado.** `percentage = numerator_n / denominator_n`: ofertas que requieren el conocimiento sobre todas las ofertas del contexto. Una oferta puede exigir varios conocimientos, por lo que los porcentajes no tienen que sumar 100 %.
+**Cómo leer el resultado.** `porcentaje` indica la proporción de ofertas que exige el conocimiento. Los porcentajes no suman 100 %, porque una oferta puede requerir varios conocimientos.
 
 **Advertencia semántica.** La frecuencia en publicaciones no equivale a dominio personal ni importancia causal.
 
 #### Query general
 
+**Columnas visuales:** `conocimiento_id`, `conocimiento`, `dimension`, `ofertas`, `porcentaje`, `rank`.
 **Alcance:** Top 5 por dimensión, máximo 15 filas.
 
 ```cypher
+CALL () {
 MATCH (oferta:Oferta_Laboral)
 WHERE oferta.fecha_publicacion IS NOT NULL
 WITH max(oferta.fecha_publicacion) AS fecha_corte
@@ -384,6 +434,16 @@ RETURN fila.id AS conocimiento_id,
        'available' AS availability
 ORDER BY dimension, rank
 LIMIT 15
+}
+WITH *
+WHERE availability = 'available'
+RETURN conocimiento_id,
+       conocimiento,
+       dimension,
+       ofertas,
+       percentage AS porcentaje,
+       rank
+ORDER BY dimension, rank
 ```
 
 #### Query específica
@@ -400,7 +460,11 @@ LIMIT 15
 }
 ```
 
+**Columnas visuales:** `conocimiento_id`, `conocimiento`, `dimension`, `ofertas`, `porcentaje`, `rank`.
+**Alcance:** Top 20 de una dimensión y contexto seleccionados.
+
 ```cypher
+CALL () {
 MATCH (ca:Carrera)-[:DIRIGE_A]-(total:Oferta_Laboral)
       -[:PUBLICA]-(:Empresa)-[:AGRUPA]-(i:Industria)
 WHERE ca.id_carrera = $carrera_id
@@ -441,25 +505,38 @@ RETURN ca.id_carrera AS carrera_id,
        total_ofertas AS denominator_n,
        'available' AS availability
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN conocimiento_id,
+       conocimiento,
+       dimension,
+       ofertas,
+       percentage AS porcentaje,
+       rank
+ORDER BY rank
 ```
 
-**Resultado esperado.** La vista general devuelve hasta **15 filas** y la específica hasta **20 filas**. Con los parámetros anteriores, la ejecución verificada devolvió **20 filas** con estado **`available`**. Gráfico sugerido: **barras ordenadas por pestañas**.
+**Gráfico sugerido:** `ranked_bar_tabs`. Límite: general 15 filas; específica 20 filas.
+
 
 ## Alineación curricular
 
 ### 5. Para la carrera seleccionada, ¿qué elementos tienen mayor cobertura curricular declarada?
 
-**Qué busca mostrar.** La disponibilidad de información curricular y, para una carrera, qué conocimientos aparecen cubiertos por más cursos.
+**Qué busca mostrar.** Disponibilidad por carrera en macro y top 20 por proporción de cursos en detalle.
 
-**Cómo leer el resultado.** `percentage = numerator_n / denominator_n`: cursos que cubren el conocimiento sobre los cursos de la carrera. Revise `availability`, `is_comparable` y `dimension_coverage_n` antes de comparar.
+**Cómo leer el resultado.** La macro muestra cursos con cobertura declarada por dimensión. En detalle, `porcentaje_cobertura` es la proporción de cursos de la carrera que cubre el conocimiento.
 
 **Advertencia semántica.** Cobertura declarada no mide profundidad, calidad ni dominio del estudiante.
 
 #### Query general
 
+**Columnas visuales:** `carrera_id`, `carrera`, `cursos`, `cursos_con_competencias`, `cursos_con_habilidades`, `cursos_con_herramientas`.
 **Alcance:** Estado de disponibilidad de las 14 carreras.
 
 ```cypher
+CALL () {
 MATCH (ca:Carrera)
 OPTIONAL MATCH (ca)-[:ENSENIA]-(cu:Curso)
 WITH ca, count(DISTINCT cu) AS total_cursos
@@ -498,6 +575,16 @@ RETURN ca.id_carrera AS carrera_id,
             ELSE null END AS warning
 ORDER BY has_any_comparable_dimension DESC, total_cursos DESC, carrera
 LIMIT 14
+}
+WITH *
+WHERE availability = 'available'
+RETURN carrera_id,
+       carrera,
+       value AS cursos,
+       coberturas_competencia AS cursos_con_competencias,
+       coberturas_habilidad AS cursos_con_habilidades,
+       coberturas_herramienta AS cursos_con_herramientas
+ORDER BY carrera
 ```
 
 #### Query específica
@@ -511,7 +598,11 @@ LIMIT 14
 }
 ```
 
+**Columnas visuales:** `conocimiento_id`, `conocimiento`, `dimension`, `cursos`, `porcentaje_cobertura`, `rank`.
+**Alcance:** Top 20 elementos cubiertos por una carrera.
+
 ```cypher
+CALL () {
 MATCH (ca:Carrera)
 WHERE ca.id_carrera = $carrera_id
 OPTIONAL MATCH (ca)-[:ENSENIA]-(curso_total:Curso)
@@ -565,23 +656,36 @@ RETURN ca.id_carrera AS carrera_id,
             ELSE null END AS warning
 ORDER BY rank
 LIMIT 20
+}
+WITH *
+WHERE availability = 'available'
+RETURN conocimiento_id,
+       conocimiento,
+       dimension,
+       value AS cursos,
+       percentage AS porcentaje_cobertura,
+       rank
+ORDER BY rank
 ```
 
-**Resultado esperado.** La vista general devuelve hasta **14 filas** y la específica hasta **20 filas**. Con los parámetros anteriores, la ejecución verificada devolvió **20 filas** con estado **`available`**. Gráfico sugerido: **estado de cobertura y barras**.
+**Gráfico sugerido:** `coverage_status_then_bar`. Límite: general 14 filas; específica 20 filas.
+
 
 ### 6. ¿En qué elementos la demanda relativa supera más a la cobertura?
 
-**Qué busca mostrar.** Los conocimientos cuya presencia relativa en ofertas supera su presencia relativa en cursos, para priorizar revisión curricular.
+**Qué busca mostrar.** Ranking por diferencia entre proporción de ofertas y proporción de cursos.
 
-**Cómo leer el resultado.** `value = demand_percentage - coverage_percentage`. Un valor positivo prioriza una posible brecha. Los cuatro campos de numerador y denominador permiten auditar la comparación; `rank` no es una calificación académica.
+**Cómo leer el resultado.** `brecha_porcentual` es demanda menos cobertura. Un valor positivo señala que la presencia en ofertas supera la cobertura curricular declarada.
 
 **Advertencia semántica.** Es una señal de revisión sin umbral; dimensiones incompletas quedan excluidas.
 
 #### Query general
 
+**Columnas visuales:** `carrera_id`, `carrera`, `conocimiento_id`, `conocimiento`, `dimension`, `demanda_porcentaje`, `cobertura_porcentaje`, `brecha_porcentual`, `rank`.
 **Alcance:** Top 20 diferencias entre contextos comparables.
 
 ```cypher
+CALL () {
 MATCH (todas:Carrera)
 WITH count(DISTINCT todas) AS total_carreras
 MATCH (oferta:Oferta_Laboral)
@@ -674,6 +778,19 @@ RETURN fila.carrera_id AS carrera_id,
        true AS is_comparable,
        total_carreras
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN carrera_id,
+       carrera,
+       conocimiento_id,
+       conocimiento,
+       dimension,
+       demand_percentage AS demanda_porcentaje,
+       coverage_percentage AS cobertura_porcentaje,
+       value AS brecha_porcentual,
+       rank
+ORDER BY rank
 ```
 
 #### Query específica
@@ -690,7 +807,11 @@ ORDER BY rank
 }
 ```
 
+**Columnas visuales:** `conocimiento_id`, `conocimiento`, `dimension`, `demanda_porcentaje`, `cobertura_porcentaje`, `brecha_porcentual`, `rank`.
+**Alcance:** Top 20 diferencias para carrera, industria y dimensión.
+
 ```cypher
+CALL () {
 MATCH (ca:Carrera)
 WHERE ca.id_carrera = $carrera_id
 MATCH (i:Industria)
@@ -798,23 +919,37 @@ RETURN ca.id_carrera AS carrera_id,
             THEN 'No hay ofertas en el contexto seleccionado.'
             ELSE null END AS warning
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN conocimiento_id,
+       conocimiento,
+       dimension,
+       demand_percentage AS demanda_porcentaje,
+       coverage_percentage AS cobertura_porcentaje,
+       value AS brecha_porcentual,
+       rank
+ORDER BY rank
 ```
 
-**Resultado esperado.** La vista general devuelve hasta **20 filas** y la específica hasta **20 filas**. Con los parámetros anteriores, la ejecución verificada devolvió **20 filas** con estado **`available`**. Gráfico sugerido: **cuadrantes o barras agrupadas**.
+**Gráfico sugerido:** `quadrant_or_grouped_bar`. Límite: general 20 filas; específica 20 filas.
+
 
 ### 7. ¿En cuáles la cobertura supera más a la demanda reciente?
 
-**Qué busca mostrar.** Los conocimientos con mayor presencia curricular relativa que demanda reciente observada, como señal para investigar vigencia.
+**Qué busca mostrar.** Ranking, sin umbral, por proporción de cursos menos proporción de ofertas recientes.
 
-**Cómo leer el resultado.** `value = coverage_percentage - demand_percentage`. Un valor alto solo señala desalineación observada para revisión; no demuestra obsolescencia. `no_market_data` significa que no hubo base de mercado comparable.
+**Cómo leer el resultado.** `brecha_porcentual` compara demanda reciente y cobertura declarada. Es una señal para revisar contenido, no una prueba de que un conocimiento sea obsoleto.
 
 **Advertencia semántica.** Poca demanda observada no prueba obsolescencia; sin mercado se devuelve estado.
 
 #### Query general
 
+**Columnas visuales:** `carrera_id`, `carrera`, `conocimiento_id`, `conocimiento`, `dimension`, `demanda_porcentaje`, `cobertura_porcentaje`, `brecha_porcentual`, `rank`.
 **Alcance:** Top 20 diferencias entre contextos comparables.
 
 ```cypher
+CALL () {
 MATCH (todas:Carrera)
 WITH count(DISTINCT todas) AS total_carreras
 MATCH (oferta:Oferta_Laboral)
@@ -886,6 +1021,19 @@ RETURN fila.carrera_id AS carrera_id,
        fila.availability = 'available' AS is_comparable,
        total_carreras
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN carrera_id,
+       carrera,
+       conocimiento_id,
+       conocimiento,
+       dimension,
+       demand_percentage AS demanda_porcentaje,
+       coverage_percentage AS cobertura_porcentaje,
+       value AS brecha_porcentual,
+       rank
+ORDER BY rank
 ```
 
 #### Query específica
@@ -902,7 +1050,11 @@ ORDER BY rank
 }
 ```
 
+**Columnas visuales:** `conocimiento_id`, `conocimiento`, `dimension`, `demanda_porcentaje`, `cobertura_porcentaje`, `brecha_porcentual`, `rank`.
+**Alcance:** Top 20 diferencias o un estado no_market_data.
+
 ```cypher
+CALL () {
 MATCH (ca:Carrera)
 WHERE ca.id_carrera = $carrera_id
 MATCH (i:Industria)
@@ -1001,23 +1153,37 @@ RETURN ca.id_carrera AS carrera_id,
             THEN 'No hay ofertas en el contexto seleccionado.'
             ELSE null END AS warning
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN conocimiento_id,
+       conocimiento,
+       dimension,
+       demand_percentage AS demanda_porcentaje,
+       coverage_percentage AS cobertura_porcentaje,
+       value AS brecha_porcentual,
+       rank
+ORDER BY rank
 ```
 
-**Resultado esperado.** La vista general devuelve hasta **20 filas** y la específica hasta **20 filas**. Con los parámetros anteriores, la ejecución verificada devolvió **20 filas** con estado **`available`**. Gráfico sugerido: **barras divergentes**.
+**Gráfico sugerido:** `diverging_bar`. Límite: general 20 filas; específica 20 filas.
+
 
 ### 8. ¿Qué cursos comparten más conocimientos con las ofertas del contexto seleccionado?
 
-**Qué busca mostrar.** Los cursos que comparten más conocimientos con las ofertas del contexto, útiles para orientar contenidos o programas de prácticas.
+**Qué busca mostrar.** Top 20 cursos por ofertas únicas relacionadas y conocimientos compartidos.
 
-**Cómo leer el resultado.** `value` es el número de ofertas únicas vinculadas mediante conocimientos compartidos. `conocimientos_compartidos` explica la amplitud del cruce y `denominator_n` da el universo de ofertas.
+**Cómo leer el resultado.** `ofertas` es el soporte de mercado asociado al curso y `conocimientos_compartidos` indica el solapamiento usado para priorizarlo.
 
 **Advertencia semántica.** La correspondencia no implica causalidad, calidad del curso ni contratación.
 
 #### Query general
 
+**Columnas visuales:** `carrera_id`, `carrera`, `curso_id`, `curso`, `ofertas`, `conocimientos_compartidos`, `participacion`, `rank`.
 **Alcance:** Top 20 cursos de dimensiones comparables.
 
 ```cypher
+CALL () {
 MATCH (todas:Carrera)
 WITH count(DISTINCT todas) AS total_carreras
 MATCH (perfilada:Carrera)
@@ -1067,6 +1233,18 @@ RETURN fila.carrera_id AS carrera_id,
        toFloat(carreras_perfiladas) / total_carreras AS coverage_percentage,
        true AS is_comparable
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN carrera_id,
+       carrera,
+       curso_id,
+       curso,
+       ofertas,
+       conocimientos_compartidos,
+       assignment_share AS participacion,
+       rank
+ORDER BY rank
 ```
 
 #### Query específica
@@ -1083,7 +1261,11 @@ ORDER BY rank
 }
 ```
 
+**Columnas visuales:** `curso_id`, `curso`, `dimension`, `ofertas`, `conocimientos_compartidos`, `rank`.
+**Alcance:** Top 20 cursos o un estado de indisponibilidad.
+
 ```cypher
+CALL () {
 MATCH (ca:Carrera)
 WHERE ca.id_carrera = $carrera_id
 MATCH (i:Industria)
@@ -1158,25 +1340,38 @@ RETURN ca.id_carrera AS carrera_id,
             THEN 'No hay ofertas en el contexto seleccionado.'
             ELSE null END AS warning
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN curso_id,
+       curso,
+       dimension,
+       value AS ofertas,
+       conocimientos_compartidos,
+       rank
+ORDER BY rank
 ```
 
-**Resultado esperado.** La vista general devuelve hasta **20 filas** y la específica hasta **20 filas**. Con los parámetros anteriores, la ejecución verificada devolvió **20 filas** con estado **`available`**. Gráfico sugerido: **barras ordenadas**.
+**Gráfico sugerido:** `ranked_bar`. Límite: general 20 filas; específica 20 filas.
+
 
 ## Empresas y funciones
 
 ### 9. ¿Qué empresas concentran las ofertas del contexto y qué conocimientos solicitan?
 
-**Qué busca mostrar.** Las empresas que concentran publicaciones y el conocimiento más frecuente asociado a sus ofertas.
+**Qué busca mostrar.** Top 20 empresas y su conocimiento más frecuente.
 
-**Cómo leer el resultado.** `rank` ordena empresas por ofertas y `assignment_share` muestra su peso en las asignaciones del contexto. `conocimiento_lider` es el más frecuente para esa empresa, no su única demanda.
+**Cómo leer el resultado.** El gráfico ordena empresas por publicaciones; `conocimiento_lider` es el conocimiento más frecuente en las ofertas de cada empresa.
 
 **Advertencia semántica.** Describe publicaciones de las empresas, no capacidades internas ni contrataciones.
 
 #### Query general
 
+**Columnas visuales:** `empresa_id`, `empresa`, `conocimiento_id`, `conocimiento_lider`, `ofertas`, `participacion`, `rank`.
 **Alcance:** Top 20 empresas recientes.
 
 ```cypher
+CALL () {
 MATCH (oferta:Oferta_Laboral)
 WHERE oferta.fecha_publicacion IS NOT NULL
 WITH max(oferta.fecha_publicacion) AS fecha_corte
@@ -1220,6 +1415,17 @@ RETURN fila.empresa_id AS empresa_id,
        total_asignaciones AS total_assignments,
        'available' AS availability
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN empresa_id,
+       empresa,
+       conocimiento_id,
+       conocimiento_lider,
+       ofertas,
+       assignment_share AS participacion,
+       rank
+ORDER BY rank
 ```
 
 #### Query específica
@@ -1235,7 +1441,11 @@ ORDER BY rank
 }
 ```
 
+**Columnas visuales:** `empresa_id`, `empresa`, `conocimiento_id`, `conocimiento_lider`, `ofertas`, `participacion`, `rank`.
+**Alcance:** Top 20 empresas para carrera, industria y período.
+
 ```cypher
+CALL () {
 MATCH (ca:Carrera)-[:DIRIGE_A]-(o_total:Oferta_Laboral)
       -[:PUBLICA]-(e:Empresa)-[:AGRUPA]-(i:Industria)
 WHERE ca.id_carrera = $carrera_id
@@ -1281,23 +1491,37 @@ RETURN ca.id_carrera AS carrera_id,
        total_asignaciones AS total_assignments,
        'available' AS availability
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN empresa_id,
+       empresa,
+       conocimiento_id,
+       conocimiento_lider,
+       ofertas,
+       assignment_share AS participacion,
+       rank
+ORDER BY rank
 ```
 
-**Resultado esperado.** La vista general devuelve hasta **20 filas** y la específica hasta **20 filas**. Con los parámetros anteriores, la ejecución verificada devolvió **20 filas** con estado **`available`**. Gráfico sugerido: **barras ordenadas con detalle**.
+**Gráfico sugerido:** `ranked_bar_with_detail`. Límite: general 20 filas; específica 20 filas.
+
 
 ### 10. ¿Qué conocimientos aparecen proporcionalmente más en las ofertas de Empresa A que de Empresa B?
 
-**Qué busca mostrar.** Los conocimientos proporcionalmente más frecuentes en Empresa A que en Empresa B, controlando por el volumen de ofertas de cada una.
+**Qué busca mostrar.** Lift con soporte mínimo en macro; diferencias positivas A−B en detalle.
 
-**Cómo leer el resultado.** `difference_pp = empresa_a_percentage - empresa_b_percentage`; se muestran diferencias positivas para A. Compare también `numerator_n_*` y `denominator_n_*`: una diferencia grande con poco soporte es menos estable.
+**Cómo leer el resultado.** En macro, `lift` compara la frecuencia de cada conocimiento contra el mercado. En detalle, `diferencia_pp` es Empresa A menos Empresa B, en puntos porcentuales.
 
 **Advertencia semántica.** Compara demanda publicada; ambas empresas deben existir y tener soporte.
 
 #### Query general
 
+**Columnas visuales:** `empresa_id`, `empresa`, `conocimiento_id`, `conocimiento`, `lift`, `rank`.
 **Alcance:** Top 20 lifts empresa-conocimiento con soporte mínimo 5.
 
 ```cypher
+CALL () {
 MATCH (oferta:Oferta_Laboral)
 WHERE oferta.fecha_publicacion IS NOT NULL
 WITH max(oferta.fecha_publicacion) AS fecha_corte
@@ -1354,6 +1578,16 @@ RETURN fila.empresa_id AS empresa_id,
        'available' AS availability,
        5 AS minimum_support_n
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN empresa_id,
+       empresa,
+       conocimiento_id,
+       conocimiento,
+       lift,
+       rank
+ORDER BY rank
 ```
 
 #### Query específica
@@ -1369,7 +1603,11 @@ ORDER BY rank
 }
 ```
 
+**Columnas visuales:** `empresa_a`, `empresa_b`, `conocimiento_id`, `conocimiento`, `dimension`, `porcentaje_empresa_a`, `porcentaje_empresa_b`, `diferencia_pp`, `rank`.
+**Alcance:** Top 20 diferencias positivas entre dos empresas.
+
 ```cypher
+CALL () {
 MATCH (empresa_a:Empresa)
 WHERE empresa_a.id_empresa = $empresa_a_id
 OPTIONAL MATCH (empresa_b:Empresa)
@@ -1458,23 +1696,39 @@ RETURN $empresa_a_id AS empresa_a_id,
             THEN 'No hay conocimientos con diferencia positiva para Empresa A.'
             ELSE null END AS warning
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN empresa_a,
+       empresa_b,
+       conocimiento_id,
+       conocimiento,
+       dimension,
+       empresa_a_percentage AS porcentaje_empresa_a,
+       empresa_b_percentage AS porcentaje_empresa_b,
+       difference_pp AS diferencia_pp,
+       rank
+ORDER BY rank
 ```
 
-**Resultado esperado.** La vista general devuelve hasta **20 filas** y la específica hasta **20 filas**. Con los parámetros anteriores, la ejecución verificada devolvió **20 filas** con estado **`available`**. Gráfico sugerido: **barras divergentes**.
+**Gráfico sugerido:** `diverging_bar`. Límite: general 20 filas; específica 20 filas.
+
 
 ### 11. ¿Qué conocimientos aparecen con mayor frecuencia en ofertas cuyos títulos tienen señal textual de liderazgo en una industria?
 
-**Qué busca mostrar.** Qué conocimientos aparecen en ofertas cuyo título contiene señales textuales de liderazgo dentro de una industria.
+**Qué busca mostrar.** Industrias con más títulos señalados y top 10 conocimientos al seleccionar una.
 
-**Cómo leer el resultado.** `percentage = numerator_n / denominator_n`: ofertas señaladas que requieren el conocimiento sobre todas las ofertas señaladas de la industria. `rank` expresa frecuencia, no importancia causal.
+**Cómo leer el resultado.** `porcentaje` es la proporción dentro de las ofertas con señal textual de liderazgo. La señal se obtiene del título publicado, no de una función normalizada.
 
 **Advertencia semántica.** Es una heurística por términos inequívocos del título, no una función normalizada.
 
 #### Query general
 
+**Columnas visuales:** `industria_id`, `industria`, `ofertas_liderazgo`, `porcentaje`, `rank`.
 **Alcance:** Top 20 industrias por títulos con señal textual.
 
 ```cypher
+CALL () {
 MATCH (oferta:Oferta_Laboral)
 WHERE oferta.fecha_publicacion IS NOT NULL
 WITH max(oferta.fecha_publicacion) AS fecha_corte
@@ -1511,6 +1765,15 @@ RETURN fila.industria_id AS industria_id,
        fila.total AS denominator_n,
        CASE WHEN fila.total IS NULL THEN 'no_data' ELSE 'available' END AS availability
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN industria_id,
+       industria,
+       titulos_con_senal_liderazgo AS ofertas_liderazgo,
+       percentage AS porcentaje,
+       rank
+ORDER BY rank
 ```
 
 #### Query específica
@@ -1525,7 +1788,11 @@ ORDER BY rank
 }
 ```
 
+**Columnas visuales:** `conocimiento_id`, `conocimiento`, `dimension`, `ofertas`, `porcentaje`, `rank`.
+**Alcance:** Top 10 conocimientos de los títulos señalados.
+
 ```cypher
+CALL () {
 MATCH (i:Industria)
 WHERE i.id_industria = $industria_id
 OPTIONAL MATCH (i)-[:AGRUPA]-(:Empresa)-[:PUBLICA]-(o_total:Oferta_Laboral)
@@ -1571,23 +1838,36 @@ RETURN i.id_industria AS industria_id,
        CASE WHEN availability = 'available' THEN total_liderazgo ELSE null END AS denominator_n,
        availability
 ORDER BY rank
+}
+WITH *
+WHERE availability = 'available'
+RETURN conocimiento_id,
+       conocimiento,
+       dimension,
+       ofertas,
+       percentage AS porcentaje,
+       rank
+ORDER BY rank
 ```
 
-**Resultado esperado.** La vista general devuelve hasta **20 filas** y la específica hasta **10 filas**. Con los parámetros anteriores, la ejecución verificada devolvió **10 filas** con estado **`available`**. Gráfico sugerido: **barras con profundización**.
+**Gráfico sugerido:** `ranked_bar_drilldown`. Límite: general 20 filas; específica 10 filas.
+
 
 ### 12. ¿Cómo cambia la distribución de títulos de puesto para una carrera según el tipo de empresa?
 
-**Qué busca mostrar.** Cómo se distribuyen los títulos publicados para una carrera entre los tipos de empresa disponibles en el grafo.
+**Qué busca mostrar.** Hasta 4 tipos con mayor soporte y top 5 títulos elegibles por tipo.
 
-**Cómo leer el resultado.** `assignment_share = numerator_n / denominator_n` mide el peso del título dentro de su tipo de empresa. Los títulos se normalizan solo a minúsculas y espacios; variantes semánticas pueden permanecer separadas.
+**Cómo leer el resultado.** `participacion` es el peso del título dentro de su tipo de empresa. El título se normaliza solo en mayúsculas/minúsculas y espacios.
 
 **Advertencia semántica.** No existe tamaño empresarial; Puesto.nombre es título publicado, no función normalizada.
 
 #### Query general
 
+**Columnas visuales:** `tipo_empresa`, `titulo_publicado`, `ofertas`, `participacion`, `rank`.
 **Alcance:** Hasta 4 tipos y 5 títulos por tipo, máximo 20 filas.
 
 ```cypher
+CALL () {
 MATCH (oferta:Oferta_Laboral)
 WHERE oferta.fecha_publicacion IS NOT NULL
 WITH max(oferta.fecha_publicacion) AS fecha_corte
@@ -1627,6 +1907,15 @@ RETURN tipo.tipo AS tipo_empresa_id,
        'available' AS availability
 ORDER BY denominator_n DESC, tipo_empresa, rank
 LIMIT 20
+}
+WITH *
+WHERE availability = 'available'
+RETURN tipo_empresa,
+       titulo_publicado,
+       ofertas,
+       assignment_share AS participacion,
+       rank
+ORDER BY tipo_empresa, rank
 ```
 
 #### Query específica
@@ -1641,7 +1930,11 @@ LIMIT 20
 }
 ```
 
+**Columnas visuales:** `tipo_empresa`, `titulo_publicado`, `ofertas`, `participacion`, `rank`.
+**Alcance:** Hasta 4 tipos y 5 títulos por tipo, máximo 20 filas.
+
 ```cypher
+CALL () {
 MATCH (ca:Carrera)-[:DIRIGE_A]-(o:Oferta_Laboral)-[:PUBLICA]-(e:Empresa)
 MATCH (o)-[:OFRECE]-(p:Puesto)
 WHERE ca.id_carrera = $carrera_id
@@ -1677,56 +1970,43 @@ RETURN ca.id_carrera AS carrera_id,
        'available' AS availability
 ORDER BY denominator_n DESC, tipo_empresa, rank
 LIMIT 20
+}
+WITH *
+WHERE availability = 'available'
+RETURN tipo_empresa,
+       titulo_publicado,
+       ofertas,
+       assignment_share AS participacion,
+       rank
+ORDER BY tipo_empresa, rank
 ```
 
-**Resultado esperado.** La vista general devuelve hasta **20 filas** y la específica hasta **20 filas**. Con los parámetros anteriores, la ejecución verificada devolvió **12 filas** con estado **`available`**. Gráfico sugerido: **barras agrupadas con profundización**.
+**Gráfico sugerido:** `grouped_bar_drilldown`. Límite: general 20 filas; específica 20 filas.
+
 
 ## Evidencia de validación
 
-| # | Consulta | `EXPLAIN` general | `EXPLAIN` específica | Ejecución específica | Filas |
-|---:|---|---|---|---|---:|
-| 1 | `tendencia_ofertas` | OK | OK | `available` | 12 |
-| 2 | `carreras_con_mayor_demanda` | OK | OK | `available` | 3 |
-| 3 | `industrias_por_carrera` | OK | OK | `available` | 10 |
-| 4 | `conocimientos_mas_demandados` | OK | OK | `available` | 20 |
-| 5 | `cobertura_curricular` | OK | OK | `available` | 20 |
-| 6 | `brechas_demanda_alta` | OK | OK | `available` | 20 |
-| 7 | `senales_revision_vigencia` | OK | OK | `available` | 20 |
-| 8 | `cursos_con_mayor_correspondencia` | OK | OK | `available` | 20 |
-| 9 | `empresas_y_conocimientos` | OK | OK | `available` | 20 |
-| 10 | `diferenciadores_empresas` | OK | OK | `available` | 20 |
-| 11 | `conocimientos_liderazgo` | OK | OK | `available` | 10 |
-| 12 | `funciones_por_tipo_empresa` | OK | OK | `available` | 12 |
+| # | Consulta | Vistas | Contrato visual |
+|---:|---|---|---|
+| 1 | `tendencia_ofertas` | general y específica | período, ofertas |
+| 2 | `carreras_con_mayor_demanda` | general y específica | carrera, ofertas, participación, rank |
+| 3 | `industrias_por_carrera` | general y específica | industria, ofertas, participación, rank |
+| 4 | `conocimientos_mas_demandados` | general y específica | conocimiento, ofertas, porcentaje, rank |
+| 5 | `cobertura_curricular` | general y específica | cobertura curricular por carrera o conocimiento |
+| 6 | `brechas_demanda_alta` | general y específica | demanda, cobertura, brecha, rank |
+| 7 | `senales_revision_vigencia` | general y específica | demanda, cobertura, brecha, rank |
+| 8 | `cursos_con_mayor_correspondencia` | general y específica | curso, ofertas, conocimientos compartidos, rank |
+| 9 | `empresas_y_conocimientos` | general y específica | empresa, conocimiento líder, ofertas, participación |
+| 10 | `diferenciadores_empresas` | general y específica | lift o comparación porcentual entre empresas |
+| 11 | `conocimientos_liderazgo` | general y específica | industria o conocimiento, porcentaje, rank |
+| 12 | `funciones_por_tipo_empresa` | general y específica | tipo de empresa, título, ofertas, participación |
 
-> [!NOTE]
-> La query general de liderazgo contiene el carácter `$` dentro de una expresión regular como ancla de fin de texto. No es un parámetro; ninguna query general contiene referencias de la forma `$nombre`.
+Las queries generales no requieren parámetros. El carácter `$` que aparece dentro de la expresión regular de liderazgo es un ancla de fin de texto, no un parámetro Cypher.
 
-## Checklist antes de llevar una query al dashboard
+## Checklist antes de graficar
 
-- [ ] La query general se ejecuta sin parámetros y no contiene referencias `$nombre`.
-- [ ] La query específica recibe exactamente los parámetros declarados en su bloque `:param`.
-- [ ] El rango de fechas pertenece al dataset y no supera 20 buckets mensuales.
-- [ ] `availability` permite interpretar la fila y `warning` está vacío o fue atendido.
-- [ ] Numerador y denominador corresponden a la métrica mostrada.
-- [ ] La cardinalidad respeta el límite del catálogo y es adecuada para el gráfico.
-- [ ] La visualización no presenta ausencia de datos como cero.
-- [ ] Las conclusiones respetan las limitaciones semánticas de la pregunta.
-
-## Runner alternativo
-
-Desde `backend/`, puede consultar el catálogo sin usar LangGraph ni OpenAI:
-
-```powershell
-python scripts/ejecutar_consultas_estrategicas.py --listar
-```
-
-Para imprimir una query exacta:
-
-```powershell
-python scripts/ejecutar_consultas_estrategicas.py `
-  --consulta industrias_por_carrera `
-  --vista general `
-  --mostrar-query
-```
-
-Para imprimir la variante específica, cambie `--vista general` por `--vista especifica` y agregue todos los `--param CLAVE=VALOR` exigidos por la consulta.
+- [ ] La query general corre sin parámetros.
+- [ ] La query específica usa exactamente los parámetros de su bloque `:param`.
+- [ ] Las columnas devueltas corresponden al gráfico indicado; no contienen aliases técnicos duplicados.
+- [ ] Una tabla vacía se interpreta como falta de datos/cobertura verificable, nunca como cero.
+- [ ] Las conclusiones respetan los límites semánticos de la pregunta.
