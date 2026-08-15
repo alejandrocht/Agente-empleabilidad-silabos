@@ -57,6 +57,13 @@ El `.env` define:
 
 Proveedor soportado: solo `openai`.
 
+## Normalizador curricular
+- Toda ejecución real de sílabos debe pasar por el analista LLM curricular; mantener `NORMALIZADOR_CURRICULAR_LLM=true` en `backend/.env`.
+- El flujo semántico divide los logros en lotes de 8, conserva cache y publica `analisis_llm.json` y `decisiones_llm.jsonl` como evidencia.
+- No considerar `limpios/silabos.jsonl` como resultado final: es staging previo al análisis LLM.
+- `NORMALIZADOR_CURRICULAR_INSPECTOR=true` debe mantenerse activo para revisar las decisiones del analista.
+- El valor `NORMALIZADOR_CURRICULAR_LLM=false` solo es válido en pruebas offline explícitas; no usarlo para ejecuciones reales ni para smoke tests del producto.
+
 ## Verificación
 - Instalar el paquete: `cd backend && python -m pip install -e ".[dev]"`
 - Ejecutar el agente: `cd backend && python scripts/consola.py`

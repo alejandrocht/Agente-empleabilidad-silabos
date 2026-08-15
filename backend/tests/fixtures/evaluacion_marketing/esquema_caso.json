@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "marketing-2026-1-gold-case",
+  "title": "Marketing curricular evaluation case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "stratum", "source", "expected", "labeler", "review"],
+  "properties": {
+    "case_id": {"type": "string", "pattern": "^MKT26-[A-Z0-9-]+$"},
+    "stratum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cycle", "domain", "adversarial"],
+      "properties": {
+        "cycle": {"type": "string", "pattern": "^Ciclo_(0[1-9]|10)$"},
+        "domain": {"type": "string", "minLength": 1},
+        "adversarial": {"type": "boolean"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id_habilidad_fuente", "id_curso", "id_silabo", "archivo", "evidence"],
+      "properties": {
+        "id_habilidad_fuente": {"type": "string", "minLength": 1},
+        "id_curso": {"type": "string", "minLength": 1},
+        "id_silabo": {"type": "string", "minLength": 1},
+        "archivo": {"type": "string", "minLength": 1},
+        "etiqueta_logro": {"type": "string", "minLength": 1},
+        "descripcion_fuente": {"type": "string", "minLength": 1},
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "competency", "skill", "tool", "evidence_requirements"],
+      "properties": {
+        "outcome": {"enum": ["ACCEPT", "REVIEW_HUMAN"]},
+        "competency": {"$ref": "#/$defs/label"},
+        "skill": {"$ref": "#/$defs/label"},
+        "tool": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "array", "items": {"$ref": "#/$defs/tool"}}
+          ]
+        },
+        "evidence_requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "review_reason": {"type": ["string", "null"]}
+      }
+    },
+    "labeler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["labeler_id", "labeled_at", "label_source"],
+      "properties": {
+        "labeler_id": {"type": "string", "minLength": 1},
+        "labeled_at": {"type": "string", "minLength": 1},
+        "label_source": {"const": "independent_human_source_review"}
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reviewer_id", "reviewed_at"],
+      "properties": {
+        "status": {"enum": ["PENDING", "RECONCILED", "REVIEW_HUMAN"]},
+        "reviewer_id": {"type": "string", "minLength": 1},
+        "reviewed_at": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"expected": {"properties": {"outcome": {"const": "ACCEPT"}}}}},
+      "then": {
+        "properties": {
+          "expected": {
+            "properties": {
+              "competency": {"type": "object"},
+              "skill": {"type": "object"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"expected": {"properties": {"outcome": {"const": "REVIEW_HUMAN"}}}}},
+      "then": {
+        "properties": {
+          "expected": {
+            "required": ["review_reason"],
+            "properties": {"review_reason": {"type": "string", "minLength": 1}}
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "label": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "name"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "name": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "required", "evidence"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "required": {"type": "boolean"},
+        "evidence": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

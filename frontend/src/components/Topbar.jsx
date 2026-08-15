@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, Menu } from "lucide-react";
+import { BarChart3, Menu, Upload } from "lucide-react";
 
 export default function Topbar({ conversacion, onAbrirMenu }) {
   return (
@@ -24,13 +24,22 @@ export default function Topbar({ conversacion, onAbrirMenu }) {
             </p>
           </div>
         </div>
-        <Link
-          href="/dashboard"
-          className="inline-flex items-center gap-1.5 rounded-xl bg-ink px-3 py-2 text-xs font-bold text-white transition hover:bg-ulima focus:outline-none focus:ring-2 focus:ring-ulima/40"
-        >
-          <BarChart3 size={14} />
-          Dashboard
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/normalizador"
+            className="hidden items-center gap-1.5 rounded-xl border border-line px-3 py-2 text-xs font-bold text-ink transition hover:border-ulima hover:text-ulima focus:outline-none focus:ring-2 focus:ring-ulima/40 sm:inline-flex"
+          >
+            <Upload size={14} />
+            Normalizar fuente
+          </Link>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-ink px-3 py-2 text-xs font-bold text-white transition hover:bg-ulima focus:outline-none focus:ring-2 focus:ring-ulima/40"
+          >
+            <BarChart3 size={14} />
+            Dashboard
+          </Link>
+        </div>
       </div>
     </header>
   );

@@ -9,6 +9,7 @@ from typing import Any, TypeVar
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from agente.api.normalizador import router as normalizador_router
 from agente.config import settings as _settings  # noqa: F401
 from agente.dashboard import servicio as dashboard
 from agente.db.neo4j import obtener_driver
@@ -19,6 +20,7 @@ from agente.observabilidad.logger import log_fin_turno, log_paso
 # Construir el grafo no conecta Neo4j ni crea clientes OpenAI; ambos recursos son perezosos.
 grafo = construir_grafo()
 app = FastAPI(title="CIAR Agente API", version="2.0.0")
+app.include_router(normalizador_router, prefix="/normalizador", tags=["normalizador"])
 ResultadoDashboard = TypeVar("ResultadoDashboard")
 
 

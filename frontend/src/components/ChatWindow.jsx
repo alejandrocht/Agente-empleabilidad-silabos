@@ -12,7 +12,7 @@ export default function ChatWindow({ conversacion, agregarMensaje }) {
   }, [conversacion?.mensajes.length, enviando]);
 
   return (
-    <div className="canvas-dots flex min-h-0 flex-1 flex-col">
+    <div id="main-content" tabIndex={-1} className="canvas-dots flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 py-6 sm:px-6 lg:py-8">
         {errorRed ? (

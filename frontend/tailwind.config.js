@@ -35,6 +35,7 @@ export default {
       fontFamily: {
         display: ["Roboto", "Helvetica Neue", "sans-serif"],
         body: ["Roboto", "Helvetica Neue", "sans-serif"],
+        editorial: ["Lusitana", "Georgia", "serif"],
         mono: ["IBM Plex Mono", "SFMono-Regular", "monospace"],
       },
       boxShadow: {

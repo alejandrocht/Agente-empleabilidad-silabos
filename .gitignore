@@ -10,4 +10,5 @@ __pycache__/
 frontend/.next/
 frontend/node_modules/
 backend/.venv/
+backend/.normalizador/
 *.egg-info/

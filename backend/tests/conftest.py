@@ -11,6 +11,8 @@ import pytest
 # Las pruebas nunca deben enviar trazas reales ni depender de una instalación editable previa.
 os.environ["LANGSMITH_TRACING"] = "false"
 os.environ["INSPECTOR_LLM"] = "false"
+# Las pruebas de contrato son offline; las ejecuciones reales deben activar el LLM.
+os.environ["NORMALIZADOR_CURRICULAR_LLM"] = "false"
 SRC = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC))
 

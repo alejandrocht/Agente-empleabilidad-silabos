@@ -32,3 +32,12 @@ Agente principal y objetivo final actual del proyecto CIAR. Convierte preguntas 
 - `cd backend && python scripts/consola.py`
 - Probar al menos una pregunta real contra Neo4j
 - Si se toca generación/validación de Cypher, probar casos de `PREGUNTAS_EJEMPLO.md`
+
+## Desarrollo asistido
+
+- Si la superficie multi-agente no está disponible o está incompleta, se permite
+  implementar directamente en el repositorio cuando la persona usuaria lo haya
+  solicitado explícitamente.
+- Los cambios directos deben mantener el alcance mínimo, incluir pruebas
+  focalizadas y verificar el diff antes de entregarse.
+- No se deben omitir validaciones por el hecho de trabajar sin sub-agentes.

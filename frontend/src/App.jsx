@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ChatWindow from "./components/ChatWindow";
+import AccessibilityPanel from "./components/AccessibilityPanel";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
 import { useConversaciones } from "./hooks/useConversaciones";
@@ -21,6 +22,7 @@ export default function App() {
 
   return (
     <main className="app-bg h-[100dvh] overflow-hidden text-ink">
+      <div id="ciar-app" className="h-full">
       <div className="flex h-full overflow-hidden">
         {menuAbierto ? (
           <button
@@ -50,6 +52,8 @@ export default function App() {
           />
         </section>
       </div>
+      </div>
+      <AccessibilityPanel />
     </main>
   );
 }

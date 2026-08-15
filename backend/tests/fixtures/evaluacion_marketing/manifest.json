@@ -1,0 +1,52 @@
+{
+  "fixture_id": "marketing-2026-1-gold",
+  "fixture_version": 1,
+  "schema_file": "esquema_caso.json",
+  "cases_file": "casos.jsonl",
+  "status": "PENDIENTE_ETIQUETADO_HUMANO",
+  "target_case_count": 36,
+  "labeled_case_count": 0,
+  "adversarial_case_count": 4,
+  "sampling": {
+    "seed": 20260812,
+    "cycle_counts": {
+      "Ciclo_01": 3,
+      "Ciclo_02": 3,
+      "Ciclo_03": 3,
+      "Ciclo_04": 3,
+      "Ciclo_05": 3,
+      "Ciclo_06": 3,
+      "Ciclo_07": 3,
+      "Ciclo_08": 3,
+      "Ciclo_09": 4,
+      "Ciclo_10": 4
+    },
+    "domain_minimum": 3,
+    "domains": [
+      "fundamentos_comunicacion_investigacion",
+      "consumidor_experiencia_comportamiento",
+      "marca_producto_precio_canales",
+      "investigacion_analitica",
+      "digital_ecommerce_inbound",
+      "comunicacion_publicidad_promocion",
+      "estrategia_proyectos_finanzas",
+      "social_sostenibilidad_internacional"
+    ],
+    "selection_source": "human-review of source curriculum records, stratified by cycle and domain",
+    "model_outputs_are_not_selection_or_truth_source": true
+  },
+  "required_case_fields": [
+    "case_id",
+    "stratum",
+    "source",
+    "expected",
+    "labeler",
+    "review"
+  ],
+  "evaluation": {
+    "automated_metrics_allowed": false,
+    "block_reason": "Gold labels are not present; human labeling and reconciliation must finish first.",
+    "allowed_review_outcome": "REVIEW_HUMAN",
+    "truth_policy": "Expected labels must be independently authored from source evidence before inspecting candidate model output."
+  }
+}

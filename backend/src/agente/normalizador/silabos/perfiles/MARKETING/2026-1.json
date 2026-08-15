@@ -1,0 +1,59 @@
+{
+  "carrera": "MARKETING",
+  "periodo": "2026-1",
+  "rol": "Analista curricular de Marketing",
+  "descripcion": "Interpreta capacidades profesionales de marketing sin reducirlas a competencias de ingeniería.",
+  "dominios": [
+    "investigación de mercados",
+    "comportamiento del consumidor",
+    "segmentación y targeting",
+    "gestión de marcas",
+    "estrategia de marketing",
+    "marketing digital y performance",
+    "comunicación y publicidad",
+    "pricing y revenue",
+    "trade marketing y canales",
+    "ventas y relacionamiento",
+    "innovación y desarrollo de productos",
+    "analítica comercial"
+  ],
+  "competencias_preferidas": [
+    "Gestión estratégica",
+    "Creación de marcas competitivas",
+    "Orientación al consumidor",
+    "Diagnostico competitivo de la presencia de productos, servicios y marcas en el mercado",
+    "Rediseño competitivo de estrategias para productos, servicios y marcas en el mercado",
+    "Gestión de tecnología digital",
+    "Investigación",
+    "Comunicación efectiva"
+  ],
+  "habilidades_evitar": [
+    "Comunicar",
+    "Integrar",
+    "Aplicar conceptos",
+    "Usar herramientas",
+    "Analizar información"
+  ],
+  "exclusiones": [
+    "No convertir un código E/G en una competencia universal.",
+    "No usar competencias de Sistemas solo porque el logro mencione datos, análisis o tecnología.",
+    "No inventar una herramienta si no aparece en una sección curricular confiable.",
+    "No fusionar segmentación de mercados con segmentación de redes.",
+    "No confundir métricas financieras de VPN/VAN con una herramienta de red.",
+    "No usar bibliografía, URLs o plataformas de clase como evidencia de herramienta profesional."
+  ],
+  "reglas": [
+    "Cada logro específico debe producir una habilidad observable con verbo y objeto.",
+    "La competencia debe describir un dominio profesional que pueda agrupar varias habilidades.",
+    "La herramienta es opcional y se conserva solo si la evidencia curricular la respalda.",
+    "Si la competencia declarada y el contenido difieren, conserva ambas evidencias y elige una competencia disciplinar solo con justificación.",
+    "Un concepto nuevo se acepta únicamente si está respaldado por el sílabo y no es un alias obvio de otro concepto."
+  ],
+  "estado": "BORRADOR",
+  "revision": "2026-1-r1",
+  "contraejemplos": [
+    "Un logro sobre VPN, VAN o rentabilidad financiera no justifica una herramienta de red.",
+    "Un logro sobre segmentación de mercados no justifica conceptos de segmentación de redes.",
+    "Bibliografía, URLs y plataformas de clase no son evidencia de una herramienta profesional."
+  ]
+}
