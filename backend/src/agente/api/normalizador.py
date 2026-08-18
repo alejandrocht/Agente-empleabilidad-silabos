@@ -9,10 +9,14 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from agente.config.settings import entero
-from agente.normalizador.ejecuciones import gestor_ejecuciones
+from agente.normalizador.ejecuciones import (
+    EjecucionNoCancelable,
+    HistorialNoEliminable,
+    gestor_ejecuciones,
+)
 from agente.normalizador.modelos import Hallazgo
 
 router = APIRouter()
@@ -102,6 +106,61 @@ def errores_ejecucion(id_ejecucion: str) -> dict[str, object]:
         "estado": estado["estado"],
         "hallazgos": estado["hallazgos"],
     }
+
+
+@router.post("/ejecuciones/{id_ejecucion}/cancelar", status_code=202)
+def cancelar_ejecucion(id_ejecucion: str) -> dict[str, object]:
+    """Solicita detener la ejecución antes del siguiente lote costoso."""
+
+    if re.fullmatch(r"NOR_[0-9a-f]{16}", id_ejecucion) is None:
+        raise HTTPException(status_code=404, detail="Ejecución no encontrada.")
+    try:
+        return gestor_ejecuciones.cancelar(id_ejecucion)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Ejecución no encontrada.") from exc
+    except EjecucionNoCancelable as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/ejecuciones")
+def listar_ejecuciones(
+    limite: int = Query(default=20, ge=1, le=100),
+) -> dict[str, object]:
+    """Devuelve el historial compacto con la política TTL/LRU aplicada."""
+
+    return gestor_ejecuciones.listar_historial(limite)
+
+
+@router.get("/ejecuciones/{id_ejecucion}/reporte")
+def descargar_reporte_ejecucion(id_ejecucion: str) -> JSONResponse:
+    """Descarga el manifest y los reportes auditables como un único JSON."""
+
+    if re.fullmatch(r"NOR_[0-9a-f]{16}", id_ejecucion) is None:
+        raise HTTPException(status_code=404, detail="Ejecución no encontrada.")
+    try:
+        reporte = gestor_ejecuciones.obtener_reporte(id_ejecucion)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Ejecución no encontrada.") from exc
+    return JSONResponse(
+        content=reporte,
+        headers={
+            "Content-Disposition": f'attachment; filename="{id_ejecucion}_reporte.json"',
+        },
+    )
+
+
+@router.delete("/ejecuciones/{id_ejecucion}/historial")
+def eliminar_ejecucion_historial(id_ejecucion: str) -> dict[str, object]:
+    """Elimina manualmente una carpeta terminal del historial."""
+
+    if re.fullmatch(r"NOR_[0-9a-f]{16}", id_ejecucion) is None:
+        raise HTTPException(status_code=404, detail="Ejecución no encontrada.")
+    try:
+        return gestor_ejecuciones.eliminar_historial(id_ejecucion)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Ejecución no encontrada.") from exc
+    except HistorialNoEliminable as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/ejecuciones/{id_ejecucion}")

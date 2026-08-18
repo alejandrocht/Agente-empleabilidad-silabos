@@ -63,6 +63,55 @@ export async function obtenerCuarentenaNormalizador(idEjecucion, opciones = {}) 
   return datos;
 }
 
+export async function cancelarEjecucionNormalizador(idEjecucion) {
+  const respuesta = await fetch(
+    `/api/normalizador/ejecuciones/${encodeURIComponent(idEjecucion)}/cancelar`,
+    { method: "POST" },
+  );
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudo cancelar la ejecución.");
+  }
+  return datos;
+}
+
+export async function listarEjecucionesNormalizador(limite = 20) {
+  const parametros = new URLSearchParams({ limite: String(limite) });
+  const respuesta = await fetch(`/api/normalizador/ejecuciones?${parametros.toString()}`);
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudo cargar el historial.");
+  }
+  return datos;
+}
+
+export async function obtenerReporteEjecucionNormalizador(idEjecucion) {
+  const respuesta = await fetch(
+    `/api/normalizador/ejecuciones/${encodeURIComponent(idEjecucion)}/reporte`,
+  );
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudo cargar el reporte de la ejecución.");
+  }
+  return datos;
+}
+
+export function obtenerUrlReporteEjecucionNormalizador(idEjecucion) {
+  return `/api/normalizador/ejecuciones/${encodeURIComponent(idEjecucion)}/reporte`;
+}
+
+export async function eliminarEjecucionHistorialNormalizador(idEjecucion) {
+  const respuesta = await fetch(
+    `/api/normalizador/ejecuciones/${encodeURIComponent(idEjecucion)}/historial`,
+    { method: "DELETE" },
+  );
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudo eliminar la ejecución del historial.");
+  }
+  return datos;
+}
+
 export function obtenerUrlOutputNormalizador(idEjecucion, archivo) {
   const ruta = String(archivo || "")
     .split("/")

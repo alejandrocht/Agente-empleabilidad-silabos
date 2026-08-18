@@ -676,12 +676,14 @@ def construir_salidas_curriculares(
         relaciones_canonicas,
     )
     hallazgos.extend(hallazgos_validacion)
-    outputs: list[dict[str, object]] = []
-    if not any(item.severidad == "error" for item in hallazgos):
-        outputs = [
-            _output(salida / nombre, "csv_curricular", len(filas_por_archivo[nombre]))
-            for nombre, _ in ARCHIVOS_SALIDA
-        ]
+    # Los CSV ya escritos siguen siendo evidencia útil incluso cuando el gate
+    # los marca como no publicables; declararlos permite inspeccionarlos sin
+    # convertirlos en una salida aprobada.
+    outputs = [
+        _output(salida / nombre, "csv_curricular", len(filas_por_archivo[nombre]))
+        for nombre, _ in ARCHIVOS_SALIDA
+        if (salida / nombre).is_file()
+    ]
     publicable = bool(registros) and not any(
         hallazgo.severidad == "error" for hallazgo in hallazgos
     )
@@ -713,6 +715,11 @@ def _catalogo_curricular(
 
     declaraciones_fuente = _declaraciones_de_registros(registros)
     if catalogo_carrera is not None:
+        catalogo_por_capas = catalogo_base.con_carrera(
+            catalogo_carrera,
+            origen="perfil_carrera",
+            version="carrera",
+        )
         competencias: list[ConceptoCHH] = list(catalogo_carrera.competencias)
         for declaracion in declaraciones_fuente:
             concepto = _concepto_declarado(
@@ -725,11 +732,10 @@ def _catalogo_curricular(
                 for item in competencias
             ):
                 competencias.append(concepto)
-        # La carrera especializa competencias. Habilidades (verbos) y
-        # herramientas se contrastan contra el vocabulario global completo:
-        # un bootstrap parcial no puede eliminar candidatos y convertir una
-        # coincidencia antes ambigua en una falsa certeza.
-        return catalogo_base.con_competencias(
+        # La carrera especializa competencias, habilidades y herramientas. El
+        # vocabulario general permanece como fallback para no perder conceptos
+        # reutilizables mientras el perfil específico aún está incompleto.
+        return catalogo_por_capas.con_competencias(
             tuple(competencias),
             origen="perfil_carrera",
             version="carrera",
@@ -1342,8 +1348,17 @@ def _concepto_decidido(
         id=_hash_id(prefijo, nombre),
         nombre=_texto(nombre),
         descripcion=_texto(descripcion) or f"Capacidad curricular para {_texto(nombre).lower()}.",
-        tipo=tipo,
+        tipo=_tipo_competencia(tipo) if prefijo == "COMP" else tipo,
     )
+
+
+def _tipo_competencia(tipo: str) -> str:
+    """Reduce etiquetas LLM a los dos valores permitidos por el contrato CSV."""
+
+    clave = clave_concepto(tipo)
+    if "blanda" in clave or "soft" in clave:
+        return "blanda"
+    return "dura"
 
 
 def _herramienta_decidida(nombre: str, decision: DecisionCurricular) -> bool:

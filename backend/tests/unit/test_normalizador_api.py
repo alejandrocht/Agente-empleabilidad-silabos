@@ -305,9 +305,9 @@ def test_warning_de_ingestion_marca_limpieza_curricular_con_advertencias(
     id_ejecucion, directorio = gestor.crear("silabos", "paquete.zip")
     ejecucion = gestor._obtener_objeto(id_ejecucion)
     warning = Hallazgo(
-        codigo="METADATO_MACOS_IGNORADO",
+        codigo="ARCHIVO_NO_CURRICULAR",
         severidad="warning",
-        mensaje="Se ignoró metadata de macOS.",
+        mensaje="El archivo no es DOCX ni PDF y será ignorado.",
     )
     validacion = ResultadoValidacionSilabos(
         archivo="paquete.zip",
@@ -346,7 +346,7 @@ def test_warning_de_ingestion_marca_limpieza_curricular_con_advertencias(
     assert respuesta["estado"] == "limpiado_con_advertencias"
     assert respuesta["hallazgos"] == [warning.a_dict()]
     assert respuesta["validacion_silabos"]["hallazgos"] == [warning.a_dict()]
-    assert manifest.count("METADATO_MACOS_IGNORADO") == 2
+    assert manifest.count("ARCHIVO_NO_CURRICULAR") == 2
 
 
 def test_persiste_progreso_llm_en_el_manifest_durante_limpieza(monkeypatch, tmp_path: Path) -> None:

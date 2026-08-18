@@ -12,6 +12,7 @@ from agente.normalizador.empleabilidad.catalogo import (
     clave_concepto,
 )
 from agente.normalizador.silabos.perfiles import crear_perfil_bootstrap
+from agente.normalizador.silabos.salida import _catalogo_curricular
 
 
 def _crear_catalogos(directorio: Path) -> None:
@@ -83,6 +84,62 @@ def test_carga_catalogo_directo_de_carrera(tmp_path: Path) -> None:
     assert catalogo is not None
     assert catalogo.obtener("competencia", "Gestión estratégica") is not None
     assert catalogo.obtener("herramienta", "Google Analytics") is not None
+
+
+def test_overlay_de_carrera_precede_y_conserva_fallback_global(tmp_path: Path) -> None:
+    _crear_catalogos(tmp_path)
+    directorio = tmp_path / "carreras" / "MARKETING" / "2026-1"
+    directorio.mkdir(parents=True)
+    (directorio / "catalogo_competencias.csv").write_text(
+        "id_competencia,nombre_competencia,descripcion_breve_competencia,tipo_competencia\n"
+        "COMP_MARK,Análisis de datos,Interpretar datos de marketing,dura\n"
+        "COMP_MARK_2,Gestión de campañas,Diseñar campañas de marketing,dura\n",
+        encoding="utf-8",
+    )
+    (directorio / "catalogo_habilidades.csv").write_text(
+        "id_habilidad,nombre_habilidad,descripcion_breve\n"
+        "HAB_MARK,Diseñar campañas,Ejecutar campañas de marketing\n",
+        encoding="utf-8",
+    )
+    (directorio / "catalogo_herramientas.csv").write_text(
+        "id_herramienta,nombre_herramienta,descripcion_breve_herramienta\n"
+        "HERR_MARK,Google Ads,Crear campañas digitales\n",
+        encoding="utf-8",
+    )
+
+    base = CatalogoCHH.desde_directorio(tmp_path)
+    carrera = cargar_catalogo_carrera("Marketing", "2026-1", str(tmp_path))
+    assert carrera is not None
+
+    combinado = base.con_carrera(carrera)
+
+    assert combinado.obtener("competencia", "Análisis de datos").id == "COMP_MARK"
+    assert combinado.obtener("competencia", "Gestión de campañas").id == "COMP_MARK_2"
+    assert combinado.obtener("habilidad", "Analizar datos").id == "HAB_1"
+    assert combinado.obtener("habilidad", "Diseñar campañas").id == "HAB_MARK"
+    assert combinado.obtener("herramienta", "Power BI").id == "HERR_1"
+    assert combinado.obtener("herramienta", "Google Ads").id == "HERR_MARK"
+
+    curricular = _catalogo_curricular(
+        [
+            {
+                "datos": {
+                    "competencias_declaradas": [
+                        {
+                            "codigo": "E1",
+                            "nombre": "Gestión de campañas",
+                            "descripcion": "Diseñar campañas.",
+                        }
+                    ]
+                }
+            }
+        ],
+        base,
+        carrera,
+    )
+
+    assert curricular.obtener("habilidad", "Diseñar campañas").id == "HAB_MARK"
+    assert curricular.obtener("herramienta", "Power BI").id == "HERR_1"
 
 
 def test_crea_perfil_bootstrap_sin_alterar_los_esquemas_csv(tmp_path: Path) -> None:

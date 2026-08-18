@@ -22,6 +22,7 @@ EstadoEjecucion = Literal[
     "no_publicado",
     "rechazado",
     "error",
+    "cancelado",
 ]
 
 
@@ -185,8 +186,9 @@ FaseProgresoLLM = Literal[
     "finalizando",
     "completado",
     "error",
+    "cancelado",
 ]
-EstadoReporteFinalLLM = Literal["pendiente", "disponible", "error"]
+EstadoReporteFinalLLM = Literal["pendiente", "disponible", "error", "cancelado"]
 
 
 @dataclass(frozen=True, slots=True)

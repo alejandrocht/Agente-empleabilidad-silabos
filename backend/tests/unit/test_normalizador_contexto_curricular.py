@@ -7,9 +7,11 @@ import json
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH, EjemploCHH
 from agente.normalizador.silabos import analista_llm
 from agente.normalizador.silabos.contexto_curricular import (
+    CHH_OUTPUT_TYPES,
     construir_contexto_por_logro,
     construir_perfil_para_prompt,
 )
+from agente.normalizador.silabos.perfil_carrera import cargar_perfil_carrera
 
 
 def _catalogo(version: str = "catalogo-r1") -> CatalogoCHH:
@@ -129,3 +131,79 @@ def test_fingerprint_es_determinista_y_sensible_a_catalogo_y_perfil() -> None:
     ) != analista_llm._clave_lote(
         ({"contexto_recuperado": catalogo_nuevo},), _perfil(), "modelo-prueba"
     )
+
+
+def test_taxonomia_rag_expone_exactamente_los_tres_tipos_chh() -> None:
+    contexto = construir_contexto_por_logro(
+        {"logro": "Analizar marketing"},
+        _catalogo(),
+        _perfil(),
+    )
+
+    assert CHH_OUTPUT_TYPES == ("competencia", "habilidad", "herramienta")
+    assert contexto["taxonomia"] == {
+        "tipos_salida": ["competencia", "habilidad", "herramienta"]
+    }
+    assert set(contexto["candidatos"]) == set(CHH_OUTPUT_TYPES)
+    assert all(
+        concepto["tipo"] == tipo
+        for tipo, conceptos in contexto["candidatos"].items()
+        for concepto in conceptos
+    )
+
+
+def test_contexto_conserva_proveniencia_sin_exponer_rutas_locales() -> None:
+    contexto = construir_contexto_por_logro(
+        {
+            "id_silabo": "/private/workspace/silabos/marketing.docx",
+            "id_curso": "CUR_1",
+            "curso": "Investigación de mercados",
+            "logro": "Analizar campañas",
+        },
+        _catalogo(),
+        _perfil(),
+    )
+
+    proveniencia = contexto["proveniencia"]
+    assert proveniencia["universidad"] == "Universidad de Lima"
+    assert proveniencia["id_silabo"] == "marketing.docx"
+    assert "/private/" not in json.dumps(contexto, ensure_ascii=False)
+
+
+def test_perfil_inexistente_queda_declarado_sin_inventar_dominios(tmp_path) -> None:
+    perfil = cargar_perfil_carrera(
+        "INGENIERIA AMBIENTAL",
+        "2026-1",
+        directorio_perfiles=tmp_path / "perfiles",
+        directorio_catalogos=tmp_path / "catalogos",
+    )
+
+    assert perfil["estado"] == "BORRADOR"
+    assert perfil["perfil_disponible"] is False
+    assert perfil["origen_perfil"] == "pendiente_de_formalizacion"
+    assert perfil.get("dominios", []) == []
+
+
+def test_perfil_backend_tiene_precedencia_sobre_catalogo_externo(tmp_path) -> None:
+    perfiles = tmp_path / "perfiles" / "MARKETING"
+    perfiles.mkdir(parents=True)
+    (perfiles / "2026-1.json").write_text(
+        json.dumps({"carrera": "MARKETING", "estado": "APROBADO", "revision": "backend-r1"}),
+        encoding="utf-8",
+    )
+    externo = tmp_path / "catalogos" / "carreras" / "MARKETING" / "2026-1"
+    externo.mkdir(parents=True)
+    (externo / "perfil.json").write_text(
+        json.dumps({"carrera": "MARKETING", "estado": "BORRADOR", "revision": "catalogo-r1"}),
+        encoding="utf-8",
+    )
+
+    perfil = cargar_perfil_carrera(
+        "MARKETING",
+        "2026-1",
+        directorio_perfiles=tmp_path / "perfiles",
+        directorio_catalogos=tmp_path / "catalogos",
+    )
+
+    assert perfil["revision"] == "backend-r1"
+    assert perfil["origen_perfil"] == "backend_perfil"

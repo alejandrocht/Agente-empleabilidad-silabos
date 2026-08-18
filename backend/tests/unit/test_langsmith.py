@@ -5,6 +5,9 @@ from __future__ import annotations
 import sys
 from types import SimpleNamespace
 
+import pytest
+
+from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.silabos import analista_llm
 from agente.observabilidad import langsmith
 
@@ -110,6 +113,36 @@ def test_ejecutar_flujo_no_requiere_red(monkeypatch) -> None:
         "publicable": True,
         "outputs_count": 1,
     }
+
+
+def test_ejecutar_flujo_cierra_traza_con_estado_cancelado(monkeypatch) -> None:
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    capturado = {}
+
+    def traceable(**kwargs):
+        def decorar(funcion):
+            def trazada(entrada):
+                resultado = funcion(entrada)
+                capturado["salida"] = kwargs["process_outputs"](resultado)
+                return resultado
+
+            return trazada
+
+        return decorar
+
+    monkeypatch.setitem(sys.modules, "langsmith", SimpleNamespace(traceable=traceable))
+
+    with pytest.raises(CancelacionSolicitada):
+        langsmith.ejecutar_flujo(
+            lambda: (_ for _ in ()).throw(CancelacionSolicitada()),
+            run_name="normalizador.curricular",
+            inputs={"execution_id": "NOR_123"},
+            tags=["normalizador"],
+            metadata={"execution_id": "NOR_123"},
+        )
+
+    assert capturado["salida"]["status"] == "cancelled"
+    assert capturado["salida"]["estado"] == "cancelado"
 
 
 def test_analista_asigna_run_name_y_rol_distinguibles(monkeypatch, tmp_path) -> None:

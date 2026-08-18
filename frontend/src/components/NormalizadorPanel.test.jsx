@@ -2,27 +2,44 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import NormalizadorPanel from "./NormalizadorPanel";
 import {
+  cancelarEjecucionNormalizador,
   iniciarNormalizadorEmpleabilidad,
   iniciarNormalizadorSilabos,
+  listarEjecucionesNormalizador,
   obtenerCuarentenaNormalizador,
   obtenerEjecucionNormalizador,
   obtenerErroresNormalizador,
 } from "../api/normalizador";
 
 vi.mock("../api/normalizador", () => ({
+  cancelarEjecucionNormalizador: vi.fn(),
   iniciarNormalizadorEmpleabilidad: vi.fn(),
   iniciarNormalizadorSilabos: vi.fn(),
+  listarEjecucionesNormalizador: vi.fn(),
+  obtenerReporteEjecucionNormalizador: vi.fn(),
+  obtenerUrlReporteEjecucionNormalizador: vi.fn((idEjecucion) => `/api/normalizador/ejecuciones/${idEjecucion}/reporte`),
+  eliminarEjecucionHistorialNormalizador: vi.fn(),
   obtenerCuarentenaNormalizador: vi.fn(),
   obtenerEjecucionNormalizador: vi.fn(),
   obtenerErroresNormalizador: vi.fn(),
   obtenerUrlOutputNormalizador: vi.fn((idEjecucion, archivo) => `/api/normalizador/ejecuciones/${idEjecucion}/outputs/${archivo}`),
 }));
 
+async function renderPanelAfterRecovery() {
+  const rendered = render(<NormalizadorPanel />);
+  await waitFor(() => expect(screen.queryByText("Recuperando ejecución")).toBeNull());
+  return rendered;
+}
+
 describe("panel del normalizador", () => {
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    listarEjecucionesNormalizador.mockResolvedValue({ ejecuciones: [], retencion: null });
     iniciarNormalizadorEmpleabilidad.mockResolvedValue({
       id_ejecucion: "NOR_0123456789abcdef",
       archivo: "fuente.xlsx",
@@ -46,8 +63,92 @@ describe("panel del normalizador", () => {
     obtenerCuarentenaNormalizador.mockResolvedValue({ total: 0, filas: [] });
   });
 
+  it("recupera al montar una ejecución curricular activa y continúa su seguimiento", async () => {
+    const idEjecucion = "NOR_restaurar12345678";
+    let resolverDetalle;
+    const detallePendiente = new Promise((resolve) => {
+      resolverDetalle = resolve;
+    });
+    listarEjecucionesNormalizador.mockResolvedValue({
+      ejecuciones: [{
+        id_ejecucion: idEjecucion,
+        tipo: "silabos",
+        archivo: "marketing.zip",
+        parametros: { carrera: "Marketing", periodo: "2026-1" },
+        estado: "limpiando",
+        actualizada_en: "2026-08-18T12:00:00+00:00",
+      }],
+      retencion: null,
+    });
+    obtenerEjecucionNormalizador.mockReturnValue(detallePendiente);
+
+    render(<NormalizadorPanel />);
+
+    expect(screen.getByText("Recuperando ejecución")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Sílabos" }).disabled).toBe(true);
+    await waitFor(() => expect(obtenerEjecucionNormalizador).toHaveBeenCalledWith(idEjecucion));
+
+    resolverDetalle({
+      id_ejecucion: idEjecucion,
+      tipo: "silabos",
+      archivo: "marketing.zip",
+      parametros: { carrera: "Marketing", periodo: "2026-1" },
+      estado: "limpiando",
+      validacion_silabos: { valida: true, archivos: [{ nombre: "marketing.pdf" }] },
+      outputs: [],
+      hallazgos: [],
+      progreso_llm: {
+        fase: "analista",
+        chunks_completados: 2,
+        chunks_totales: 4,
+        logros_detectados: 20,
+        logros_procesados: 10,
+        logros_totales: 20,
+        silabos_detectados: 1,
+        silabos_procesados: 1,
+        silabos_totales: 1,
+        decisiones_cacheadas: 0,
+        reintentos: 0,
+        eventos: [],
+      },
+    });
+
+    await waitFor(() => expect(screen.getByText("Limpiando datos")).toBeTruthy());
+    expect(screen.queryByText("Recibido")).toBeNull();
+    expect(screen.getByRole("tab", { name: "Sílabos" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("combobox", { name: "Carrera" }).value).toBe("Marketing");
+    expect(screen.getByRole("combobox", { name: "Periodo" }).value).toBe("2026-1");
+    expect(screen.getByText(/Procesamos los sílabos por lotes/)).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: "Progreso del flujo" }).getAttribute("aria-valuetext")).toMatch(/50%/);
+  });
+
+  it("limpia el polling al desmontar una ejecución restaurada", async () => {
+    const idEjecucion = "NOR_timer12345678";
+    const ejecucionActiva = {
+      id_ejecucion: idEjecucion,
+      tipo: "silabos",
+      archivo: "marketing.zip",
+      parametros: { carrera: "Marketing", periodo: "2026-1" },
+      estado: "limpiando",
+      validacion_silabos: { valida: true, archivos: [] },
+      outputs: [],
+      hallazgos: [],
+    };
+    listarEjecucionesNormalizador.mockResolvedValue({ ejecuciones: [ejecucionActiva], retencion: null });
+    obtenerEjecucionNormalizador.mockResolvedValue(ejecucionActiva);
+
+    const { unmount } = render(<NormalizadorPanel />);
+    await waitFor(() => expect(screen.getByText("Limpiando datos")).toBeTruthy());
+    const llamadasAntesDeDesmontar = obtenerEjecucionNormalizador.mock.calls.length;
+
+    unmount();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    expect(obtenerEjecucionNormalizador).toHaveBeenCalledTimes(llamadasAntesDeDesmontar);
+  });
+
   it("permite seleccionar una fuente y muestra el estado final", async () => {
-    const { container } = render(<NormalizadorPanel />);
+    const { container } = await renderPanelAfterRecovery();
     const archivo = new File(["xlsx"], "fuente.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     fireEvent.change(container.querySelector('input[type="file"]'), { target: { files: [archivo] } });
 
@@ -78,7 +179,7 @@ describe("panel del normalizador", () => {
       hallazgos: [],
     });
 
-    const { container } = render(<NormalizadorPanel />);
+    const { container } = await renderPanelAfterRecovery();
     fireEvent.click(screen.getByRole("tab", { name: "Sílabos" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), { target: { value: "Marketing" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), { target: { value: "2026-1" } });
@@ -94,6 +195,48 @@ describe("panel del normalizador", () => {
     expect(screen.getByRole("button", { name: "Iniciar limpieza curricular" }).disabled).toBe(true);
     expect(screen.getByRole("button", { name: "Nueva fuente" }).disabled).toBe(true);
     expect(iniciarNormalizadorSilabos).toHaveBeenCalledWith(archivo, "Marketing", "2026-1");
+  });
+
+  it("confirma la cancelación y detiene el polling de la ejecución curricular", async () => {
+    const confirmacion = vi.spyOn(window, "confirm").mockReturnValue(true);
+    iniciarNormalizadorSilabos.mockResolvedValue({
+      id_ejecucion: "NOR_cancelar12345678",
+      tipo: "silabos",
+      archivo: "curriculo.zip",
+      estado: "validando",
+    });
+    obtenerEjecucionNormalizador.mockResolvedValue({
+      id_ejecucion: "NOR_cancelar12345678",
+      tipo: "silabos",
+      archivo: "curriculo.zip",
+      estado: "limpiando",
+      validacion_silabos: { valida: true, archivos: [] },
+      outputs: [],
+      hallazgos: [],
+    });
+    cancelarEjecucionNormalizador.mockResolvedValue({
+      id_ejecucion: "NOR_cancelar12345678",
+      tipo: "silabos",
+      archivo: "curriculo.zip",
+      estado: "limpiando",
+      cancelacion_solicitada: true,
+      hallazgos: [],
+    });
+
+    const { container } = await renderPanelAfterRecovery();
+    fireEvent.click(screen.getByRole("tab", { name: "Sílabos" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), { target: { value: "Marketing" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), { target: { value: "2026-1" } });
+    fireEvent.change(container.querySelector('input[type="file"]'), { target: { files: [new File(["zip"], "curriculo.zip", { type: "application/zip" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar limpieza curricular" }));
+
+    const botonCancelar = await screen.findByRole("button", { name: "Cancelar procesamiento" });
+    fireEvent.click(botonCancelar);
+
+    await waitFor(() => expect(cancelarEjecucionNormalizador).toHaveBeenCalledWith("NOR_cancelar12345678"));
+    expect(confirmacion).toHaveBeenCalledWith("¿Estás seguro de que deseas cancelar el procesamiento?");
+    expect(screen.getByRole("status").textContent).toMatch(/Cancelación solicitada/);
+    confirmacion.mockRestore();
   });
 
   it("muestra el registro por etapas, hallazgos y una ejecución sin actividad reciente", async () => {
@@ -122,7 +265,7 @@ describe("panel del normalizador", () => {
       }],
     });
 
-    const { container } = render(<NormalizadorPanel />);
+    const { container } = await renderPanelAfterRecovery();
     fireEvent.click(screen.getByRole("tab", { name: "Sílabos" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), { target: { value: "Marketing" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), { target: { value: "2026-1" } });
@@ -193,7 +336,7 @@ describe("progreso LLM del normalizador", () => {
       },
     });
 
-    const { container } = render(<NormalizadorPanel />);
+    const { container } = await renderPanelAfterRecovery();
     fireEvent.click(screen.getByRole("tab", { name: "Sílabos" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), { target: { value: "Marketing" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), { target: { value: "2026-1" } });
@@ -240,7 +383,7 @@ describe("progreso LLM del normalizador", () => {
       progreso_llm: null,
     });
 
-    const { container } = render(<NormalizadorPanel />);
+    const { container } = await renderPanelAfterRecovery();
     fireEvent.click(screen.getByRole("tab", { name: "Sílabos" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), { target: { value: "Marketing" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), { target: { value: "2026-1" } });

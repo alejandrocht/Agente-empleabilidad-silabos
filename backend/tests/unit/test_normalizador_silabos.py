@@ -11,6 +11,7 @@ from pathlib import Path
 from docx import Document
 
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
+from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import ProgresoLimpiezaLLM
 from agente.normalizador.silabos import limpieza
 from agente.normalizador.silabos.analista_llm import ResultadoAnalisisCurricular
@@ -337,6 +338,41 @@ def test_preserva_el_ultimo_chunk_si_el_analista_falla_tarde(
     assert progreso_final.eventos[-1].mensaje.startswith("El análisis LLM no estuvo disponible")
 
 
+def test_cancelacion_conserva_reportes_auditables_llm(
+    monkeypatch, tmp_path: Path
+) -> None:
+    fuente = tmp_path / "Ciclo_03" / "DISENO_DE_BASES_DE_DATOS.docx"
+    fuente.parent.mkdir()
+    _crear_docx(fuente)
+    validacion = validar_archivo(fuente, "Ingeniería de Sistemas", "2030-1")
+
+    monkeypatch.setattr(
+        limpieza,
+        "analizar_registros_curriculares",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(CancelacionSolicitada()),
+    )
+
+    ejecucion = tmp_path / "ejecucion"
+    try:
+        limpiar_archivo(
+            fuente,
+            ejecucion,
+            validacion,
+            _catalogo_con_habilidad_bases_de_datos(),
+            usar_llm=True,
+        )
+    except CancelacionSolicitada:
+        pass
+    else:
+        raise AssertionError("La cancelación debe propagarse al gestor de ejecuciones.")
+
+    reportes = ejecucion / "salidas" / "reportes"
+    assert (reportes / "decisiones_llm.jsonl").is_file()
+    assert (reportes / "cuarentena.jsonl").is_file()
+    analisis = json.loads((reportes / "analisis_llm.json").read_text(encoding="utf-8"))
+    assert analisis["estado"] == "CANCELADO"
+
+
 def test_extrae_una_sola_fila_logica_para_logro_con_vmerge(tmp_path: Path) -> None:
     fuente = tmp_path / "MARKETING_SOCIAL.docx"
     _crear_docx_con_logro_verticalmente_combinado(fuente)
@@ -407,7 +443,7 @@ def test_rechaza_ruta_insegura_en_zip(tmp_path: Path) -> None:
     assert any(hallazgo.codigo == "RUTA_ZIP_INSEGURA" for hallazgo in validacion.hallazgos)
 
 
-def test_ignora_metadatos_de_macos_en_zip(tmp_path: Path) -> None:
+def test_ignora_silenciosamente_metadatos_de_macos_en_zip(tmp_path: Path) -> None:
     docx = tmp_path / "curso.docx"
     _crear_docx(docx)
     fuente = tmp_path / "curriculo.zip"
@@ -419,9 +455,7 @@ def test_ignora_metadatos_de_macos_en_zip(tmp_path: Path) -> None:
 
     assert validacion.valida is True
     assert [archivo.nombre for archivo in validacion.archivos] == ["MARKETING/curso.docx"]
-    assert any(
-        hallazgo.codigo == "METADATO_MACOS_IGNORADO" for hallazgo in validacion.hallazgos
-    )
+    assert validacion.hallazgos == ()
 
 
 def test_conserva_logro_cuando_codigo_no_aparece_en_tabla(tmp_path: Path) -> None:

@@ -22,6 +22,7 @@ from agente.normalizador.empleabilidad.catalogo import (
     CatalogoCHH,
     clave_concepto,
 )
+from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import (
     EstadoReporteFinalLLM,
     FaseProgresoLLM,
@@ -32,6 +33,7 @@ from agente.normalizador.silabos.contexto_curricular import (
     construir_contexto_por_logro,
     construir_perfil_para_prompt,
 )
+from agente.normalizador.silabos.perfil_carrera import cargar_perfil_carrera
 from agente.observabilidad.langsmith import invocar_llm
 
 
@@ -306,8 +308,17 @@ def analizar_registros_curriculares(
     al_actualizar_progreso: Callable[[ProgresoLimpiezaLLM], None] | None = None,
     progreso_inicial: ProgresoLimpiezaLLM | None = None,
     id_ejecucion: str = "",
+    cancelada: Callable[[], bool] | None = None,
 ) -> ResultadoAnalisisCurricular:
     """Analiza todos los logros fuente y conserva fallos sin abortar el lote."""
+
+    def verificar_cancelacion() -> None:
+        """Evita iniciar otra llamada LLM después de una cancelación."""
+
+        if cancelada is not None and cancelada():
+            raise CancelacionSolicitada()
+
+    verificar_cancelacion()
 
     perfil = _cargar_perfil(carrera, periodo)
     contexto_perfil = construir_contexto_por_logro({}, catalogo, perfil)
@@ -423,11 +434,13 @@ def analizar_registros_curriculares(
     )
 
     for indice_lote, lote in enumerate(lotes, start=1):
+        verificar_cancelacion()
         clave_lote = _clave_lote(lote, perfil, modelo_analista)
         lote_respuesta = cache.get(clave_lote)
         if lote_respuesta is not None:
             decisiones_cacheadas.update(str(caso["id_habilidad_fuente"]) for caso in lote)
         if lote_respuesta is None:
+            verificar_cancelacion()
             try:
                 respuesta = _invocar_analista(
                     analista,
@@ -442,6 +455,8 @@ def analizar_registros_curriculares(
                 cache[clave_lote] = lote_respuesta
                 _guardar_cache(cache_path, cache)
                 decisiones_cacheadas.update(str(caso["id_habilidad_fuente"]) for caso in lote)
+            except CancelacionSolicitada:
+                raise
             except Exception as exc:
                 reportes.append(
                     {
@@ -527,6 +542,7 @@ def analizar_registros_curriculares(
                 )
             try:
                 if respuesta_reintento is None:
+                    verificar_cancelacion()
                     respuesta_modelo = _invocar_analista(
                         analista,
                         lote_reintento,
@@ -558,6 +574,8 @@ def analizar_registros_curriculares(
                         ids_recuperados,
                     )
                 )
+            except CancelacionSolicitada:
+                raise
             except Exception as exc:
                 reportes.append(
                     _reporte_reintento_omitidos(
@@ -634,10 +652,12 @@ def analizar_registros_curriculares(
             ),
         )
         for indice_lote, lote in enumerate(lotes_residuales, start=1):
+            verificar_cancelacion()
             por_id = {str(caso["id_habilidad_fuente"]): caso for caso in lote}
             for id_habilidad in por_id:
                 modelos_escalados.setdefault(id_habilidad, []).append(modelo_analista_residual)
             try:
+                verificar_cancelacion()
                 respuesta_residual = _invocar_analista(
                     analista_residual,
                     lote,
@@ -648,6 +668,8 @@ def analizar_registros_curriculares(
                     chunk=indice_lote,
                     rol="analista_curricular_residual",
                 )
+            except CancelacionSolicitada:
+                raise
             except Exception as exc:
                 reportes.append(
                     {
@@ -722,8 +744,10 @@ def analizar_registros_curriculares(
             mensaje="Inspector LLM listo: validando las decisiones del analista.",
         )
         for indice_lote, lote in enumerate(lotes_inspector, start=1):
+            verificar_cancelacion()
             decisiones = [decisiones_crudas[str(caso["id_habilidad_fuente"])] for caso in lote]
             try:
+                verificar_cancelacion()
                 respuesta_inspector = _invocar_inspector(
                     inspector,
                     lote,
@@ -734,6 +758,8 @@ def analizar_registros_curriculares(
                     id_ejecucion=id_ejecucion,
                     chunk=indice_lote,
                 )
+            except CancelacionSolicitada:
+                raise
             except Exception as exc:
                 reportes.append(
                     {
@@ -805,11 +831,13 @@ def analizar_registros_curriculares(
             mensaje="Inspector residual listo: revisando decisiones con observaciones.",
         )
         for indice_lote, lote in enumerate(lotes_inspector_residual, start=1):
+            verificar_cancelacion()
             decisiones = [decisiones_crudas[str(caso["id_habilidad_fuente"])] for caso in lote]
             ids_lote: set[str] = {decision.id_habilidad_fuente for decision in decisiones}
             for id_habilidad in ids_lote:
                 modelos_escalados.setdefault(id_habilidad, []).append(modelo_inspector_residual)
             try:
+                verificar_cancelacion()
                 respuesta_inspeccion_residual = _invocar_inspector(
                     inspector_residual,
                     lote,
@@ -822,6 +850,8 @@ def analizar_registros_curriculares(
                     rol="inspector_curricular_residual",
                     reintento=True,
                 )
+            except CancelacionSolicitada:
+                raise
             except Exception as exc:
                 reportes.append(
                     {
@@ -1390,15 +1420,7 @@ def _reporte_decision(
 
 
 def _cargar_perfil(carrera: str, periodo: str) -> dict[str, object]:
-    clave_carrera = clave_concepto(carrera).replace(" ", "_").upper()
-    ruta = Path(__file__).parent / "perfiles" / clave_carrera / f"{periodo}.json"
-    if not ruta.is_file():
-        return {
-            "carrera": carrera,
-            "periodo": periodo,
-            "reglas": ["Usar solo evidencia del sílabo y contexto profesional de la carrera."],
-        }
-    return cast(dict[str, object], json.loads(ruta.read_text(encoding="utf-8")))
+    return cargar_perfil_carrera(carrera, periodo)
 
 
 def _hash_id(prefijo: str, *partes: str) -> str:

@@ -21,6 +21,7 @@ from agente.normalizador.empleabilidad.catalogo import (
     cargar_catalogo_carrera,
 )
 from agente.normalizador.empleabilidad.entrada import normalizar_etiqueta
+from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import (
     ArchivoSilabo,
     Hallazgo,
@@ -481,6 +482,7 @@ def limpiar_archivo(
     al_actualizar_progreso_llm: Callable[[ProgresoLimpiezaLLM], None] | None = None,
     progreso_inicial: ProgresoLimpiezaLLM | None = None,
     id_ejecucion: str = "",
+    cancelada: Callable[[], bool] | None = None,
 ) -> ResultadoLimpiezaSilabos:
     """Materializa la fuente y construye el paquete curricular CSV.
 
@@ -519,11 +521,17 @@ def limpiar_archivo(
         if al_actualizar_progreso_llm is not None:
             al_actualizar_progreso_llm(progreso)
 
+    def verificar_cancelacion() -> None:
+        if cancelada is not None and cancelada():
+            raise CancelacionSolicitada()
+
     if usar_llm and progreso_inicial is None:
         publicar_progreso(progreso_extraccion)
 
-    materializados = _materializar(ruta_entrada, fuentes, validacion.archivos)
+    verificar_cancelacion()
+    materializados = _materializar(ruta_entrada, fuentes, validacion.archivos, cancelada)
     for indice_archivo, archivo in enumerate(validacion.archivos, start=1):
+        verificar_cancelacion()
         ruta = materializados[archivo.nombre]
         logros_archivo = 0
         silabo_extraido = False
@@ -613,6 +621,7 @@ def limpiar_archivo(
             publicar_progreso(progreso_extraccion)
 
     staging = limpios / "silabos.jsonl"
+    verificar_cancelacion()
     with staging.open("w", encoding="utf-8", newline="\n") as salida_staging:
         for registro in registros:
             salida_staging.write(
@@ -635,6 +644,7 @@ def limpiar_archivo(
         analisis_llm = None
         if usar_llm:
             try:
+                verificar_cancelacion()
                 catalogo_para_llm = _catalogo_curricular(
                     registros,
                     catalogo_base,
@@ -650,8 +660,11 @@ def limpiar_archivo(
                     al_actualizar_progreso=publicar_progreso,
                     progreso_inicial=progreso_extraccion,
                     id_ejecucion=id_ejecucion,
+                    cancelada=cancelada,
                 )
                 decisiones_llm = analisis_llm.decisiones
+            except CancelacionSolicitada:
+                raise
             except Exception as exc:
                 hallazgos.append(
                     _hallazgo(
@@ -727,6 +740,35 @@ def limpiar_archivo(
                 )
             )
             resultado_catalogo = replace(resultado_catalogo, outputs=report_outputs)
+    except CancelacionSolicitada:
+        _escribir_jsonl(
+            reportes / "decisiones_llm.jsonl",
+            (
+                {
+                    "tipo": "sistema",
+                    "estado": "CANCELADO",
+                    "detalle": "El análisis se detuvo antes del siguiente lote LLM.",
+                },
+            ),
+        )
+        _escribir_json(
+            reportes / "analisis_llm.json",
+            {
+                "estado": "CANCELADO",
+                "decisiones_aceptadas": 0,
+                "mensaje": "La ejecución fue cancelada antes de completar el análisis.",
+            },
+        )
+        _escribir_jsonl(reportes / "cuarentena.jsonl", tuple(cuarentena))
+        if usar_llm:
+            publicar_progreso(
+                replace(
+                    progreso_extraccion,
+                    fase="cancelado",
+                    reporte_final="cancelado",
+                ).con_evento("El análisis LLM fue cancelado por el usuario.")
+            )
+        raise
     except Exception as exc:
         if usar_llm:
             publicar_progreso(
@@ -782,9 +824,15 @@ def _materializar(
     ruta_entrada: Path,
     directorio: Path,
     archivos: tuple[ArchivoSilabo, ...],
+    cancelada: Callable[[], bool] | None = None,
 ) -> dict[str, Path]:
+    def verificar_cancelacion() -> None:
+        if cancelada is not None and cancelada():
+            raise CancelacionSolicitada()
+
     resultado: dict[str, Path] = {}
     if ruta_entrada.suffix.lower() != ".zip":
+        verificar_cancelacion()
         nombre = archivos[0].nombre
         destino = directorio / Path(nombre).name
         shutil.copyfile(ruta_entrada, destino)
@@ -792,6 +840,7 @@ def _materializar(
         return resultado
     with zipfile.ZipFile(ruta_entrada) as paquete:
         for archivo in archivos:
+            verificar_cancelacion()
             destino = directorio / archivo.nombre
             destino.parent.mkdir(parents=True, exist_ok=True)
             with (

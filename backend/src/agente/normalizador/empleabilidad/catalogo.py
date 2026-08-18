@@ -210,6 +210,110 @@ class CatalogoCHH:
             f"{self.version}:{version}",
         )
 
+    def con_carrera(
+        self,
+        catalogo_carrera: CatalogoCHH,
+        *,
+        origen: str = "perfil_carrera",
+        version: str = "carrera",
+    ) -> CatalogoCHH:
+        """Combina el vocabulario global con un overlay específico de carrera.
+
+        El overlay de carrera tiene precedencia cuando dos conceptos comparten
+        el mismo nombre normalizado. Los conceptos globales que no colisionan
+        permanecen disponibles como fallback, de modo que una carrera no
+        pierde habilidades o herramientas reutilizables por tener un perfil
+        parcial. Los ejemplos también se remapean al ID que ganó la colisión.
+        """
+
+        competencias, mapa_competencias = _fusionar_conceptos(
+            catalogo_carrera.competencias,
+            self.competencias,
+            "competencia",
+        )
+        habilidades, mapa_habilidades = _fusionar_conceptos(
+            catalogo_carrera.habilidades,
+            self.habilidades,
+            "habilidad",
+        )
+        herramientas, mapa_herramientas = _fusionar_conceptos(
+            catalogo_carrera.herramientas,
+            self.herramientas,
+            "herramienta",
+        )
+
+        por_id = {
+            concepto.id: concepto
+            for concepto in (*competencias, *habilidades, *herramientas)
+            if concepto.id
+        }
+        tipos_por_id: dict[str, str] = {}
+        for tipo, conceptos in (
+            ("competencia", competencias),
+            ("habilidad", habilidades),
+            ("herramienta", herramientas),
+        ):
+            for concepto in conceptos:
+                anterior = tipos_por_id.get(concepto.id)
+                if anterior is not None and anterior != tipo:
+                    raise ValueError(
+                        f"ID duplicado entre capas: {concepto.id!r} aparece como "
+                        f"{tipo} y como {anterior}."
+                    )
+                tipos_por_id[concepto.id] = tipo
+
+        ejemplos: dict[str, list[EjemploCHH]] = {}
+        for fuente in (catalogo_carrera, self):
+            for id_habilidad, items in fuente._ejemplos_por_habilidad.items():
+                id_habilidad_final = mapa_habilidades.get(id_habilidad, id_habilidad)
+                if id_habilidad_final not in por_id:
+                    continue
+                for ejemplo in items:
+                    competencia = por_id.get(
+                        mapa_competencias.get(ejemplo.competencia.id, ejemplo.competencia.id)
+                    )
+                    habilidad = por_id.get(
+                        mapa_habilidades.get(ejemplo.habilidad.id, ejemplo.habilidad.id)
+                    )
+                    herramienta = (
+                        por_id.get(
+                            mapa_herramientas.get(
+                                ejemplo.herramienta.id,
+                                ejemplo.herramienta.id,
+                            )
+                        )
+                        if ejemplo.herramienta
+                        else None
+                    )
+                    if competencia is None or habilidad is None:
+                        continue
+                    remapeado = EjemploCHH(competencia, habilidad, herramienta, ejemplo.tipo)
+                    existentes = ejemplos.setdefault(id_habilidad_final, [])
+                    clave = (
+                        remapeado.competencia.id,
+                        remapeado.habilidad.id,
+                        remapeado.herramienta.id if remapeado.herramienta else "",
+                    )
+                    if not any(
+                        (
+                            item.competencia.id,
+                            item.habilidad.id,
+                            item.herramienta.id if item.herramienta else "",
+                        )
+                        == clave
+                        for item in existentes
+                    ):
+                        existentes.append(remapeado)
+
+        return CatalogoCHH(
+            competencias,
+            habilidades,
+            herramientas,
+            {id_habilidad: tuple(items) for id_habilidad, items in ejemplos.items()},
+            self.origen + catalogo_carrera.origen + (origen,),
+            f"{self.version}:{catalogo_carrera.version}:{version}",
+        )
+
     def ejemplos(self, consulta: str, limite: int = 6) -> tuple[EjemploCHH, ...]:
         """Devuelve cadenas existentes asociadas a habilidades candidatas."""
 
@@ -365,6 +469,46 @@ def _indice_unico(
             )
         por_nombre[clave] = concepto
     return por_nombre
+
+
+def _fusionar_conceptos(
+    preferidos: tuple[ConceptoCHH, ...],
+    generales: tuple[ConceptoCHH, ...],
+    tipo: str,
+) -> tuple[tuple[ConceptoCHH, ...], dict[str, str]]:
+    """Fusiona conceptos por nombre, conservando la precedencia del overlay."""
+
+    resultado: list[ConceptoCHH] = []
+    por_nombre: dict[str, ConceptoCHH] = {}
+    por_id: dict[str, ConceptoCHH] = {}
+    mapa_ids: dict[str, str] = {}
+
+    for concepto in (*preferidos, *generales):
+        existente_id = por_id.get(concepto.id) if concepto.id else None
+        if existente_id is not None:
+            if clave_concepto(existente_id.nombre) != clave_concepto(concepto.nombre):
+                raise ValueError(
+                    f"ID duplicado entre capas para {tipo}: {concepto.id!r} "
+                    f"({existente_id.nombre!r} y {concepto.nombre!r})."
+                )
+            mapa_ids[concepto.id] = existente_id.id
+            continue
+
+        clave = clave_concepto(concepto.nombre)
+        existente_nombre = por_nombre.get(clave) if clave else None
+        if existente_nombre is not None:
+            if concepto.id:
+                mapa_ids[concepto.id] = existente_nombre.id
+            continue
+
+        resultado.append(concepto)
+        if clave:
+            por_nombre[clave] = concepto
+        if concepto.id:
+            por_id[concepto.id] = concepto
+            mapa_ids[concepto.id] = concepto.id
+
+    return tuple(resultado), mapa_ids
 
 
 def _fuentes_de_respaldo(directorio: Path) -> list[Path]:

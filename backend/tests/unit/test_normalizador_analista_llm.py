@@ -5,10 +5,12 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+from threading import Event
 
 import pytest
 
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
+from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import ProgresoLimpiezaLLM
 from agente.normalizador.silabos import analista_llm, salida
 
@@ -243,6 +245,63 @@ def test_analista_e_inspector_aceptan_decision_con_evidencia(monkeypatch, tmp_pa
     assert resultado.modelo_inspector == "gpt-5.6-sol-test"
     assert len(resultado.decisiones) == 1
     assert any(fila["estado"] == "ACEPTADA" for fila in resultado.reportes)
+
+
+def test_cancelacion_no_envia_un_segundo_lote_llm(monkeypatch, tmp_path: Path) -> None:
+    """La bandera se evalúa antes del siguiente lote de ocho logros."""
+
+    registros = [
+        {
+            "id_silabo": f"SIL_{indice}",
+            "origen": {"archivo": f"curso-{indice}.docx"},
+            "datos": {
+                "curso": "Campañas",
+                "sumilla": "Diseñar campañas de marketing.",
+                "logro_general": "Diseñar campañas de marketing.",
+                "texto_relevante": "Contexto de marketing.",
+                "logros_especificos": [
+                    {"etiqueta": "L1", "descripcion": f"Diseñar campaña {indice}"}
+                ],
+                "competencias_declaradas": [],
+                "programa_analitico": [],
+                "herramientas_evidencia": [],
+            },
+        }
+        for indice in range(9)
+    ]
+    cancelada = Event()
+
+    class LLMContador:
+        model_name = "modelo-test"
+
+        def __init__(self) -> None:
+            self.llamadas = 0
+            self.esquema = None
+
+        def with_structured_output(self, esquema):
+            self.esquema = esquema
+            return self
+
+        def invoke(self, _prompt: str):
+            self.llamadas += 1
+            cancelada.set()
+            return self.esquema(decisiones=[])
+
+    llm = LLMContador()
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: llm)
+
+    with pytest.raises(CancelacionSolicitada):
+        analista_llm.analizar_registros_curriculares(
+            registros,
+            _catalogo_vacio(),
+            "Marketing",
+            "2026-1",
+            tmp_path,
+            inspeccionar=False,
+            cancelada=cancelada.is_set,
+        )
+
+    assert llm.llamadas == 1
 
 
 def test_normaliza_habilidad_nominalizada_antes_de_validarla(monkeypatch, tmp_path: Path) -> None:
@@ -617,6 +676,26 @@ def test_no_publica_herramienta_solo_por_contexto_generico_del_logro() -> None:
     )
 
     assert salida._herramientas_llm_nuevas(decision, {"logro_actual": logro}, ()) == ()
+
+
+def test_normaliza_tipo_de_competencia_llm_al_contrato_csv() -> None:
+    dura = salida._concepto_decidido(
+        _catalogo_vacio(),
+        "Gestión de campañas de marketing",
+        "Planificación y gestión de campañas.",
+        "competencia profesional de Marketing",
+        "COMP",
+    )
+    blanda = salida._concepto_decidido(
+        _catalogo_vacio(),
+        "Comunicación efectiva",
+        "Comunicar con claridad.",
+        "competencia blanda",
+        "COMP",
+    )
+
+    assert dura.tipo == "dura"
+    assert blanda.tipo == "blanda"
 
 
 def test_alias_ms_word_se_consolida_con_microsoft_word_detectado() -> None:

@@ -21,11 +21,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   iniciarNormalizadorEmpleabilidad,
   iniciarNormalizadorSilabos,
+  cancelarEjecucionNormalizador,
   obtenerCuarentenaNormalizador,
   obtenerEjecucionNormalizador,
   obtenerErroresNormalizador,
   obtenerUrlOutputNormalizador,
+  listarEjecucionesNormalizador,
 } from "../api/normalizador";
+import Neo4jImportPanel from "./Neo4jImportPanel";
+import HistorialEjecucionesPanel from "./HistorialEjecucionesPanel";
 
 const ESTADOS_TERMINALES = new Set([
   "normalizado",
@@ -33,6 +37,7 @@ const ESTADOS_TERMINALES = new Set([
   "no_publicado",
   "rechazado",
   "error",
+  "cancelado",
 ]);
 
 const ESTADOS_TERMINALES_SILABOS = new Set([
@@ -41,7 +46,50 @@ const ESTADOS_TERMINALES_SILABOS = new Set([
   "no_publicado",
   "rechazado",
   "error",
+  "cancelado",
 ]);
+
+const ESTADOS_RECONOCIDOS = new Set([
+  "recibido",
+  "validando",
+  "validado",
+  "validado_con_advertencias",
+  "limpiando",
+  "limpiado",
+  "limpiado_con_advertencias",
+  "normalizando",
+  "normalizado",
+  "normalizado_con_advertencias",
+  "no_publicado",
+  "rechazado",
+  "error",
+  "cancelado",
+]);
+
+function esEjecucionActiva(ejecucion) {
+  const estado = String(ejecucion?.estado || "").toLowerCase();
+  return ESTADOS_RECONOCIDOS.has(estado)
+    && !ESTADOS_TERMINALES.has(estado)
+    && !ESTADOS_TERMINALES_SILABOS.has(estado);
+}
+
+function fechaEjecucion(ejecucion) {
+  const fecha = new Date(ejecucion?.actualizada_en || ejecucion?.creada_en || "").getTime();
+  return Number.isFinite(fecha) ? fecha : null;
+}
+
+function ultimaEjecucionActiva(ejecuciones) {
+  return ejecuciones
+    .filter((ejecucion) => ejecucion?.id_ejecucion && esEjecucionActiva(ejecucion))
+    .sort((a, b) => {
+      const fechaA = fechaEjecucion(a);
+      const fechaB = fechaEjecucion(b);
+      if (fechaA === null && fechaB === null) return 0;
+      if (fechaA === null) return 1;
+      if (fechaB === null) return -1;
+      return fechaB - fechaA;
+    })[0] || null;
+}
 
 function esEstadoTerminal(ejecucion) {
   if (!ejecucion) return false;
@@ -62,6 +110,7 @@ const ETIQUETAS_ESTADO = {
   no_publicado: "No publicado",
   rechazado: "Entrada rechazada",
   error: "Error de ejecución",
+  cancelado: "Procesamiento cancelado",
 };
 
 const PASOS_POR_TIPO = {
@@ -154,6 +203,7 @@ function pasoCompletado(estado, indice, tipo) {
         no_publicado: 4,
         rechazado: 0,
         error: 0,
+        cancelado: 0,
       }
     : {
         recibido: 0,
@@ -169,6 +219,7 @@ function pasoCompletado(estado, indice, tipo) {
         no_publicado: 4,
         rechazado: 0,
         error: 0,
+        cancelado: 0,
       };
   return (orden[estado] ?? 0) > indice;
 }
@@ -224,7 +275,7 @@ function actividadPorEtapas(ejecucion) {
   const validacion = esSilabo ? ejecucion.validacion_silabos : ejecucion.validacion;
   const limpieza = esSilabo ? ejecucion.limpieza_silabos : ejecucion.limpieza;
   const tieneSalida = Array.isArray(ejecucion.outputs) && ejecucion.outputs.length > 0;
-  const fallida = ["rechazado", "error", "no_publicado"].includes(estado);
+  const fallida = ["rechazado", "error", "no_publicado", "cancelado"].includes(estado);
   const validacionCompletada = Boolean(validacion) || ["validado", "validado_con_advertencias", "limpiando", "limpiado", "limpiado_con_advertencias", "normalizando", "normalizado", "normalizado_con_advertencias", "no_publicado"].includes(estado);
   const limpiezaCompletada = Boolean(limpieza) || ["limpiado", "limpiado_con_advertencias", "normalizando", "normalizado", "normalizado_con_advertencias", "no_publicado"].includes(estado);
   const normalizacionCompletada = Boolean(ejecucion.normalizacion) || ["normalizado", "normalizado_con_advertencias", "no_publicado"].includes(estado);
@@ -255,7 +306,9 @@ function actividadPorEtapas(ejecucion) {
     {
       id: "limpieza",
       titulo: "Limpieza",
-      detalle: limpiezaCompletada
+      detalle: estado === "cancelado"
+        ? "El procesamiento fue cancelado antes de completar la limpieza."
+        : limpiezaCompletada
         ? esSilabo
           ? `${limpieza?.registros ?? 0} sílabos extraídos para el resultado curricular.`
           : "Staging de la fuente preparado."
@@ -299,7 +352,7 @@ function actividadPorEtapas(ejecucion) {
         : "Pendiente de publicar las salidas.",
     estado: estadoActividad({
       completada: tieneSalida,
-      requiereAtencion: estado === "no_publicado" || (esEstadoTerminal(ejecucion) && !tieneSalida),
+      requiereAtencion: estado === "no_publicado" || estado === "cancelado" || (esEstadoTerminal(ejecucion) && !tieneSalida),
     }),
   });
 
@@ -332,12 +385,14 @@ const ETIQUETAS_FASE_LLM = {
   finalizando: "Finalizando reporte",
   completado: "Completado",
   error: "Con observaciones",
+  cancelado: "Cancelado",
 };
 
 const ETIQUETAS_REPORTE_LLM = {
   pendiente: "pendiente",
   disponible: "disponible",
   error: "no disponible",
+  cancelado: "cancelado",
 };
 
 function numeroProgreso(valor) {
@@ -420,6 +475,7 @@ function metricas(ejecucion, cuarentena) {
 
 export default function NormalizadorPanel() {
   const inputRef = useRef(null);
+  const restauracionRef = useRef(0);
   const [modo, setModo] = useState("empleabilidad");
   const [archivo, setArchivo] = useState(null);
   const [carrera, setCarrera] = useState("");
@@ -429,15 +485,21 @@ export default function NormalizadorPanel() {
   const [errores, setErrores] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [errorRed, setErrorRed] = useState("");
+  const [cancelando, setCancelando] = useState(false);
+  const [cancelacionEnviada, setCancelacionEnviada] = useState(false);
+  const [pollingDetenido, setPollingDetenido] = useState(false);
+  const [recuperando, setRecuperando] = useState(true);
 
-  const consultar = useCallback(async (id) => {
+  const consultar = useCallback(async (id, puedeAplicar = () => true) => {
     const datos = await obtenerEjecucionNormalizador(id);
+    if (!puedeAplicar()) return datos;
     setEjecucion(datos);
     if (esEstadoTerminal(datos)) {
       const [detalleErrores, detalleCuarentena] = await Promise.all([
         obtenerErroresNormalizador(id),
         obtenerCuarentenaNormalizador(id, { limite: 8 }),
       ]);
+      if (!puedeAplicar()) return datos;
       setErrores(detalleErrores.hallazgos || []);
       setCuarentena(detalleCuarentena);
     }
@@ -445,20 +507,65 @@ export default function NormalizadorPanel() {
   }, []);
 
   useEffect(() => {
-    if (!ejecucion?.id_ejecucion || esEstadoTerminal(ejecucion)) return undefined;
+    let desmontado = false;
+    const version = restauracionRef.current;
+    const puedeAplicar = () => !desmontado && version === restauracionRef.current;
+
+    async function restaurarEjecucionActiva() {
+      try {
+        const historial = await listarEjecucionesNormalizador(20);
+        if (!puedeAplicar()) return;
+        const ejecucionActiva = ultimaEjecucionActiva(
+          Array.isArray(historial?.ejecuciones) ? historial.ejecuciones : [],
+        );
+        if (!ejecucionActiva) return;
+
+        const tipo = ejecucionActiva.tipo === "silabos" ? "silabos" : "empleabilidad";
+        const parametros = ejecucionActiva.parametros || {};
+        setModo(tipo);
+        setCarrera(tipo === "silabos" ? String(parametros.carrera || "") : "");
+        setPeriodo(tipo === "silabos" ? String(parametros.periodo || "") : "");
+        const detalle = await consultar(ejecucionActiva.id_ejecucion, puedeAplicar);
+        if (puedeAplicar()) {
+          const tipoDetalle = detalle?.tipo === "silabos" ? "silabos" : tipo;
+          const parametrosDetalle = detalle?.parametros || parametros;
+          setModo(tipoDetalle);
+          setCarrera(tipoDetalle === "silabos" ? String(parametrosDetalle.carrera || "") : "");
+          setPeriodo(tipoDetalle === "silabos" ? String(parametrosDetalle.periodo || "") : "");
+        }
+      } catch (error) {
+        if (puedeAplicar()) setErrorRed(error.message || "No se pudo recuperar la ejecución activa.");
+      } finally {
+        if (puedeAplicar()) setRecuperando(false);
+      }
+    }
+
+    restaurarEjecucionActiva();
+    return () => {
+      desmontado = true;
+    };
+  }, [consultar]);
+
+  useEffect(() => {
+    if (!ejecucion?.id_ejecucion || esEstadoTerminal(ejecucion) || pollingDetenido) return undefined;
     const timer = window.setInterval(() => {
       consultar(ejecucion.id_ejecucion).catch((error) => setErrorRed(error.message));
     }, 900);
     return () => window.clearInterval(timer);
-  }, [consultar, ejecucion]);
+  }, [consultar, ejecucion, pollingDetenido]);
 
   const iniciar = async () => {
     if (!archivo) return;
+    restauracionRef.current += 1;
+    setRecuperando(false);
     setCargando(true);
     setErrorRed("");
     setEjecucion(null);
     setCuarentena(null);
     setErrores([]);
+    setCancelando(false);
+    setCancelacionEnviada(false);
+    setPollingDetenido(false);
     try {
       if (modo === "silabos" && (!carrera.trim() || !periodo.trim())) {
         setErrorRed("Para limpiar sílabos debes indicar carrera y periodo.");
@@ -476,6 +583,23 @@ export default function NormalizadorPanel() {
     }
   };
 
+  const cancelar = async () => {
+    if (!ejecucion?.id_ejecucion || cancelando || cancelacionEnviada) return;
+    if (!window.confirm("¿Estás seguro de que deseas cancelar el procesamiento?")) return;
+    setCancelando(true);
+    setErrorRed("");
+    try {
+      const datos = await cancelarEjecucionNormalizador(ejecucion.id_ejecucion);
+      setEjecucion(datos);
+      setCancelacionEnviada(true);
+      setPollingDetenido(true);
+    } catch (error) {
+      setErrorRed(error.message || "No se pudo solicitar la cancelación.");
+    } finally {
+      setCancelando(false);
+    }
+  };
+
   const seleccionarArchivo = (event) => {
     const siguiente = event.target.files?.[0] || null;
     setArchivo(siguiente);
@@ -483,26 +607,30 @@ export default function NormalizadorPanel() {
   };
 
   const resetear = () => {
+    restauracionRef.current += 1;
     setArchivo(null);
     setEjecucion(null);
     setCuarentena(null);
     setErrores([]);
     setErrorRed("");
+    setCancelando(false);
+    setCancelacionEnviada(false);
+    setPollingDetenido(false);
+    setRecuperando(false);
     if (inputRef.current) inputRef.current.value = "";
   };
 
-  const estado = ejecucion?.estado || "recibido";
+  const estado = recuperando ? "recuperando" : ejecucion?.estado || "recibido";
   const esCurricular = ejecucion?.tipo === "silabos" || modo === "silabos";
   const esFinal = esEstadoTerminal(ejecucion);
   const flujo = tipoFlujo(ejecucion, modo);
   const pasos = pasosPara(ejecucion, modo);
-  const controlesBloqueados = cargando || Boolean(ejecucion);
-  const ejecucionActiva = cargando || Boolean(ejecucion && !esFinal);
+  const controlesBloqueados = recuperando || cargando || Boolean(ejecucion);
+  const ejecucionActiva = recuperando || cargando || Boolean(ejecucion && !esFinal);
   const resultadoListo = esCurricular
     ? ["limpiado", "limpiado_con_advertencias"].includes(estado)
       && ejecucion?.validacion_silabos?.valida === true
     : ejecucion?.normalizacion?.publicable === true;
-  const tituloEstado = ETIQUETAS_ESTADO[estado] || "Preparando ejecución";
   const resumenMetricas = useMemo(() => metricas(ejecucion, cuarentena), [ejecucion, cuarentena]);
   const progresoLimpiezaLLM = useMemo(() => progresoLLM(ejecucion), [ejecucion]);
   const registroActividad = useMemo(() => actividadPorEtapas(ejecucion), [ejecucion]);
@@ -511,12 +639,24 @@ export default function NormalizadorPanel() {
   const ultimaActualizacion = fechaLegible(ejecucion?.actualizada_en);
   const IconoFuente = esCurricular ? BookOpen : FileSpreadsheet;
   const pasoEnCurso = pasos.find((paso) => pasoActivo(estado, paso.id, flujo));
-  const progreso = progresoFlujo(estado, flujo);
-  const detalleSeguimiento = !ejecucion && !cargando
+  const progresoManifest = progresoLimpiezaLLM && progresoLimpiezaLLM.chunksTotales > 0
+    ? progresoLimpiezaLLM.porcentaje
+    : null;
+  const progreso = recuperando
+    ? null
+    : progresoManifest ?? (!ejecucion ? 0 : esFinal ? progresoFlujo(estado, flujo) : null);
+  const detalleSeguimiento = recuperando
+    ? "Comprobando si existe una ejecución activa para recuperar su seguimiento."
+    : !ejecucion && !cargando
     ? "Selecciona una fuente y presiona el botón de inicio para comenzar."
     : esFinal
       ? (esCurricular ? "La estructura quedó registrada y ya puedes revisar sus hallazgos." : "La ejecución terminó y el gate dejó su resultado registrado.")
-      : `Etapa actual: ${pasoEnCurso?.label || "preparación"}. Los controles permanecen bloqueados hasta terminar.`;
+      : cancelacionEnviada
+        ? "Cancelación solicitada. El lote actual puede terminar, pero no se enviarán nuevos lotes al LLM."
+        : esCurricular
+          ? "Procesamos los sílabos por lotes, conservamos las evidencias y hallazgos de cada etapa, y habilitaremos los CSV y la inspección al completar el ETL."
+          : "Procesamos la fuente por etapas y conservamos las evidencias y hallazgos de cada etapa; los resultados y la inspección se habilitarán al completar el ETL.";
+  const tituloEstado = recuperando ? "Recuperando ejecución" : ETIQUETAS_ESTADO[estado] || "Preparando ejecución";
 
   return (
     <main className="h-[100dvh] w-full overflow-y-auto overscroll-contain bg-fondo text-ink">
@@ -568,7 +708,7 @@ export default function NormalizadorPanel() {
               {ejecucionActiva ? (
                 <p className="flex items-center gap-2 text-xs font-bold text-ulima">
                   <LoaderCircle className="animate-girar" size={14} />
-                  Fuente bloqueada durante la ejecución
+                  {recuperando ? "Recuperando el seguimiento" : "Fuente bloqueada durante la ejecución"}
                 </p>
               ) : null}
             </div>
@@ -699,15 +839,43 @@ export default function NormalizadorPanel() {
                 </span>
               </div>
 
-              <div className="mt-5" role="progressbar" aria-label="Progreso del flujo" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progreso} aria-valuetext={`${progreso}% completado`}>
+              <div
+                className="mt-5"
+                role="progressbar"
+                aria-label="Progreso del flujo"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow={progreso ?? undefined}
+                aria-valuetext={recuperando
+                  ? "Recuperando la ejecución activa"
+                  : progreso === null
+                    ? "Procesamiento en curso; porcentaje pendiente de datos del manifest"
+                    : `${progreso}% completado${progresoManifest !== null ? " según el manifest" : ""}`}
+              >
                 <div className="mb-2.5 flex items-center justify-between font-body text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
                   <span>{esCurricular ? "Flujo curricular" : "Flujo de empleabilidad"}</span>
-                  <span className="text-ulima">{progreso}%</span>
+                  <span className="text-ulima">
+                    {recuperando ? "Recuperando…" : progreso === null ? "En curso" : `${progreso}%`}
+                  </span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-ash">
-                  <div className="h-full rounded-full bg-ulima transition-[width] duration-700 ease-out" style={{ width: `${progreso}%` }} />
+                  <div className="h-full rounded-full bg-ulima transition-[width] duration-700 ease-out" style={{ width: `${progreso ?? 0}%` }} />
                 </div>
               </div>
+
+              {esCurricular && ["validando", "limpiando", "normalizando"].includes(estado) && !cancelacionEnviada ? (
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={cancelar}
+                    disabled={cancelando}
+                    className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-extrabold text-red-700 transition hover:border-red-300 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {cancelando ? <LoaderCircle className="animate-girar" size={14} /> : <XCircle size={14} />}
+                    {cancelando ? "Cancelando…" : "Cancelar procesamiento"}
+                  </button>
+                </div>
+              ) : null}
 
               <div className="mt-5 grid grid-cols-4" aria-label="Etapas del flujo">
                 {pasos.map((paso, indice) => {
@@ -736,7 +904,7 @@ export default function NormalizadorPanel() {
                 </div>
                 <div className="min-w-0">
                   <p className="font-body text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                    {ejecucionActiva ? "Proceso en curso" : esFinal ? "Proceso registrado" : "Esperando fuente"}
+                    {recuperando ? "Recuperando seguimiento" : ejecucionActiva ? "Proceso en curso" : esFinal ? "Proceso registrado" : "Esperando fuente"}
                   </p>
                   <p className="mt-1 text-sm leading-5 text-muted">{detalleSeguimiento}</p>
                 </div>
@@ -749,7 +917,7 @@ export default function NormalizadorPanel() {
                     <p className="mt-1.5 text-2xl font-extrabold tracking-[-0.035em]">{tituloEstado}</p>
                   </div>
                   <span className={`rounded-full px-2.5 py-1 font-body text-[10px] font-bold uppercase tracking-[0.08em] ${esFinal ? resultadoListo ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700" : ejecucionActiva ? "bg-[#FFF5F1] text-ulima" : "bg-ash text-muted"}`}>
-                    {esFinal ? resultadoListo ? "Revisado" : "Requiere atención" : ejecucionActiva ? "En curso" : "Sin iniciar"}
+                    {recuperando ? "Recuperando" : esFinal ? resultadoListo ? "Revisado" : "Requiere atención" : ejecucionActiva ? "En curso" : "Sin iniciar"}
                   </span>
                 </div>
                 <p className="mt-2 text-sm leading-6 text-muted">
@@ -799,10 +967,18 @@ export default function NormalizadorPanel() {
                           : progresoLimpiezaLLM.mensaje}
                       </p>
                     </div>
-                    <span className="rounded-full border border-ulima/20 bg-paper px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-ulima">
-                      Reporte final: {ETIQUETAS_REPORTE_LLM[progresoLimpiezaLLM.reporte_final] || "pendiente"}
-                    </span>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <span className="rounded-full border border-ulima/20 bg-paper px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-ulima">
+                        Reporte final: {ETIQUETAS_REPORTE_LLM[progresoLimpiezaLLM.reporte_final] || "pendiente"}
+                      </span>
+                    </div>
                   </div>
+
+                  {cancelacionEnviada ? (
+                    <p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
+                      Cancelación solicitada. Recomendamos revisar el historial cuando el worker termine de cerrar la ejecución.
+                    </p>
+                  ) : null}
 
                   <div
                     className="mt-3 h-2 overflow-hidden rounded-full bg-ulima/10"
@@ -1026,8 +1202,13 @@ export default function NormalizadorPanel() {
                   {esCurricular ? "Contexto CHH disponible para la siguiente extracción" : `Catálogo ${ejecucion.catalogo_chh.version} · ${ejecucion.catalogo_chh.competencias} competencias · ${ejecucion.catalogo_chh.habilidades} habilidades · ${ejecucion.catalogo_chh.herramientas} herramientas`}
                 </p>
               ) : null}
+              {esCurricular && resultadoListo ? (
+                <Neo4jImportPanel idEjecucion={ejecucion.id_ejecucion} />
+              ) : null}
             </section>
           ) : null}
+
+          <HistorialEjecucionesPanel />
         </div>
       </div>
     </main>

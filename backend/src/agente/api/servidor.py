@@ -9,6 +9,7 @@ from typing import Any, TypeVar
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from agente.api.neo4j_importacion import router as neo4j_importacion_router
 from agente.api.normalizador import router as normalizador_router
 from agente.config import settings as _settings  # noqa: F401
 from agente.dashboard import servicio as dashboard
@@ -21,6 +22,7 @@ from agente.observabilidad.logger import log_fin_turno, log_paso
 grafo = construir_grafo()
 app = FastAPI(title="CIAR Agente API", version="2.0.0")
 app.include_router(normalizador_router, prefix="/normalizador", tags=["normalizador"])
+app.include_router(neo4j_importacion_router, prefix="/neo4j", tags=["neo4j-importacion"])
 ResultadoDashboard = TypeVar("ResultadoDashboard")
 
 

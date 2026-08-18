@@ -23,6 +23,10 @@ const nextConfig = {
         source: "/api/normalizador/:path*",
         destination: backendUrl + "/normalizador/:path*",
       },
+      {
+        source: "/api/neo4j/:path*",
+        destination: backendUrl + "/neo4j/:path*",
+      },
     ];
   },
 };

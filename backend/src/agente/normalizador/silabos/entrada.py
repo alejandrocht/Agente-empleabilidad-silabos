@@ -153,14 +153,8 @@ def validar_archivo(
                         )
                         continue
                     if _es_metadato_macos(nombre):
-                        hallazgos.append(
-                            _hallazgo(
-                                "METADATO_MACOS_IGNORADO",
-                                "warning",
-                                "Se ignoró un archivo auxiliar de macOS dentro del ZIP.",
-                                nombre,
-                            )
-                        )
+                        # Los archivos auxiliares de macOS no son datos curriculares
+                        # ni deben contaminar el reporte con warnings irrelevantes.
                         continue
                     if len(archivos) >= MAX_ARCHIVOS:
                         hallazgos.append(

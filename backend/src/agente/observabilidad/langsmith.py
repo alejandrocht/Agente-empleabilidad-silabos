@@ -17,6 +17,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar
 
 from agente.config.settings import booleano
+from agente.normalizador.excepciones import CancelacionSolicitada
 
 T = TypeVar("T")
 
@@ -128,6 +129,11 @@ def _resumen_salida(valor: Any) -> dict[str, Any]:
     """Limita el span raíz a un resumen; las salidas LLM quedan en sus runs nativos."""
 
     resumen: dict[str, Any] = {"type": type(valor).__name__}
+    if isinstance(valor, Mapping):
+        for atributo in ("status", "estado", "mensaje"):
+            dato = valor.get(atributo)
+            if isinstance(dato, (bool, int, float, str)):
+                resumen[atributo] = dato
     for atributo in ("publicable", "relaciones", "competencias", "habilidades", "herramientas"):
         dato = getattr(valor, atributo, None)
         if isinstance(dato, (bool, int, float, str)):
@@ -151,6 +157,22 @@ def ejecutar_flujo(
 
     if not tracing_activo():
         return funcion()
+    cancelacion: CancelacionSolicitada | None = None
+
+    def ejecutar_trazado(_entrada: Any) -> T | dict[str, str]:
+        nonlocal cancelacion
+        try:
+            return funcion()
+        except CancelacionSolicitada as exc:
+            # El span raíz termina correctamente con un estado explícito. La
+            # excepción se relanza después para que el worker marque el manifest.
+            cancelacion = exc
+            return {
+                "status": "cancelled",
+                "estado": "cancelado",
+                "mensaje": str(exc),
+            }
+
     try:
         from langsmith import traceable
 
@@ -167,9 +189,12 @@ def ejecutar_flujo(
             process_outputs=procesar_salidas,
             enabled=True,
         )
-        trazada = decorador(lambda _entrada: funcion())
+        trazada = decorador(ejecutar_trazado)
     except Exception:
         # Una instalación incompleta o una configuración inválida no debe impedir
         # el procesamiento curricular. La llamada de negocio se ejecuta una sola vez.
         return funcion()
-    return trazada({"run": run_name})
+    resultado = trazada({"run": run_name})
+    if cancelacion is not None:
+        raise cancelacion
+    return resultado  # type: ignore[return-value]
