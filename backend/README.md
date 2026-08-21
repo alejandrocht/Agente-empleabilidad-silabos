@@ -1,32 +1,32 @@
-# Backend del Agente CIAR
+# CIAR Agent Backend
 
-Agente LangGraph que convierte preguntas en español a Cypher, valida que las consultas sean
-de solo lectura y consulta el schema vivo de Neo4j. OpenAI es el único proveedor LLM; cada rol
-puede seleccionar su modelo desde `.env`.
+The active backend lives in `backend/agente`. It uses LangGraph, OpenAI, and Neo4j to
+answer Spanish questions about the CIAR academic and employment graph. Domain queries
+are read-only and pass through the current Cypher guard and Neo4j `READ` gateway.
 
-## Instalación
+## Install
+
+From the repository root:
 
 ```powershell
 cd backend
 python -m pip install -e ".[dev]"
-Copy-Item .env.example .env  # solo si todavía no existe
+Copy-Item .env.example .env  # only when .env does not exist
 ```
 
-Completa `OPENAI_API_KEY` y las credenciales de Neo4j. Para habilitar trazas, completa también
-`LANGSMITH_API_KEY`; `LANGSMITH_TRACING=true` ya viene en la plantilla.
+Fill `.env` with OpenAI credentials and Neo4j credentials. Use a read-only Neo4j
+principal for domain queries.
 
-## Ejecución
+## Run
+
+The console uses the async `responder` entrypoint:
 
 ```powershell
+cd backend
 python scripts/consola.py
-uvicorn agente.api.servidor:app --reload --port 8001
-python -m pytest
-ruff check src tests scripts
-mypy src
 ```
 
-Todas las consultas pasan por una guarda central y se ejecutan en sesiones Neo4j de lectura.
-La caché y la memoria son efímeras, tienen TTL y permanecen acotadas por proceso.
+Exit with `/salir`.
 
 ## Normalizadores de Empleabilidad y Sílabos
 
@@ -91,8 +91,7 @@ reportan para revisión. DOCX y PDF admiten códigos `E/G` numéricos y alfabét
 
 ### Analista curricular LLM por carrera
 
-Por defecto la ejecución curricular es determinista y no consume tokens. Para activar el analista
-semántico y su inspector:
+En producción la ejecución curricular debe activar el analista semántico y su inspector. Para ello:
 
 ```dotenv
 NORMALIZADOR_CURRICULAR_LLM=true
@@ -177,7 +176,7 @@ revisar qué declaró cada sílabo sin publicar placeholders.
 Después de revisar una ejecución, se puede generar un perfil inicial sin alterar los esquemas CSV:
 
 ```bash
-PYTHONPATH=src .venv/bin/python scripts/generar_perfil_carrera.py \
+python -m scripts.generar_perfil_carrera \
   --ejecucion .normalizador/NOR_xxx \
   --catalogos "/ruta/Normalizacion CIAR/catalogos" \
   --carrera Marketing --periodo 2026-1
@@ -190,23 +189,103 @@ un perfil está en bootstrap, especializa el espacio de **competencias**; las ha
 contrastan contra el catálogo global para que un perfil incompleto no elimine candidatos y fuerce falsos positivos.
 
 ## Logs
+The current FastAPI application is `api.servidor:app`:
 
-En `INFO` aparecen eventos de negocio: memoria recibida y actualizada, decisiones de ruta,
-estrategia, caché, entidades, Cypher, filas e inspección de la respuesta. Cada evento incluye
-automáticamente la función que lo originó y usa el formato `[campo]: valor` en una sola línea:
-
-```text
-18:40:56.601 [nivel]: INFO [sesion]: ses-eb1636cec94a [evento]: decision.ruta_seleccionada [funcion]: agente.grafo.enrutado.ruta_tras_estrategia [desde]: selecciona_estrategia [hacia]: valida_cypher [motivo]: plantilla determinista
+```powershell
+cd backend
+python -m uvicorn api.servidor:app --reload --port 8001
 ```
 
-`DEBUG` agrega una línea por función finalizada con su duración. Los IDs de sesión se
-pseudonimizan y los secretos, saltos de línea y campos excesivos se sanean de forma central.
-Se controla desde `.env`:
+It exposes `/health`, `/chat`, `/chat/stream`, `/preguntar`, and the typed read-only
+dashboard endpoints under `/dashboard/`. No endpoint accepts arbitrary Cypher.
 
-```dotenv
-LOG_FORMATO=legible  # usa json para ingestión por máquinas
-LOG_NIVEL=INFO       # usa DEBUG para el perfil técnico por función
-LOG_FUNCIONES=true
-LOG_MAX_CHARS_CAMPO=800
-LOG_SESION_COMPLETA=false
+## Active architecture
+
+- `agente/grafo/constructor.py` contains the graph factory and the no-argument
+  `langgraph_entrypoint` referenced by `langgraph.json`.
+- `agente/utils/tooler.py` contains exactly 20 immutable, parameter-validated Cypher
+  templates. A deterministic exact match skips planning; uncertain questions use the
+  planner/dynamic route.
+- `agente/cache/consultas.py` provides a thread-safe process-local LRU cache of
+  successful normalized query rows. It uses a 600-second TTL and 256-entry limit by
+  default, configured by `QUERY_RESULT_CACHE_TTL_SECONDS` and
+  `QUERY_RESULT_CACHE_MAX_ENTRIES`.
+- The graph is stateless and compiles without a LangGraph checkpointer. `thread_id` is
+  retained only as an HTTP correlation identifier; requests do not share state.
+- `agente/utils/response_inspector.py` performs deterministic checks on every final
+  response. Invalid output is replaced by a safe fallback; no `INSPECTOR_LLM` setting
+  is active.
+- `agente/dashboard/consultas.py` and `agente/dashboard/servicio.py` expose the
+  allow-listed dashboard data. The metadata endpoint reports supported and deferred
+  datasets. Deferred datasets remain empty rather than being fabricated.
+
+## Neo4j configuration
+
+Domain reads prefer a complete `NEO4J_READ_*` group and otherwise use the legacy
+`NEO4J_*` group. A partial higher-priority group fails closed, preserving isolation and
+avoiding mixed credentials.
+
+### Offline document graph ingestion
+
+Source syllabi and job descriptions can be reviewed and imported offline with:
+
+```powershell
+cd backend
+python -m scripts.ingest_documents .\imports\syllabus.md .\imports\jobs.json
+# Example: cap this dry run to one source while keeping the default batch size.
+python -m scripts.ingest_documents --max-documents 1 .\imports\syllabus.md
 ```
+
+Run the CLI from `backend/` with the module form above; this is the supported and
+unambiguous invocation because it preserves the package import path.
+
+The command accepts bounded `.txt`, `.md`, `.markdown`, and explicitly shaped `.json`
+documents. It runs in dry-run mode by default and prints a normalized preview without
+source text, credentials, or arbitrary Cypher. JSON entries must contain only `id` or
+`document_id` plus `text` or `content`.
+
+Writing is a separate administrative operation and requires both `--write` and a
+complete dedicated `NEO4J_INGEST_URI`, `NEO4J_INGEST_USER`,
+`NEO4J_INGEST_PASSWORD`, and `NEO4J_INGEST_DATABASE` group. The writer never falls
+back to `NEO4J_READ_*` or legacy `NEO4J_*` credentials, never deletes graph data, and
+uses LangChain Neo4j's `add_graph_documents` helper with `include_source=False`.
+Review and retain the dry-run preview before running the write command.
+
+The transformer is probabilistic even with strict allow-lists. Extraction can create
+incorrect entities or relationships, so previews must be reviewed and imports should
+not introduce unsupported academic labels. This write path is outside the chatbot's
+read-only request policy and is never called by `/chat`, `/chat/stream`, `/preguntar`,
+the planner, entity resolution, or the domain query gateway.
+
+See `.env.example` for all current schema-cache, query-cache, logging, and role-specific
+OpenAI settings.
+
+## Verification
+
+From `backend/`:
+
+```powershell
+python -m pytest -q
+python -m ruff check .
+python -m mypy agente
+python -m compileall -q agente api scripts
+python -c "from agente.grafo.constructor import langgraph_entrypoint; langgraph_entrypoint()"
+```
+
+The last command validates the LangGraph no-argument entrypoint and builds the graph
+without opening Neo4j or calling OpenAI. Live acceptance is separate: a real Neo4j
+question, deployed-schema `EXPLAIN`/execution, and external OpenAI/LangSmith access.
+This offline slice does not run live services.
+
+When frontend files are affected, run from `frontend/`:
+
+```powershell
+npm run check
+npm audit --omit=dev
+```
+
+## Historical migration note
+
+The former `backend/src/agente` package and the strategic-query runner were removed in
+the active migration. Historical plans may still describe them; those sections are
+context only and must not be used as current commands or import paths.

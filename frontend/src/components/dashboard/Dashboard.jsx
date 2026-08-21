@@ -9,11 +9,17 @@ import {
   LineChart,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useEffect } from "react";
+import {
+  dashboardApi,
+  esBackendNoDisponible,
+} from "../../api/dashboard";
 import BarrasComparativasChart from "./BarrasComparativasChart";
 import BrechaCurriculoMercadoChart from "./BrechaCurriculoMercadoChart";
 import RankingDimensionChart from "./RankingDimensionChart";
 import TarjetaGrafico from "./TarjetaGrafico";
 import TendenciaOfertasChart from "./TendenciaOfertasChart";
+import EstadoGrafico from "./EstadoGrafico";
 import {
   MOCK_CARRERAS,
   MOCK_DASHBOARDS,
@@ -46,13 +52,14 @@ const modeloPorCarrera = {
   comunicacion: "habilidades",
 };
 
-function Selector({ etiqueta, valor, onChange, opciones }) {
+function Selector({ etiqueta, valor, onChange, opciones, disabled = false }) {
   return (
     <label className="grid gap-1.5 text-sm font-semibold text-ink">
       {etiqueta}
       <select
         value={valor}
         onChange={onChange}
+        disabled={disabled}
         className="h-10 rounded-xl border border-line bg-paper px-3 text-sm font-medium text-ink outline-none transition focus:border-ulima focus:ring-2 focus:ring-ulima/20"
       >
         {opciones.map((item) => (
@@ -89,7 +96,43 @@ function normalizarRanking(filas, campo, etiqueta = "elemento") {
   }));
 }
 
-export default function Dashboard() {
+const EMPTY_MODEL = {
+  tendencia: [],
+  carreras: [],
+  industrias: [],
+  demanda: [],
+  cobertura: [],
+  brechas: [],
+  empresasTop: [],
+};
+
+const UNSUPPORTED_MESSAGE = "Dataset no soportado por la frontera activa del backend.";
+
+function textoError(error) {
+  return error instanceof Error && error.message
+    ? error.message
+    : "No se pudieron cargar estos datos.";
+}
+
+function filasDeRespuesta(respuesta) {
+  if (!respuesta || !Array.isArray(respuesta.filas)) {
+    throw new Error("La respuesta del dashboard tiene una forma inválida.");
+  }
+  return respuesta.filas;
+}
+
+function periodoDeFila(fila) {
+  if (!fila?.anio || !fila?.mes) return "";
+  return `${fila.anio}-${String(fila.mes).padStart(2, "0")}`;
+}
+
+export default function Dashboard({ api = dashboardApi }) {
+  const [estadoBackend, setEstadoBackend] = useState("loading");
+  const [errorBackend, setErrorBackend] = useState("");
+  const [carrerasApi, setCarrerasApi] = useState([]);
+  const [periodoConsulta, setPeriodoConsulta] = useState(null);
+  const [datosApi, setDatosApi] = useState(EMPTY_MODEL);
+  const [estadosDatos, setEstadosDatos] = useState({});
   const [facultadId, setFacultadId] = useState(MOCK_FACULTADES[0].id);
   const [carreraId, setCarreraId] = useState(MOCK_CARRERAS[0].id);
   const [industriaId, setIndustriaId] = useState(MOCK_INDUSTRIAS[0].id);
@@ -98,31 +141,138 @@ export default function Dashboard() {
   const [empresaComparadaId, setEmpresaComparadaId] = useState(MOCK_EMPRESAS[1].id);
   const [funcionId, setFuncionId] = useState(MOCK_FUNCIONES[0].id);
 
+  useEffect(() => {
+    let vigente = true;
+    Promise.all([api.obtenerMetadatosDashboard(), api.obtenerCarrerasDashboard()])
+      .then(([metadata, carreras]) => {
+        if (!vigente) return;
+        setEstadoBackend("connected");
+        setPeriodoConsulta(metadata.periodo_disponible || null);
+        setCarrerasApi(Array.isArray(carreras.carreras) ? carreras.carreras : []);
+        setErrorBackend("");
+        if (!metadata.periodo_disponible?.desde || !metadata.periodo_disponible?.hasta) {
+          setEstadosDatos({
+            tendencia: { cargando: false },
+            carreras: { cargando: false },
+            industrias: { cargando: false },
+            demanda: { cargando: false },
+            cobertura: { cargando: false },
+            brechas: { cargando: false },
+            empresasTop: { cargando: false },
+          });
+        }
+        const primeraCarrera = carreras.carreras?.[0]?.id;
+        if (primeraCarrera) setCarreraId(primeraCarrera);
+      })
+      .catch((error) => {
+        if (!vigente) return;
+        if (esBackendNoDisponible(error)) {
+          setEstadoBackend("fallback");
+          setErrorBackend("La API del dashboard no está disponible.");
+        } else {
+          setEstadoBackend("error");
+          setErrorBackend(textoError(error));
+        }
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [api]);
+
+  useEffect(() => {
+    if (estadoBackend !== "connected" || !periodoConsulta?.desde || !periodoConsulta?.hasta || !carreraId) {
+      return undefined;
+    }
+
+    let vigente = true;
+    const parametros = {
+      desde: periodoConsulta.desde,
+      hasta: periodoConsulta.hasta,
+      carrera_id: carreraId,
+      limite: 10,
+    };
+    const solicitudes = {
+      tendencia: api.obtenerTendenciaDashboard({ ...parametros }),
+      carreras: api.obtenerCarrerasPorDemandaDashboard({ ...parametros }),
+      industrias: api.obtenerIndustriasPorCarreraDashboard(carreraId, { ...parametros }),
+      demanda: api.obtenerDemandaDashboard("competencias", { ...parametros }),
+      cobertura: api.obtenerCoberturaDashboard("competencias", { carrera_id: carreraId, limite: 10 }),
+      brechas: api.obtenerBrechasDashboard("competencias", { ...parametros }),
+      empresasTop: api.obtenerEmpresasDashboard({
+        desde: periodoConsulta.desde,
+        hasta: periodoConsulta.hasta,
+        limite: 10,
+      }),
+    };
+    setEstadosDatos(Object.fromEntries(Object.keys(solicitudes).map((clave) => [clave, { cargando: true }])));
+
+    const entradas = Object.entries(solicitudes);
+    Promise.allSettled(entradas.map(([, solicitud]) => solicitud)).then((resultados) => {
+      if (!vigente) return;
+      const siguientesDatos = { ...EMPTY_MODEL };
+      const siguientesEstados = {};
+      resultados.forEach((resultado, indice) => {
+        const clave = entradas[indice][0];
+        if (resultado.status === "fulfilled") {
+          try {
+            siguientesDatos[clave] = filasDeRespuesta(resultado.value);
+            siguientesEstados[clave] = { cargando: false };
+          } catch (error) {
+            siguientesEstados[clave] = { cargando: false, error: textoError(error) };
+          }
+        } else {
+          siguientesEstados[clave] = { cargando: false, error: textoError(resultado.reason) };
+        }
+      });
+      setDatosApi(siguientesDatos);
+      setEstadosDatos(siguientesEstados);
+    });
+
+    return () => {
+      vigente = false;
+    };
+  }, [api, carreraId, estadoBackend, periodoConsulta]);
+
   const carrerasDeFacultad = useMemo(
     () => MOCK_CARRERAS.filter((item) => item.facultad_id === facultadId),
     [facultadId],
   );
-  const carrera = MOCK_CARRERAS.find((item) => item.id === carreraId)
-    || carrerasDeFacultad[0]
-    || MOCK_CARRERAS[0];
+  const carrerasDisponibles = estadoBackend === "connected" ? carrerasApi : MOCK_CARRERAS;
+  const carrera = carrerasDisponibles.find((item) => item.id === carreraId)
+    || carrerasDisponibles[0]
+    || { id: "", nombre: "Carrera no disponible", cursos_conectados: 0 };
   const industria = MOCK_INDUSTRIAS.find((item) => item.id === industriaId) || MOCK_INDUSTRIAS[0];
   const empresaReferencia = MOCK_EMPRESAS.find((item) => item.id === empresaReferenciaId) || MOCK_EMPRESAS[0];
   const empresaComparada = MOCK_EMPRESAS.find((item) => item.id === empresaComparadaId) || MOCK_EMPRESAS[1];
   const funcion = MOCK_FUNCIONES.find((item) => item.id === funcionId) || MOCK_FUNCIONES[0];
-  const modelo = MOCK_DASHBOARDS[modeloPorCarrera[carrera.id] || "competencias"];
+  const modeloFallback = MOCK_DASHBOARDS[modeloPorCarrera[carrera.id] || "competencias"];
+  const modelo = estadoBackend === "fallback"
+    ? modeloFallback
+    : {
+      tendencia: datosApi.tendencia.map((fila) => ({ ...fila, periodo: periodoDeFila(fila) })),
+      carreras: datosApi.carreras,
+      industrias: datosApi.industrias,
+      demanda: datosApi.demanda,
+      cobertura: datosApi.cobertura,
+      brechas: datosApi.brechas,
+      empresasTop: datosApi.empresasTop,
+    };
 
-  const carrerasPorDemanda = normalizarRanking(modelo.carreras, "indice");
-  const industriasPorCarrera = modelo.industrias.map((fila) => ({
-    elemento: fila.industria,
-    oportunidades: fila.ofertas,
-  }));
+  const carrerasPorDemanda = estadoBackend === "fallback"
+    ? normalizarRanking(modelo.carreras, "indice")
+    : modelo.carreras.map((fila) => ({ elemento: fila.elemento, ofertas: fila.ofertas }));
+  const industriasPorCarrera = estadoBackend === "fallback"
+    ? modelo.industrias.map((fila) => ({ elemento: fila.industria, oportunidades: fila.ofertas }))
+    : modelo.industrias.map((fila) => ({ elemento: fila.elemento, oportunidades: fila.ofertas }));
   const coberturaCurricular = modelo.cobertura;
-  const funcionesPorTipoEmpresa = modelo.destinos;
-  const diferenciadores = modelo.diferenciadores.map((fila) => ({
-    ...fila,
-    referencia: fila.referencia,
-    comparada: fila.comparada,
-  }));
+  const funcionesPorTipoEmpresa = estadoBackend === "fallback" ? modelo.destinos : [];
+  const diferenciadores = estadoBackend === "fallback" ? modelo.diferenciadores : [];
+  const estado = (clave) => estadoBackend === "fallback"
+    ? {}
+    : estadosDatos[clave] || { cargando: true };
+  const etiquetaPeriodo = estadoBackend === "connected" && periodoConsulta
+    ? `${periodoConsulta.desde || ""} a ${periodoConsulta.hasta || ""}`
+    : periodo;
 
   function cambiarFacultad(evento) {
     const siguienteFacultad = evento.target.value;
@@ -162,7 +312,9 @@ export default function Dashboard() {
             </span>
           </Link>
           <div className="flex items-center gap-2">
-            <span className="hidden rounded-lg bg-ulima/10 px-2.5 py-1.5 text-xs font-bold text-ulima sm:inline">Datos de demostración</span>
+             <span className="hidden rounded-lg bg-ulima/10 px-2.5 py-1.5 text-xs font-bold text-ulima sm:inline">
+               {estadoBackend === "fallback" ? "Datos de demostración" : "Datos del grafo"}
+             </span>
             <Link href="/" className="inline-flex items-center gap-1.5 rounded-xl border border-line px-3 py-2 text-xs font-bold text-ink transition hover:border-ulima hover:text-ulima focus:outline-none focus:ring-2 focus:ring-ulima/40">
               <ArrowLeft size={14} /> Chat
             </Link>
@@ -181,66 +333,76 @@ export default function Dashboard() {
 
         <section aria-label="Filtros del dashboard" className="mb-9 rounded-2xl border border-line bg-paper p-4 shadow-sm sm:p-5">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Selector etiqueta="Facultad" valor={facultadId} onChange={cambiarFacultad} opciones={MOCK_FACULTADES} />
-            <Selector etiqueta="Carrera" valor={carrera.id} onChange={(evento) => setCarreraId(evento.target.value)} opciones={carrerasDeFacultad} />
-            <Selector etiqueta="Industria" valor={industriaId} onChange={(evento) => setIndustriaId(evento.target.value)} opciones={MOCK_INDUSTRIAS} />
-            <Selector etiqueta="Periodo" valor={periodo} onChange={(evento) => setPeriodo(evento.target.value)} opciones={MOCK_PERIODOS} />
-            <Selector etiqueta="Empresa de referencia" valor={empresaReferencia.id} onChange={cambiarEmpresaReferencia} opciones={MOCK_EMPRESAS} />
-            <Selector etiqueta="Empresa comparada" valor={empresaComparada.id} onChange={cambiarEmpresaComparada} opciones={MOCK_EMPRESAS} />
-            <Selector etiqueta="Función" valor={funcion.id} onChange={(evento) => setFuncionId(evento.target.value)} opciones={MOCK_FUNCIONES} />
+             {estadoBackend === "fallback" ? <Selector etiqueta="Facultad" valor={facultadId} onChange={cambiarFacultad} opciones={MOCK_FACULTADES} /> : null}
+             <Selector
+               etiqueta="Carrera"
+               valor={carrera.id}
+               onChange={(evento) => setCarreraId(evento.target.value)}
+               opciones={estadoBackend === "connected" ? carrerasDisponibles : carrerasDeFacultad}
+               disabled={estadoBackend === "loading" || estadoBackend === "error"}
+             />
+             {estadoBackend === "fallback" ? <Selector etiqueta="Industria" valor={industriaId} onChange={(evento) => setIndustriaId(evento.target.value)} opciones={MOCK_INDUSTRIAS} /> : null}
+             <Selector etiqueta="Periodo" valor={etiquetaPeriodo} onChange={(evento) => setPeriodo(evento.target.value)} opciones={estadoBackend === "connected" ? [etiquetaPeriodo] : MOCK_PERIODOS} disabled={estadoBackend === "connected"} />
+             {estadoBackend === "fallback" ? <Selector etiqueta="Empresa de referencia" valor={empresaReferencia.id} onChange={cambiarEmpresaReferencia} opciones={MOCK_EMPRESAS} /> : null}
+             {estadoBackend === "fallback" ? <Selector etiqueta="Empresa comparada" valor={empresaComparada.id} onChange={cambiarEmpresaComparada} opciones={MOCK_EMPRESAS} /> : null}
+             {estadoBackend === "fallback" ? <Selector etiqueta="Función" valor={funcion.id} onChange={(evento) => setFuncionId(evento.target.value)} opciones={MOCK_FUNCIONES} /> : null}
           </div>
           <p className="mt-3 text-xs leading-5 text-muted">
-            Esta pantalla usa datos de demostración. La versión conectada ejecutará las consultas generales para la vista macro y las específicas cuando se apliquen filtros.
+             {estadoBackend === "fallback"
+               ? "La API del dashboard no está disponible; se muestran datos de demostración y no se envían consultas al grafo."
+               : estadoBackend === "connected"
+                 ? "La vista conectada usa únicamente consultas fijas de solo lectura. Las métricas sin proyección activa se muestran como no disponibles."
+                 : errorBackend || "Cargando catálogo y período disponible del grafo…"}
           </p>
         </section>
 
         <Seccion icono={LineChart} titulo="Panorama laboral" descripcion="Responde dónde está la demanda, cómo evoluciona y qué conocimientos concentra el mercado.">
           <div className="grid gap-5 xl:grid-cols-12">
-            <TarjetaGrafico titulo="¿Cómo evolucionan las ofertas laborales?" descripcion="Volumen mensual de oportunidades para el período seleccionado." className="xl:col-span-6" accion={<span className="rounded-lg bg-ulima/10 px-2 py-1 text-[11px] font-bold text-ulima">{periodo}</span>}>
-              <TendenciaOfertasChart filas={modelo.tendencia} />
-            </TarjetaGrafico>
-            <TarjetaGrafico titulo="¿Qué carreras concentran mayor demanda?" descripcion="Ranking de carreras según las oportunidades vinculadas." className="xl:col-span-6">
-              <RankingDimensionChart tipo="demanda" filas={carrerasPorDemanda} />
-            </TarjetaGrafico>
-            <TarjetaGrafico titulo={`¿En qué industrias se publican ofertas para ${carrera.nombre}?`} descripcion="Sectores laborales con mayor cantidad de oportunidades para la carrera seleccionada." className="xl:col-span-6">
-              <RankingDimensionChart tipo="destinos" filas={industriasPorCarrera} />
-            </TarjetaGrafico>
-            <TarjetaGrafico titulo="¿Qué conocimientos demanda más el mercado?" descripcion="Conocimientos con mayor presencia en las ofertas analizadas." className="xl:col-span-6">
-              <RankingDimensionChart tipo="demanda" filas={modelo.demanda} />
+             <TarjetaGrafico titulo="¿Cómo evolucionan las ofertas laborales?" descripcion="Volumen mensual de oportunidades para el período seleccionado." className="xl:col-span-6" accion={<span className="rounded-lg bg-ulima/10 px-2 py-1 text-[11px] font-bold text-ulima">{etiquetaPeriodo}</span>}>
+               <TendenciaOfertasChart filas={modelo.tendencia} {...estado("tendencia")} />
+             </TarjetaGrafico>
+             <TarjetaGrafico titulo="¿Qué carreras concentran mayor demanda?" descripcion="Ranking de carreras según las oportunidades vinculadas." className="xl:col-span-6">
+               <RankingDimensionChart tipo="demanda" filas={carrerasPorDemanda} {...estado("carreras")} />
+             </TarjetaGrafico>
+             <TarjetaGrafico titulo={`¿En qué industrias se publican ofertas para ${carrera.nombre}?`} descripcion="Sectores laborales con mayor cantidad de oportunidades para la carrera seleccionada." className="xl:col-span-6">
+               <RankingDimensionChart tipo="destinos" filas={industriasPorCarrera} {...estado("industrias")} />
+             </TarjetaGrafico>
+             <TarjetaGrafico titulo="¿Qué conocimientos demanda más el mercado?" descripcion="Conocimientos con mayor presencia en las ofertas analizadas." className="xl:col-span-6">
+               <RankingDimensionChart tipo="demanda" filas={modelo.demanda} {...estado("demanda")} />
             </TarjetaGrafico>
           </div>
         </Seccion>
 
         <Seccion icono={GraduationCap} titulo="Alineación curricular" descripcion={`Muestra cómo ${carrera.nombre} se relaciona con las señales de ${industria.nombre.toLowerCase()}.`}>
           <div className="grid gap-5 xl:grid-cols-12">
-            <TarjetaGrafico titulo="¿Qué conocimientos ya cubre el currículo?" descripcion="Presencia de conocimientos en los cursos de la carrera seleccionada." className="xl:col-span-6">
-              <RankingDimensionChart tipo="cobertura" filas={coberturaCurricular} />
-            </TarjetaGrafico>
-            <TarjetaGrafico titulo="¿Qué conocimientos demandados presentan una brecha?" descripcion="Comparación entre la demanda laboral y la presencia declarada en cursos." className="xl:col-span-6">
-              <BrechaCurriculoMercadoChart filas={modelo.brechas} disponible />
-            </TarjetaGrafico>
-            <TarjetaGrafico titulo="¿Qué cursos requieren revisar su vigencia?" descripcion="Señales de actualización frente a señales que requieren revisión." className="xl:col-span-6">
-              <BarrasComparativasChart filas={modelo.vigencia} series={seriesVigencia} />
-            </TarjetaGrafico>
-            <TarjetaGrafico titulo="¿Qué cursos tienen mayor correspondencia con el mercado?" descripcion="Cursos donde la oferta formativa se conecta con las señales de demanda." className="xl:col-span-6">
-              <BarrasComparativasChart filas={modelo.cursos} series={seriesCursos} />
+             <TarjetaGrafico titulo="¿Qué conocimientos ya cubre el currículo?" descripcion="Presencia de conocimientos en los cursos de la carrera seleccionada." className="xl:col-span-6">
+               <RankingDimensionChart tipo="cobertura" filas={coberturaCurricular} disponible={estadoBackend === "fallback" || datosApi.cobertura.length > 0} motivo={estadoBackend === "connected" && !datosApi.cobertura.length ? "No hay cobertura curricular para esta dimensión." : undefined} {...estado("cobertura")} />
+             </TarjetaGrafico>
+             <TarjetaGrafico titulo="¿Qué conocimientos demandados presentan una brecha?" descripcion="Comparación entre la demanda laboral y la presencia declarada en cursos." className="xl:col-span-6">
+               <BrechaCurriculoMercadoChart filas={modelo.brechas} disponible={estadoBackend === "fallback" || datosApi.brechas.length > 0} motivo={estadoBackend === "connected" && !datosApi.brechas.length ? "No hay elementos comparables para estos filtros." : undefined} {...estado("brechas")} />
+             </TarjetaGrafico>
+             <TarjetaGrafico titulo="¿Qué cursos requieren revisar su vigencia?" descripcion="Señales de actualización frente a señales que requieren revisión." className="xl:col-span-6">
+               {estadoBackend === "fallback" ? <BarrasComparativasChart filas={modelo.vigencia} series={seriesVigencia} /> : <EstadoGrafico vacio mensajeVacio={UNSUPPORTED_MESSAGE} />}
+             </TarjetaGrafico>
+             <TarjetaGrafico titulo="¿Qué cursos tienen mayor correspondencia con el mercado?" descripcion="Cursos donde la oferta formativa se conecta con las señales de demanda." className="xl:col-span-6">
+               {estadoBackend === "fallback" ? <BarrasComparativasChart filas={modelo.cursos} series={seriesCursos} /> : <EstadoGrafico vacio mensajeVacio={UNSUPPORTED_MESSAGE} />}
             </TarjetaGrafico>
           </div>
         </Seccion>
 
         <Seccion icono={BriefcaseBusiness} titulo="Empresas y funciones" descripcion="Permite contrastar empresas y entender los conocimientos y funciones que demandan.">
           <div className="grid gap-5 xl:grid-cols-12">
-            <TarjetaGrafico titulo="¿Qué empresas concentran oportunidades y conocimientos?" descripcion="Empresas con mayor volumen de oportunidades en el contexto seleccionado." className="xl:col-span-6">
-              <RankingDimensionChart tipo="empresas" filas={modelo.empresasTop} />
-            </TarjetaGrafico>
-            <TarjetaGrafico titulo={`¿Qué conocimientos diferencian a ${empresaReferencia.nombre} de ${empresaComparada.nombre}?`} descripcion="Comparación de presencia de conocimientos entre las empresas seleccionadas." className="xl:col-span-6">
-              <BarrasComparativasChart filas={diferenciadores} series={seriesEmpresas} />
-            </TarjetaGrafico>
-            <TarjetaGrafico titulo={`¿Cuáles son los conocimientos núcleo para ${funcion.nombre}?`} descripcion="Conocimientos más conectados con las oportunidades de la función seleccionada." className="xl:col-span-6">
-              <RankingDimensionChart tipo="demanda" filas={modelo.demanda} />
-            </TarjetaGrafico>
-            <TarjetaGrafico titulo={`¿Cómo varían las funciones para ${carrera.nombre} según el tipo de empresa?`} descripcion="Funciones con mayor presencia por tipo o sector de empresa." className="xl:col-span-6">
-              <RankingDimensionChart tipo="destinos" filas={funcionesPorTipoEmpresa} />
+             <TarjetaGrafico titulo="¿Qué empresas concentran oportunidades y conocimientos?" descripcion="Empresas con mayor volumen de oportunidades en el contexto seleccionado." className="xl:col-span-6">
+               <RankingDimensionChart tipo="empresas" filas={modelo.empresasTop} {...estado("empresasTop")} />
+             </TarjetaGrafico>
+             <TarjetaGrafico titulo={`¿Qué conocimientos diferencian a ${empresaReferencia.nombre} de ${empresaComparada.nombre}?`} descripcion="Comparación de presencia de conocimientos entre las empresas seleccionadas." className="xl:col-span-6">
+               {estadoBackend === "fallback" ? <BarrasComparativasChart filas={diferenciadores} series={seriesEmpresas} /> : <EstadoGrafico vacio mensajeVacio={UNSUPPORTED_MESSAGE} />}
+             </TarjetaGrafico>
+             <TarjetaGrafico titulo={`¿Cuáles son los conocimientos núcleo para ${funcion.nombre}?`} descripcion="Conocimientos más conectados con las oportunidades de la función seleccionada." className="xl:col-span-6">
+               {estadoBackend === "fallback" ? <RankingDimensionChart tipo="demanda" filas={modelo.demanda} /> : <EstadoGrafico vacio mensajeVacio={UNSUPPORTED_MESSAGE} />}
+             </TarjetaGrafico>
+             <TarjetaGrafico titulo={`¿Cómo varían las funciones para ${carrera.nombre} según el tipo de empresa?`} descripcion="Funciones con mayor presencia por tipo o sector de empresa." className="xl:col-span-6">
+               {estadoBackend === "fallback" ? <RankingDimensionChart tipo="destinos" filas={funcionesPorTipoEmpresa} /> : <EstadoGrafico vacio mensajeVacio={UNSUPPORTED_MESSAGE} />}
             </TarjetaGrafico>
           </div>
         </Seccion>

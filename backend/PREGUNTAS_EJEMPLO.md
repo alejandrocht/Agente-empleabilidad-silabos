@@ -1,4 +1,9 @@
-# Preguntas de ejemplo
+# Catálogo de preguntas de aceptación
+
+Estas preguntas sirven como catálogo de aceptación para el agente CIAR actual. La
+implementación activa es el paquete `backend/agente`, no el paquete histórico
+`backend/src/agente`. Las respuestas que requieren datos deben usar consultas Cypher de
+solo lectura y respetar el schema vigente de Neo4j.
 
 ## Currícula
 

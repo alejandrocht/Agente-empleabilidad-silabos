@@ -31,7 +31,7 @@ const SUGERENCIAS = [
   },
 ];
 
-export default function ListaMensajes({ mensajes, enviando, onSugerencia }) {
+export default function ListaMensajes({ mensajes, enviando, mensajeStreaming, onSugerencia }) {
   if (mensajes.length === 0 && !enviando) {
     return (
       <div className="flex flex-1 items-center justify-center py-8 sm:py-12">
@@ -76,7 +76,11 @@ export default function ListaMensajes({ mensajes, enviando, onSugerencia }) {
       {mensajes.map((mensaje, index) => (
         <Burbuja key={`${mensaje.rol}-${index}`} mensaje={mensaje} />
       ))}
-      {enviando ? <Burbuja mensaje={{ rol: "agente", cargando: true }} /> : null}
+      {mensajeStreaming ? (
+        <Burbuja mensaje={{ rol: "agente", ...mensajeStreaming }} />
+      ) : enviando ? (
+        <Burbuja mensaje={{ rol: "agente", cargando: true }} />
+      ) : null}
     </div>
   );
 }

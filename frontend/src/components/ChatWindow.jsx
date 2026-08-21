@@ -4,12 +4,12 @@ import BarraInput from "./BarraInput";
 import ListaMensajes from "./ListaMensajes";
 
 export default function ChatWindow({ conversacion, agregarMensaje }) {
-  const { enviar, enviando, errorRed } = useChat({ conversacion, agregarMensaje });
+  const { enviar, enviando, errorRed, mensajeStreaming } = useChat({ conversacion, agregarMensaje });
   const finRef = useRef(null);
 
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [conversacion?.mensajes.length, enviando]);
+  }, [conversacion?.mensajes.length, enviando, mensajeStreaming?.texto, mensajeStreaming?.cypher, mensajeStreaming?.fase]);
 
   return (
     <div id="main-content" tabIndex={-1} className="canvas-dots flex min-h-0 flex-1 flex-col">
@@ -24,13 +24,14 @@ export default function ChatWindow({ conversacion, agregarMensaje }) {
         <ListaMensajes
           mensajes={conversacion?.mensajes ?? []}
           enviando={enviando}
+          mensajeStreaming={mensajeStreaming}
           onSugerencia={enviar}
         />
         <div ref={finRef} />
         </div>
       </div>
 
-      <BarraInput onEnviar={enviar} disabled={enviando} />
+      <BarraInput onEnviar={enviar} disabled={enviando} fase={mensajeStreaming?.fase} />
     </div>
   );
 }

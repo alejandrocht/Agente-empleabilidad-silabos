@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
-"""Punto de entrada interactivo del agente CIAR v2."""
+"""Minimal interactive console for the current async CIAR graph API."""
 
 from __future__ import annotations
 
-import uuid
-from typing import Any
+import asyncio
+import os
+import sys
+from pathlib import Path
 
-from agente.config import settings as _settings  # noqa: F401
-from agente.grafo.constructor import construir_grafo
-from agente.observabilidad.logger import log_fin_turno
+# Allow running this script directly from the backend directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# In interactive mode we want the human-readable verbose trace; keep the
+# structured operational logs quiet unless the user explicitly configured them.
+os.environ.setdefault("CIAR_LOG_LEVEL", "WARNING")
+
+from agente.grafo.constructor import responder
 
 
-def run_console() -> None:
-    """Mantiene una sesión y muestra cada nodo, Cypher y respuesta del turno."""
-    grafo = construir_grafo()
-    id_sesion = f"ciar-console-{uuid.uuid4().hex[:8]}"
-    print("Agente CIAR consola v2")
+async def run_console() -> None:
+    """Read questions and invoke the current async graph entry point."""
+    print("Agente CIAR")
     print("Escribe tu pregunta. Comando para salir: /salir\n")
 
     while True:
@@ -24,41 +29,26 @@ def run_console() -> None:
         except (EOFError, KeyboardInterrupt):
             print()
             break
+
         if not pregunta:
             continue
-        if pregunta.lower() in {"/salir", "salir", "exit", "quit"}:
+        if pregunta.lower() == "/salir":
             break
 
-        config = {"configurable": {"thread_id": id_sesion}, "recursion_limit": 20}
-        estado_final: dict[str, Any] = {}
-        pasos: list[str] = []
         try:
-            print("  [Flujo] Iniciando recorrido...")
-            for paso in grafo.stream(
-                {"pregunta": pregunta, "id_sesion": id_sesion},
-                config=config,
-                stream_mode="updates",
-            ):
-                for nombre_nodo, cambios in paso.items():
-                    pasos.append(nombre_nodo)
-                    print(f"  [Flujo] {nombre_nodo}")
-                    if cambios:
-                        if cambios.get("cypher"):
-                            print(f"  [Cypher] {cambios['cypher']}")
-                        if cambios.get("error"):
-                            print(f"  [Bloqueado] {cambios['error']}")
-                        estado_final.update(cambios)
-            respuesta = str(estado_final.get("respuesta", "(sin respuesta)"))
-            log_fin_turno(id_sesion, respuesta, pasos)
-            print(f"\n[Respuesta] {respuesta}\n")
+            respuesta = await responder(pregunta, verbose=True)
         except Exception as exc:
-            print(f"\nError del agente: {exc}\n")
+            print(f"\nError del agente ({type(exc).__name__}). Intenta nuevamente.\n")
+            continue
+
+        print(f"\n[Respuesta] {respuesta}\n")
+
     print("Listo.")
 
 
 def main() -> None:
-    """Arranca la consola después de que settings haya cargado el entorno."""
-    run_console()
+    """Start the async console loop."""
+    asyncio.run(run_console())
 
 
 if __name__ == "__main__":

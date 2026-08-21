@@ -8,9 +8,18 @@ const chartConfig = {
   ofertas: { label: "Ofertas", color: "#FF5117" },
 };
 
-export default function TendenciaOfertasChart({ filas }) {
+export default function TendenciaOfertasChart({ filas, cargando, error, disponible = true, motivo }) {
   const datos = filas || [];
-  if (!datos.length) return <EstadoGrafico vacio />;
+  if (cargando || error || !disponible || !datos.length) {
+    return (
+      <EstadoGrafico
+        cargando={cargando}
+        error={error}
+        vacio={!disponible || !datos.length}
+        mensajeVacio={motivo || "No hay datos para estos filtros."}
+      />
+    );
+  }
 
   return (
     <ChartContainer config={chartConfig} className="h-72 min-h-[18rem] w-full">

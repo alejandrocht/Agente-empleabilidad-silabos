@@ -2,12 +2,24 @@
 
 import { Bar, BarChart, CartesianGrid, Legend, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "../ui/chart";
+import EstadoGrafico from "./EstadoGrafico";
 
 function abreviar(valor) {
   return valor.length > 25 ? valor.slice(0, 24) + "…" : valor;
 }
 
-export default function BarrasComparativasChart({ filas, series, etiquetaEje = "elemento", apiladas = false }) {
+export default function BarrasComparativasChart({ filas, series, etiquetaEje = "elemento", apiladas = false, cargando, error, disponible = true, motivo }) {
+  if (cargando || error || !disponible || !filas?.length) {
+    return (
+      <EstadoGrafico
+        cargando={cargando}
+        error={error}
+        vacio={!disponible || !filas?.length}
+        mensajeVacio={motivo || "No hay datos para estos filtros."}
+      />
+    );
+  }
+
   const config = Object.fromEntries(
     series.map((serie) => [serie.clave, { label: serie.etiqueta, color: serie.color }]),
   );

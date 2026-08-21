@@ -1,10 +1,14 @@
-﻿# Dashboard CIAR: preguntas, métricas y consultas fijas
+﻿# Dashboard CIAR: questions, metrics, fixed queries, and active boundary
 
 ## Decisión
 
 El producto será un **dashboard general con filtros progresivos y drill-down**, organizado en tres secciones: **Panorama laboral**, **Alineación curricular** y **Empresas y funciones**.
 
-La vista inicial debe explicar el panorama sin configuración. Los filtros refinan el mismo contexto y el clic sobre una entidad abre un detalle acotado. El dashboard no ejecutará preguntas libres ni Cypher generado por un LLM: cada visualización consumirá uno de los 12 datasets fijos definidos en `backend/src/agente/dashboard/`.
+The initial view should explain the market panorama without configuration. Filters refine
+the same context and selecting an entity opens a bounded detail view. The original product
+contract below describes 12 planned datasets; the active implementation boundary is
+documented explicitly in the English section below and does not restore
+`backend/src/agente/dashboard/`.
 
 ## Quick path
 
@@ -14,6 +18,57 @@ La vista inicial debe explicar el panorama sin configuración. Los filtros refin
 4. Revisar numeradores, denominadores y estado de disponibilidad antes de interpretar el resultado.
 
 > **Regla de producto:** general primero, contexto después, detalle bajo demanda. Ninguna vista general devuelve matrices exhaustivas.
+
+## Active implementation contract
+
+The active dashboard code is under `backend/agente/dashboard/`, served by
+`backend/api/servidor.py`, and executed through the guarded async gateway in
+`backend/agente/utils/db.py`. Every query is allow-listed, parameter-validated, checked
+with `EXPLAIN`, routed with Neo4j `READ`, normalized, and bounded. Endpoints never accept
+Cypher text.
+
+### Current endpoints
+
+- `GET /dashboard/metadata`
+- `GET /dashboard/filtros/carreras`
+- `GET /dashboard/ofertas/tendencia?desde=...&hasta=...&carrera_id=...`
+- `GET /dashboard/carreras/demanda?desde=...&hasta=...&limite=...`
+- `GET /dashboard/carreras/{carrera_id}/industrias?desde=...&hasta=...&limite=...`
+- `GET /dashboard/empresas?desde=...&hasta=...&limite=...`
+- `GET /dashboard/dimensiones/{tipo}/demanda?carrera_id=...&desde=...&hasta=...&limite=...`
+- `GET /dashboard/dimensiones/{tipo}/cobertura?carrera_id=...&limite=...`
+- `GET /dashboard/dimensiones/{tipo}/brechas?carrera_id=...&desde=...&hasta=...&limite=...`
+- `GET /dashboard/dimensiones/{tipo}/industrias?elemento_id=...&desde=...&hasta=...&limite=...`
+
+The active `tipo` values are `competencias`, `habilidades`, and `herramientas`. The API
+validates IDs, dates, and limits before accessing Neo4j.
+
+### Supported and deferred datasets
+
+The metadata contract currently reports seven supported datasets:
+
+`tendencia_ofertas`, `carreras_con_mayor_demanda`, `industrias_por_carrera`,
+`conocimientos_mas_demandados`, `cobertura_curricular`, `brechas_demanda_alta`, and
+`empresas_y_conocimientos`.
+
+The following five datasets are intentionally deferred and are returned as unsupported
+metadata, not fabricated results: `senales_revision_vigencia`,
+`cursos_con_mayor_correspondencia`, `diferenciadores_empresas`,
+`conocimientos_liderazgo`, and `funciones_por_tipo_empresa`. They require validated
+projections that the active schema does not currently provide.
+
+The frontend uses labeled demonstration data only when the dashboard API is unavailable.
+When the API is available, deferred datasets show an unsupported empty state and an empty
+live dataset is not converted into demo data. An individual query failure is not hidden by
+the demo fallback.
+
+### Offline and live-only acceptance
+
+Offline checks are catalog validation, `py_compile`/`compileall`, Ruff, mypy, backend tests,
+and frontend checks when affected. Live-only acceptance consists of running the allow-listed
+queries against the deployed Neo4j schema, including `EXPLAIN`, cardinality, data support,
+and performance checks. Live-only acceptance is not claimed by local tests and is deferred
+when Neo4j is unavailable.
 
 ## Qué puede afirmar el dashboard
 
@@ -131,7 +186,7 @@ Si `Oferta_Laboral` está vacío, la serie P1 devuelve `no_data`. Las demás pla
 críticas protegen `fecha_corte` nula y devuelven un dataset vacío, que el API deberá traducir al
 mismo estado `no_data` sin fabricar períodos o rankings.
 
-## Arquitectura del catálogo
+## Historical catalog architecture
 
 ```text
 backend/src/agente/dashboard/
@@ -145,7 +200,15 @@ backend/scripts/
 └── ejecutar_consultas_estrategicas.py
 ```
 
-El runner mantiene `--listar`, `--vista general|especifica` y `--mostrar-query`. Ejecuta Neo4j directamente en modo lectura; no usa LangGraph, OpenAI ni APOC.
+The `src/agente` catalog and `ejecutar_consultas_estrategicas.py` runner above are
+historical and are not current commands. They are retained as product-design context.
+
+## Active implementation reference
+
+For implementation work, use the English active implementation contract above and these
+current modules: `backend/agente/dashboard/consultas.py`,
+`backend/agente/dashboard/servicio.py`, `backend/agente/cache/consultas.py`,
+`backend/agente/utils/db.py`, and `backend/api/servidor.py`.
 
 ## Plan de entrega por work units
 
@@ -194,7 +257,11 @@ El runner mantiene `--listar`, `--vista general|especifica` y `--mostrar-query`.
 - Medir tiempos y soportes reales.
 - Ajustar top-N y advertencias sin cambiar la semántica de las métricas.
 
-## Criterios de aceptación de WU1
+## Historical WU1 acceptance (live-only items explicitly marked)
+
+The checklist below belongs to the original 12-dataset product work unit. It is retained
+for traceability, not as proof that the active backend implements all 12 datasets. The
+active seven-supported/five-deferred contract and offline/live boundary are defined above.
 
 - [ ] Existen exactamente 12 slugs únicos, cuatro por sección.
 - [ ] Cada general contiene cero referencias a parámetros y respeta su límite declarado.
@@ -206,7 +273,10 @@ El runner mantiene `--listar`, `--vista general|especifica` y `--mostrar-query`.
 - [ ] `py_compile`, Ruff y mypy strict pasan sobre catálogo y runner.
 - [ ] No se modifican endpoints ni frontend en este work unit.
 
-## Referencia operativa
+## Historical runner reference
+
+The commands below target the deleted strategic-query runner and are historical only. Use
+the current API and backend verification commands in the active contract above.
 
 ```powershell
 cd backend

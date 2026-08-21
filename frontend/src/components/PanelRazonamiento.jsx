@@ -1,5 +1,5 @@
 import { Check, ChevronDown, Clipboard, Hexagon, ShieldAlert } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const COLOR_LABEL = {
   empresa: "#3D7A9E",
@@ -35,10 +35,57 @@ function resaltarCypher(cypher) {
   );
 }
 
-export default function PanelRazonamiento({ pasos = [], cypher, entidades, error, errorRed }) {
-  const [abierto, setAbierto] = useState(false);
+const SECURITY_ERROR_CODES = new Set([
+  "cypher_injection",
+  "prompt_injection",
+  "query_blocked",
+  "read_only_blocked",
+  "readonly_blocked",
+]);
+
+export function detalleError(error) {
+  if (error === "planner_failed") {
+    return {
+      kind: "planner",
+      text: "No pude interpretar la consulta. Podés reformularla e intentarlo de nuevo.",
+    };
+  }
+
+  if (error === "entity_resolution_failed") {
+    return {
+      kind: "entity",
+      text: "No pude identificar una entidad única para esa consulta. Intentá ser más específico.",
+    };
+  }
+
+  if (SECURITY_ERROR_CODES.has(error)) {
+    return {
+      kind: "security",
+      text: "Consulta bloqueada por seguridad. El agente conserva la política de solo lectura.",
+    };
+  }
+
+  return {
+    kind: "default",
+    text: "No se pudo procesar la consulta. Intentá nuevamente.",
+  };
+}
+
+export default function PanelRazonamiento({
+  pasos = [],
+  cypher = "",
+  entidades = [],
+  error = "",
+  errorRed = "",
+}) {
+  const [abierto, setAbierto] = useState(Boolean(cypher));
   const [copiado, setCopiado] = useState(false);
   const tieneDetalle = cypher || entidades.length > 0 || error || errorRed || pasos.length > 0;
+  const detalle = error ? detalleError(error) : null;
+
+  useEffect(() => {
+    if (cypher) setAbierto(true);
+  }, [cypher]);
 
   if (!tieneDetalle) return null;
 
@@ -69,7 +116,7 @@ export default function PanelRazonamiento({ pasos = [], cypher, entidades, error
           {error ? (
             <div className="mt-3 flex gap-2 rounded-[10px] bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
               <ShieldAlert size={18} className="shrink-0" />
-              Consulta no permitida. El agente conserva la política de solo lectura.
+              {detalle.text}
             </div>
           ) : null}
 

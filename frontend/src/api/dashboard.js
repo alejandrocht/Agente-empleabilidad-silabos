@@ -8,11 +8,13 @@ function construirUrl(ruta, parametros = {}) {
   return query ? ruta + "?" + query : ruta;
 }
 
-async function solicitar(ruta, parametros) {
-  const respuesta = await fetch(construirUrl(ruta, parametros));
+async function solicitar(ruta, parametros, opciones = {}) {
+  const respuesta = await fetch(construirUrl(ruta, parametros), opciones);
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok) {
-    throw new Error(datos.detail || "No se pudieron cargar los datos del dashboard.");
+    const error = new Error(datos.detail || "No se pudieron cargar los datos del dashboard.");
+    error.status = respuesta.status;
+    throw error;
   }
   return datos;
 }
@@ -44,3 +46,31 @@ export function obtenerBrechasDashboard(tipo, parametros) {
 export function obtenerIndustriasDashboard(tipo, parametros) {
   return solicitar("/api/dashboard/dimensiones/" + tipo + "/industrias", parametros);
 }
+
+export function obtenerCarrerasPorDemandaDashboard(parametros) {
+  return solicitar("/api/dashboard/carreras/demanda", parametros);
+}
+
+export function obtenerIndustriasPorCarreraDashboard(carreraId, parametros) {
+  return solicitar("/api/dashboard/carreras/" + encodeURIComponent(carreraId) + "/industrias", parametros);
+}
+
+export function obtenerEmpresasDashboard(parametros) {
+  return solicitar("/api/dashboard/empresas", parametros);
+}
+
+export function esBackendNoDisponible(error) {
+  return error instanceof TypeError || Number(error?.status) >= 500;
+}
+
+export const dashboardApi = {
+  obtenerMetadatosDashboard,
+  obtenerCarrerasDashboard,
+  obtenerTendenciaDashboard,
+  obtenerDemandaDashboard,
+  obtenerCoberturaDashboard,
+  obtenerBrechasDashboard,
+  obtenerCarrerasPorDemandaDashboard,
+  obtenerIndustriasPorCarreraDashboard,
+  obtenerEmpresasDashboard,
+};

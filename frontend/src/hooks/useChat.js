@@ -1,53 +1,67 @@
-import { useRef, useState } from "react";
-import { enviarPregunta } from "../api/agente";
+import { useMemo, useRef } from "react";
+import { useStream, FetchStreamTransport } from "@langchain/langgraph-sdk/react";
+
+export function normalizeChatValues(values) {
+  const source = values && typeof values === "object" && !Array.isArray(values) ? values : {};
+  return {
+    texto: typeof source.respuesta === "string" ? source.respuesta : "",
+    cypher: typeof source.cypher === "string" ? source.cypher : "",
+    fase: typeof source.fase === "string" ? source.fase : "",
+    entidades: Array.isArray(source.entidades) ? source.entidades : [],
+    filas: Array.isArray(source.filas) ? source.filas : [],
+    pasos: Array.isArray(source.pasos) ? source.pasos : [],
+    error: typeof source.error === "string" ? source.error : "",
+  };
+}
 
 export function useChat({ conversacion, agregarMensaje }) {
-  const [enviando, setEnviando] = useState(false);
-  const [errorRed, setErrorRed] = useState(null);
-  const bloqueo = useRef(false);
+  const agregarRef = useRef(agregarMensaje);
+  const conversacionRef = useRef(conversacion);
+  agregarRef.current = agregarMensaje;
+  conversacionRef.current = conversacion;
 
-  const enviar = async (texto) => {
+  const transport = useMemo(
+    () => new FetchStreamTransport({ apiUrl: "/chat/stream" }),
+    []
+  );
+
+  const { values, submit, isLoading, error } = useStream({
+    transport,
+    threadId: conversacion?.id_sesion ?? null,
+    onFinish: (finalState) => {
+      const conv = conversacionRef.current;
+      const finalValues = normalizeChatValues(finalState?.values);
+      if (!conv || !finalValues.texto) return;
+      agregarRef.current(conv.id, {
+        rol: "agente",
+        texto: finalValues.texto,
+        cypher: finalValues.cypher,
+        fase: finalValues.fase,
+        entidades: finalValues.entidades,
+        filas: finalValues.filas,
+        pasos: finalValues.pasos,
+        error: finalValues.error,
+        creado: Date.now(),
+      });
+    },
+  });
+
+  const enviar = (texto) => {
     const pregunta = texto.trim();
-    if (!pregunta || bloqueo.current || !conversacion) return;
-
-    bloqueo.current = true;
-    setErrorRed(null);
+    if (!pregunta || isLoading || !conversacion) return;
     agregarMensaje(conversacion.id, { rol: "usuario", texto: pregunta, creado: Date.now() });
-    setEnviando(true);
-
-    try {
-      const data = await enviarPregunta({
-        pregunta,
-        idSesion: conversacion.id_sesion,
-      });
-      agregarMensaje(conversacion.id, {
-        rol: "agente",
-        texto: data.respuesta,
-        cypher: data.cypher,
-        entidades: data.entidades ?? [],
-        filas: data.filas ?? [],
-        pasos: data.pasos ?? [],
-        error: data.error ?? null,
-        creado: Date.now(),
-      });
-    } catch (err) {
-      const mensaje = err.message || "No se pudo contactar al agente.";
-      setErrorRed(mensaje);
-      agregarMensaje(conversacion.id, {
-        rol: "agente",
-        texto: "No se pudo contactar al agente.",
-        errorRed: mensaje,
-        pasos: [],
-        filas: [],
-        entidades: [],
-        cypher: null,
-        creado: Date.now(),
-      });
-    } finally {
-      bloqueo.current = false;
-      setEnviando(false);
-    }
+    submit({ pregunta });
   };
 
-  return { enviar, enviando, errorRed };
+  const streamingValues = normalizeChatValues(values);
+  const mensajeStreaming = isLoading
+    ? { ...streamingValues, streaming: true }
+    : null;
+
+  return {
+    enviar,
+    enviando: isLoading,
+    errorRed: typeof error?.message === "string" ? error.message : "",
+    mensajeStreaming,
+  };
 }

@@ -3,7 +3,15 @@ import { useEffect, useRef, useState } from "react";
 
 const MAX_CHARS = 500;
 
-export default function BarraInput({ onEnviar, disabled }) {
+const ETIQUETAS_FASE = {
+  analizando: "Analizando tu consulta…",
+  preparando_consulta: "Preparando la consulta…",
+  validando_consulta: "Validando consulta…",
+  consultando_grafo: "Consultando el grafo…",
+  redactando: "Escribiendo la respuesta…",
+};
+
+export default function BarraInput({ onEnviar, disabled, fase = "" }) {
   const [texto, setTexto] = useState("");
   const areaRef = useRef(null);
 
@@ -55,7 +63,7 @@ export default function BarraInput({ onEnviar, disabled }) {
           </button>
         </div>
         <div className="flex items-center justify-between px-1.5 pt-2 text-[11px] text-muted">
-          <span>{disabled ? "Recorriendo el grafo…" : "Enter para enviar · Shift + Enter para una nueva línea"}</span>
+          <span>{disabled ? ETIQUETAS_FASE[fase] || "Procesando tu consulta…" : "Enter para enviar · Shift + Enter para una nueva línea"}</span>
           <span className={`font-mono ${texto.length > 450 ? "font-semibold text-ulima" : ""}`}>
             {texto.length}/{MAX_CHARS}
           </span>

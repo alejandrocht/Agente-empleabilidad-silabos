@@ -1,4 +1,4 @@
-const backendUrl = process.env.API_URL || "http://127.0.0.1:8001";
+const backendUrl = process.env.API_URL || "http://127.0.0.1:8002";
 
 const nextConfig = {
   experimental: {
@@ -10,6 +10,10 @@ const nextConfig = {
       {
         source: "/chat",
         destination: `${backendUrl}/chat`,
+      },
+      {
+        source: "/chat/stream",
+        destination: `${backendUrl}/chat/stream`,
       },
       {
         source: "/health",

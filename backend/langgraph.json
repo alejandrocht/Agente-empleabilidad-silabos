@@ -1,7 +1,7 @@
 {
   "dependencies": ["."],
   "graphs": {
-    "agente": "./src/agente/grafo/constructor.py:construir_grafo"
+    "agente": "./agente/grafo/constructor.py:langgraph_entrypoint"
   },
   "env": ".env"
 }

@@ -27,7 +27,7 @@ las cumple, no se acepta.
 
 ---
 
-## 2. Infraestructura — orden de carpetas profesional
+## 2. Historical target infrastructure — preserved for migration context
 
 ### 2.1 Qué dicen las convenciones (investigación)
 
@@ -56,7 +56,7 @@ Fuentes:
 - [The Cleanest Way to Structure a Python Project in 2025 — Medium](https://medium.com/the-pythonworld/the-cleanest-way-to-structure-a-python-project-in-2025-4f04ccb8602f)
 - [langgraph-example-pyproject — GitHub](https://github.com/langchain-ai/langgraph-example-pyproject)
 
-### 2.2 Estructura objetivo (árbol comentado)
+### 2.2 Historical target structure (superseded by the active snapshot)
 
 Mantenemos `backend/` y `frontend/` como dos aplicaciones separadas (monorepo). El backend
 adopta el layout `src/` profesional. Los nombres de módulos se mantienen en español para ser
@@ -160,7 +160,7 @@ Agente-empleabilidad-silabos/
 └── sesiones/                             ← Historial técnico
 ```
 
-### 2.3 Archivos raíz clave
+### 2.3 Historical root-file examples
 
 **`backend/pyproject.toml`** — dependencias y config de calidad:
 
@@ -231,7 +231,7 @@ build-backend = "setuptools.build_meta"
 
 ---
 
-## 3. Cómo cada problema del XML se resuelve (mapa problema → fase)
+## 3. Historical problem-to-phase map
 
 | Problema del diagrama XML | Se resuelve en |
 |---------------------------|----------------|
@@ -246,7 +246,7 @@ build-backend = "setuptools.build_meta"
 
 ---
 
-## 4. Fases de implementación
+## 4. Historical implementation phases
 
 Cada fase tiene: **Objetivo · Depende de · Archivos · Código clave (comentado) · Reglas
 aplicadas · Pruebas de auditoría · Criterio de aceptación.**
@@ -799,6 +799,32 @@ plantillas parametrizadas. Reduce costo y da reproducibilidad.
 | 18 | `silabo_de_curso` | sílabo de cálculo I | Curso |
 | 19 | `carreras_que_tienen_curso` | ¿qué carreras tienen estadística? | Curso |
 | 20 | `cursos_para_competencia` | cursos que desarrollan liderazgo | Competencia |
+
+**Estado en la arquitectura activa (`backend/agente`):** el catálogo inmutable conserva
+los 10 IDs laborales existentes y ahora contiene 10 consultas laborales adicionales. Los
+IDs `top_empresas_ofertas` e `industrias_con_mas_ofertas` del plan están cubiertos por
+`empresas_mayor_ofertas` e `industrias_mayor_demanda`; no se crean alias duplicados.
+El catálogo activo también publica patrones completos para las preguntas comunes que pueden
+resolverse de forma determinista. El nodo `seleccionar_plantilla_rapida` los normaliza solo
+para comparar ortografía, conserva los parámetros explícitos de la entrada, valida todos los
+parámetros requeridos y vuelve a aplicar `guard_cypher` antes de crear el plan. Una coincidencia
+ambigua, incompleta o no soportada vuelve a `obtiene_contexto_corto -> planificador`; no hay
+fuzzy matching ni resolución implícita de entidades.
+
+**Entradas diferidas explícitas:** no se implementan hasta que el schema del backend activo
+publique etiquetas, propiedades y relaciones académicas verificables:
+
+| ID del plan | Motivo de diferimiento |
+|---|---|
+| `contar_carreras` | El contrato de schema disponible para `backend/agente` no incluye el subgrafo académico. |
+| `listar_carreras` | El contrato de schema disponible para `backend/agente` no incluye el subgrafo académico. |
+| `cursos_de_carrera` | Requiere una relación Carrera–Curso no confirmada por el schema activo. |
+| `contar_cursos_de_carrera` | Requiere una relación Carrera–Curso no confirmada por el schema activo. |
+| `facultad_de_carrera` | Requiere etiquetas y relación Facultad–Carrera no confirmadas por el schema activo. |
+| `herramientas_de_carrera` | Requiere relaciones curriculares no confirmadas por el schema activo. |
+| `silabo_de_curso` | Requiere una entidad o relación de sílabo no confirmada por el schema activo. |
+| `carreras_que_tienen_curso` | Requiere una relación Carrera–Curso no confirmada por el schema activo. |
+| `cursos_para_competencia` | Requiere el subgrafo curricular y sus relaciones de cobertura no confirmados. |
 
 **Estructura de una plantilla (patrón para las 20):**
 
