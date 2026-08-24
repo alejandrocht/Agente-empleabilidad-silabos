@@ -2,6 +2,8 @@ import asyncio
 import hashlib
 import hmac
 import json
+import math
+import os
 import secrets
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
@@ -28,6 +30,11 @@ from agente.utils.validacion import EntradaInvalida, validar_pregunta
 USER_FACING_STREAM_NODES: frozenset[str] = frozenset()
 STREAM_TEXT_CHUNK_SIZE = 8
 STREAM_TEXT_CHUNK_DELAY_SECONDS = 0.04
+DEFAULT_GRAPH_TIMEOUT_SECONDS = 90.0
+GRAPH_TIMEOUT_RESPONSE = (
+    "La consulta tardó más de lo esperado y fue detenida de forma segura. "
+    "Intentá nuevamente o formulala de manera más específica."
+)
 PUBLIC_TEXT_FIELDS = ("respuesta", "error")
 PUBLIC_LIST_FIELDS = ("filas",)
 PUBLIC_PHASES = frozenset(
@@ -146,6 +153,18 @@ def _validate_public_question(value: object, route: str) -> str:
         length=len(validated),
     )
     return validated
+
+
+def _graph_timeout_seconds() -> float:
+    """Return a positive whole-graph deadline without trusting bad config."""
+    raw_value = os.getenv("CIAR_GRAPH_TIMEOUT_SECONDS")
+    if raw_value is None:
+        return DEFAULT_GRAPH_TIMEOUT_SECONDS
+    try:
+        value = float(raw_value)
+    except ValueError:
+        return DEFAULT_GRAPH_TIMEOUT_SECONDS
+    return value if math.isfinite(value) and value > 0 else DEFAULT_GRAPH_TIMEOUT_SECONDS
 
 
 def extract_public_text(content: object) -> str:
@@ -340,6 +359,19 @@ async def _memory_serialized_events(
             yield event
 
 
+async def _bounded_memory_serialized_events(
+    graph: Any,
+    state: dict[str, Any],
+    config: RunnableConfig,
+    memory_scope: str,
+    timeout_seconds: float,
+) -> AsyncIterator[dict[str, Any]]:
+    """Stop a stalled graph while preserving the per-scope lock cleanup."""
+    async with asyncio.timeout(timeout_seconds):
+        async for event in _memory_serialized_events(graph, state, config, memory_scope):
+            yield event
+
+
 async def _dashboard_operation(
     name: str,
     operation: Callable[[], Awaitable[DashboardResult]],
@@ -492,12 +524,18 @@ async def chat(body: PreguntaChat, request: Request) -> JSONResponse:
         thread_id = _thread_id(body.thread_id or body.id_sesion)
         user_identity, new_identity_cookie = _anonymous_identity(request)
         try:
-            resultado = await responder(
-                pregunta,
-                user_id=user_identity,
-                thread_id=thread_id,
-                memory_store=DEFAULT_CONVERSATION_MEMORY,
+            resultado = await asyncio.wait_for(
+                responder(
+                    pregunta,
+                    user_id=user_identity,
+                    thread_id=thread_id,
+                    memory_store=DEFAULT_CONVERSATION_MEMORY,
+                ),
+                timeout=_graph_timeout_seconds(),
             )
+        except TimeoutError as exc:
+            log_error("api", "request_timeout", exc, route="chat", status="degraded")
+            resultado = GRAPH_TIMEOUT_RESPONSE
         except EntradaInvalida as exc:
             log_error("api", "request_rejected", exc, route="chat", status="failed")
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -591,7 +629,7 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                     merge_public_state({"fase": "analizando"})
                     yield emit_state("phase")
                     graph = construir_grafo()
-                    async for event in _memory_serialized_events(
+                    async for event in _bounded_memory_serialized_events(
                         graph,
                         {
                             "pregunta": pregunta,
@@ -600,6 +638,7 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                         },
                         runnable_config,
                         memory_scope,
+                        _graph_timeout_seconds(),
                     ):
                         kind = event["event"]
                         phase = _stream_phase_from_event(event)
@@ -662,6 +701,21 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                                 )
                                 if changed:
                                     yield emit_state("state")
+                except TimeoutError as exc:
+                    log_error(
+                        "api",
+                        "stream_timeout",
+                        exc,
+                        route="chat_stream",
+                        status="degraded",
+                    )
+                    stream_status = "degraded"
+                    accumulated_state.clear()
+                    accumulated_text = GRAPH_TIMEOUT_RESPONSE
+                    merge_public_state(
+                        {"error": "graph_timeout", "fase": "completado"}
+                    )
+                    yield emit_state("timeout")
                 except EntradaInvalida as exc:
                     log_error("api", "stream_rejected", exc, route="chat_stream", status="failed")
                     yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"

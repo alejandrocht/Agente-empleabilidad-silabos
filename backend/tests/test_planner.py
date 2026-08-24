@@ -261,19 +261,25 @@ def test_grafo_se_compila_sin_checkpointer_y_con_barreras_de_seguridad() -> None
     }
 
 
-def test_grafo_ejecuta_solo_la_ruta_publica() -> None:
+def test_grafo_rechaza_pregunta_fuera_del_alcance_sin_llamar_al_modelo() -> None:
     class Direct:
+        calls = 0
+
         async def ainvoke(self, _: object) -> object:
+            self.calls += 1
             return type("Message", (), {"content": "Respuesta directa válida para CIAR."})()
 
+    direct = Direct()
     result = asyncio.run(
         constructor.construir_grafo(
-            direct_runnable=Direct(),
+            direct_runnable=direct,
         ).ainvoke({"pregunta": "¿Cuál es la capital de Perú?"})
     )
 
-    assert result["respuesta"] == "Respuesta directa válida para CIAR."
-    assert result["ruta"] == "conversacion"
+    assert result["respuesta"] != "Respuesta directa válida para CIAR."
+    assert result["ruta"] == "finalizar"
+    assert result["error"] == "fuera_de_alcance"
+    assert direct.calls == 0
 
 
 def test_obtiene_pregunta_loguea_solo_longitud(

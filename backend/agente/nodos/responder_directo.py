@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import math
+import os
 from typing import Protocol, cast
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -16,6 +19,19 @@ from agente.utils.response_text import normalize_response_text
 SAFE_RESPONSE_FALLBACK = (
     "No pude generar una respuesta segura en este momento. Intentá reformular tu consulta."
 )
+DEFAULT_DIRECT_RESPONSE_TIMEOUT_SECONDS = 30.0
+
+
+def _direct_response_timeout_seconds() -> float:
+    """Return a positive conversational deadline without trusting bad config."""
+    raw_value = os.getenv("CIAR_DIRECT_RESPONSE_TIMEOUT_SECONDS")
+    if raw_value is None:
+        return DEFAULT_DIRECT_RESPONSE_TIMEOUT_SECONDS
+    try:
+        value = float(raw_value)
+    except ValueError:
+        return DEFAULT_DIRECT_RESPONSE_TIMEOUT_SECONDS
+    return value if math.isfinite(value) and value > 0 else DEFAULT_DIRECT_RESPONSE_TIMEOUT_SECONDS
 
 
 class DirectResponseRunnable(Protocol):
@@ -53,8 +69,14 @@ async def responder_directo(
     ]
     try:
         runnable = direct_runnable or build_direct_response_runnable()
-        result = await runnable.ainvoke(mensajes)
+        result = await asyncio.wait_for(
+            runnable.ainvoke(mensajes),
+            timeout=_direct_response_timeout_seconds(),
+        )
         answer = normalize_response_text(getattr(result, "content", None))
+    except TimeoutError as exc:
+        log_error("direct_response", "timeout", exc)
+        return {"respuesta": SAFE_RESPONSE_FALLBACK, "error": "direct_response_timeout"}
     except Exception as exc:
         log_error("direct_response", "failed", exc)
         return {"respuesta": SAFE_RESPONSE_FALLBACK, "error": "direct_response_failed"}

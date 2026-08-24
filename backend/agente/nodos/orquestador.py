@@ -7,7 +7,10 @@ import unicodedata
 from typing import Literal
 
 from agente.grafo.estado import Estado
-from agente.utils.conversacion import respuesta_conversacional
+from agente.utils.conversacion import (
+    RESPUESTA_FUERA_DE_ALCANCE,
+    respuesta_conversacional,
+)
 from agente.utils.logger import log_event
 
 Route = Literal["conversacion", "cypher", "finalizar"]
@@ -54,6 +57,41 @@ _GRAPH_TERMS = frozenset(
         "vacantes",
     }
 )
+_DOMAIN_TERMS = _GRAPH_TERMS | frozenset(
+    {
+        "alineacion",
+        "alineamiento",
+        "aprendizaje",
+        "aprendizajes",
+        "brecha",
+        "brechas",
+        "competencia",
+        "competencias",
+        "comparar",
+        "comparacion",
+        "curricular",
+        "curriculo",
+        "demanda",
+        "diferencia",
+        "egresado",
+        "egresados",
+        "ensenanza",
+        "exige",
+        "exigencia",
+        "formacion",
+        "mercado",
+        "perfil",
+        "perfiles",
+        "requerimiento",
+        "requerimientos",
+        "requisito",
+        "requisitos",
+        "silabo",
+        "sillabo",
+        "ulima",
+        "universidad",
+    }
+)
 
 
 def _tokens(text: str) -> frozenset[str]:
@@ -78,6 +116,15 @@ def orquestador(estado: Estado) -> Estado:
         log_event("orchestrator", "route_selected", route="conversacion", local=True)
         return {"ruta": "conversacion", "respuesta": local_answer}
 
-    route: Route = "cypher" if _tokens(question) & _GRAPH_TERMS else "conversacion"
+    tokens = _tokens(question)
+    if not tokens & _DOMAIN_TERMS:
+        log_event("orchestrator", "route_selected", route="finalizar", reason="out_of_scope")
+        return {
+            "ruta": "finalizar",
+            "respuesta": RESPUESTA_FUERA_DE_ALCANCE,
+            "error": "fuera_de_alcance",
+        }
+
+    route: Route = "cypher" if tokens & _GRAPH_TERMS else "conversacion"
     log_event("orchestrator", "route_selected", route=route, local=False)
     return {"ruta": route}

@@ -103,6 +103,24 @@ describe("interfaz del chat", () => {
     expect(screen.queryByText(/Consulta bloqueada por seguridad/)).toBeNull();
   });
 
+  it("explica cuando una respuesta se detuvo por tiempo", () => {
+    render(<Burbuja mensaje={{ rol: "agente", error: "graph_timeout" }} />);
+
+    expect(screen.getByText(/tardó demasiado/)).toBeTruthy();
+  });
+
+  it("explica cuando la pregunta está fuera del alcance de CIAR", () => {
+    render(<Burbuja mensaje={{ rol: "agente", error: "fuera_de_alcance" }} />);
+
+    expect(screen.getByText(/fuera del alcance de CIAR/)).toBeTruthy();
+  });
+
+  it("explica cuando la fuente de datos no está disponible", () => {
+    render(<Burbuja mensaje={{ rol: "agente", error: "schema_unavailable" }} />);
+
+    expect(screen.getByText(/fuente de datos de empleabilidad/)).toBeTruthy();
+  });
+
   it("muestra el Cypher validado en la respuesta del agente", () => {
     render(
       <Burbuja

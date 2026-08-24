@@ -14,6 +14,12 @@ RESPUESTA_CAPACIDADES: Final[str] = (
     "Puedo ayudarte con carreras, cursos, empresas, ofertas laborales, "
     "habilidades y otras relaciones entre formación y empleo."
 )
+RESPUESTA_FUERA_DE_ALCANCE: Final[str] = (
+    "Soy el agente CIAR de la Universidad de Lima. Solo puedo analizar la relación "
+    "entre la formación universitaria y la demanda del mercado laboral: carreras, "
+    "cursos, habilidades, herramientas, puestos, empresas, ofertas y brechas. "
+    "No puedo responder preguntas generales sobre otros temas."
+)
 
 _SALUDOS: Final[frozenset[str]] = frozenset(
     {

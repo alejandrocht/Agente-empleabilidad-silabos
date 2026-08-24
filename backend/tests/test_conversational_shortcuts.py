@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 import agente.grafo.constructor as constructor
 from agente.nodos.orquestador import orquestador
-from agente.utils.conversacion import RESPUESTA_SALUDO
+from agente.utils.conversacion import RESPUESTA_FUERA_DE_ALCANCE, RESPUESTA_SALUDO
 from api import servidor
 
 
@@ -58,3 +58,13 @@ def test_orchestrator_routes_domain_question_to_guarded_graph() -> None:
     result = orquestador({"pregunta": "¿Cuántas ofertas laborales existen?"})
 
     assert result == {"ruta": "cypher"}
+
+
+def test_orchestrator_rejects_questions_outside_ciar_scope() -> None:
+    result = orquestador({"pregunta": "¿Qué opinas del papa?"})
+
+    assert result == {
+        "ruta": "finalizar",
+        "respuesta": RESPUESTA_FUERA_DE_ALCANCE,
+        "error": "fuera_de_alcance",
+    }

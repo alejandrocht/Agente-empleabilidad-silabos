@@ -14,8 +14,8 @@ from agente.utils.verbose import verbose_step
 SchemaLoader = Callable[[], Neo4jSchemaSnapshot]
 SCHEMA_LOAD_ERROR = "schema_unavailable"
 SAFE_SCHEMA_ERROR = (
-    "No pude consultar la información de forma segura en este momento. "
-    "Intentá nuevamente más tarde."
+    "La fuente de datos de empleabilidad no está disponible o no corresponde al grafo CIAR. "
+    "Verificá la conexión de Neo4j e intentá nuevamente."
 )
 
 

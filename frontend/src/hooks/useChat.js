@@ -17,6 +17,7 @@ export function normalizeChatValues(values) {
 export function useChat({ conversacion, agregarMensaje }) {
   const agregarRef = useRef(agregarMensaje);
   const conversacionRef = useRef(conversacion);
+  const valoresStreamingRef = useRef(normalizeChatValues(null));
   agregarRef.current = agregarMensaje;
   conversacionRef.current = conversacion;
 
@@ -44,16 +45,38 @@ export function useChat({ conversacion, agregarMensaje }) {
         creado: Date.now(),
       });
     },
+    onError: (streamError) => {
+      const conv = conversacionRef.current;
+      if (!conv) return;
+      const current = valoresStreamingRef.current;
+      agregarRef.current(conv.id, {
+        rol: "agente",
+        texto: current.texto || "No pude completar la respuesta porque la conexión se interrumpió.",
+        cypher: current.cypher,
+        fase: "completado",
+        entidades: current.entidades,
+        filas: current.filas,
+        pasos: current.pasos,
+        error: current.texto ? "stream_interrupted" : "stream_failed",
+        errorRed:
+          typeof streamError?.message === "string"
+            ? streamError.message
+            : "La conexión con el agente se interrumpió.",
+        creado: Date.now(),
+      });
+    },
   });
 
   const enviar = (texto) => {
     const pregunta = texto.trim();
     if (!pregunta || isLoading || !conversacion) return;
     agregarMensaje(conversacion.id, { rol: "usuario", texto: pregunta, creado: Date.now() });
+    valoresStreamingRef.current = normalizeChatValues(null);
     submit({ pregunta });
   };
 
   const streamingValues = normalizeChatValues(values);
+  valoresStreamingRef.current = streamingValues;
   const mensajeStreaming = isLoading
     ? { ...streamingValues, streaming: true }
     : null;

@@ -17,6 +17,7 @@ from agente.utils.logger import log_event
 load_dotenv()
 
 DEFAULT_SCHEMA_CACHE_TTL_SECONDS = 900.0
+REQUIRED_CIAR_LABELS = frozenset({"Carrera", "Empresa", "Oferta_Laboral"})
 _schema_cache_lock = RLock()
 _schema_cache_snapshot: Neo4jSchemaSnapshot | None = None
 _schema_cache_created_at = 0.0
@@ -65,6 +66,13 @@ def extract_neo4j_schema() -> Neo4jSchemaSnapshot:
         graph.refresh_schema()
         text = graph.get_schema
         structured = deepcopy(graph.get_structured_schema)
+        available_labels = set(structured.get("node_props", {}))
+        missing_labels = sorted(REQUIRED_CIAR_LABELS - available_labels)
+        if missing_labels:
+            raise ValueError(
+                "Neo4j schema is not the CIAR graph; missing labels: "
+                + ", ".join(missing_labels)
+            )
         snapshot = Neo4jSchemaSnapshot(
             text=text,
             structured=structured,

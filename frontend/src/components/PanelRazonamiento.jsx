@@ -44,6 +44,27 @@ const SECURITY_ERROR_CODES = new Set([
 ]);
 
 export function detalleError(error) {
+  if (error === "fuera_de_alcance") {
+    return {
+      kind: "scope",
+      text: "Esta consulta está fuera del alcance de CIAR. El agente analiza formación universitaria, mercado laboral y brechas de empleabilidad.",
+    };
+  }
+
+  if (error === "schema_unavailable") {
+    return {
+      kind: "data_source",
+      text: "No se pudo conectar con la fuente de datos de empleabilidad. Verificá la conexión y las credenciales de Neo4j.",
+    };
+  }
+
+  if (error === "direct_response_timeout" || error === "graph_timeout") {
+    return {
+      kind: "timeout",
+      text: "La consulta tardó demasiado y fue detenida de forma segura. Intentá nuevamente.",
+    };
+  }
+
   if (error === "planner_failed") {
     return {
       kind: "planner",

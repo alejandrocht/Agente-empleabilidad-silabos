@@ -4,6 +4,7 @@ import asyncio
 import importlib
 import inspect
 import json
+from contextlib import suppress
 from types import SimpleNamespace
 
 import pytest
@@ -35,6 +36,12 @@ class FakeAsyncRunnable:
     async def ainvoke(self, messages: object) -> object:
         self.messages = messages
         return type("Message", (), {"content": self.content})()
+
+
+class NeverEndingRunnable:
+    async def ainvoke(self, _: object) -> object:
+        await asyncio.Future()
+        return type("Message", (), {"content": "nunca"})()
 
 
 class FakePlanner:
@@ -155,6 +162,34 @@ def test_responder_directo_usa_fallback_para_contenido_vacio_o_invalido(
     assert result == {
         "respuesta": SAFE_RESPONSE_FALLBACK,
         "error": "direct_response_failed",
+    }
+
+
+def test_responder_directo_no_deja_la_solicitud_abierta_si_el_modelo_no_responde(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CIAR_DIRECT_RESPONSE_TIMEOUT_SECONDS", "0.01")
+
+    async def invoke_with_deadline() -> object:
+        task = asyncio.create_task(
+            responder_directo(
+                {"pregunta": "¿Qué opinas del papa?"},
+                direct_runnable=NeverEndingRunnable(),
+            )
+        )
+        done, _ = await asyncio.wait({task}, timeout=0.1)
+        if not done:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            return None
+        return task.result()
+
+    result = asyncio.run(invoke_with_deadline())
+
+    assert result == {
+        "respuesta": SAFE_RESPONSE_FALLBACK,
+        "error": "direct_response_timeout",
     }
 
 

@@ -331,6 +331,13 @@ class DegradedStreamGraph:
         }
 
 
+class HangingStreamGraph:
+    async def astream_events(self, *_: object, **__: object) -> AsyncIterator[dict[str, Any]]:
+        await asyncio.Future()
+        if False:
+            yield {}
+
+
 def test_streaming_endpoint_sanitizes_internal_state_and_model_chunks(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -375,6 +382,24 @@ def test_streaming_endpoint_marks_degraded_graph_completion_without_success(
     ]
     assert completed
     assert completed[-1]["context"]["status"] == "degraded"
+
+
+def test_streaming_endpoint_closes_with_safe_fallback_when_graph_stalls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CIAR_GRAPH_TIMEOUT_SECONDS", "0.01")
+    monkeypatch.setattr(servidor, "construir_grafo", lambda: HangingStreamGraph())
+
+    with TestClient(servidor.app) as client:
+        response = client.post(
+            "/chat/stream",
+            json={"input": {"pregunta": "consulta"}},
+        )
+
+    assert response.status_code == 200
+    assert "graph_timeout" in response.text
+    assert "La consulta tardó más de lo esperado" in response.text
+    assert response.text.endswith("event: end\ndata: {}\n\n")
 
 
 def test_dashboard_endpoints_fail_closed_for_invalid_input_and_provider_failure(
