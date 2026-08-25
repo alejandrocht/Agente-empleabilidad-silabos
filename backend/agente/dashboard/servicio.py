@@ -15,7 +15,7 @@ from agente.dashboard.consultas import (
     UNSUPPORTED_DATASETS,
     get_dashboard_query,
 )
-from agente.nodos.ejecutar_plantilla import TemplateQueryGateway
+from agente.nodos.devuelve_respuesta import ReadQueryGateway
 from agente.utils.cypher_guard import guard_cypher
 from agente.utils.db import normalize_neo4j_value, open_query_gateway
 
@@ -84,7 +84,7 @@ async def _execute(
     query_id: str,
     parameters: Mapping[str, Any],
     *,
-    query_gateway: TemplateQueryGateway | None = None,
+    query_gateway: ReadQueryGateway | None = None,
     result_cache: QueryResultCache | None = None,
 ) -> list[dict[str, Any]]:
     """Execute one immutable query after static read-only validation."""
@@ -96,7 +96,7 @@ async def _execute(
     if cached is not None:
         return cached
 
-    async def run(gateway: TemplateQueryGateway) -> list[dict[str, Any]]:
+    async def run(gateway: ReadQueryGateway) -> list[dict[str, Any]]:
         rows = await gateway.run(guarded.text, guarded.parameters)
         normalized = normalize_neo4j_value(rows)
         if not isinstance(normalized, list) or not all(isinstance(row, dict) for row in normalized):
@@ -113,7 +113,7 @@ async def _execute(
 
 async def listar_carreras(
     *,
-    query_gateway: TemplateQueryGateway | None = None,
+    query_gateway: ReadQueryGateway | None = None,
     result_cache: QueryResultCache | None = None,
 ) -> dict[str, Any]:
     rows = await _execute(
@@ -134,7 +134,7 @@ async def listar_carreras(
 
 async def metadatos(
     *,
-    query_gateway: TemplateQueryGateway | None = None,
+    query_gateway: ReadQueryGateway | None = None,
     result_cache: QueryResultCache | None = None,
 ) -> dict[str, Any]:
     rows = await _execute(
@@ -159,7 +159,7 @@ async def metadatos(
 async def obtener_carrera(
     carrera_id: str,
     *,
-    query_gateway: TemplateQueryGateway | None = None,
+    query_gateway: ReadQueryGateway | None = None,
     result_cache: QueryResultCache | None = None,
 ) -> dict[str, Any]:
     rows = await _execute(
@@ -185,7 +185,7 @@ async def tendencia_ofertas(
     hasta: date,
     carrera_id: str | None = None,
     *,
-    query_gateway: TemplateQueryGateway | None = None,
+    query_gateway: ReadQueryGateway | None = None,
     result_cache: QueryResultCache | None = None,
 ) -> dict[str, Any]:
     parameters = _period(desde, hasta)
@@ -204,7 +204,7 @@ async def carreras_por_demanda(
     hasta: date,
     limite: int = 10,
     *,
-    query_gateway: TemplateQueryGateway | None = None,
+    query_gateway: ReadQueryGateway | None = None,
     result_cache: QueryResultCache | None = None,
 ) -> dict[str, Any]:
     rows = await _execute(
@@ -223,7 +223,7 @@ async def demanda_dimension(
     hasta: date,
     limite: int = 10,
     *,
-    query_gateway: TemplateQueryGateway | None = None,
+    query_gateway: ReadQueryGateway | None = None,
     result_cache: QueryResultCache | None = None,
 ) -> dict[str, Any]:
     slug = _dimension(tipo)
@@ -244,7 +244,7 @@ async def cobertura_dimension(
     carrera_id: str,
     limite: int = 10,
     *,
-    query_gateway: TemplateQueryGateway | None = None,
+    query_gateway: ReadQueryGateway | None = None,
     result_cache: QueryResultCache | None = None,
 ) -> dict[str, Any]:
     slug = _dimension(tipo)
@@ -275,7 +275,7 @@ async def brechas_dimension(
     hasta: date,
     limite: int = 10,
     *,
-    query_gateway: TemplateQueryGateway | None = None,
+    query_gateway: ReadQueryGateway | None = None,
     result_cache: QueryResultCache | None = None,
 ) -> dict[str, Any]:
     slug = _dimension(tipo)
@@ -305,7 +305,7 @@ async def industrias_por_carrera(
     hasta: date,
     limite: int = 10,
     *,
-    query_gateway: TemplateQueryGateway | None = None,
+    query_gateway: ReadQueryGateway | None = None,
     result_cache: QueryResultCache | None = None,
 ) -> dict[str, Any]:
     career = await obtener_carrera(
@@ -327,7 +327,7 @@ async def industrias_elemento(
     hasta: date,
     limite: int = 10,
     *,
-    query_gateway: TemplateQueryGateway | None = None,
+    query_gateway: ReadQueryGateway | None = None,
     result_cache: QueryResultCache | None = None,
 ) -> dict[str, Any]:
     slug = _dimension(tipo)
@@ -345,7 +345,7 @@ async def empresas_dashboard(
     hasta: date,
     limite: int = 10,
     *,
-    query_gateway: TemplateQueryGateway | None = None,
+    query_gateway: ReadQueryGateway | None = None,
     result_cache: QueryResultCache | None = None,
 ) -> dict[str, Any]:
     rows = await _execute(

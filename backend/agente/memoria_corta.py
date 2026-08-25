@@ -149,6 +149,8 @@ class ConversationMemory:
         scope: str,
         original_question: str,
         contextualized_question: str | None = None,
+        *,
+        result_anchor: str | None = None,
     ) -> None:
         """Store the original question and a non-recursive bounded topic anchor."""
         del contextualized_question
@@ -167,6 +169,8 @@ class ConversationMemory:
                     anchor = _compose_subset_anchor(base_question, original_question)
                 else:
                     anchor = previous.context_anchor
+            if isinstance(result_anchor, str) and result_anchor.strip():
+                anchor = result_anchor.strip()
             turn = ConversationTurn(
                 original_question=original_question[:MAX_PREGUNTA_CHARS],
                 context_anchor=anchor[:MAX_PREGUNTA_CHARS],
@@ -323,6 +327,8 @@ def _is_subset_filter_follow_up(question: str) -> bool:
     if not _is_follow_up(question):
         return False
     normalized = _LEADING_PUNCTUATION.sub("", question).casefold()
+    if re.match(r"^con\s+que\s+(?:tecnologia|herramienta)", normalized):
+        return False
     if normalized.startswith(("y de ", "de los que ", "de las que ")):
         return True
     return any(pattern.search(normalized) for pattern in _SUBSET_FILTER_PATTERNS)

@@ -46,9 +46,7 @@ strict = true
 
 [[tool.mypy.overrides]]
 module = [
-    "agente.nodos.ejecutar_plantilla",
     "agente.nodos.generar_cypher",
-    "agente.nodos.planificador",
 ]
 ignore_errors = true
 

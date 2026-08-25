@@ -1,0 +1,32 @@
+[
+  {
+    "question": "Hola, ¿cómo estás?",
+    "previous_question": null,
+    "answer": "¡Hola! Estoy bien, gracias por preguntar. ¿En qué puedo ayudarte?",
+    "duration_ms": 4984.4
+  },
+  {
+    "question": "¿Cuántas carreras hay?",
+    "previous_question": null,
+    "answer": "Hay 14 carreras.",
+    "duration_ms": 6036.1
+  },
+  {
+    "question": "Top 10 empresas con más ofertas dirigidas a Derecho.",
+    "previous_question": null,
+    "answer": "Top 10 empresas con más ofertas dirigidas a Derecho:\n\n1. PHILIPPI PRIETOCARRIZOSA FERRERO DU & URÍA: 126 ofertas\n2. EY // TANAKA, VALDIVIA & ASOCIADOS SOCIEDAD CIVIL DE RESPONSABILIDAD LIMITADA: 104 ofertas\n3. EMPRESAS DEL ESTADO: 90 ofertas\n4. SUPERINTENDENCIA DE BANCA, SEGUROS Y ADMINISTRADORAS PRIVADAS DE FONDOS DE PENSIONES: 88 ofertas\n5. BANCO DE LA NACION: 77 ofertas\n6. MANPOWER PROFESSIONAL SERVICES S.A: 63 ofertas\n7. SUPERINTENDENCIA NACIONAL DE ADUANAS Y DE ADMINISTRACION TRIBUTARIA - SUNAT: 60 ofertas\n8. BOTTO & ESCOBAR SOCIEDAD CIVIL DE RESPONSABILIDAD LIMITADA: 55 ofertas\n9. ESTUDIO JURIDICO OROPEZA & ASOCIADOS SCRL: 52 ofertas\n10. PAYET, REY, CAUVI S. CIVIL DE R. L.: 52 ofertas",
+    "duration_ms": 9565.25
+  },
+  {
+    "question": "¿Y para Ingeniería de Sistemas?",
+    "previous_question": "Top 10 empresas con más ofertas dirigidas a Derecho.",
+    "answer": "Para Ingeniería de Sistemas, las empresas con más ofertas son:\n\n- KROWDY PERU SAC: 87 ofertas\n- NOVATRONIC SAC: 78\n- BANCO DE LA NACION: 61\n- FULLTIMEFORCE S.A.C.: 55\n- UNIVERSIDAD DE LIMA: 55\n- MIBANCO: 52\n- SINAPSIS AGENCIA DIGITAL: 48\n- SUNAT: 41\n- EVENTIVA S.A.C.: 40\n- MANAGEMENT SOLUTIONS PERU S.A.C.: 40",
+    "duration_ms": 10960.79
+  },
+  {
+    "question": "¿Cuáles son las herramientas más solicitadas para esa carrera?",
+    "previous_question": "¿Y para Ingeniería de Sistemas?",
+    "answer": "Las herramientas más solicitadas, ordenadas por cantidad de ofertas, son:\n\n1. SQL: 148 ofertas  \n2. SAP: 115  \n3. Java: 98  \n4. Power BI: 70  \n5. Linux: 56  \n6. AWS: 54  \n7. Microsoft Project: 53  \n8. Angular: 50  \n9. Microsoft Azure: 49  \n10. Microsoft Excel: 48  \n11. Oracle: 48  \n12. Python: 47  \n13. Git: 40  \n14. .NET: 39  \n15. HTML: 39  \n16. SQL Server: 39  \n17. MySQL: 33  \n18. CSS: 29  \n19. PHP: 25  \n20. JavaScript: 24",
+    "duration_ms": 11600.41
+  }
+]

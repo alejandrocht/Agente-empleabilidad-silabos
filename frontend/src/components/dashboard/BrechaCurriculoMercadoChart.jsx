@@ -6,7 +6,7 @@ import EstadoGrafico from "./EstadoGrafico";
 
 const chartConfig = {
   demandaPct: { label: "Demanda laboral", color: "#FF5117" },
-  coberturaPct: { label: "Cobertura declarada", color: "#00C5D6" },
+  demandaCubiertaPct: { label: "Demanda cubierta por cursos", color: "#00C5D6" },
 };
 
 function abreviar(valor) {
@@ -20,7 +20,7 @@ function Leyenda() {
         <i className="h-2.5 w-2.5 rounded-sm bg-ulima" /> Demanda laboral
       </span>
       <span className="flex items-center gap-1.5">
-        <i className="h-2.5 w-2.5 rounded-sm bg-secundario-turquesa" /> Cobertura declarada
+        <i className="h-2.5 w-2.5 rounded-sm bg-secundario-turquesa" /> Demanda cubierta por cursos
       </span>
     </div>
   );
@@ -42,7 +42,9 @@ export default function BrechaCurriculoMercadoChart({ filas, cargando, error, di
     .map((fila) => ({
       ...fila,
       demandaPct: Math.round(fila.demanda * 1000) / 10,
-      coberturaPct: Math.round(fila.cobertura * 1000) / 10,
+      demandaCubiertaPct: Math.round(
+        (fila.demanda_cubierta ?? fila.demanda * fila.cobertura) * 1000,
+      ) / 10,
     }))
     .reverse();
 
@@ -77,7 +79,7 @@ export default function BrechaCurriculoMercadoChart({ filas, cargando, error, di
             }
           />
           <Bar dataKey="demandaPct" fill="var(--color-demandaPct)" radius={[4, 4, 4, 4]} />
-          <Bar dataKey="coberturaPct" fill="var(--color-coberturaPct)" radius={[4, 4, 4, 4]} />
+          <Bar dataKey="demandaCubiertaPct" fill="var(--color-demandaCubiertaPct)" radius={[4, 4, 4, 4]} />
         </BarChart>
       </ChartContainer>
       <Leyenda />

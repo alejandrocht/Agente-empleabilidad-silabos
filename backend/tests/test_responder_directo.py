@@ -9,9 +9,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from agente.grafo.constructor import construir_grafo
-from agente.grafo.plan import Plan
-from agente.nodos.inspeccionar_respuesta import SAFE_RESPONSE_INSPECTION_FALLBACK
 from agente.nodos.responder_directo import (
     SAFE_RESPONSE_FALLBACK,
     build_direct_response_runnable,
@@ -21,11 +18,8 @@ from agente.utils.prompt import build_direct_response_prompt
 from agente.utils.response_inspector import inspect_response
 
 
-def direct_plan() -> Plan:
-    return Plan(
-        accion="responder_directo",
-        usar_schema=False,
-    )
+def direct_plan() -> dict[str, str]:
+    return {"accion": "responder_directo"}
 
 
 class FakeAsyncRunnable:
@@ -42,14 +36,6 @@ class NeverEndingRunnable:
     async def ainvoke(self, _: object) -> object:
         await asyncio.Future()
         return type("Message", (), {"content": "nunca"})()
-
-
-class FakePlanner:
-    def __init__(self, plan: Plan) -> None:
-        self.plan = plan
-
-    def invoke(self, _: object) -> Plan:
-        return self.plan
 
 
 def test_responder_directo_devuelve_respuesta_string() -> None:
@@ -80,20 +66,6 @@ def test_response_inspector_rejects_obvious_invalid_outputs(response: str) -> No
     valid, _ = inspect_response(response)
 
     assert valid is False
-
-
-@pytest.mark.skip(reason="Response inspection is not part of the active graph")
-def test_graph_inspector_replaces_invalid_direct_response_at_public_boundary() -> None:
-    graph = construir_grafo(
-        planner_runnable=FakePlanner(direct_plan()),
-        direct_runnable=FakeAsyncRunnable("The company has 3 offers available."),
-    )
-
-    result = asyncio.run(graph.ainvoke({"pregunta": "Hola"}))
-
-    assert result["respuesta"] == SAFE_RESPONSE_INSPECTION_FALLBACK
-    assert result["error"] == "response_inspection_failed"
-    assert "reason" not in result
 
 
 def test_responder_directo_incluye_solo_la_pregunta() -> None:

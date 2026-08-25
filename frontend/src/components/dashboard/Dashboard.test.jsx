@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Dashboard from "./Dashboard";
 
@@ -55,6 +55,30 @@ describe("Dashboard data boundary", () => {
 
     await waitFor(() => expect(screen.getAllByText("Datos del grafo").length).toBeGreaterThan(0));
     await waitFor(() => expect(screen.getAllByTestId("chart-success").length).toBeGreaterThan(0));
+  });
+
+  it("allows changing the connected date range within the available period", async () => {
+    const api = createApi();
+    const tendencias = [];
+    api.obtenerTendenciaDashboard = (parametros) => {
+      tendencias.push(parametros);
+      return Promise.resolve({ filas: [{ anio: 2025, mes: 1, ofertas: 3 }] });
+    };
+
+    render(<Dashboard api={api} />);
+
+    const desde = await screen.findByLabelText("Desde");
+    const hasta = screen.getByLabelText("Hasta");
+    expect(desde.disabled).toBe(false);
+    expect(hasta.disabled).toBe(false);
+    expect(desde.getAttribute("min")).toBe("2025-01-01");
+    expect(hasta.getAttribute("max")).toBe("2025-01-31");
+
+    fireEvent.change(desde, { target: { value: "2025-01-10" } });
+
+    await waitFor(() => expect(
+      tendencias.some((parametros) => parametros.desde === "2025-01-10"),
+    ).toBe(true));
   });
 
   it("uses the documented demo fallback only when the backend is unavailable", async () => {

@@ -113,6 +113,21 @@ def test_empty_active_result_explains_the_agent_scope() -> None:
     assert "carreras, cursos, facultades" in result["respuesta"]
 
 
+def test_aggregate_count_uses_metric_value_instead_of_row_count() -> None:
+    result = asyncio.run(
+        devuelve_respuesta(
+            {
+                "cypher": "MATCH (c:Carrera) RETURN count(c) AS total_carreras LIMIT $limite",
+                "parameters": {"limite": 20},
+                "query_limit": 20,
+            },
+            query_gateway=FakeGateway([{"total_carreras": 14}]),
+        )
+    )
+
+    assert result["respuesta"] == "Hay 14 carreras."
+
+
 def test_schema_loads_before_generation_and_prompt_contains_question_and_schema() -> None:
     order: list[str] = []
 
@@ -360,7 +375,9 @@ def test_parameterized_text_search_without_quoted_literals_is_accepted() -> None
     )
 
     assert result["error"] is None
-    assert gateway.calls == [(cypher, {"texto": "sap"})]
+    assert gateway.calls == [
+        (cypher.replace("$texto", "$empresa_texto"), {"empresa_texto": "sap"})
+    ]
 
 
 def test_public_projection_keeps_response_rows_and_error_only() -> None:

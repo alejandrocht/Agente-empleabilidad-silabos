@@ -72,6 +72,25 @@ function Selector({ etiqueta, valor, onChange, opciones, disabled = false }) {
   );
 }
 
+function SelectorFecha({ etiqueta, valor, minimo, maximo, onChange, disabled = false }) {
+  const id = "dashboard-fecha-" + etiqueta.toLowerCase();
+  return (
+    <label htmlFor={id} className="grid gap-1.5 text-sm font-semibold text-ink">
+      {etiqueta}
+      <input
+        id={id}
+        type="date"
+        value={valor || ""}
+        min={minimo || undefined}
+        max={maximo || undefined}
+        onChange={onChange}
+        disabled={disabled}
+        className="h-10 rounded-xl border border-line bg-paper px-3 text-sm font-medium text-ink outline-none transition focus:border-ulima focus:ring-2 focus:ring-ulima/20 disabled:cursor-not-allowed disabled:bg-ash"
+      />
+    </label>
+  );
+}
+
 function Seccion({ icono: Icono, titulo, descripcion, children }) {
   return (
     <section className="mb-10">
@@ -130,6 +149,7 @@ export default function Dashboard({ api = dashboardApi }) {
   const [estadoBackend, setEstadoBackend] = useState("loading");
   const [errorBackend, setErrorBackend] = useState("");
   const [carrerasApi, setCarrerasApi] = useState([]);
+  const [periodoDisponible, setPeriodoDisponible] = useState(null);
   const [periodoConsulta, setPeriodoConsulta] = useState(null);
   const [datosApi, setDatosApi] = useState(EMPTY_MODEL);
   const [estadosDatos, setEstadosDatos] = useState({});
@@ -147,7 +167,9 @@ export default function Dashboard({ api = dashboardApi }) {
       .then(([metadata, carreras]) => {
         if (!vigente) return;
         setEstadoBackend("connected");
-        setPeriodoConsulta(metadata.periodo_disponible || null);
+        const rangoDisponible = metadata.periodo_disponible || null;
+        setPeriodoDisponible(rangoDisponible);
+        setPeriodoConsulta(rangoDisponible);
         setCarrerasApi(Array.isArray(carreras.carreras) ? carreras.carreras : []);
         setErrorBackend("");
         if (!metadata.periodo_disponible?.desde || !metadata.periodo_disponible?.hasta) {
@@ -282,6 +304,10 @@ export default function Dashboard({ api = dashboardApi }) {
     if (siguienteCarrera) setCarreraId(siguienteCarrera.id);
   }
 
+  function cambiarFechaPeriodo(campo, valor) {
+    setPeriodoConsulta((actual) => (actual ? { ...actual, [campo]: valor } : actual));
+  }
+
   function cambiarEmpresaReferencia(evento) {
     const siguienteEmpresa = evento.target.value;
     setEmpresaReferenciaId(siguienteEmpresa);
@@ -342,7 +368,28 @@ export default function Dashboard({ api = dashboardApi }) {
                disabled={estadoBackend === "loading" || estadoBackend === "error"}
              />
              {estadoBackend === "fallback" ? <Selector etiqueta="Industria" valor={industriaId} onChange={(evento) => setIndustriaId(evento.target.value)} opciones={MOCK_INDUSTRIAS} /> : null}
-             <Selector etiqueta="Periodo" valor={etiquetaPeriodo} onChange={(evento) => setPeriodo(evento.target.value)} opciones={estadoBackend === "connected" ? [etiquetaPeriodo] : MOCK_PERIODOS} disabled={estadoBackend === "connected"} />
+             {estadoBackend === "connected" ? (
+               <>
+                 <SelectorFecha
+                   etiqueta="Desde"
+                   valor={periodoConsulta?.desde}
+                   minimo={periodoDisponible?.desde}
+                   maximo={periodoConsulta?.hasta || periodoDisponible?.hasta}
+                   onChange={(evento) => cambiarFechaPeriodo("desde", evento.target.value)}
+                   disabled={!periodoDisponible?.desde}
+                 />
+                 <SelectorFecha
+                   etiqueta="Hasta"
+                   valor={periodoConsulta?.hasta}
+                   minimo={periodoConsulta?.desde || periodoDisponible?.desde}
+                   maximo={periodoDisponible?.hasta}
+                   onChange={(evento) => cambiarFechaPeriodo("hasta", evento.target.value)}
+                   disabled={!periodoDisponible?.hasta}
+                 />
+               </>
+             ) : (
+               <Selector etiqueta="Periodo" valor={etiquetaPeriodo} onChange={(evento) => setPeriodo(evento.target.value)} opciones={MOCK_PERIODOS} />
+             )}
              {estadoBackend === "fallback" ? <Selector etiqueta="Empresa de referencia" valor={empresaReferencia.id} onChange={cambiarEmpresaReferencia} opciones={MOCK_EMPRESAS} /> : null}
              {estadoBackend === "fallback" ? <Selector etiqueta="Empresa comparada" valor={empresaComparada.id} onChange={cambiarEmpresaComparada} opciones={MOCK_EMPRESAS} /> : null}
              {estadoBackend === "fallback" ? <Selector etiqueta="Función" valor={funcion.id} onChange={(evento) => setFuncionId(evento.target.value)} opciones={MOCK_FUNCIONES} /> : null}

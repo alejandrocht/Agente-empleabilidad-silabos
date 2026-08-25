@@ -10,11 +10,13 @@ from neo4j.exceptions import CypherSyntaxError
 
 from agente.grafo.constructor import construir_grafo
 from agente.grafo.plan import Plan
+from agente.nodos.resuelve_entidades import resuelve_entidades
 from agente.utils.cypher_guard import guard_cypher
 from agente.utils.db import Neo4jExplainError
 from agente.utils.entity_resolver import (
     ENTITY_CONTRACTS,
     available_entity_contracts,
+    normalize_entity_text_parameters,
     reconcile_entity_parameters,
     resolve_entity,
     resolve_entity_result,
@@ -33,6 +35,24 @@ class FakeGateway:
     ) -> list[dict[str, Any]]:
         self.calls.append((cypher, dict(parameters or {})))
         return self.rows
+
+
+class CompetenciaCatalogFallbackGateway:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def run(
+        self, cypher: str, parameters: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        self.calls.append((cypher, dict(parameters or {})))
+        if "WHERE n." in cypher:
+            return []
+        return [
+            {
+                "entity_id": "COMP_6546a71d727fc690",
+                "entity_names": ["Pensamiento cr\u00edtico"],
+            }
+        ]
 
 
 class ExplainFailureGateway:
@@ -400,6 +420,85 @@ def test_plan_parameter_resolution_canonicalizes_aliases() -> None:
         )
     )
     assert resolved == {"carrera_id": "CAR_7"}
+
+
+def test_resolver_matches_unaccented_competencia_text_against_catalog_fallback() -> None:
+    gateway = CompetenciaCatalogFallbackGateway()
+
+    result = asyncio.run(
+        resolve_entity_result(
+            "competencia_texto",
+            "pensamiento critico",
+            query_gateway=gateway,
+            schema=ALL_ENTITY_SCHEMA,
+        )
+    )
+
+    assert result.status == "unique"
+    assert result.matches[0].identifier == "COMP_6546a71d727fc690"
+    assert len(gateway.calls) == 2
+
+
+def test_generic_name_parameter_is_resolved_without_term_specific_replacements() -> None:
+    gateway = CompetenciaCatalogFallbackGateway()
+    cypher = (
+        "MATCH (c:Curso)-[:TIENE]->(cc:Cobertura_Curricular)-[:CUBRE]->(co:Competencia) "
+        "WHERE toLower(co.nombre_competencia) CONTAINS toLower($texto) "
+        "RETURN DISTINCT c.nombre_curso AS curso LIMIT $limite"
+    )
+    result = asyncio.run(
+        resuelve_entidades(
+            {
+                "cypher": cypher,
+                "parameters": {"texto": "PENSAMIENTO CRITICO", "limite": 10},
+                "schema": type("Snapshot", (), {"structured": ALL_ENTITY_SCHEMA})(),
+            },
+            entity_gateway=gateway,
+        )
+    )
+
+    assert result["error"] is None
+    assert result["parameters"] == {
+        "competencia_id": "COMP_6546a71d727fc690",
+        "limite": 10,
+    }
+    assert "co.id_competencia = $competencia_id" in result["cypher"]
+
+
+def test_generic_name_parameter_normalization_is_schema_driven() -> None:
+    cypher = (
+        "MATCH (co:Competencia) WHERE toLower(co.nombre_competencia) "
+        "CONTAINS toLower($texto) RETURN co.nombre_competencia LIMIT $limite"
+    )
+
+    normalized_cypher, normalized_parameters = normalize_entity_text_parameters(
+        cypher,
+        {"texto": "PENSAMIENTO CRITICO", "limite": 10},
+        ALL_ENTITY_SCHEMA,
+    )
+
+    assert "$competencia_texto" in normalized_cypher
+    assert "$texto" not in normalized_cypher
+    assert normalized_parameters == {
+        "competencia_texto": "PENSAMIENTO CRITICO",
+        "limite": 10,
+    }
+
+
+def test_reconcile_rewrites_competencia_text_to_imported_canonical_id() -> None:
+    cypher, parameters = reconcile_entity_parameters(
+        "MATCH (comp:Competencia) WHERE toLower(comp.nombre_competencia) "
+        "CONTAINS toLower($competencia_texto) "
+        "RETURN comp.nombre_competencia AS competencia LIMIT $limite",
+        {"competencia_texto": "pensamiento critico", "limite": 20},
+        {"competencia_id": "COMP_6546a71d727fc690", "limite": 20},
+        cardinality="one",
+    )
+
+    assert "comp.id_competencia = $competencia_id" in cypher
+    assert "CONTAINS" not in cypher
+    assert parameters == {"competencia_id": "COMP_6546a71d727fc690", "limite": 20}
+    assert guard_cypher(cypher, parameters).limit == 20
 
 
 def test_reconcile_preserves_numeric_canonical_id_type() -> None:

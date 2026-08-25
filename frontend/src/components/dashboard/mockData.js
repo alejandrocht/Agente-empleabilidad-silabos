@@ -30,7 +30,8 @@ function crearBrechas(items) {
     total_ofertas: 1200,
     cursos_con_cobertura: Math.round(cobertura * 40),
     total_cursos: 40,
-    brecha: demanda - cobertura,
+    demanda_cubierta: demanda * cobertura,
+    brecha: demanda * (1 - cobertura),
   }));
 }
 

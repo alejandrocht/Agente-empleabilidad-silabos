@@ -186,11 +186,12 @@ ENTITY_CONTRACTS: Mapping[str, EntityContract] = {
         parameter_aliases=(
             "competencia_id",
             "competencia",
+            "competencia_texto",
             "competency_id",
             "competency",
         ),
-        allowed_id_prefixes=("COM_",),
-        canonical_prefix="COM_",
+        allowed_id_prefixes=("COMP_", "COM_"),
+        canonical_prefix="COMP_",
         supported_relationships=("REQUIERE",),
     ),
     "curso_id": EntityContract(
@@ -271,6 +272,51 @@ def available_entity_contracts(
         and contract.identifier in properties[contract.label]
         and any(name in properties[contract.label] for name in contract.names)
     }
+
+
+def normalize_entity_text_parameters(
+    cypher: str,
+    parameters: Mapping[str, Any],
+    schema: Mapping[str, Any] | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Route a generic name search through the matching canonical entity parameter.
+
+    The generated query may use ``$texto`` for a single entity name property.
+    Route that value through the entity resolver so matching can fold case,
+    accents, punctuation, and whitespace without term-specific replacements.
+    Ambiguous queries are left untouched and remain subject to normal validation.
+    """
+    if "$texto" not in cypher or "texto" not in parameters:
+        return cypher, dict(parameters)
+
+    predicate_region = re.split(r"\bRETURN\b", cypher, maxsplit=1, flags=re.IGNORECASE)[0]
+    candidates: list[EntityContract] = []
+    for contract in available_entity_contracts(schema).values():
+        label_pattern = rf":{re.escape(contract.label)}\b"
+        if not re.search(label_pattern, predicate_region):
+            continue
+        if not any(
+            re.search(
+                rf"\b{_CYPHER_NAME}\.{re.escape(name)}\b.*\$texto\b",
+                predicate_region,
+            )
+            for name in contract.names
+        ):
+            continue
+        candidates.append(contract)
+
+    if len(candidates) != 1:
+        return cypher, dict(parameters)
+
+    contract = candidates[0]
+    text_parameter = f"{contract.parameter.removesuffix('_id')}_texto"
+    if text_parameter in parameters:
+        return cypher, dict(parameters)
+
+    normalized_cypher = re.sub(r"\$texto\b", f"${text_parameter}", cypher)
+    normalized_parameters = dict(parameters)
+    normalized_parameters[text_parameter] = normalized_parameters.pop("texto")
+    return normalized_cypher, normalized_parameters
 
 
 def _contract_for_parameter(

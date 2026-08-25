@@ -225,6 +225,16 @@ def _stream_phase_from_event(event: dict[str, Any]) -> str:
     return phase if isinstance(phase, str) and phase in PUBLIC_PHASES else ""
 
 
+def _es_identificador_publico(key: str) -> bool:
+    clave = key.strip().lower()
+    return (
+        clave in {"id", "identificador"}
+        or clave.startswith("id_")
+        or clave.endswith("_id")
+        or clave.endswith("_ids")
+    )
+
+
 def _json_safe_public_value(value: object) -> object:
     if value is None or isinstance(value, (str, bool, int, float)):
         return value
@@ -238,7 +248,11 @@ def _json_safe_public_value(value: object) -> object:
     if isinstance(value, dict):
         sanitized_dict: dict[str, object] = {}
         for key, item in value.items():
-            if not isinstance(key, str) or key in GRAPH_INTERNAL_KEYS:
+            if (
+                not isinstance(key, str)
+                or key in GRAPH_INTERNAL_KEYS
+                or _es_identificador_publico(key)
+            ):
                 continue
             public_item = _json_safe_public_value(item)
             if public_item is not _UNSAFE_VALUE:

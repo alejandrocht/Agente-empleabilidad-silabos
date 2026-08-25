@@ -1,0 +1,1134 @@
+{
+  "generated_at": "2026-08-19T17:13:50.646220-05:00",
+  "question_count": 28,
+  "technical_success_count": 28,
+  "semantic_success_count": 28,
+  "results": [
+    {
+      "id": 1,
+      "question": "¿Qué industria corresponde al identificador INDU_NO_EXISTE?",
+      "duration_ms": 10171.73,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (i:Industria)\nWHERE i.id_industria = $industria_id\nRETURN i.nombre AS industria\nLIMIT $limite",
+      "parameters": {
+        "industria_id": "INDU_NO_EXISTE",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 0,
+      "rows_preview": [],
+      "response": "No encontré resultados para esa consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 2,
+      "question": "¿Qué herramientas corresponden a los identificadores HERR_NO_EXISTE y HERR_TAMPOCO_EXISTE?",
+      "duration_ms": 1780.19,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nWHERE h.id_herramienta IN $herramienta_ids\nRETURN DISTINCT\n  h.id_herramienta AS herramienta_id,\n  h.nombre_herramienta AS herramienta\nORDER BY herramienta ASC\nLIMIT $limite",
+      "parameters": {
+        "herramienta_ids": [
+          "HERR_NO_EXISTE",
+          "HERR_TAMPOCO_EXISTE"
+        ],
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 0,
+      "rows_preview": [],
+      "response": "No encontré resultados para esa consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 3,
+      "question": "¿Qué cursos pertenecen a la carrera con identificador CAR_NO_EXISTE?",
+      "duration_ms": 2606.18,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (c:Carrera)-[:ENSENIA]->(curso:Curso)\nWHERE c.id_carrera = $carrera_id\nRETURN DISTINCT curso.id_curso AS curso_id, curso.nombre_curso AS curso\nORDER BY curso ASC\nLIMIT $limite",
+      "parameters": {
+        "carrera_id": "CAR_NO_EXISTE",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 0,
+      "rows_preview": [],
+      "response": "No encontré resultados para esa consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 4,
+      "question": "¿Qué empresas pertenecen a la industria financiera?",
+      "duration_ms": 5587.75,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (i:Industria)-[:AGRUPA]->(e:Empresa)\nRETURN DISTINCT e.id_empresa AS empresa_id, e.nombre AS empresa, e.razon_social AS razon_social\nORDER BY empresa ASC\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "empresa_id": "EMP_221d25542ac2a8ee",
+          "empresa": "+1 SAC",
+          "razon_social": "+1 SAC"
+        },
+        {
+          "empresa_id": "EMP_4bfe58734723835d",
+          "empresa": "1000 MILLAS SAC",
+          "razon_social": "1000 MILLAS SAC"
+        },
+        {
+          "empresa_id": "EMP_3e5f34515cd3dac5",
+          "empresa": "1TO1 SAC",
+          "razon_social": "1TO1 SAC"
+        },
+        {
+          "empresa_id": "EMP_6f97bb399a8d55cf",
+          "empresa": "2019FACT PRODUCCIONES SAC",
+          "razon_social": "2019FACT PRODUCCIONES SAC"
+        },
+        {
+          "empresa_id": "EMP_49072f860543e39a",
+          "empresa": "2CONNECT SERVICES S.A.C.",
+          "razon_social": "2CONNECT SERVICES S.A.C."
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 5,
+      "question": "¿Cuántas ofertas requieren Python?",
+      "duration_ms": 3156.11,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nWHERE toLower(h.nombre_herramienta) CONTAINS toLower($herramienta_texto)\nRETURN count(DISTINCT o) AS total_ofertas\nLIMIT $limite",
+      "parameters": {
+        "herramienta_texto": "Python",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 1,
+      "rows_preview": [
+        {
+          "total_ofertas": 122
+        }
+      ],
+      "response": "Encontré 1 resultado para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 6,
+      "question": "¿Cuántas ofertas requieren Python o SQL?",
+      "duration_ms": 4785.84,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nWHERE toLower(h.nombre_herramienta) CONTAINS toLower($python_text)\n   OR toLower(h.nombre_herramienta) CONTAINS toLower($sql_text)\nRETURN count(DISTINCT o) AS total_ofertas\nLIMIT $limite",
+      "parameters": {
+        "python_text": "Python",
+        "sql_text": "SQL",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 1,
+      "rows_preview": [
+        {
+          "total_ofertas": 470
+        }
+      ],
+      "response": "Encontré 1 resultado para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 7,
+      "question": "¿Qué puestos requieren Python y SQL?",
+      "duration_ms": 2040.95,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nMATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nWHERE toLower(h.nombre_herramienta) CONTAINS toLower($herramienta_python_texto)\n   OR toLower(h.nombre_herramienta) CONTAINS toLower($herramienta_sql_texto)\nRETURN DISTINCT p.id_puesto AS puesto_id, p.nombre AS puesto\nLIMIT $limite",
+      "parameters": {
+        "herramienta_python_texto": "Python",
+        "herramienta_sql_texto": "SQL",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "puesto_id": "PUE_a3a0a9b3641ba282",
+          "puesto": "DESARROLLADOR WEB FULLSTAK EQUIPO DE DESARROLLO"
+        },
+        {
+          "puesto_id": "PUE_0f5a4296930c8901",
+          "puesto": "DESARROLLADOR WEB FULLSTAK EQUIPO DE DESARROLLO"
+        },
+        {
+          "puesto_id": "PUE_fe3eeceaeb63096a",
+          "puesto": "PRACTICANTE DE SISTEMAS"
+        },
+        {
+          "puesto_id": "PUE_6fc8a17a5ec0ac06",
+          "puesto": "PRACTICANTE DE DESARROLLO WEB DE EQUIPO DE DESARROLLO"
+        },
+        {
+          "puesto_id": "PUE_283d606a925ce335",
+          "puesto": "PRACTICANTE DE DESARROLLO WEB DE EQUIPO DE DESARROLLO"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 8,
+      "question": "¿Qué herramientas aparecen para puestos de Analista?",
+      "duration_ms": 2927.1,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)-[:DEFIINE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nWHERE toLower(p.nombre) CONTAINS toLower($puesto_texto)\nRETURN DISTINCT h.id_herramienta AS herramienta_id, h.nombre_herramienta AS herramienta\nORDER BY herramienta ASC\nLIMIT $limite",
+      "parameters": {
+        "puesto_texto": "Analista",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "herramienta_id": "HERR_48a5e1cbd9db3fe1",
+          "herramienta": ".NET"
+        },
+        {
+          "herramienta_id": "HERR_2723a3e08bcc219e",
+          "herramienta": "AWS"
+        },
+        {
+          "herramienta_id": "HERR_60086edfd2cfb147",
+          "herramienta": "Adobe Illustrator"
+        },
+        {
+          "herramienta_id": "HERR_73afc734b62d5c8e",
+          "herramienta": "Adobe Photoshop"
+        },
+        {
+          "herramienta_id": "HERR_ced16fd60439ffc4",
+          "herramienta": "Angular"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 9,
+      "question": "¿Qué habilidades se piden en ofertas para Analista de Datos?",
+      "duration_ms": 4133.12,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nMATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Habilidad)\nWHERE toLower(p.nombre) CONTAINS toLower($puesto_texto)\nRETURN DISTINCT h.id_habilidad AS habilidad_id, h.nombre_habilidad AS habilidad\nORDER BY habilidad ASC\nLIMIT $limite",
+      "parameters": {
+        "puesto_texto": "Analista de Datos",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 14,
+      "rows_preview": [
+        {
+          "habilidad_id": "HAB_032538ca5d591618",
+          "habilidad": "Análisis de datos"
+        },
+        {
+          "habilidad_id": "HAB_cc93a2acf65b9e74",
+          "habilidad": "Clasificación de datos"
+        },
+        {
+          "habilidad_id": "HAB_04e5bfe0302c620f",
+          "habilidad": "Computación en la nube"
+        },
+        {
+          "habilidad_id": "HAB_d8263e25e4095670",
+          "habilidad": "Consultas de bases de datos"
+        },
+        {
+          "habilidad_id": "HAB_082abf2de29df399",
+          "habilidad": "Elaboración de informes"
+        }
+      ],
+      "response": "Encontré 14 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 10,
+      "question": "¿Qué ofertas mencionan el cargo crudo Analista en el texto publicado?",
+      "duration_ms": 3962.4,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)\nWHERE toLower(o.cargo) CONTAINS toLower($cargo_texto)\nRETURN o.id_ofe_laboral AS oferta_id, o.cargo AS cargo, o.fecha_publicacion AS fecha_publicacion\nORDER BY fecha_publicacion DESC, oferta_id ASC\nLIMIT $limite",
+      "parameters": {
+        "cargo_texto": "Analista",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "oferta_id": "LAB_d16e2f894056e6a4",
+          "cargo": "ANALISTA",
+          "fecha_publicacion": "2025-12-31T00:00:00.000000000+00:00"
+        },
+        {
+          "oferta_id": "LAB_5766b852d5c86fe5",
+          "cargo": "ANALISTA",
+          "fecha_publicacion": "2025-12-30T00:00:00.000000000+00:00"
+        },
+        {
+          "oferta_id": "LAB_d951fc55d4ec9b65",
+          "cargo": "ANALISTA",
+          "fecha_publicacion": "2025-12-30T00:00:00.000000000+00:00"
+        },
+        {
+          "oferta_id": "LAB_6de9429829f19aeb",
+          "cargo": "ANALISTA",
+          "fecha_publicacion": "2025-12-29T00:00:00.000000000+00:00"
+        },
+        {
+          "oferta_id": "LAB_e922acc2aa4ece46",
+          "cargo": "ANALISTA",
+          "fecha_publicacion": "2025-12-29T00:00:00.000000000+00:00"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 11,
+      "question": "¿Qué puestos formales contienen Analista en su nombre?",
+      "duration_ms": 2767.94,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nWHERE toLower(p.nombre) CONTAINS toLower($texto)\nRETURN DISTINCT p.id_puesto AS puesto_id, p.nombre AS puesto\nORDER BY puesto ASC\nLIMIT $limite",
+      "parameters": {
+        "texto": "Analista",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "puesto_id": "PUE_bad1632186e10b80",
+          "puesto": "37 ANALISTA DE INVESTIGACIÓN"
+        },
+        {
+          "puesto_id": "PUE_db6d1784ff769889",
+          "puesto": "AANALISTA DE FINANZAS"
+        },
+        {
+          "puesto_id": "PUE_5c1406e652c67242",
+          "puesto": "ABOGADO ANALISTA DE PROCESAL CIVIL"
+        },
+        {
+          "puesto_id": "PUE_49462d23f0eb2d11",
+          "puesto": "ABOGADO ANALISTA GP DE RECLAMOS"
+        },
+        {
+          "puesto_id": "PUE_48fefbcb38b855cd",
+          "puesto": "ABOGADO ANALISTA PROCESAL CIVIL"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 12,
+      "question": "¿Cuáles son las empresas con más ofertas durante 2025?",
+      "duration_ms": 6096.06,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)\nWHERE date(o.fecha_publicacion) >= date($desde)\n  AND date(o.fecha_publicacion) < date($hasta)\nRETURN e.id_empresa AS empresa_id, e.nombre AS empresa, count(DISTINCT o) AS total_ofertas\nORDER BY total_ofertas DESC, empresa ASC\nLIMIT $limite",
+      "parameters": {
+        "desde": "2025-01-01",
+        "hasta": "2026-01-01",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "empresa_id": "EMP_640c6553c6f2ee7d",
+          "empresa": "BANCO DE LA NACION",
+          "total_ofertas": 165
+        },
+        {
+          "empresa_id": "EMP_717bceafc1a5dafd",
+          "empresa": "V & O VASVAL CONSULTORES Y ASESORES",
+          "total_ofertas": 164
+        },
+        {
+          "empresa_id": "EMP_47f42efb87384408",
+          "empresa": "ADECCO CONSULTING S.A.",
+          "total_ofertas": 161
+        },
+        {
+          "empresa_id": "EMP_a197af00a598b78c",
+          "empresa": "EVENTIVA S.A.C.",
+          "total_ofertas": 156
+        },
+        {
+          "empresa_id": "EMP_a816ad613ea1420c",
+          "empresa": "SUPERINTENDENCIA NACIONAL DE ADUANAS Y DE ADMINISTRACION TRIBUTARIA - SUNAT",
+          "total_ofertas": 152
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 13,
+      "question": "¿Cuáles son las ofertas publicadas desde 2025-01-01 hasta 2025-12-31?",
+      "duration_ms": 6936.07,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)\nWHERE o.fecha_publicacion IS NOT NULL\n  AND date(o.fecha_publicacion) >= date($desde)\n  AND date(o.fecha_publicacion) < date($hasta)\nRETURN DISTINCT\n  o.id_ofe_laboral AS oferta_id,\n  e.id_empresa AS empresa_id,\n  e.nombre AS empresa,\n  o.fecha_publicacion AS fecha_publicacion\nORDER BY fecha_publicacion DESC, oferta_id ASC\nLIMIT $limite",
+      "parameters": {
+        "desde": "2025-01-01",
+        "hasta": "2026-01-01",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "oferta_id": "LAB_102f74b214d4f701",
+          "empresa_id": "EMP_929bc6444f8f992e",
+          "empresa": "RCS CAPITAL HUMANO EIRL",
+          "fecha_publicacion": "2025-12-31T00:00:00.000000000+00:00"
+        },
+        {
+          "oferta_id": "LAB_356022ef2f975a60",
+          "empresa_id": "EMP_929bc6444f8f992e",
+          "empresa": "RCS CAPITAL HUMANO EIRL",
+          "fecha_publicacion": "2025-12-31T00:00:00.000000000+00:00"
+        },
+        {
+          "oferta_id": "LAB_3a9b8da5a269e5de",
+          "empresa_id": "EMP_68b3600ac4677b66",
+          "empresa": "UNIVERSIDAD MARIA AUXILIADORA S.A.C.",
+          "fecha_publicacion": "2025-12-31T00:00:00.000000000+00:00"
+        },
+        {
+          "oferta_id": "LAB_580501cd79aaddaf",
+          "empresa_id": "EMP_03ec4afb3d8e5901",
+          "empresa": "PRUDENTIALSAF SOCIEDAD ADMINISTRADORA DE FONDOS S.A.C.",
+          "fecha_publicacion": "2025-12-31T00:00:00.000000000+00:00"
+        },
+        {
+          "oferta_id": "LAB_5ac3b8c1e9457bcf",
+          "empresa_id": "EMP_68b3600ac4677b66",
+          "empresa": "UNIVERSIDAD MARIA AUXILIADORA S.A.C.",
+          "fecha_publicacion": "2025-12-31T00:00:00.000000000+00:00"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 14,
+      "question": "¿Qué industrias tuvieron ofertas recientes y cuántas fueron?",
+      "duration_ms": 5620.0,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (i:Industria)-[:AGRUPA]->(e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)\nWHERE o.fecha_publicacion IS NOT NULL\nRETURN i.id_industria AS industria_id, i.nombre AS industria, count(DISTINCT o) AS total_ofertas, max(o.fecha_publicacion) AS ultima_publicacion\nORDER BY ultima_publicacion DESC, total_ofertas DESC, industria ASC\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "industria_id": "INDU_c61bd6a4248d91f8",
+          "industria": "Otras actividades de dotación de recursos humanos",
+          "total_ofertas": 3232,
+          "ultima_publicacion": "2025-12-31T00:00:00.000000000+00:00"
+        },
+        {
+          "industria_id": "INDU_500bb06b8dd4cd9b",
+          "industria": "Otros tipos de intermediación monetaria",
+          "total_ofertas": 1314,
+          "ultima_publicacion": "2025-12-31T00:00:00.000000000+00:00"
+        },
+        {
+          "industria_id": "INDU_bca9ec8f463c4088",
+          "industria": "Enseñanza superior",
+          "total_ofertas": 741,
+          "ultima_publicacion": "2025-12-31T00:00:00.000000000+00:00"
+        },
+        {
+          "industria_id": "INDU_2fcce50f75dc6b51",
+          "industria": "Administración de mercados financieros",
+          "total_ofertas": 412,
+          "ultima_publicacion": "2025-12-31T00:00:00.000000000+00:00"
+        },
+        {
+          "industria_id": "INDU_5a51bc0c9aa2b803",
+          "industria": "Actividades de telecomunicaciones inalámbricas",
+          "total_ofertas": 222,
+          "ultima_publicacion": "2025-12-31T00:00:00.000000000+00:00"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 15,
+      "question": "¿Qué herramientas están relacionadas con cada puesto y cuántas ofertas sostienen cada par?",
+      "duration_ms": 5169.73,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nMATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nRETURN p.id_puesto AS puesto_id, p.nombre AS puesto, h.id_herramienta AS herramienta_id, h.nombre_herramienta AS herramienta, count(DISTINCT o) AS total_ofertas\nORDER BY total_ofertas DESC, puesto ASC, herramienta ASC\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "puesto_id": "PUE_eb573238175bfe64",
+          "puesto": ".NET DEVELOPER - INTERN",
+          "herramienta_id": "HERR_ff15d3db67353076",
+          "herramienta": "Microsoft Azure",
+          "total_ofertas": 1
+        },
+        {
+          "puesto_id": "PUE_bb873f6e37cc1899",
+          "puesto": ".NET DEVELOPER - INTERN",
+          "herramienta_id": "HERR_ff15d3db67353076",
+          "herramienta": "Microsoft Azure",
+          "total_ofertas": 1
+        },
+        {
+          "puesto_id": "PUE_17dbd5ee321ddd97",
+          "puesto": ".NET DEVELOPER - INTERN",
+          "herramienta_id": "HERR_ff15d3db67353076",
+          "herramienta": "Microsoft Azure",
+          "total_ofertas": 1
+        },
+        {
+          "puesto_id": "PUE_dba8b0c0d6d6e04f",
+          "puesto": ".NET DEVELOPER - INTERN DE INTEGRITY RISK SERVICES",
+          "herramienta_id": "HERR_ff15d3db67353076",
+          "herramienta": "Microsoft Azure",
+          "total_ofertas": 1
+        },
+        {
+          "puesto_id": "PUE_d21fe70a1ee877b5",
+          "puesto": ".NET DEVELOPER - STAFF",
+          "herramienta_id": "HERR_ff15d3db67353076",
+          "herramienta": "Microsoft Azure",
+          "total_ofertas": 1
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 16,
+      "question": "¿Qué combinaciones únicas de empresa, puesto y herramienta aparecen en las ofertas?",
+      "duration_ms": 4632.95,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nMATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nRETURN DISTINCT e.nombre AS empresa, p.nombre AS puesto, h.nombre_herramienta AS herramienta\nORDER BY empresa ASC, puesto ASC, herramienta ASC\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "empresa": "1000 MILLAS SAC",
+          "puesto": "CLIMA Y CULTURA DE CLIMA Y CULTURA",
+          "herramienta": "Adobe Illustrator"
+        },
+        {
+          "empresa": "1000 MILLAS SAC",
+          "puesto": "CLIMA Y CULTURA DE CLIMA Y CULTURA",
+          "herramienta": "Adobe Photoshop"
+        },
+        {
+          "empresa": "1000 MILLAS SAC",
+          "puesto": "CLIMA Y CULTURA DE CLIMA Y CULTURA",
+          "herramienta": "Canva"
+        },
+        {
+          "empresa": "1000 MILLAS SAC",
+          "puesto": "CLIMA Y CULTURA DE CLIMA Y CULTURA",
+          "herramienta": "Microsoft Excel"
+        },
+        {
+          "empresa": "1000 MILLAS SAC",
+          "puesto": "CLIMA Y CULTURA DE CLIMA Y CULTURA",
+          "herramienta": "Microsoft Word"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 17,
+      "question": "¿Qué combinaciones únicas de empresa, herramienta y habilidad aparecen en las ofertas?",
+      "duration_ms": 4484.48,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Habilidad)\nMATCH (r)-[:REQUIERE]->(t:Herramienta)\nRETURN DISTINCT\n  e.nombre AS empresa,\n  t.nombre_herramienta AS herramienta,\n  h.nombre_habilidad AS habilidad\nORDER BY empresa ASC, herramienta ASC, habilidad ASC\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "empresa": "1000 MILLAS SAC",
+          "herramienta": "Adobe Illustrator",
+          "habilidad": "Análisis de datos"
+        },
+        {
+          "empresa": "1000 MILLAS SAC",
+          "herramienta": "Adobe Photoshop",
+          "habilidad": "Análisis de datos"
+        },
+        {
+          "empresa": "1000 MILLAS SAC",
+          "herramienta": "Canva",
+          "habilidad": "Análisis de datos"
+        },
+        {
+          "empresa": "1000 MILLAS SAC",
+          "herramienta": "Microsoft Excel",
+          "habilidad": "Análisis de datos"
+        },
+        {
+          "empresa": "1000 MILLAS SAC",
+          "herramienta": "Microsoft Word",
+          "habilidad": "Análisis de datos"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 18,
+      "question": "¿Qué carreras reciben ofertas de empresas financieras?",
+      "duration_ms": 4056.58,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (i:Industria)-[:AGRUPA]->(e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)-[:DIRIGE_A]->(c:Carrera)\nWHERE toLower(i.nombre) CONTAINS toLower($industria_texto)\nRETURN DISTINCT c.id_carrera AS carrera_id, c.nombre_carrera AS carrera\nORDER BY carrera ASC\nLIMIT $limite",
+      "parameters": {
+        "industria_texto": "financieras",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 7,
+      "rows_preview": [
+        {
+          "carrera_id": "CAR_6cf69ce9e7aca4e0",
+          "carrera": "ADMINISTRACIÓN"
+        },
+        {
+          "carrera_id": "CAR_8f496feec94eb1ce",
+          "carrera": "COMUNICACIÓN"
+        },
+        {
+          "carrera_id": "CAR_525cfd02ce6f836c",
+          "carrera": "CONTABILIDAD Y FINANZAS"
+        },
+        {
+          "carrera_id": "CAR_b8b3a9403ceee5e6",
+          "carrera": "DERECHO"
+        },
+        {
+          "carrera_id": "CAR_7f7e4d7eba491f6f",
+          "carrera": "ECONOMÍA"
+        }
+      ],
+      "response": "Encontré 7 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 19,
+      "question": "¿Qué competencias aparecen en cursos de Ingeniería de Sistemas?",
+      "duration_ms": 3632.15,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (c:Carrera)-[:ENSENIA]->(cu:Curso)-[:TIENE]->(cc:Cobertura_Curricular)-[:CUBRE]->(co:Competencia)\nWHERE toLower(c.nombre_carrera) CONTAINS toLower($carrera_texto)\nRETURN DISTINCT co.id_competencia AS competencia_id, co.nombre_competencia AS competencia\nORDER BY competencia ASC\nLIMIT $limite",
+      "parameters": {
+        "carrera_texto": "Ingeniería de Sistemas",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "competencia_id": "COMP_4f7ae2708e4aa92f",
+          "competencia": "Administración de bases de datos"
+        },
+        {
+          "competencia_id": "COMP_718b0efa134f71b8",
+          "competencia": "Administración de personal"
+        },
+        {
+          "competencia_id": "COMP_e4235f8d3d6ef84a",
+          "competencia": "Análisis de datos"
+        },
+        {
+          "competencia_id": "COMP_8fd8ee321018ed10",
+          "competencia": "Análisis de datos para la toma de decisiones"
+        },
+        {
+          "competencia_id": "COMP_d2c87cd1c1fc2543",
+          "competencia": "Análisis de mercado"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 20,
+      "question": "¿Qué empresas publicaron ofertas que requieren Pythno?",
+      "duration_ms": 3671.46,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nWHERE toLower(h.nombre_herramienta) CONTAINS toLower($herramienta_texto)\nRETURN DISTINCT e.id_empresa AS empresa_id, e.nombre AS empresa, e.razon_social AS razon_social\nORDER BY empresa ASC\nLIMIT $limite",
+      "parameters": {
+        "herramienta_texto": "Pythno",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 0,
+      "rows_preview": [],
+      "response": "No encontré resultados para esa consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 21,
+      "question": "¿Qué empresas pertenecen a la industria finaciera?",
+      "duration_ms": 4093.03,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (i:Industria)-[:AGRUPA]->(e:Empresa)\nWHERE toLower(i.nombre) CONTAINS toLower($industria_texto)\nRETURN DISTINCT e.id_empresa AS empresa_id, e.nombre AS nombre, e.razon_social AS razon_social\nORDER BY nombre ASC\nLIMIT $limite",
+      "parameters": {
+        "industria_texto": "financiera",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "empresa_id": "EMP_c62c3253708d30c7",
+          "nombre": "AC CAPITALES SOCIEDAD ADMINISTRADORA DE FONDOS DE INVERSION S.A.",
+          "razon_social": "AC CAPITALES SOCIEDAD ADMINISTRADORA DE FONDOS DE INVERSION S.A."
+        },
+        {
+          "empresa_id": "EMP_5a02280203f96edf",
+          "nombre": "AURYN HOLDINGS S.A.C",
+          "razon_social": "AURYN HOLDINGS S.A.C"
+        },
+        {
+          "empresa_id": "EMP_1f200afabf336762",
+          "nombre": "BD CAPITAL SAFI S.A.C.",
+          "razon_social": "BD CAPITAL SAFI S.A.C."
+        },
+        {
+          "empresa_id": "EMP_0f2889ba720d025a",
+          "nombre": "BLANCO SOCIEDAD ANONIMA DE FONDOS S.A.C.",
+          "razon_social": "BLANCO SOCIEDAD ANONIMA DE FONDOS S.A.C."
+        },
+        {
+          "empresa_id": "EMP_8e8c71d0e1d8f6a2",
+          "nombre": "CAPIA SOCIEDAD ADMINISTRADORA DE FONDOS DE INVERSION S.A",
+          "razon_social": "CAPIA SOCIEDAD ADMINISTRADORA DE FONDOS DE INVERSION S.A"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 22,
+      "question": "¿Qué puestos aparecen para el término ambiguo Analista?",
+      "duration_ms": 1901.67,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nWHERE toLower(p.nombre) CONTAINS toLower($puesto_texto)\nRETURN DISTINCT\n  p.id_puesto AS puesto_id,\n  p.nombre AS puesto\nORDER BY puesto ASC\nLIMIT $limite",
+      "parameters": {
+        "puesto_texto": "Analista",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "puesto_id": "PUE_bad1632186e10b80",
+          "puesto": "37 ANALISTA DE INVESTIGACIÓN"
+        },
+        {
+          "puesto_id": "PUE_db6d1784ff769889",
+          "puesto": "AANALISTA DE FINANZAS"
+        },
+        {
+          "puesto_id": "PUE_5c1406e652c67242",
+          "puesto": "ABOGADO ANALISTA DE PROCESAL CIVIL"
+        },
+        {
+          "puesto_id": "PUE_49462d23f0eb2d11",
+          "puesto": "ABOGADO ANALISTA GP DE RECLAMOS"
+        },
+        {
+          "puesto_id": "PUE_48fefbcb38b855cd",
+          "puesto": "ABOGADO ANALISTA PROCESAL CIVIL"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 23,
+      "question": "¿Cuántas ofertas no tienen fecha de publicación?",
+      "duration_ms": 2557.76,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)\nWHERE o.fecha_publicacion IS NULL\nRETURN count(o) AS total_ofertas\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 1,
+      "rows_preview": [
+        {
+          "total_ofertas": 0
+        }
+      ],
+      "response": "Encontré 1 resultado para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 24,
+      "question": "¿Qué ofertas tienen fecha de finalización posterior a su publicación?",
+      "duration_ms": 3888.92,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)\nWHERE o.fecha_publicacion IS NOT NULL\n  AND o.fecha_finalizacion IS NOT NULL\n  AND date(o.fecha_finalizacion) > date(o.fecha_publicacion)\nRETURN o.id_ofe_laboral AS oferta_id,\n       o.cargo AS cargo,\n       o.fecha_publicacion AS fecha_publicacion,\n       o.fecha_finalizacion AS fecha_finalizacion\nORDER BY fecha_finalizacion DESC\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "oferta_id": "LAB_34911649d3fb4b07",
+          "cargo": "TRAINEE",
+          "fecha_publicacion": "2022-02-25T00:00:00.000000000+00:00",
+          "fecha_finalizacion": "2030-03-15T00:00:00.000000000+00:00"
+        },
+        {
+          "oferta_id": "LAB_f8779c1ac4649cb8",
+          "cargo": "PRACTICANTE PROFESIONAL",
+          "fecha_publicacion": "2022-03-09T00:00:00.000000000+00:00",
+          "fecha_finalizacion": "2029-11-15T00:00:00.000000000+00:00"
+        },
+        {
+          "oferta_id": "LAB_6aad505e32de601c",
+          "cargo": "PRACTICANTE",
+          "fecha_publicacion": "2024-10-10T00:00:00.000000000+00:00",
+          "fecha_finalizacion": "2027-11-13T00:00:00.000000000+00:00"
+        },
+        {
+          "oferta_id": "LAB_a6263761eaf92cde",
+          "cargo": "PRACTICANTE",
+          "fecha_publicacion": "2022-08-26T00:00:00.000000000+00:00",
+          "fecha_finalizacion": "2027-09-21T00:00:00.000000000+00:00"
+        },
+        {
+          "oferta_id": "LAB_c577d88798181634",
+          "cargo": "ASISTENTE",
+          "fecha_publicacion": "2024-10-25T00:00:00.000000000+00:00",
+          "fecha_finalizacion": "2027-01-15T00:00:00.000000000+00:00"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 25,
+      "question": "¿Qué empresas ofrecen puestos de Datos o Finanzas?",
+      "duration_ms": 4309.41,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nWHERE toLower(p.nombre) CONTAINS toLower($datos_texto)\n   OR toLower(p.nombre) CONTAINS toLower($finanzas_texto)\nRETURN DISTINCT e.id_empresa AS empresa_id, e.nombre AS empresa\nORDER BY empresa ASC\nLIMIT $limite",
+      "parameters": {
+        "datos_texto": "Datos",
+        "finanzas_texto": "Finanzas",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "empresa_id": "EMP_2a101ee4e9d69b29",
+          "empresa": "3M PERU SA"
+        },
+        {
+          "empresa_id": "EMP_fb4d96aa64e0d1a4",
+          "empresa": "4S CONSULTORIA SAC"
+        },
+        {
+          "empresa_id": "EMP_4fb4d3676826ac84",
+          "empresa": "4X COFFEE S.A.C."
+        },
+        {
+          "empresa_id": "EMP_f0afd3c322c4cb05",
+          "empresa": "99 MINUTOS PERÚ SAC"
+        },
+        {
+          "empresa_id": "EMP_bd2df45059b03e3e",
+          "empresa": "A B INAC S.A.C."
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 26,
+      "question": "¿Qué herramientas distintas requiere cada empresa?",
+      "duration_ms": 3751.63,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nRETURN DISTINCT e.id_empresa AS empresa_id, e.nombre AS empresa, h.id_herramienta AS herramienta_id, h.nombre_herramienta AS herramienta\nORDER BY empresa ASC, herramienta ASC\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "empresa_id": "EMP_4bfe58734723835d",
+          "empresa": "1000 MILLAS SAC",
+          "herramienta_id": "HERR_60086edfd2cfb147",
+          "herramienta": "Adobe Illustrator"
+        },
+        {
+          "empresa_id": "EMP_4bfe58734723835d",
+          "empresa": "1000 MILLAS SAC",
+          "herramienta_id": "HERR_73afc734b62d5c8e",
+          "herramienta": "Adobe Photoshop"
+        },
+        {
+          "empresa_id": "EMP_4bfe58734723835d",
+          "empresa": "1000 MILLAS SAC",
+          "herramienta_id": "HERR_95475a507be8b545",
+          "herramienta": "Canva"
+        },
+        {
+          "empresa_id": "EMP_4bfe58734723835d",
+          "empresa": "1000 MILLAS SAC",
+          "herramienta_id": "HERR_5654c9328bff43d4",
+          "herramienta": "Microsoft Excel"
+        },
+        {
+          "empresa_id": "EMP_4bfe58734723835d",
+          "empresa": "1000 MILLAS SAC",
+          "herramienta_id": "HERR_8949f8736dc1056c",
+          "herramienta": "Microsoft Word"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 27,
+      "question": "¿Qué puestos tienen más herramientas distintas asociadas?",
+      "duration_ms": 2812.87,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nMATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nRETURN p.id_puesto AS puesto_id, p.nombre AS puesto, count(DISTINCT h) AS herramientas_distintas\nORDER BY herramientas_distintas DESC, puesto ASC\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "puesto_id": "PUE_1879f39965850a18",
+          "puesto": "ANALISTA PROGRAMADOR SENIOR PARA SECTOR SALUD",
+          "herramientas_distintas": 17
+        },
+        {
+          "puesto_id": "PUE_2f8cf56d8a79c114",
+          "puesto": "PROGRAMADOR PHP SENIOR",
+          "herramientas_distintas": 16
+        },
+        {
+          "puesto_id": "PUE_87aa6a0f7aa09af8",
+          "puesto": "FULL STACK DEVELOPER SENIOR DE SISTEMAS",
+          "herramientas_distintas": 15
+        },
+        {
+          "puesto_id": "PUE_c44a39bd3d6e7e77",
+          "puesto": "CAS Nº 050 - 2023 ARQUITECTO JUNIOR",
+          "herramientas_distintas": 11
+        },
+        {
+          "puesto_id": "PUE_bc035feeb36fb64f",
+          "puesto": null,
+          "herramientas_distintas": 11
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 28,
+      "question": "¿Qué industrias, empresas y puestos concentran más ofertas?",
+      "duration_ms": 4804.68,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (i:Industria)-[:AGRUPA]->(e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nRETURN i.id_industria AS industria_id, i.nombre AS industria, e.id_empresa AS empresa_id, e.nombre AS empresa, p.id_puesto AS puesto_id, p.nombre AS puesto, count(DISTINCT o) AS total_ofertas\nORDER BY total_ofertas DESC, industria ASC, empresa ASC, puesto ASC\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "industria_id": "INDU_457f5a43cb894851",
+          "industria": "Acabado de productos textiles",
+          "empresa_id": "EMP_7f3305fa91a73081",
+          "empresa": "APJL TEXTIL S.A.C.",
+          "puesto_id": "PUE_9951182f7c8c0dcf",
+          "puesto": "COMMUNITY MANAGER DE MARKETING",
+          "total_ofertas": 1
+        },
+        {
+          "industria_id": "INDU_457f5a43cb894851",
+          "industria": "Acabado de productos textiles",
+          "empresa_id": "EMP_7f3305fa91a73081",
+          "empresa": "APJL TEXTIL S.A.C.",
+          "puesto_id": "PUE_2d4b72b5b2ab73b0",
+          "puesto": "CONTROLISTA DE CALIDAD TEXTIL DE PRODUCCIÓN",
+          "total_ofertas": 1
+        },
+        {
+          "industria_id": "INDU_457f5a43cb894851",
+          "industria": "Acabado de productos textiles",
+          "empresa_id": "EMP_7f3305fa91a73081",
+          "empresa": "APJL TEXTIL S.A.C.",
+          "puesto_id": "PUE_c7a29a86d16d078d",
+          "puesto": "FACTURADOR DE CONTABILIDAD",
+          "total_ofertas": 1
+        },
+        {
+          "industria_id": "INDU_457f5a43cb894851",
+          "industria": "Acabado de productos textiles",
+          "empresa_id": "EMP_7f3305fa91a73081",
+          "empresa": "APJL TEXTIL S.A.C.",
+          "puesto_id": "PUE_605c69b199899f59",
+          "puesto": "JEFE DE PLANEAMIENTO Y CONTROL DE LA PRODUCCIÓN",
+          "total_ofertas": 1
+        },
+        {
+          "industria_id": "INDU_457f5a43cb894851",
+          "industria": "Acabado de productos textiles",
+          "empresa_id": "EMP_7f3305fa91a73081",
+          "empresa": "APJL TEXTIL S.A.C.",
+          "puesto_id": "PUE_d47a8d642eeb0714",
+          "puesto": "JEFE DE PLANEAMIENTO Y CONTROL DE LA PRODUCCIÓN",
+          "total_ofertas": 1
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    }
+  ]
+}

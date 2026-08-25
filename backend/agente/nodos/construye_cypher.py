@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from collections.abc import Mapping
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -31,6 +32,9 @@ from agente.utils.logger import (
 from agente.utils.verbose import verbose_label, verbose_step
 
 MAX_GENERATION_ATTEMPTS = 2
+_TEXT_SEARCH_PARAMETER_NAMES = frozenset(
+    {"texto", "curso_texto", "herramienta_texto", "habilidad_texto", "competencia_texto"}
+)
 SAFE_GENERATION_ERROR = (
     "No pude consultar la información de forma segura en este momento. "
     "Intentá nuevamente más tarde."
@@ -62,6 +66,30 @@ def _redact_quoted_literals(cypher: str) -> str:
                 break
             index += 1
     return "".join(redacted)
+
+
+def _fold_search_text(value: str) -> str:
+    """Fold case and accents only for structural intent checks."""
+    decomposed = unicodedata.normalize("NFKD", value.casefold())
+    without_marks = "".join(
+        character for character in decomposed if not unicodedata.combining(character)
+    )
+    return " ".join(re.findall(r"[a-z0-9]+", without_marks))
+
+
+def _normalize_text_search_parameters(
+    parameters: Mapping[str, object],
+    question: object,
+) -> dict[str, object]:
+    del question
+    return {
+        name: (
+            value.strip()
+            if name in _TEXT_SEARCH_PARAMETER_NAMES and isinstance(value, str)
+            else value
+        )
+        for name, value in parameters.items()
+    }
 
 
 def _debug_cypher(
@@ -100,6 +128,11 @@ Reglas obligatorias y no negociables:
   dirección; no inventes ni infieras elementos fuera de ese resumen.
 - Parametrizá todo valor proveniente de la pregunta. Preferí
   toLower(variable.propiedad) CONTAINS toLower($texto) sólo para parámetros textuales.
+- Un parámetro de búsqueda textual debe contener sólo el concepto buscado, nunca la pregunta
+  completa; usa el nombre o concepto que se está buscando.
+- Si la pregunta actual es un seguimiento como “con qué tecnologías se enseñan”, conserva el
+  curso mencionado en el contexto previo y consulta las tecnologías/herramientas relacionadas;
+  no conviertas la pregunta de seguimiento en una búsqueda por nombre de curso.
 - Respetá el contrato canónico de entidades: usá el nombre concreto de la entidad en el
   parámetro (`$industria_id`, `$herramienta_id`, `$carrera_id`, etc.) y comparalo sólo con su
   propiedad ID correspondiente mediante `=`. Para listas, usá el plural concreto (`*_ids`)
@@ -165,6 +198,12 @@ def _correction_feedback(exc: Exception | None = None) -> str:
             " La salida usó una agregación directamente en ORDER BY sin proyectarla. "
             "Proyectá la agregación en RETURN con un alias y ordená por ese alias."
         )
+    elif exc is not None and "Technology follow-up" in str(exc):
+        semantic_feedback = (
+            " La pregunta es un seguimiento sobre tecnologías: incluí un nodo etiquetado "
+            "Herramienta o Tecnologia y la relación curricular que lo conecte con el curso. "
+            "No busques únicamente el nombre del curso ni su sumilla."
+        )
     return (
         "La salida anterior fue rechazada. Generá nuevamente una sola consulta de lectura, "
         "sin escritura, CALL, UNION, subconsultas, WITH, UNWIND, FOREACH, comprehensions, "
@@ -200,6 +239,18 @@ def _reject_interpolated_values(cypher: str) -> None:
     """Require generated user values to travel through parameters, not literals."""
     if re.search(r"['\"`]", cypher):
         raise CypherGuardError("Generated Cypher must parameterize string values")
+
+
+def _validate_follow_up_shape(cypher: str, question: object) -> None:
+    if not isinstance(question, str):
+        return
+    folded_question = _fold_search_text(question)
+    if not re.search(r"\bcon\s+que\s+(?:tecnologia|herramienta)", folded_question):
+        return
+    if not re.search(r":(?:Herramienta|Tecnologia)\b", cypher, re.IGNORECASE):
+        raise SchemaValidationError(
+            "Technology follow-up must traverse a Herramienta or Tecnologia node"
+        )
 
 
 async def construye_cypher(
@@ -279,6 +330,14 @@ async def construye_cypher(
                 log_event("dynamic_query", "llm_request", context=request_context)
                 generation_started_at = time.perf_counter()
                 generated = GeneratedQuery.model_validate(await runnable.ainvoke(messages))
+                generated = generated.model_copy(
+                    update={
+                        "parameters": _normalize_text_search_parameters(
+                            generated.parameters,
+                            estado.get("pregunta_contextualizada", estado["pregunta"]),
+                        )
+                    }
+                )
                 generation_duration_ms = round(
                     (time.perf_counter() - generation_started_at) * 1000, 2
                 )
@@ -320,6 +379,10 @@ async def construye_cypher(
                     context=_query_log_context(corrected_cypher, generated.parameters),
                 )
                 validate_generated_schema(corrected_cypher, snapshot.structured)
+                _validate_follow_up_shape(
+                    corrected_cypher,
+                    estado.get("pregunta_contextualizada", estado["pregunta"]),
+                )
                 _debug_cypher("guard_cypher", corrected_cypher, generated.parameters)
                 guarded = guard_cypher(corrected_cypher, generated.parameters)
                 log_event(

@@ -14,12 +14,37 @@ const ETIQUETAS_PLURAL = {
   oferta: "ofertas",
 };
 
+const ANALISIS_POR_TIPO = {
+  carrera: "La lista permite comparar las carreras relacionadas y su cobertura académica.",
+  curso: "La lista reúne cursos de distintas áreas y permite comparar la cobertura curricular relacionada.",
+  empresa: "La lista permite comparar las empresas relacionadas con el criterio consultado.",
+  herramienta: "La lista permite comparar las herramientas asociadas a la consulta.",
+  competencia: "La lista permite comparar las competencias identificadas en los resultados.",
+  habilidad: "La lista permite comparar las habilidades asociadas al criterio consultado.",
+  puesto: "La lista permite comparar los puestos relacionados y sus oportunidades.",
+  oferta: "La lista permite comparar las ofertas relacionadas con la consulta.",
+};
+
 function valorSimple(valor) {
   return ["string", "number", "boolean"].includes(typeof valor) || valor == null;
 }
 
+function esIdentificador(nombre) {
+  const clave = String(nombre || "").trim().toLowerCase();
+  return clave === "id" || clave === "identificador" || clave.startsWith("id_") || clave.endsWith("_id") || clave.endsWith("_ids");
+}
+
+function columnasDe(filas) {
+  return Array.from(new Set(filas.flatMap((fila) => (fila && typeof fila === "object" ? Object.keys(fila) : []))));
+}
+
+function columnasPresentables(filas) {
+  return columnasDe(filas).filter((columna) => !esIdentificador(columna));
+}
+
 function esDatoUnico(filas) {
-  return filas.length === 1 && Object.keys(filas[0]).length === 1 && valorSimple(Object.values(filas[0])[0]);
+  const fila = filas[0];
+  return filas.length === 1 && fila && typeof fila === "object" && Object.keys(fila).length === 1 && valorSimple(Object.values(fila)[0]);
 }
 
 function titulo(texto) {
@@ -27,17 +52,31 @@ function titulo(texto) {
   return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 }
 
+function valorSinIdentificadores(valor) {
+  if (Array.isArray(valor)) return valor.map(valorSinIdentificadores);
+  if (!valor || typeof valor !== "object") return valor;
+
+  return Object.fromEntries(
+    Object.entries(valor)
+      .filter(([clave]) => !esIdentificador(clave))
+      .map(([clave, valorInterno]) => [clave, valorSinIdentificadores(valorInterno)]),
+  );
+}
+
 function formatearValor(valor) {
   if (valor == null) return "—";
   if (typeof valor === "number") return new Intl.NumberFormat("es-PE").format(valor);
-  if (typeof valor === "boolean") return valor ? "Sí" : "No";
-  return valorSimple(valor) ? String(valor) : JSON.stringify(valor);
+  if (typeof valor === "boolean") return valor ? "SÍ" : "NO";
+  if (typeof valor === "string") return valor.toLocaleUpperCase("es-PE");
+
+  const valorSeguro = valorSinIdentificadores(valor);
+  return JSON.stringify(valorSeguro).toLocaleUpperCase("es-PE");
 }
 
 export function resumenFilas(filas) {
   if (!Array.isArray(filas) || filas.length === 0 || esDatoUnico(filas)) return null;
 
-  const primeraColumna = Object.keys(filas[0])[0] || "";
+  const primeraColumna = columnasPresentables(filas)[0] || "";
   const plural = ETIQUETAS_PLURAL[primeraColumna.toLowerCase()] || "resultados";
   if (filas.length === 1) {
     const singular = plural === "resultados" ? "resultado" : plural.slice(0, -1);
@@ -46,12 +85,25 @@ export function resumenFilas(filas) {
   return `Se encontraron ${filas.length} ${plural}. Revisa el detalle en la tabla.`;
 }
 
+export function analisisFilas(filas) {
+  if (!Array.isArray(filas) || filas.length === 0) return null;
+
+  const primeraColumna = columnasPresentables(filas)[0] || "";
+  if (!primeraColumna) return null;
+
+  const plural = ETIQUETAS_PLURAL[primeraColumna.toLowerCase()] || "resultados";
+  const detalle = ANALISIS_POR_TIPO[primeraColumna.toLowerCase()] || "La información está organizada para facilitar la comparación de los resultados.";
+  return `Análisis breve: se encontraron ${filas.length} ${plural}. ${detalle}`;
+}
+
 export default function TablaFilas({ filas }) {
   const [expandida, setExpandida] = useState(false);
 
   if (!Array.isArray(filas) || filas.length === 0 || esDatoUnico(filas)) return null;
 
-  const columnas = Array.from(new Set(filas.flatMap((fila) => Object.keys(fila))));
+  const columnas = columnasPresentables(filas);
+  if (columnas.length === 0) return null;
+
   const filasVisibles = expandida ? filas : filas.slice(0, LIMITE_INICIAL);
   const filasOcultas = filas.length - filasVisibles.length;
 
@@ -60,7 +112,7 @@ export default function TablaFilas({ filas }) {
       <div className="flex items-center justify-between gap-3 border-b border-line bg-ash px-4 py-3 sm:px-5">
         <div>
           <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-muted">Detalle de resultados</p>
-          <p className="mt-0.5 text-xs text-muted">Organizado para comparar con facilidad.</p>
+          <p className="mt-0.5 text-xs text-muted">{analisisFilas(filas)}</p>
         </div>
         <span className="shrink-0 rounded-full border border-line bg-paper px-2.5 py-1 font-mono text-[10px] text-muted">
           {filas.length} {filas.length === 1 ? "resultado" : "resultados"}

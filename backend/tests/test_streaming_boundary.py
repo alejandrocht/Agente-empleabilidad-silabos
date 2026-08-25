@@ -122,6 +122,22 @@ def test_nested_query_keys_are_removed_from_public_rows() -> None:
     }
 
 
+def test_public_rows_never_expose_identifiers_even_when_nested() -> None:
+    state = {
+        "filas": [
+            {
+                "curso_id": "CUR_INTERNO",
+                "curso": "Analítica de Negocios",
+                "detalle": {"id": "DETALLE_INTERNO", "area": "Datos"},
+            }
+        ],
+    }
+
+    assert sanitize_public_state(state) == {
+        "filas": [{"curso": "Analítica de Negocios", "detalle": {"area": "Datos"}}],
+    }
+
+
 def test_query_internals_are_never_projected_publicly() -> None:
     state = {
         "respuesta": "Respuesta fundamentada",

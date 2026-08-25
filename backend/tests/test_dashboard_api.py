@@ -7,6 +7,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from agente.dashboard import servicio
+from agente.dashboard.consultas import get_dashboard_query
 from agente.utils.cypher_guard import guard_cypher
 from api.servidor import app
 
@@ -23,6 +24,13 @@ class FakeGateway:
 
 def test_every_active_dashboard_query_is_guarded_read_only() -> None:
     servicio.validar_catalogo_dashboard()
+
+
+def test_dashboard_gap_weights_curriculum_coverage_by_market_demand() -> None:
+    query = get_dashboard_query("dashboard_brechas_competencias").cypher
+
+    assert "toFloat(demanda) * toFloat(cobertura) AS demanda_cubierta" in query
+    assert "toFloat(demanda) * (1.0 - toFloat(cobertura)) AS brecha" in query
 
 
 def test_dashboard_execution_uses_fixed_query_parameters_and_cache() -> None:

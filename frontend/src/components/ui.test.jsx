@@ -35,14 +35,31 @@ describe("interfaz del chat", () => {
     expect(screen.getByText("—")).toBeTruthy();
   });
 
+  it("oculta identificadores, normaliza los valores y agrega un análisis breve", () => {
+    render(
+      <TablaFilas
+        filas={[
+          { curso_id: "CUR_INTERNO_1", curso: "Analítica de Negocios" },
+          { curso_id: "CUR_INTERNO_2", curso: "Filosofía Aplicada" },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText(/CUR_INTERNO/)).toBeNull();
+    expect(screen.queryByText("Curso id")).toBeNull();
+    expect(screen.getByText("ANALÍTICA DE NEGOCIOS")).toBeTruthy();
+    expect(screen.getByText("FILOSOFÍA APLICADA")).toBeTruthy();
+    expect(screen.getByText(/Análisis breve: se encontraron 2 cursos/)).toBeTruthy();
+  });
+
   it("muestra las tablas extensas de forma progresiva", () => {
     const filas = Array.from({ length: 10 }, (_, indice) => ({ herramienta: `Herramienta ${indice + 1}`, ofertas: indice + 1 }));
     render(<TablaFilas filas={filas} />);
 
     expect(screen.getByRole("button", { name: "Ver 2 resultados más" })).toBeTruthy();
-    expect(screen.queryByText("Herramienta 10")).toBeNull();
+    expect(screen.queryByText("HERRAMIENTA 10")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Ver 2 resultados más" }));
-    expect(screen.getByText("Herramienta 10")).toBeTruthy();
+    expect(screen.getByText("HERRAMIENTA 10")).toBeTruthy();
   });
 
   it("ignora texto no textual sin renderizar objetos internos", () => {

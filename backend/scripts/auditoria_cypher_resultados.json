@@ -1,0 +1,451 @@
+{
+  "generated_at": "2026-08-19T17:11:44.896934-05:00",
+  "question_count": 10,
+  "technical_success_count": 10,
+  "semantic_success_count": 10,
+  "results": [
+    {
+      "id": 1,
+      "question": "¿Cuáles son las 20 empresas con mayor número de ofertas publicadas dentro de la industria financiera, ordenadas de mayor a menor?",
+      "duration_ms": 21678.21,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (i:Industria)-[:AGRUPA]->(e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)\nWHERE toLower(i.nombre) CONTAINS toLower($industria_texto)\nRETURN e.id_empresa AS empresa_id, e.nombre AS empresa, count(DISTINCT o) AS total_ofertas\nORDER BY total_ofertas DESC, empresa ASC\nLIMIT $limite",
+      "parameters": {
+        "industria_texto": "financiera",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 13,
+      "rows_preview": [
+        {
+          "empresa_id": "EMP_1f200afabf336762",
+          "empresa": "BD CAPITAL SAFI S.A.C.",
+          "total_ofertas": 44
+        },
+        {
+          "empresa_id": "EMP_bb0950dea7d86349",
+          "empresa": "CORE CAPITAL SAFI S.A.",
+          "total_ofertas": 19
+        },
+        {
+          "empresa_id": "EMP_b3cc4467a198734d",
+          "empresa": "W CAPITAL SOCIEDAD ADMINISTRADORA DE FONDOS DE INVERSIÓN S.A.",
+          "total_ofertas": 17
+        },
+        {
+          "empresa_id": "EMP_03ec4afb3d8e5901",
+          "empresa": "PRUDENTIALSAF SOCIEDAD ADMINISTRADORA DE FONDOS S.A.C.",
+          "total_ofertas": 14
+        },
+        {
+          "empresa_id": "EMP_9bf66aa836864707",
+          "empresa": "ZEST CAPITALPERU SAC",
+          "total_ofertas": 14
+        }
+      ],
+      "response": "Encontré 13 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 2,
+      "question": "¿Qué herramientas aparecen en más ofertas laborales de empresas pertenecientes a la industria financiera?",
+      "duration_ms": 4311.82,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (i:Industria)-[:AGRUPA]->(e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nWHERE toLower(i.nombre) CONTAINS toLower($industria_texto)\nRETURN h.id_herramienta AS herramienta_id, h.nombre_herramienta AS herramienta, count(DISTINCT o) AS total_ofertas\nORDER BY total_ofertas DESC, herramienta ASC\nLIMIT $limite",
+      "parameters": {
+        "industria_texto": "financiera",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 8,
+      "rows_preview": [
+        {
+          "herramienta_id": "HERR_5654c9328bff43d4",
+          "herramienta": "Microsoft Excel",
+          "total_ofertas": 3
+        },
+        {
+          "herramienta_id": "HERR_4c352eb2472e4bb0",
+          "herramienta": "Google Ads",
+          "total_ofertas": 2
+        },
+        {
+          "herramienta_id": "HERR_e2aa5be863c0ef16",
+          "herramienta": "Google Analytics",
+          "total_ofertas": 2
+        },
+        {
+          "herramienta_id": "HERR_d549da7d2399bd06",
+          "herramienta": "Mailchimp",
+          "total_ofertas": 2
+        },
+        {
+          "herramienta_id": "HERR_8987efd5c770ce71",
+          "herramienta": "Microsoft Project",
+          "total_ofertas": 2
+        }
+      ],
+      "response": "Encontré 8 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 3,
+      "question": "¿Cuáles son los 10 puestos más demandados en ofertas que requieren la herramienta Python?",
+      "duration_ms": 4703.07,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nMATCH (o:Oferta_Laboral)-[:TIENE]->(r:Requerimiento_Laboral)\nMATCH (r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nWHERE toLower(h.nombre_herramienta) CONTAINS toLower($herramienta_texto)\nRETURN p.nombre AS puesto, count(DISTINCT o) AS total_ofertas\nORDER BY total_ofertas DESC, puesto ASC\nLIMIT $limite",
+      "parameters": {
+        "herramienta_texto": "Python",
+        "limite": 10
+      },
+      "query_limit": 10,
+      "rows_count": 10,
+      "rows_preview": [
+        {
+          "puesto": null,
+          "total_ofertas": 55
+        },
+        {
+          "puesto": "QA AUTOMATIZADOR JR.",
+          "total_ofertas": 3
+        },
+        {
+          "puesto": "DESARROLLADOR BACKEND JUNIOR",
+          "total_ofertas": 2
+        },
+        {
+          "puesto": "JOVEN PROFESIONAL DE OPERACIONES",
+          "total_ofertas": 2
+        },
+        {
+          "puesto": "37 ANALISTA DE INVESTIGACIÓN",
+          "total_ofertas": 1
+        }
+      ],
+      "response": "Encontré 10 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 4,
+      "question": "¿Qué habilidades son más frecuentes en las ofertas para Analista de Datos y cómo se ordenan por cantidad de ofertas?",
+      "duration_ms": 3619.56,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nMATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Habilidad)\nWHERE toLower(p.nombre) CONTAINS toLower($puesto_texto)\nRETURN h.id_habilidad AS habilidad_id, h.nombre_habilidad AS habilidad, count(DISTINCT o) AS total_ofertas\nORDER BY total_ofertas DESC, habilidad ASC\nLIMIT $limite",
+      "parameters": {
+        "puesto_texto": "Analista de Datos",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 14,
+      "rows_preview": [
+        {
+          "habilidad_id": "HAB_032538ca5d591618",
+          "habilidad": "Análisis de datos",
+          "total_ofertas": 17
+        },
+        {
+          "habilidad_id": "HAB_76d1ca7f89ed3f09",
+          "habilidad": "Toma de decisiones",
+          "total_ofertas": 14
+        },
+        {
+          "habilidad_id": "HAB_d8263e25e4095670",
+          "habilidad": "Consultas de bases de datos",
+          "total_ofertas": 10
+        },
+        {
+          "habilidad_id": "HAB_7d719d432cbbb892",
+          "habilidad": "Visualización de datos",
+          "total_ofertas": 9
+        },
+        {
+          "habilidad_id": "HAB_9f330607227e78a4",
+          "habilidad": "Seguimiento de proyectos",
+          "total_ofertas": 5
+        }
+      ],
+      "response": "Encontré 14 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 5,
+      "question": "¿Qué industrias concentran la mayor cantidad de ofertas laborales y cuántas ofertas tiene cada una?",
+      "duration_ms": 3192.93,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (i:Industria)-[:AGRUPA]->(e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)\nRETURN i.id_industria AS industria_id, i.nombre AS industria, count(DISTINCT o) AS total_ofertas\nORDER BY total_ofertas DESC, industria ASC\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "industria_id": "INDU_3b41f23fcb06b8c6",
+          "industria": "Actividades de consultoría de gestión",
+          "total_ofertas": 7737
+        },
+        {
+          "industria_id": "INDU_c61bd6a4248d91f8",
+          "industria": "Otras actividades de dotación de recursos humanos",
+          "total_ofertas": 3232
+        },
+        {
+          "industria_id": "INDU_ab72981feeea5ff2",
+          "industria": "Actividades jurídicas",
+          "total_ofertas": 1898
+        },
+        {
+          "industria_id": "INDU_a92607d82cdea77a",
+          "industria": "Venta al por mayor no especializada",
+          "total_ofertas": 1442
+        },
+        {
+          "industria_id": "INDU_c619b296de2f5d15",
+          "industria": "Actividades de la administración pública en general",
+          "total_ofertas": 1355
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 6,
+      "question": "¿Qué empresas publican ofertas que requieren herramientas y habilidades, mostrando empresa, herramienta, habilidad y fecha de publicación?",
+      "duration_ms": 4053.6,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nMATCH (r)-[:REQUIERE]->(s:Habilidad)\nRETURN DISTINCT e.nombre AS empresa, h.nombre_herramienta AS herramienta, s.nombre_habilidad AS habilidad, o.fecha_publicacion AS fecha_publicacion\nORDER BY fecha_publicacion DESC\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "empresa": "OPTIMA ENERGIA S.A.C.",
+          "herramienta": "AutoCAD",
+          "habilidad": "Elaboración de planos",
+          "fecha_publicacion": "2025-12-29T00:00:00.000000000+00:00"
+        },
+        {
+          "empresa": "MARIA PIA PRODUCCIONES SA",
+          "herramienta": "Microsoft Excel",
+          "habilidad": "Análisis de datos",
+          "fecha_publicacion": "2025-12-29T00:00:00.000000000+00:00"
+        },
+        {
+          "empresa": "CORPORACION CORIL S.A.C.",
+          "herramienta": "Microsoft Excel",
+          "habilidad": "Análisis de datos",
+          "fecha_publicacion": "2025-12-29T00:00:00.000000000+00:00"
+        },
+        {
+          "empresa": "CORPORACION INMOBILIARIA TULSI SOCIEDAD ANONIMA CERRADA",
+          "herramienta": "Microsoft Excel",
+          "habilidad": "Análisis de datos",
+          "fecha_publicacion": "2025-12-29T00:00:00.000000000+00:00"
+        },
+        {
+          "empresa": "HISPASAT PERÚ S.A.C.",
+          "herramienta": "Power BI",
+          "habilidad": "Visualización de datos",
+          "fecha_publicacion": "2025-12-29T00:00:00.000000000+00:00"
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 7,
+      "question": "¿Qué competencias curriculares están relacionadas con cursos de la carrera Ingeniería de Sistemas y cuáles aparecen con mayor frecuencia?",
+      "duration_ms": 4838.36,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (carrera:Carrera)-[:ENSENIA]->(curso:Curso)-[:TIENE]->(cobertura:Cobertura_Curricular)-[:CUBRE]->(competencia:Competencia)\nWHERE toLower(carrera.nombre_carrera) CONTAINS toLower($carrera_texto)\nRETURN competencia.id_competencia AS competencia_id, competencia.nombre_competencia AS competencia, count(DISTINCT curso) AS total_cursos\nORDER BY total_cursos DESC, competencia ASC\nLIMIT $limite",
+      "parameters": {
+        "carrera_texto": "Ingeniería de Sistemas",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "competencia_id": "COMP_2fccca5cbaebb563",
+          "competencia": "Desarrollo de software",
+          "total_cursos": 32
+        },
+        {
+          "competencia_id": "COMP_e5f4bb2f6d089e2d",
+          "competencia": "Modelamiento analítico",
+          "total_cursos": 27
+        },
+        {
+          "competencia_id": "COMP_1cc4502b2b408e9f",
+          "competencia": "Experimentación",
+          "total_cursos": 22
+        },
+        {
+          "competencia_id": "COMP_081e0f8514d48caf",
+          "competencia": "Diseño de Ingeniería",
+          "total_cursos": 20
+        },
+        {
+          "competencia_id": "COMP_831fb83e1041571f",
+          "competencia": "Investigación",
+          "total_cursos": 20
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 8,
+      "question": "¿Qué empresas tienen ofertas para puestos cuyo nombre contiene Analista y cuántas ofertas publican?",
+      "duration_ms": 3437.02,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nWHERE toLower(p.nombre) CONTAINS toLower($puesto_texto)\nRETURN e.id_empresa AS empresa_id, e.nombre AS empresa, count(DISTINCT o) AS total_ofertas\nORDER BY total_ofertas DESC, empresa ASC\nLIMIT $limite",
+      "parameters": {
+        "puesto_texto": "Analista",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "empresa_id": "EMP_a197af00a598b78c",
+          "empresa": "EVENTIVA S.A.C.",
+          "total_ofertas": 171
+        },
+        {
+          "empresa_id": "EMP_d32d9fff7c07589b",
+          "empresa": "KROWDY PERU SAC",
+          "total_ofertas": 124
+        },
+        {
+          "empresa_id": "EMP_47f42efb87384408",
+          "empresa": "ADECCO CONSULTING S.A.",
+          "total_ofertas": 114
+        },
+        {
+          "empresa_id": "EMP_a816ad613ea1420c",
+          "empresa": "SUPERINTENDENCIA NACIONAL DE ADUANAS Y DE ADMINISTRACION TRIBUTARIA - SUNAT",
+          "total_ofertas": 114
+        },
+        {
+          "empresa_id": "EMP_68b6b663f12e3959",
+          "empresa": "ASTARA PERU S.A.C.",
+          "total_ofertas": 58
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 9,
+      "question": "¿Cuáles son las ofertas más recientes de empresas de la industria financiera que requieren Python o SQL?",
+      "duration_ms": 9206.6,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (i:Industria)-[:AGRUPA]->(e:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nMATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nWHERE toLower(i.nombre) CONTAINS toLower($industria_texto)\n  AND (toLower(h.nombre_herramienta) CONTAINS toLower($python_texto)\n    OR toLower(h.nombre_herramienta) CONTAINS toLower($sql_texto))\n  AND o.fecha_publicacion IS NOT NULL\nRETURN DISTINCT\n  o.id_ofe_laboral AS oferta_id,\n  p.nombre AS puesto,\n  e.id_empresa AS empresa_id,\n  e.nombre AS empresa,\n  o.fecha_publicacion AS fecha_publicacion\nORDER BY fecha_publicacion DESC, oferta_id ASC\nLIMIT $limite",
+      "parameters": {
+        "industria_texto": "financiera",
+        "python_texto": "python",
+        "sql_texto": "sql",
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 0,
+      "rows_preview": [],
+      "response": "No encontré resultados para esa consulta.",
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": 10,
+      "question": "¿Qué relación existe entre las herramientas requeridas por las ofertas y los puestos más demandados?",
+      "duration_ms": 4947.7,
+      "status": "success",
+      "technical_success": true,
+      "semantic_success": true,
+      "semantic_failures": [],
+      "cypher": "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto)\nMATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta)\nRETURN p.id_puesto AS puesto_id,\n       p.nombre AS puesto,\n       h.id_herramienta AS herramienta_id,\n       h.nombre_herramienta AS herramienta,\n       count(DISTINCT o) AS total_ofertas\nORDER BY total_ofertas DESC, puesto ASC, herramienta ASC\nLIMIT $limite",
+      "parameters": {
+        "limite": 20
+      },
+      "query_limit": 20,
+      "rows_count": 20,
+      "rows_preview": [
+        {
+          "puesto_id": "PUE_eb573238175bfe64",
+          "puesto": ".NET DEVELOPER - INTERN",
+          "herramienta_id": "HERR_ff15d3db67353076",
+          "herramienta": "Microsoft Azure",
+          "total_ofertas": 1
+        },
+        {
+          "puesto_id": "PUE_bb873f6e37cc1899",
+          "puesto": ".NET DEVELOPER - INTERN",
+          "herramienta_id": "HERR_ff15d3db67353076",
+          "herramienta": "Microsoft Azure",
+          "total_ofertas": 1
+        },
+        {
+          "puesto_id": "PUE_17dbd5ee321ddd97",
+          "puesto": ".NET DEVELOPER - INTERN",
+          "herramienta_id": "HERR_ff15d3db67353076",
+          "herramienta": "Microsoft Azure",
+          "total_ofertas": 1
+        },
+        {
+          "puesto_id": "PUE_dba8b0c0d6d6e04f",
+          "puesto": ".NET DEVELOPER - INTERN DE INTEGRITY RISK SERVICES",
+          "herramienta_id": "HERR_ff15d3db67353076",
+          "herramienta": "Microsoft Azure",
+          "total_ofertas": 1
+        },
+        {
+          "puesto_id": "PUE_d21fe70a1ee877b5",
+          "puesto": ".NET DEVELOPER - STAFF",
+          "herramienta_id": "HERR_ff15d3db67353076",
+          "herramienta": "Microsoft Azure",
+          "total_ofertas": 1
+        }
+      ],
+      "response": "Encontré 20 resultados para tu consulta.",
+      "error": null,
+      "error_type": null
+    }
+  ]
+}

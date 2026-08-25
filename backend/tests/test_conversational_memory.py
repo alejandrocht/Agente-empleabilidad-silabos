@@ -43,6 +43,11 @@ from api import servidor
             "¿Cuáles son?",
             ("habilidades digitales", "Analista de Datos", "Cuáles son"),
         ),
+        (
+            "¿Qué curso aborda incidentes de seguridad?",
+            "con que tecnologias se ensenan",
+            ("curso aborda incidentes de seguridad", "con que tecnologias se ensenan"),
+        ),
     ],
 )
 def test_follow_up_is_contextualized_from_the_last_successful_turn(
@@ -62,6 +67,36 @@ def test_follow_up_is_contextualized_from_the_last_successful_turn(
     assert state["pregunta_contextualizada"] != follow_up
     for fragment in expected_fragments:
         assert fragment.casefold() in state["pregunta_contextualizada"].casefold()
+
+
+def test_successful_course_result_is_available_to_follow_up_without_ids() -> None:
+    memory = ConversationMemory(ttl_seconds=60, max_turns=4)
+    scope = derive_memory_scope("server-secret", "user-a", "thread-a")
+
+    guarda_memoria_corta(
+        {
+            "pregunta": "que curso aborda incidentes de seguridad",
+            "pregunta_contextualizada": "que curso aborda incidentes de seguridad",
+            "memory_scope": scope,
+            "respuesta": "Encontré un resultado.",
+            "filas": [
+                {
+                    "curso_id": "CUR_internal_should_not_leak",
+                    "curso": "Topicos Avanzados de Ciberseguridad",
+                }
+            ],
+        },
+        memory_store=memory,
+    )
+
+    state = contextualiza_pregunta(
+        {"pregunta": "con que tecnologias se ensenan", "memory_scope": scope},
+        memory_store=memory,
+    )
+
+    contextualized = state["pregunta_contextualizada"]
+    assert "Topicos Avanzados de Ciberseguridad" in contextualized
+    assert "CUR_internal_should_not_leak" not in contextualized
 
 
 def test_explicit_topic_change_does_not_drag_previous_context() -> None:

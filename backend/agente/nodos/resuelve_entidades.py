@@ -8,6 +8,7 @@ from typing import Literal, cast
 from agente.grafo.estado import Estado
 from agente.utils.entity_resolver import (
     EntityResolutionGateway,
+    normalize_entity_text_parameters,
     reconcile_entity_parameters,
     resolve_plan_parameters_result,
 )
@@ -80,6 +81,22 @@ async def resuelve_entidades(
             "error": "entity_resolution_failed",
         }
 
+    cypher = estado.get("cypher")
+    if not isinstance(cypher, str):
+        log_error(
+            "entity_resolution",
+            "cypher_invalid",
+            ValueError("cypher_invalid"),
+            status="failed",
+        )
+        return {
+            "respuesta": SAFE_ENTITY_RESOLUTION_ERROR,
+            "filas": [],
+            "error": "entity_resolution_failed",
+        }
+
+    cypher, parameters = normalize_entity_text_parameters(cypher, parameters, schema)
+
     log_event(
         "entity_resolution",
         "started",
@@ -116,19 +133,6 @@ async def resuelve_entidades(
             "entity_resolution": result.status,
         }
 
-    cypher = estado.get("cypher")
-    if not isinstance(cypher, str):
-        log_error(
-            "entity_resolution",
-            "cypher_invalid",
-            ValueError("cypher_invalid"),
-            status="failed",
-        )
-        return {
-            "respuesta": SAFE_ENTITY_RESOLUTION_ERROR,
-            "filas": [],
-            "error": "entity_resolution_failed",
-        }
     try:
         reconciled_cypher, reconciled_parameters = reconcile_entity_parameters(
             cypher,

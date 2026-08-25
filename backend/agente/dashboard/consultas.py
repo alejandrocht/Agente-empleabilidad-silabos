@@ -210,7 +210,8 @@ for _slug, (_label, _id_property, _name_property) in DIMENSIONS.items():
                coalesce(total_ofertas, 0) AS total_ofertas,
                toFloat(cobertura) AS cobertura,
                toFloat(demanda) AS demanda,
-               toFloat(demanda) - toFloat(cobertura) AS brecha
+               toFloat(demanda) * toFloat(cobertura) AS demanda_cubierta,
+               toFloat(demanda) * (1.0 - toFloat(cobertura)) AS brecha
         ORDER BY brecha DESC, ofertas_que_requieren DESC, elemento
         LIMIT $limite
         """,
