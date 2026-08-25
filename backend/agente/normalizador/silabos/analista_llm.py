@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Iterable
+import re
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, cast
@@ -18,6 +19,14 @@ from pydantic import BaseModel, Field
 
 from agente.config.settings import booleano, decimal
 from agente.llm.fabrica import obtener_llm
+from agente.normalizador.embeddings import (
+    FALLBACK_REASON_CANDIDATES_BELOW_THRESHOLD,
+    FALLBACK_REASON_CATALOG_EMPTY,
+    FALLBACK_REASON_PROVIDER_OR_VECTOR_INVALID,
+    FALLBACK_REASON_RETRIEVER_ABSENT,
+    EmbeddingRetriever,
+    EmbeddingScope,
+)
 from agente.normalizador.empleabilidad.catalogo import (
     CatalogoCHH,
     clave_concepto,
@@ -33,6 +42,7 @@ from agente.normalizador.silabos.contexto_curricular import (
     construir_contexto_por_logro,
     construir_perfil_para_prompt,
 )
+from agente.normalizador.silabos.entrada import PATRON_PERIODO
 from agente.normalizador.silabos.perfil_carrera import cargar_perfil_carrera
 from agente.observabilidad.langsmith import invocar_llm
 
@@ -98,6 +108,44 @@ class ResultadoAnalisisCurricular:
     decisiones_escaladas: int = 0
     auditoria_contexto: dict[str, object] | None = None
     progreso: ProgresoLimpiezaLLM | None = None
+
+
+# A decision is grounded only when the cited syllabus fragment supports the
+# proposed skill. Catalog retrieval deliberately does not participate in this
+# check: a competence can remain a broader abstraction of that skill.
+_METODOS_RECUPERACION_AUDITABLES = frozenset(("embedding", "lexical"))
+_REASON_CODES_RECUPERACION_AUDITABLES = frozenset(
+    (
+        FALLBACK_REASON_RETRIEVER_ABSENT,
+        FALLBACK_REASON_CATALOG_EMPTY,
+        FALLBACK_REASON_PROVIDER_OR_VECTOR_INVALID,
+        FALLBACK_REASON_CANDIDATES_BELOW_THRESHOLD,
+    )
+)
+_IDENTIFICADOR_AUDITABLE = re.compile(r"[A-Za-z0-9_.:-]{1,120}")
+_ETIQUETA_SCOPE_AUDITABLE = re.compile(r"[A-Z0-9_-]{1,80}")
+_PERIODO_SCOPE_AUDITABLE = PATRON_PERIODO
+_FINGERPRINT_AUDITABLE = re.compile(r"[0-9a-f]{16}")
+_MARCADORES_SECRETOS = ("api", "key", "token", "secret", "password", "sk-")
+
+
+_ANCLAS_NO_SEMANTICAS = frozenset(
+    {
+        "para",
+        "desde",
+        "sobre",
+        "entre",
+        "mediante",
+        "nivel",
+        "forma",
+        "proceso",
+        "procesos",
+        "profesional",
+        "profesionales",
+        "curricular",
+        "curriculares",
+    }
+)
 
 
 _VERBOS_HABILIDAD = {
@@ -309,6 +357,10 @@ def analizar_registros_curriculares(
     progreso_inicial: ProgresoLimpiezaLLM | None = None,
     id_ejecucion: str = "",
     cancelada: Callable[[], bool] | None = None,
+    embedding_retriever: EmbeddingRetriever | None = None,
+    embedding_scope: EmbeddingScope | None = None,
+    limites_candidatos: Mapping[str, int] | None = None,
+    pool_retrieval: int | None = None,
 ) -> ResultadoAnalisisCurricular:
     """Analiza todos los logros fuente y conserva fallos sin abortar el lote."""
 
@@ -323,7 +375,17 @@ def analizar_registros_curriculares(
     perfil = _cargar_perfil(carrera, periodo)
     contexto_perfil = construir_contexto_por_logro({}, catalogo, perfil)
     perfil_prompt = construir_perfil_para_prompt(perfil)
-    casos = tuple(_casos_curriculares(registros, catalogo, perfil))
+    casos = tuple(
+        _casos_curriculares(
+            registros,
+            catalogo,
+            perfil,
+            retriever=embedding_retriever,
+            embedding_scope=embedding_scope,
+            limites_candidatos=limites_candidatos,
+            pool_retrieval=pool_retrieval,
+        )
+    )
     auditoria_contexto = _auditoria_contexto(casos, contexto_perfil)
     lotes = tuple(_trocear(casos, 8))
     cache_path = directorio_ejecucion / "salidas" / "reportes" / "decisiones_llm_cache.jsonl"
@@ -1036,6 +1098,11 @@ def _casos_curriculares(
     registros: list[dict[str, object]],
     catalogo: CatalogoCHH,
     perfil: dict[str, object],
+    *,
+    retriever: EmbeddingRetriever | None = None,
+    embedding_scope: EmbeddingScope | None = None,
+    limites_candidatos: Mapping[str, int] | None = None,
+    pool_retrieval: int | None = None,
 ) -> Iterable[dict[str, object]]:
     for registro in registros:
         datos = registro.get("datos")
@@ -1094,7 +1161,15 @@ def _casos_curriculares(
                 "evidencia_herramientas": evidencias_estructuradas,
                 "evidencia_herramientas_candidata": evidencias_candidatas,
             }
-            caso["contexto_recuperado"] = construir_contexto_por_logro(caso, catalogo, perfil)
+            caso["contexto_recuperado"] = construir_contexto_por_logro(
+                caso,
+                catalogo,
+                perfil,
+                retriever=retriever,
+                embedding_scope=embedding_scope,
+                limites_candidatos=limites_candidatos,
+                pool_retrieval=pool_retrieval,
+            )
             yield caso
 
 
@@ -1102,12 +1177,15 @@ def _auditoria_contexto(
     casos: tuple[dict[str, object], ...],
     contexto_perfil: dict[str, object],
 ) -> dict[str, object]:
+    """Persist only the retrieval metadata needed to audit each logro safely."""
+
     perfil = cast(dict[str, str], contexto_perfil["perfil_referencia"])
-    fingerprints = [
-        str(contexto.get("fingerprint") or "")
+    recuperacion_por_logro = tuple(
+        recuperacion
         for caso in casos
-        if isinstance(contexto := caso.get("contexto_recuperado"), dict)
-    ]
+        if (recuperacion := _recuperacion_auditable_por_logro(caso)) is not None
+    )
+    fingerprints = [item["fingerprint"] for item in recuperacion_por_logro]
     payload = json.dumps(fingerprints, ensure_ascii=False, separators=(",", ":"))
     return {
         "version_contexto": contexto_perfil["version_contexto"],
@@ -1116,7 +1194,121 @@ def _auditoria_contexto(
         "revision_perfil": perfil["revision"],
         "hash_perfil": perfil["hash"],
         "hash_contextos": hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16],
+        "recuperacion_por_logro": list(recuperacion_por_logro),
     }
+
+
+def _recuperacion_auditable_por_logro(
+    caso: dict[str, object],
+) -> dict[str, object] | None:
+    """Project a per-logro context into a deliberately narrow audit record."""
+
+    contexto = caso.get("contexto_recuperado")
+    if not isinstance(contexto, dict):
+        return None
+    recuperacion = contexto.get("recuperacion")
+    if not isinstance(recuperacion, dict):
+        return None
+    id_habilidad = _texto_auditable(caso.get("id_habilidad_fuente"))
+    fingerprint = _fingerprint_auditable(contexto.get("fingerprint"))
+    if id_habilidad is None or fingerprint is None:
+        return None
+    method = recuperacion.get("method")
+    reason_code = recuperacion.get("reason_code")
+    return {
+        "id_habilidad_fuente": id_habilidad,
+        "fingerprint": fingerprint,
+        "method": method if method in _METODOS_RECUPERACION_AUDITABLES else None,
+        "reason_code": (
+            reason_code
+            if reason_code in _REASON_CODES_RECUPERACION_AUDITABLES
+            else None
+        ),
+        "scope": _scope_recuperacion_auditable(recuperacion.get("scope")),
+        "model": _modelo_auditable(recuperacion.get("model")),
+        "config": _configuracion_auditable(recuperacion.get("config")),
+        "minimum_similarity": _minimum_similarity_auditable(
+            recuperacion.get("minimum_similarity")
+        ),
+    }
+
+
+def _texto_auditable(valor: object) -> str | None:
+    texto = str(valor or "")
+    return texto if _IDENTIFICADOR_AUDITABLE.fullmatch(texto) else None
+
+
+def _modelo_auditable(valor: object) -> str | None:
+    texto = _texto_auditable(valor)
+    if texto is None or any(
+        marcador in texto.casefold() for marcador in _MARCADORES_SECRETOS
+    ):
+        return None
+    return texto
+
+
+def _fingerprint_auditable(valor: object) -> str | None:
+    texto = str(valor or "")
+    return texto if _FINGERPRINT_AUDITABLE.fullmatch(texto) else None
+
+
+def _configuracion_auditable(valor: object) -> str | None:
+    texto = str(valor or "")
+    if not texto.startswith("provider:"):
+        return None
+    return (
+        texto
+        if _FINGERPRINT_AUDITABLE.fullmatch(texto.removeprefix("provider:"))
+        else None
+    )
+
+
+def _etiqueta_scope_auditable(valor: object) -> str | None:
+    texto = str(valor or "")
+    return texto if _ETIQUETA_SCOPE_AUDITABLE.fullmatch(texto) else None
+
+
+def _periodo_scope_auditable(valor: object) -> str | None:
+    texto = str(valor or "")
+    return texto if _PERIODO_SCOPE_AUDITABLE.fullmatch(texto) else None
+
+
+def _minimum_similarity_auditable(valor: object) -> float | None:
+    """Keep only the safe threshold actually applied by the retriever."""
+
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        return None
+    minimo = float(valor)
+    return minimo if 0.0 <= minimo < 1.0 else None
+
+
+def _scope_recuperacion_auditable(valor: object) -> dict[str, object] | None:
+    if not isinstance(valor, dict):
+        return None
+    scope_kind = valor.get("scope_kind")
+    source_kinds = valor.get("source_kinds")
+    career = _etiqueta_scope_auditable(valor.get("career"))
+    period = _periodo_scope_auditable(valor.get("period"))
+    if (
+        scope_kind == "career_curriculum"
+        and source_kinds == ["career_curriculum"]
+        and career is not None
+        and period is not None
+    ):
+        return {
+            "scope_kind": scope_kind,
+            "career": career,
+            "period": period,
+            "source_kinds": source_kinds,
+        }
+    if scope_kind == "labor_global" and source_kinds == ["labor"]:
+        return {
+            "scope_kind": scope_kind,
+            "career": None,
+            "period": None,
+            "source_kinds": source_kinds,
+        }
+    return None
 
 
 def _evidencias_programa_analitico(datos: dict[str, object]) -> list[dict[str, str]]:
@@ -1165,10 +1357,23 @@ def _validar_decision(
         for campo in ("curso", "sumilla", "logro_general", "logro", "contenido_relacionado")
     )
     fuente_clave = clave_concepto(fuente)
+    if not _competencia_anclada_en_fuente_o_declarada(
+        decision.competencia.nombre,
+        fuente_clave,
+        caso,
+    ):
+        errores.append("COMPETENCIA_SIN_ANCLA_FUENTE")
+    evidencias_en_fuente = [
+        evidencia
+        for evidencia in decision.evidencia
+        if _evidencia_en_texto(evidencia, fuente_clave)
+    ]
     if not decision.evidencia:
         errores.append("SIN_EVIDENCIA_LLM")
-    elif not any(_evidencia_en_texto(evidencia, fuente_clave) for evidencia in decision.evidencia):
+    elif not evidencias_en_fuente:
         errores.append("EVIDENCIA_NO_ENCONTRADA")
+    else:
+        errores.extend(_errores_grounding_decision(decision, evidencias_en_fuente))
     herramientas_detectadas = caso.get("herramientas_detectadas")
     if not isinstance(herramientas_detectadas, list):
         herramientas_detectadas = []
@@ -1185,6 +1390,70 @@ def _validar_decision(
     if decision.requiere_revision:
         errores.append("LLM_SOLICITA_REVISION")
     return errores
+
+
+def _errores_grounding_decision(
+    decision: DecisionCurricular,
+    evidencias: list[str],
+) -> list[str]:
+    """Verify that one literal syllabus quote anchors the proposed skill.
+
+    A valid quote alone is insufficient: the skill must share at least two
+    normalized content anchors with one cited fragment (or all anchors when it
+    has fewer than two). A competence may be broader than the skill, but its
+    lexical relation can only add diagnostic context; it never substitutes the
+    syllabus evidence that anchors the skill.
+    """
+
+    habilidad = _anclas_grounding(decision.habilidad.nombre)
+    competencia = _anclas_grounding(decision.competencia.nombre)
+    minimas_habilidad = min(2, len(habilidad))
+    habilidad_anclada = any(
+        len(habilidad & _anclas_grounding(evidencia)) >= minimas_habilidad
+        for evidencia in evidencias
+    )
+    errores: list[str] = []
+    if not habilidad or not habilidad_anclada:
+        errores.append("HABILIDAD_SIN_ANCLA_EVIDENCIA")
+        if not competencia or not (competencia & habilidad):
+            errores.append("COMPETENCIA_SIN_ANCLA_HABILIDAD")
+    return errores
+
+
+def _anclas_grounding(texto: str) -> set[str]:
+    """Reduce texto a raíces conservadoras, evitando conectores y etiquetas vagas."""
+
+    return {
+        token[:5]
+        for token in clave_concepto(texto).split()
+        if len(token) >= 3 and token not in _ANCLAS_NO_SEMANTICAS
+    }
+
+
+def _competencia_anclada_en_fuente_o_declarada(
+    competencia: str,
+    fuente_normalizada: str,
+    caso: dict[str, object],
+) -> bool:
+    """Require the competence to be source-grounded or explicitly declared."""
+
+    anclas_competencia = _anclas_grounding(competencia)
+    if anclas_competencia & _anclas_grounding(fuente_normalizada):
+        return True
+    declaraciones = caso.get("competencias_declaradas")
+    if not isinstance(declaraciones, list):
+        return False
+    clave_competencia = clave_concepto(competencia)
+    if not clave_competencia:
+        return False
+    for declaracion in declaraciones:
+        if isinstance(declaracion, dict):
+            nombre = str(declaracion.get("nombre") or "")
+        else:
+            nombre = str(declaracion or "")
+        if clave_concepto(nombre) == clave_competencia:
+            return True
+    return False
 
 
 def _errores_residuales_escalables(errores: list[str]) -> bool:
@@ -1328,7 +1597,7 @@ def _normalizar_habilidad(decision: DecisionCurricular) -> DecisionCurricular:
 
 def _evidencia_en_texto(fragmento: str, fuente_normalizada: str) -> bool:
     evidencia = clave_concepto(fragmento)
-    if len(evidencia) < 8:
+    if len(evidencia) < 3:
         return False
     if evidencia in fuente_normalizada:
         return True

@@ -15,7 +15,7 @@ import hashlib
 import json
 import re
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypeVar
 
@@ -31,6 +31,10 @@ from agente.normalizador.silabos.analista_llm import (
     _coincide_nombre_herramienta_en_texto,
     _herramienta_nueva_evidenciada,
     _nombre_herramienta_canonico,
+)
+from agente.normalizador.silabos.clasificacion import (
+    clasificar_propuestas,
+    puede_recibir_decision,
 )
 
 COMPETENCIAS_SCHEMA: tuple[str, ...] = (
@@ -64,6 +68,11 @@ ARCHIVOS_SALIDA: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("catalogo_herramientas.csv", HERRAMIENTAS_SCHEMA),
     ("cobertura_curricular.csv", COBERTURA_SCHEMA),
 )
+PENDIENTES_ARCHIVO = "pendientes_curriculares.jsonl"
+CANDIDATOS_ARCHIVO = "candidatos_curriculares.json"
+ESTADO_PENDIENTE_CATALOGACION = "PENDIENTE_CATALOGACION"
+ESTADO_PENDIENTE_PERFIL = "PENDIENTE_AMPLIACION_PERFIL"
+ESTADO_REVISION_HUMANA = "REQUIERE_REVISION_HUMANA"
 
 _VERBOS_GENERICOS = {
     "aplicar conceptos",
@@ -103,6 +112,8 @@ class ResultadoCatalogoCurricular:
     outputs: tuple[dict[str, object], ...]
     hallazgos: tuple[Hallazgo, ...]
     cuarentena: tuple[dict[str, object], ...]
+    pendientes: int = 0
+    release_gate: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +162,7 @@ def construir_salidas_curriculares(
     habilidades_fuente: dict[str, dict[str, object]] = {}
     herramientas: dict[str, dict[str, str]] = {}
     herramientas_fuente: dict[str, dict[str, object]] = {}
+    pendientes_curriculares: list[dict[str, object]] = []
     relaciones_fuente: set[tuple[str, str, str, str, str]] = set()
     relaciones_canonicas: set[tuple[str, str, str, str, str]] = set()
     carrera_ejecucion = _texto(validacion.carrera).upper()
@@ -405,24 +417,103 @@ def construir_salidas_curriculares(
             )
             habilidad_canonica = resolucion_habilidad.concepto
             competencia_llm: ConceptoCHH | None = None
+            estado_habilidad = _estado_resolucion_determinista(resolucion_habilidad)
+            propuesta_habilidad: dict[str, object] | None = None
+            competencias_logro_canonicas = list(competencias_logro)
             if decision_llm is not None:
-                competencia_llm = _concepto_decidido(
-                    catalogo_curricular,
+                competencia_candidata = catalogo_curricular.obtener(
+                    "competencia", decision_llm.competencia.nombre
+                )
+                propuesta_competencia = _propuesta_dict(
                     decision_llm.competencia.nombre,
                     decision_llm.competencia.descripcion,
-                    decision_llm.competencia.tipo or "dura",
-                    "COMP",
+                    _tipo_competencia(decision_llm.competencia.tipo or "dura"),
                 )
-                habilidad_canonica = _concepto_decidido(
-                    catalogo_curricular,
+                if competencia_candidata is not None:
+                    competencia_llm = competencia_candidata
+                    competencias_logro_canonicas = [competencia_llm]
+                    competencias[competencia_llm.id] = {
+                        "id_competencia": competencia_llm.id,
+                        "nombre_competencia": competencia_llm.nombre,
+                        "descripcion_breve_competencia": competencia_llm.descripcion,
+                        "tipo_competencia": competencia_llm.tipo,
+                    }
+                else:
+                    _registrar_pendiente(
+                        pendientes_curriculares,
+                        tipo="competencia",
+                        estado=ESTADO_PENDIENTE_PERFIL,
+                        motivo="CONCEPTO_LLM_NO_CATALOGADO",
+                        id_curso=id_curso,
+                        id_silabo=id_silabo,
+                        archivo=archivo,
+                        id_habilidad_fuente=id_habilidad_fuente,
+                        etiqueta=etiqueta,
+                        descripcion=descripcion,
+                        propuesta=propuesta_competencia,
+                        evidencia=decision_llm.evidencia,
+                        confianza=decision_llm.confianza,
+                    )
+
+                habilidad_candidata = catalogo_curricular.obtener(
+                    "habilidad", decision_llm.habilidad.nombre
+                )
+                propuesta_habilidad = _propuesta_dict(
                     decision_llm.habilidad.nombre,
                     decision_llm.habilidad.descripcion,
                     "habilidad",
-                    "HAB",
                 )
-                competencias_logro_canonicas = [competencia_llm]
-            else:
-                competencias_logro_canonicas = list(competencias_logro)
+                if habilidad_candidata is not None:
+                    habilidad_canonica = habilidad_candidata
+                    estado_habilidad = "LLM_CANONIZADA"
+                    propuesta_habilidad = None
+                elif habilidad_canonica is not None:
+                    estado_habilidad = "CANONIZADA_CON_PROPUESTA_PERFIL"
+                    _registrar_pendiente(
+                        pendientes_curriculares,
+                        tipo="habilidad",
+                        estado=ESTADO_PENDIENTE_PERFIL,
+                        motivo="CONCEPTO_LLM_NO_CATALOGADO_CON_CANDIDATA_EXISTENTE",
+                        id_curso=id_curso,
+                        id_silabo=id_silabo,
+                        archivo=archivo,
+                        id_habilidad_fuente=id_habilidad_fuente,
+                        etiqueta=etiqueta,
+                        descripcion=descripcion,
+                        propuesta=propuesta_habilidad,
+                        evidencia=decision_llm.evidencia,
+                        confianza=decision_llm.confianza,
+                    )
+                else:
+                    estado_habilidad = ESTADO_PENDIENTE_PERFIL
+                    _registrar_pendiente(
+                        pendientes_curriculares,
+                        tipo="habilidad",
+                        estado=ESTADO_PENDIENTE_PERFIL,
+                        motivo="CONCEPTO_LLM_NO_CATALOGADO",
+                        id_curso=id_curso,
+                        id_silabo=id_silabo,
+                        archivo=archivo,
+                        id_habilidad_fuente=id_habilidad_fuente,
+                        etiqueta=etiqueta,
+                        descripcion=descripcion,
+                        propuesta=propuesta_habilidad,
+                        evidencia=decision_llm.evidencia,
+                        confianza=decision_llm.confianza,
+                    )
+            elif habilidad_canonica is None:
+                _registrar_pendiente(
+                    pendientes_curriculares,
+                    tipo="habilidad",
+                    estado=estado_habilidad,
+                    motivo=resolucion_habilidad.metodo,
+                    id_curso=id_curso,
+                    id_silabo=id_silabo,
+                    archivo=archivo,
+                    id_habilidad_fuente=id_habilidad_fuente,
+                    etiqueta=etiqueta,
+                    descripcion=descripcion,
+                )
             habilidades_fuente[id_habilidad_fuente] = {
                 "id_habilidad_fuente": id_habilidad_fuente,
                 "id_curso": id_curso,
@@ -433,11 +524,14 @@ def construir_salidas_curriculares(
                 "codigos_competencia": ";".join(_codigos_del_logro(logro)),
                 "id_habilidad_canonica": habilidad_canonica.id if habilidad_canonica else "",
                 "estado_resolucion": (
-                    "LLM_CANONIZADA" if decision_llm is not None
-                    else "CANONIZADA" if habilidad_canonica else "REVISAR"
+                    estado_habilidad
+                    if habilidad_canonica is not None or decision_llm is not None
+                    else estado_habilidad
                 ),
                 "metodo_resolucion": (
-                    "LLM_CARRERA" if decision_llm is not None else resolucion_habilidad.metodo
+                    "LLM_CATALOGO"
+                    if decision_llm is not None and habilidad_canonica is not None
+                    else resolucion_habilidad.metodo
                 ),
                 "puntaje_resolucion": (
                     decision_llm.confianza if decision_llm is not None
@@ -445,11 +539,16 @@ def construir_salidas_curriculares(
                 ),
                 "puntaje_segundo": resolucion_habilidad.puntaje_segundo,
                 "id_competencia_llm": competencia_llm.id if competencia_llm else "",
+                "propuesta_perfil": propuesta_habilidad,
             }
-            if competencia_llm is not None and not competencias_logro:
+            if competencia_llm is not None and not _tiene_proveniencia_competencia(
+                competencias_fuente,
+                id_silabo,
+                competencia_llm.id,
+            ):
                 assert decision_llm is not None
                 competencia_fuente = _hash_id(
-                    "COMP_SRC", id_silabo, "LLM", competencia_llm.nombre
+                    "COMP_SRC", id_silabo, id_habilidad_fuente, competencia_llm.nombre
                 )
                 competencias_fuente[competencia_fuente] = {
                     "id_competencia_fuente": competencia_fuente,
@@ -461,17 +560,12 @@ def construir_salidas_curriculares(
                     "descripcion_fuente": decision_llm.competencia.descripcion,
                     "id_competencia_canonica": competencia_llm.id,
                     "estado_resolucion": "LLM_DERIVADA",
-                    "metodo_resolucion": "LLM_CARRERA",
+                    "metodo_resolucion": "LLM_CATALOGO",
                     "puntaje_resolucion": decision_llm.confianza,
+                    "id_habilidad_fuente": id_habilidad_fuente,
+                    "evidencia_fuente": list(decision_llm.evidencia),
                 }
                 competencias_fuente_logro.append(competencia_fuente)
-            if competencia_llm is not None:
-                competencias[competencia_llm.id] = {
-                    "id_competencia": competencia_llm.id,
-                    "nombre_competencia": competencia_llm.nombre,
-                    "descripcion_breve_competencia": competencia_llm.descripcion,
-                    "tipo_competencia": competencia_llm.tipo,
-                }
             if habilidad_canonica is None:
                 hallazgos.append(
                     Hallazgo(
@@ -506,7 +600,27 @@ def construir_salidas_curriculares(
                 for deteccion in herramientas_detectadas
                 if decision_llm is None
                 or _herramienta_decidida(deteccion.concepto.nombre, decision_llm)
-            ) + tuple(herramienta.id for herramienta, _ in herramientas_nuevas)
+            )
+            for herramienta, evidencia in herramientas_nuevas:
+                _registrar_pendiente(
+                    pendientes_curriculares,
+                    tipo="herramienta",
+                    estado=ESTADO_PENDIENTE_PERFIL,
+                    motivo="HERRAMIENTA_LLM_NO_CATALOGADA",
+                    id_curso=id_curso,
+                    id_silabo=id_silabo,
+                    archivo=archivo,
+                    id_habilidad_fuente=id_habilidad_fuente,
+                    etiqueta=etiqueta,
+                    descripcion=descripcion,
+                    propuesta={
+                        "id": herramienta.id,
+                        "nombre": herramienta.nombre,
+                        "descripcion": herramienta.descripcion,
+                        "tipo": herramienta.tipo,
+                    },
+                    evidencia=[evidencia["texto"]],
+                )
             for deteccion in herramientas_detectadas:
                 if decision_llm is not None and not _herramienta_decidida(
                     deteccion.concepto.nombre, decision_llm
@@ -538,32 +652,9 @@ def construir_salidas_curriculares(
                     "coincidencia": deteccion.coincidencia,
                     "estado_resolucion": "EVIDENCIA_ESTRUCTURADA",
                 }
-            for herramienta, evidencia in herramientas_nuevas:
-                herramientas[herramienta.id] = {
-                    "id_herramienta": herramienta.id,
-                    "nombre_herramienta": herramienta.nombre,
-                    "descripcion_breve_herramienta": herramienta.descripcion,
-                }
-                id_herramienta_fuente = _hash_id(
-                    "HERR_SRC",
-                    id_silabo,
-                    etiqueta,
-                    herramienta.id,
-                    evidencia["seccion"],
-                    evidencia["texto"],
-                )
-                herramientas_fuente[id_herramienta_fuente] = {
-                    "id_herramienta_fuente": id_herramienta_fuente,
-                    "id_curso": id_curso,
-                    "id_silabo": id_silabo,
-                    "id_habilidad_fuente": id_habilidad_fuente,
-                    "id_herramienta_canonica": herramienta.id,
-                    "nombre_herramienta": herramienta.nombre,
-                    "seccion_fuente": evidencia["seccion"],
-                    "texto_evidencia": evidencia["texto"],
-                    "coincidencia": herramienta.nombre,
-                    "estado_resolucion": "LLM_EVIDENCIA_ESTRUCTURADA",
-                }
+            # Las propuestas de herramienta que no pertenecen al catálogo se
+            # conservan en pendientes_curriculares; nunca se promocionan a un
+            # CSV canónico solo por haber sido sugeridas por el LLM.
 
             for indice_competencia, competencia_fuente in enumerate(competencias_fuente_logro):
                 herramientas_fuente_logro = herramienta_ids if indice_competencia == 0 else ()
@@ -663,19 +754,55 @@ def construir_salidas_curriculares(
         reportes / "cobertura_curricular_canonica.jsonl",
         (_fila_cobertura(relacion, "COB_CUR_CAN") for relacion in sorted(relaciones_canonicas)),
     )
-    for nombre, columnas in ARCHIVOS_SALIDA:
-        ruta = salida / nombre
-        _escribir_csv(ruta, columnas, filas_por_archivo[nombre])
-
-    hallazgos_validacion = validar_salidas_curriculares(
-        salida,
-        registros,
+    pendientes_curriculares = clasificar_propuestas(pendientes_curriculares)
+    _escribir_jsonl(reportes / PENDIENTES_ARCHIVO, pendientes_curriculares)
+    _escribir_candidatos_curriculares(
+        reportes,
         filas_por_archivo,
-        competencias_fuente,
-        habilidades_fuente,
-        relaciones_canonicas,
+        materialized=not any(
+            puede_recibir_decision(fila) and not _texto(fila.get("decision"))
+            for fila in pendientes_curriculares
+        ),
     )
+    canonical_materialized = not any(
+        puede_recibir_decision(fila) and not _texto(fila.get("decision"))
+        for fila in pendientes_curriculares
+    )
+    if canonical_materialized:
+        for nombre, columnas in ARCHIVOS_SALIDA:
+            ruta = salida / nombre
+            _escribir_csv(ruta, columnas, filas_por_archivo[nombre])
+        hallazgos_validacion = validar_salidas_curriculares(
+            salida,
+            registros,
+            filas_por_archivo,
+            competencias_fuente,
+            habilidades_fuente,
+            herramientas_fuente,
+            relaciones_canonicas,
+        )
+    else:
+        _retirar_csv_canónico(salida)
+        hallazgos_validacion = ()
     hallazgos.extend(hallazgos_validacion)
+    release_gate = evaluar_release_gate(
+        carrera=carrera_ejecucion,
+        periodo=periodo_ejecucion,
+        registros=len(registros),
+        logros_fuente=_conteo_logros_con_descripcion(registros),
+        filas_por_archivo=filas_por_archivo,
+        competencias_fuente=list(competencias_fuente.values()),
+        habilidades_fuente=list(habilidades_fuente.values()),
+        herramientas_fuente=list(herramientas_fuente.values()),
+        relaciones_canonicas=relaciones_canonicas,
+        pendientes=pendientes_curriculares,
+        hallazgos=hallazgos,
+        canonical_materialized=canonical_materialized,
+    )
+    _escribir_json(
+        reportes / "release_gate.json",
+        release_gate,
+    )
     # Los CSV ya escritos siguen siendo evidencia útil incluso cuando el gate
     # los marca como no publicables; declararlos permite inspeccionarlos sin
     # convertirlos en una salida aprobada.
@@ -684,6 +811,49 @@ def construir_salidas_curriculares(
         for nombre, _ in ARCHIVOS_SALIDA
         if (salida / nombre).is_file()
     ]
+    outputs.extend(
+        [
+            _output(
+                reportes / "competencias_fuente.jsonl",
+                "provenance",
+                len(competencias_fuente),
+            ),
+            _output(
+                reportes / "habilidades_fuente.jsonl",
+                "provenance",
+                len(habilidades_fuente),
+            ),
+            _output(
+                reportes / "herramientas_fuente.jsonl",
+                "provenance",
+                len(herramientas_fuente),
+            ),
+            _output(
+                reportes / "cobertura_curricular_fuente.jsonl",
+                "provenance",
+                len(relaciones_fuente),
+            ),
+            _output(
+                reportes / "cobertura_curricular_canonica.jsonl",
+                "provenance",
+                len(relaciones_canonicas),
+            ),
+            _output(
+                reportes / PENDIENTES_ARCHIVO,
+                "pendientes_curriculares",
+                len(pendientes_curriculares),
+            ),
+            _output(reportes / "release_gate.json", "release_gate", 1),
+        ]
+    )
+    if not canonical_materialized:
+        outputs.append(
+            _output(
+                reportes / CANDIDATOS_ARCHIVO,
+                "candidatos_curriculares",
+                sum(len(filas) for filas in filas_por_archivo.values()),
+            )
+        )
     publicable = bool(registros) and not any(
         hallazgo.severidad == "error" for hallazgo in hallazgos
     )
@@ -696,6 +866,8 @@ def construir_salidas_curriculares(
         outputs=tuple(outputs),
         hallazgos=tuple(hallazgos),
         cuarentena=tuple(cuarentena),
+        pendientes=len(pendientes_curriculares),
+        release_gate=release_gate,
     )
 
 
@@ -1503,12 +1675,51 @@ def _escribir_jsonl(ruta: Path, filas: Iterable[object]) -> None:
             archivo.write("\n")
 
 
+def _escribir_candidatos_curriculares(
+    reportes: Path,
+    filas_por_archivo: dict[str, list[dict[str, str]]],
+    *,
+    materialized: bool,
+) -> None:
+    """Persists canonical candidates separately from importable CSV files."""
+
+    contenido = {
+        "version": "curricular-candidates/v1",
+        "materialized": materialized,
+        "archivos": {
+            nombre: list(filas_por_archivo[nombre]) for nombre, _ in ARCHIVOS_SALIDA
+        },
+        "decision_policy": {
+            "exact_duplicates": "AUTO_DEDUPLICATE",
+            "semantic_duplicates": "REVIEW_ONLY",
+            "suspicious_tools": "REVIEW_ONLY",
+            "auto_delete": False,
+            "auto_merge": False,
+            "source_rows_preserved": True,
+        },
+    }
+    _escribir_json(reportes / CANDIDATOS_ARCHIVO, contenido)
+
+
+def _retirar_csv_canónico(salida: Path) -> None:
+    """Ensures an unresolved execution cannot expose stale canonical CSVs."""
+
+    for nombre, _ in ARCHIVOS_SALIDA:
+        try:
+            (salida / nombre).unlink(missing_ok=True)
+        except OSError:
+            # The release gate remains blocked; retaining no stale publication
+            # is preferable to failing the source/provenance checkpoint.
+            continue
+
+
 def validar_salidas_curriculares(
     salida: Path,
     registros: list[dict[str, object]],
     filas_por_archivo: dict[str, list[dict[str, str]]],
     competencias_fuente: dict[str, dict[str, object]],
     habilidades_fuente: dict[str, dict[str, object]],
+    herramientas_fuente: dict[str, dict[str, object]],
     relaciones_canonicas: set[tuple[str, str, str, str, str]],
 ) -> tuple[Hallazgo, ...]:
     """Actúa como juez determinista antes de publicar los cuatro CSV."""
@@ -1708,7 +1919,332 @@ def validar_salidas_curriculares(
                 hoja="reportes/habilidades_fuente.jsonl",
             )
         )
+    ids_competencias_salida = {
+        _texto(fila.get("id_competencia")) for fila in competencias_csv
+    }
+    ids_competencias_fuente = {
+        _texto(fila.get("id_competencia_canonica"))
+        for fila in competencias_fuente.values()
+        if _texto(fila.get("id_competencia_canonica"))
+    }
+    ids_competencias_sin_proveniencia = ids_competencias_salida - ids_competencias_fuente
+    if ids_competencias_sin_proveniencia:
+        hallazgos.append(
+            Hallazgo(
+                codigo="COMPETENCIA_CANONICA_SIN_PROVENANCE",
+                severidad="warning",
+                mensaje=(
+                    "Una competencia canónica no tiene una fila de provenance "
+                    "que explique su origen curricular."
+                ),
+                hoja="reportes/competencias_fuente.jsonl",
+                detalle="; ".join(sorted(ids_competencias_sin_proveniencia)),
+            )
+        )
+
+    ids_habilidades_salida = {_texto(fila.get("id_habilidad")) for fila in habilidades_csv}
+    ids_habilidades_fuente = {
+        _texto(fila.get("id_habilidad_canonica"))
+        for fila in habilidades_fuente.values()
+        if _texto(fila.get("id_habilidad_canonica"))
+    }
+    ids_habilidades_sin_proveniencia = ids_habilidades_salida - ids_habilidades_fuente
+    if ids_habilidades_sin_proveniencia:
+        hallazgos.append(
+            Hallazgo(
+                codigo="HABILIDAD_CANONICA_SIN_PROVENANCE",
+                severidad="warning",
+                mensaje=(
+                    "Una habilidad canónica no tiene una fila de provenance "
+                    "que explique su logro de origen."
+                ),
+                hoja="reportes/habilidades_fuente.jsonl",
+                detalle="; ".join(sorted(ids_habilidades_sin_proveniencia)),
+            )
+        )
+
+    ids_herramientas_salida = {_texto(fila.get("id_herramienta")) for fila in herramientas_csv}
+    ids_herramientas_fuente = {
+        _texto(fila.get("id_herramienta_canonica"))
+        for fila in herramientas_fuente.values()
+        if _texto(fila.get("id_herramienta_canonica"))
+    }
+    ids_herramientas_sin_proveniencia = ids_herramientas_salida - ids_herramientas_fuente
+    if ids_herramientas_sin_proveniencia:
+        hallazgos.append(
+            Hallazgo(
+                codigo="HERRAMIENTA_CANONICA_SIN_PROVENANCE",
+                severidad="warning",
+                mensaje=(
+                    "Una herramienta canónica no tiene una fila de provenance "
+                    "que explique su evidencia estructurada."
+                ),
+                hoja="reportes/herramientas_fuente.jsonl",
+                detalle="; ".join(sorted(ids_herramientas_sin_proveniencia)),
+            )
+        )
     return tuple(hallazgos)
+
+
+def evaluar_release_gate(
+    *,
+    carrera: str,
+    periodo: str,
+    registros: int,
+    logros_fuente: int,
+    filas_por_archivo: dict[str, list[dict[str, str]]],
+    competencias_fuente: list[dict[str, object]],
+    habilidades_fuente: list[dict[str, object]],
+    herramientas_fuente: list[dict[str, object]],
+    relaciones_canonicas: set[tuple[str, str, str, str, str]],
+    pendientes: list[dict[str, object]],
+    hallazgos: list[Hallazgo],
+    canonical_materialized: bool = True,
+) -> dict[str, object]:
+    """Build the immutable decision consumed by the Neo4j importer.
+
+    Pending curriculum is allowed in a draft package, but every canonical row
+    must have source provenance before the package can be imported. This keeps
+    human review selective without allowing an untraceable canonical edge.
+    """
+
+    competencias = filas_por_archivo.get("catalogo_competencias.csv", [])
+    habilidades = filas_por_archivo.get("catalogo_habilidades.csv", [])
+    herramientas = filas_por_archivo.get("catalogo_herramientas.csv", [])
+    cobertura = filas_por_archivo.get("cobertura_curricular.csv", [])
+
+    ids_competencias = {
+        _texto(fila.get("id_competencia"))
+        for fila in competencias
+        if _texto(fila.get("id_competencia"))
+    }
+    ids_habilidades = {
+        _texto(fila.get("id_habilidad")) for fila in habilidades if _texto(fila.get("id_habilidad"))
+    }
+    ids_herramientas = {
+        _texto(fila.get("id_herramienta"))
+        for fila in herramientas
+        if _texto(fila.get("id_herramienta"))
+    }
+    provenance = {
+        "missing_competencies": sorted(
+            ids_competencias
+            - {
+                _texto(fila.get("id_competencia_canonica"))
+                for fila in competencias_fuente
+                if _texto(fila.get("id_competencia_canonica"))
+            }
+        ),
+        "missing_skills": sorted(
+            ids_habilidades
+            - {
+                _texto(fila.get("id_habilidad_canonica"))
+                for fila in habilidades_fuente
+                if _texto(fila.get("id_habilidad_canonica"))
+            }
+        ),
+        "missing_tools": sorted(
+            ids_herramientas
+            - {
+                _texto(fila.get("id_herramienta_canonica"))
+                for fila in herramientas_fuente
+                if _texto(fila.get("id_herramienta_canonica"))
+            }
+        ),
+    }
+    provenance_complete = not any(provenance.values())
+
+    canonical_tuples = {
+        (
+            _texto(fila.get("id_curso")),
+            _texto(fila.get("id_silabo")),
+            _texto(fila.get("id_competencia")),
+            _texto(fila.get("id_habilidad")),
+            _texto(fila.get("id_herramienta")),
+        )
+        for fila in cobertura
+    }
+    missing_relations = sorted(canonical_tuples - relaciones_canonicas)
+    relation_references = sorted(
+        {
+            identificador
+            for fila in cobertura
+            for columna in ("id_competencia", "id_habilidad", "id_herramienta")
+            if (identificador := _texto(fila.get(columna)))
+            and identificador
+            not in (
+                ids_competencias
+                if columna == "id_competencia"
+                else ids_habilidades
+                if columna == "id_habilidad"
+                else ids_herramientas
+            )
+        }
+    )
+    source_complete = registros > 0 and len(habilidades_fuente) >= logros_fuente
+    no_structural_errors = not any(hallazgo.severidad == "error" for hallazgo in hallazgos)
+    blockers: list[str] = []
+    if not source_complete:
+        blockers.append("SOURCE_COVERAGE_INCOMPLETE")
+    if not provenance_complete:
+        blockers.append("PROVENANCE_INCOMPLETE")
+    if missing_relations:
+        blockers.append("CANONICAL_RELATION_UNVERIFIED")
+    if relation_references:
+        blockers.append("CANONICAL_REFERENCE_MISSING")
+    if not no_structural_errors:
+        blockers.append("STRUCTURAL_ERRORS_PRESENT")
+    pendientes_sin_decidir = sum(
+        1
+        for pendiente in pendientes
+        if puede_recibir_decision(pendiente) and not _texto(pendiente.get("decision"))
+    )
+    if pendientes_sin_decidir:
+        blockers.append("PENDING_DECISIONS")
+    if not canonical_materialized:
+        blockers.append("CANONICAL_MATERIALIZATION_PENDING")
+
+    pendientes_por_estado: dict[str, int] = {}
+    for pendiente in pendientes:
+        estado = _texto(pendiente.get("estado_resolucion")) or "PENDIENTE"
+        pendientes_por_estado[estado] = pendientes_por_estado.get(estado, 0) + 1
+
+    return {
+        "version": "curricular-release-gate/v1",
+        "decision": "ALLOW_IMPORT" if not blockers else "BLOCK_IMPORT",
+        "carrera": carrera,
+        "periodo": periodo,
+        "blockers": blockers,
+        "checks": {
+            "source_coverage": {
+                "ok": source_complete,
+                "records": registros,
+                "logros_fuente": logros_fuente,
+                "habilidades_fuente": len(habilidades_fuente),
+            },
+            "provenance": {
+                "ok": provenance_complete,
+                **provenance,
+            },
+            "canonical_relations": {
+                "ok": not missing_relations,
+                "rows": len(cobertura),
+                "verified": len(relaciones_canonicas),
+                "missing": missing_relations,
+            },
+            "canonical_references": {
+                "ok": not relation_references,
+                "missing": relation_references,
+            },
+            "structural_errors": {
+                "ok": no_structural_errors,
+                "count": sum(
+                    1 for hallazgo in hallazgos if hallazgo.severidad == "error"
+                ),
+            },
+            "pending_preserved": {
+                "ok": len(pendientes) >= max(0, logros_fuente - len(habilidades)),
+                "total": len(pendientes),
+                "by_state": pendientes_por_estado,
+            },
+            "approval": {
+                "ok": pendientes_sin_decidir == 0 and canonical_materialized,
+                "pending_decision": pendientes_sin_decidir,
+                "canonical_materialized": canonical_materialized,
+            },
+        },
+        "observability": {
+            "source_records": registros,
+            "source_logros": logros_fuente,
+            "canonical_competencies": len(competencias),
+            "canonical_skills": len(habilidades),
+            "canonical_tools": len(herramientas),
+            "canonical_relations": len(cobertura),
+            "pending_records": len(pendientes),
+        },
+    }
+
+
+def _estado_resolucion_determinista(resolucion: ResolucionConcepto) -> str:
+    if resolucion.concepto is not None:
+        return "CANONIZADA"
+    if resolucion.metodo == "AMBIGUA_O_INSUFICIENTE":
+        return ESTADO_REVISION_HUMANA
+    return ESTADO_PENDIENTE_CATALOGACION
+
+
+def _propuesta_dict(nombre: str, descripcion: str, tipo: str) -> dict[str, object]:
+    return {
+        "nombre": _texto(nombre),
+        "descripcion": _texto(descripcion),
+        "tipo": _texto(tipo),
+    }
+
+
+def _registrar_pendiente(
+    pendientes: list[dict[str, object]],
+    *,
+    tipo: str,
+    estado: str,
+    motivo: str,
+    id_curso: str,
+    id_silabo: str,
+    archivo: str,
+    id_habilidad_fuente: str,
+    etiqueta: str,
+    descripcion: str,
+    propuesta: dict[str, object] | None = None,
+    evidencia: list[str] | None = None,
+    confianza: float | None = None,
+) -> None:
+    nombre_propuesta = _texto(
+        (propuesta or {}).get("nombre") or (propuesta or {}).get("id")
+    )
+    pendientes.append(
+        {
+            "id_pendiente": _hash_id(
+                "PEN",
+                tipo,
+                id_silabo,
+                id_habilidad_fuente,
+                motivo,
+                nombre_propuesta,
+            ),
+            "tipo": tipo,
+            "estado_resolucion": estado,
+            "motivo": motivo,
+            "id_curso": id_curso,
+            "id_silabo": id_silabo,
+            "archivo": archivo,
+            "id_habilidad_fuente": id_habilidad_fuente,
+            "etiqueta_logro": etiqueta,
+            "descripcion_fuente": descripcion,
+            "propuesta": propuesta,
+            "evidencia": list(evidencia or []),
+            "confianza": confianza,
+        }
+    )
+
+
+def _tiene_proveniencia_competencia(
+    competencias_fuente: dict[str, dict[str, object]],
+    id_silabo: str,
+    id_competencia: str,
+) -> bool:
+    return any(
+        _texto(fila.get("id_silabo")) == id_silabo
+        and _texto(fila.get("id_competencia_canonica")) == id_competencia
+        for fila in competencias_fuente.values()
+    )
+
+
+def _conteo_logros_con_descripcion(registros: list[dict[str, object]]) -> int:
+    return sum(
+        1
+        for datos in _datos_registros(registros)
+        for logro in _logros(datos)
+        if _texto(logro.get("descripcion"))
+    )
 
 
 def _ids_unicos(
@@ -1758,6 +2294,13 @@ def _escribir_csv(ruta: Path, columnas: tuple[str, ...], filas: list[dict[str, s
         escritor.writerows(
             {columna: fila.get(columna, "") for columna in columnas} for fila in filas
         )
+
+
+def _escribir_json(ruta: Path, contenido: dict[str, object]) -> None:
+    ruta.write_text(
+        json.dumps(contenido, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _output(ruta: Path, tipo: str, registros: int) -> dict[str, object]:

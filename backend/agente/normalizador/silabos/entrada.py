@@ -19,6 +19,7 @@ FORMATOS: dict[str, FormatoSilabo] = {".docx": "docx", ".pdf": "pdf"}
 MAX_ARCHIVOS = 500
 MAX_BYTES_ARCHIVO = 50 * 1024 * 1024
 MAX_BYTES_DESCOMPRIMIDOS = 500 * 1024 * 1024
+PATRON_PERIODO = re.compile(r"\d{4}-\d+")
 
 
 def normalizar_carrera(valor: object) -> str:
@@ -29,7 +30,7 @@ def normalizar_carrera(valor: object) -> str:
 
 
 def normalizar_periodo(valor: object) -> str:
-    """Acepta periodos variables, pero exige el formato año-secuencia."""
+    """Normaliza espacios; la validación de dominio usa ``PATRON_PERIODO``."""
 
     periodo = re.sub(r"\s+", "", str(valor or ""))
     return periodo
@@ -98,7 +99,7 @@ def validar_archivo(
                 "La carrera debe ser declarada por la persona usuaria.",
             )
         )
-    if re.fullmatch(r"\d{4}-\d+", periodo_normalizado) is None:
+    if PATRON_PERIODO.fullmatch(periodo_normalizado) is None:
         hallazgos.append(
             _hallazgo(
                 "PERIODO_INVALIDO",

@@ -4,8 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from typing import cast
 
+from agente.normalizador.embeddings import (
+    DEFAULT_EMBEDDING_LIMITS,
+    FALLBACK_REASON_PROVIDER_OR_VECTOR_INVALID,
+    FALLBACK_REASON_RETRIEVER_ABSENT,
+    EmbeddingRetriever,
+    EmbeddingScope,
+    EmbeddingUnavailable,
+    normalizar_limites,
+)
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
 
 CHH_OUTPUT_TYPES = ("competencia", "habilidad", "herramienta")
@@ -23,6 +33,11 @@ def construir_contexto_por_logro(
     caso: dict[str, object],
     catalogo: CatalogoCHH,
     perfil: dict[str, object],
+    *,
+    retriever: EmbeddingRetriever | None = None,
+    embedding_scope: EmbeddingScope | None = None,
+    limites_candidatos: Mapping[str, int] | None = None,
+    pool_retrieval: int | None = None,
 ) -> dict[str, object]:
     """Construye el único contexto recuperado que ve el LLM para un logro.
 
@@ -32,11 +47,63 @@ def construir_contexto_por_logro(
     """
 
     consulta = _consulta(caso)
-    recuperados = catalogo.buscar(consulta, limite=max(_LIMITES_CANDIDATOS.values()))
-    candidatos = {
-        tipo: [_candidato_dict(concepto, tipo) for concepto in recuperados.get(tipo, ())[:limite]]
-        for tipo, limite in _LIMITES_CANDIDATOS.items()
-    }
+    limites_lexicales = _limites_candidatos(limites_candidatos)
+    limites_embedding = normalizar_limites(
+        limites_candidatos,
+        defaults=DEFAULT_EMBEDDING_LIMITS,
+    )
+    scope = embedding_scope or _scope_por_defecto(perfil)
+    perfil_estado = str(perfil.get("estado") or "BORRADOR").upper()
+    perfil_revision = str(perfil.get("revision") or perfil.get("periodo") or "sin_revision")
+    retrieval_info = _auditoria_recuperacion(
+        "lexical",
+        scope,
+        None,
+        None,
+        FALLBACK_REASON_RETRIEVER_ABSENT,
+        perfil_estado=perfil_estado,
+        perfil_revision=perfil_revision,
+    )
+    candidatos: dict[str, list[dict[str, object]]]
+    if retriever is not None:
+        try:
+            recuperados_embedding = retriever.retrieve(
+                consulta,
+                scope=scope,
+                limits=limites_embedding,
+                pool_size=pool_retrieval,
+            )
+            candidatos = {
+                tipo: [item.a_dict() for item in recuperados_embedding.get(tipo, ())]
+                for tipo in CHH_OUTPUT_TYPES
+            }
+            retrieval_info = _auditoria_recuperacion(
+                "embedding",
+                scope,
+                retriever.model_identifier,
+                retriever.config_identifier,
+                minimum_similarity=retriever.minimum_similarity,
+                perfil_estado=perfil_estado,
+                perfil_revision=perfil_revision,
+            )
+        except EmbeddingUnavailable as exc:
+            retrieval_info = _auditoria_recuperacion(
+                "lexical",
+                scope,
+                retriever.model_identifier,
+                retriever.config_identifier,
+                (
+                    exc.reason_code
+                    if isinstance(exc.reason_code, str)
+                    else FALLBACK_REASON_PROVIDER_OR_VECTOR_INVALID
+                ),
+                minimum_similarity=retriever.minimum_similarity,
+                perfil_estado=perfil_estado,
+                perfil_revision=perfil_revision,
+            )
+            candidatos = _candidatos_lexical(consulta, catalogo, limites_lexicales)
+    else:
+        candidatos = _candidatos_lexical(consulta, catalogo, limites_lexicales)
     contexto: dict[str, object] = {
         "version_contexto": _VERSION_CONTEXTO,
         "catalogo": {"version": catalogo.version},
@@ -48,6 +115,7 @@ def construir_contexto_por_logro(
             "Puedes proponer un concepto nuevo solo con evidencia explícita del sílabo."
         ),
         "candidatos": candidatos,
+        "recuperacion": retrieval_info,
         "ejemplos": [
             ejemplo.a_dict() for ejemplo in catalogo.ejemplos(consulta, limite=_LIMITE_EJEMPLOS)
         ],
@@ -55,6 +123,50 @@ def construir_contexto_por_logro(
     }
     contexto["fingerprint"] = _fingerprint(contexto)
     return contexto
+
+
+def _limites_candidatos(limites: Mapping[str, int] | None) -> dict[str, int]:
+    return normalizar_limites(limites, defaults=_LIMITES_CANDIDATOS)
+
+
+def _candidatos_lexical(
+    consulta: str,
+    catalogo: CatalogoCHH,
+    limites: Mapping[str, int],
+) -> dict[str, list[dict[str, object]]]:
+    recuperados = catalogo.buscar(consulta, limite=max(limites.values(), default=0))
+    return {
+        tipo: [_candidato_dict(concepto, tipo) for concepto in recuperados.get(tipo, ())[:limite]]
+        for tipo, limite in limites.items()
+    }
+
+
+def _scope_por_defecto(perfil: dict[str, object]) -> EmbeddingScope | None:
+    carrera = str(perfil.get("carrera") or "").strip() or None
+    periodo = str(perfil.get("periodo") or "").strip() or None
+    return EmbeddingScope.curriculum(carrera, periodo) if carrera and periodo else None
+
+
+def _auditoria_recuperacion(
+    metodo: str,
+    scope: EmbeddingScope | None,
+    modelo: str | None,
+    configuracion: str | None,
+    reason_code: str | None = None,
+    minimum_similarity: float | None = None,
+    perfil_estado: str | None = None,
+    perfil_revision: str | None = None,
+) -> dict[str, object]:
+    return {
+        "method": metodo,
+        "scope": scope.a_dict() if scope else None,
+        "model": modelo,
+        "config": configuracion,
+        "reason_code": reason_code,
+        "minimum_similarity": minimum_similarity,
+        "profile_status": perfil_estado,
+        "profile_revision": perfil_revision,
+    }
 
 
 def _consulta(caso: dict[str, object]) -> str:
@@ -70,10 +182,10 @@ def _consulta(caso: dict[str, object]) -> str:
     )
 
 
-def _candidato_dict(concepto: ConceptoCHH, tipo: str) -> dict[str, str]:
+def _candidato_dict(concepto: ConceptoCHH, tipo: str) -> dict[str, object]:
     """Añade el tipo CHH de la colección, aunque el CSV no lo declare."""
 
-    resultado = dict(concepto.a_dict())
+    resultado: dict[str, object] = dict(concepto.a_dict())
     resultado["tipo"] = tipo
     return resultado
 
@@ -126,7 +238,12 @@ def _perfil_referencia(perfil: dict[str, object]) -> dict[str, str]:
 
 def _perfil_contextual(perfil: dict[str, object]) -> dict[str, object]:
     estado = str(perfil.get("estado") or "BORRADOR").upper()
-    if estado not in {"APROBADO", "BORRADOR"}:
+    if estado not in {
+        "APROBADO",
+        "BORRADOR",
+        "BORRADOR_CON_PENDIENTES",
+        "REQUIERE_REVISION_HUMANA",
+    }:
         estado = "BORRADOR"
     resultado: dict[str, object] = {
         "carrera": str(perfil.get("carrera") or ""),

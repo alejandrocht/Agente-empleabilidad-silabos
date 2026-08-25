@@ -57,11 +57,14 @@ POST /normalizador/silabos
 GET  /normalizador/ejecuciones/{id_ejecucion}
 GET  /normalizador/ejecuciones/{id_ejecucion}/errores
 GET  /normalizador/ejecuciones/{id_ejecucion}/cuarentena
+GET  /normalizador/ejecuciones/{id_ejecucion}/pendientes
+POST /normalizador/ejecuciones/{id_ejecucion}/pendientes/decidir
+GET  /normalizador/ejecuciones/{id_ejecucion}/release-gate
 ```
 
 El corte curricular valida el paquete, extrae metadatos, sumilla, logro general, logros específicos
 y programa analítico. El JSONL de limpieza es staging interno y no se ofrece como salida de negocio.
-Cuando pasan las puertas curriculares, se publican exactamente cuatro CSV:
+Cada ejecución conserva exactamente cuatro CSV curriculares como paquete candidato:
 
 ```text
 salidas/catalogo_competencias.csv
@@ -72,8 +75,23 @@ salidas/cobertura_curricular.csv
 
 La cobertura solo contiene `id_cob_curricular`, `id_curso`, `id_silabo`, `id_competencia`,
 `id_habilidad` e `id_herramienta`. El último campo puede estar vacío; los demás identifican la
-relación atómica y conectan cada resultado con el curso y el sílabo de origen. Si alguna puerta falla,
-los CSV no se publican y la ejecución queda en `no_publicado` con hallazgos y cuarentena consultables.
+relación atómica y conectan cada resultado con el curso y el sílabo de origen. La proveniencia
+detallada se conserva en `salidas/reportes/{competencias,habilidades,herramientas}_fuente.jsonl` y
+en `cobertura_curricular_fuente.jsonl`; las propuestas no catalogadas quedan en
+`pendientes_curriculares.jsonl` con un `id_pendiente` estable, evidencia y estado explícito.
+
+Cuando el LLM propone una competencia, habilidad o herramienta que no coincide con el catálogo,
+la interfaz muestra un checkpoint al finalizar la ejecución. El ejecutor envía un lote con
+`{"id_pendiente":"...","decision":"ADD"}` o `KEEP_PENDING`. `ADD` promueve el concepto solo
+al perfil de carrera/periodo, genera provenance y recalcula el release gate; `KEEP_PENDING` conserva
+la evidencia fuera de los CSV canónicos. Ambas decisiones quedan en
+`reportes/decisiones_curriculares.jsonl` y una repetición exacta es idempotente.
+
+El reporte `release_gate.json` es la decisión de publicación para Neo4j. Los pendientes preservados
+son válidos en un borrador, pero una salida solo puede importarse cuando el gate indica
+`ALLOW_IMPORT`; provenance incompleta, relaciones canónicas no verificadas o errores estructurales
+mantienen `BLOCK_IMPORT`. Así la revisión humana se concentra en ambigüedades y evolución del perfil,
+no en cada logro claro.
 
 Cada ejecución curricular está aislada por la pareja declarada `carrera` + `periodo`: esa pareja se
 normaliza, se conserva en el registro y forma parte de los IDs de curso y sílabo. No se aplica un
@@ -127,6 +145,31 @@ La auditoría se guarda fuera de los CSV en `salidas/reportes/decisiones_llm.jso
 para mantener la trazabilidad. Python no modifica los CSV: los cuatro archivos mantienen exactamente
 sus columnas actuales.
 
+### Embeddings curriculares por carrera (opt-in)
+
+La recuperación semántica es opcional y solo sugiere candidatos CHH al LLM por cada logro. No mezcla
+el corpus laboral, se limita al catálogo de la misma `carrera` + `periodo`, y nunca se considera
+evidencia: Python sigue verificando las citas contra el sílabo literal antes de aprobar una decisión.
+
+```dotenv
+# Requiere OPENAI_API_KEY y un catálogo curricular revisado para la carrera/periodo.
+NORMALIZADOR_CURRICULAR_EMBEDDINGS=true
+NORMALIZADOR_CURRICULAR_EMBEDDING_CARRERAS=MARKETING@2026-1,INGENIERIA@2026-1
+NORMALIZADOR_EMBEDDING_MODEL=text-embedding-3-small
+# Se aceptan únicamente similitudes estrictamente mayores al umbral.
+# El valor seguro por defecto 0 excluye similitudes cero y negativas.
+NORMALIZADOR_CURRICULAR_EMBEDDING_MIN_SIMILARITY=0
+```
+
+Ambos controles (`NORMALIZADOR_CURRICULAR_EMBEDDINGS` y la allowlist
+`NORMALIZADOR_CURRICULAR_EMBEDDING_CARRERAS`) deben habilitar exactamente la pareja carrera + periodo
+enviada; las entradas antiguas que solo contienen una carrera fallan cerrado. Sin credenciales,
+catálogo específico, proveedor/vector válido o candidatos por encima del umbral, el sistema usa el
+fallback lexical y registra solo un `reason_code` estable: `embedding_retriever_absent`,
+`embedding_catalog_empty`, `embedding_provider_or_vector_invalid` o
+`embedding_candidates_below_threshold`. La auditoría no persiste mensajes de excepción, rutas ni
+secretos.
+
 Las herramientas no se buscan en el texto completo: únicamente se aceptan cuando aparecen en una sección
 estructurada de recursos, software, herramientas digitales o programa analítico. El programa analítico es
 una fuente estructurada válida después de excluir bibliografía, URLs y recursos docentes genéricos; esas
@@ -144,13 +187,13 @@ El flujo curricular es determinista y respeta la evidencia en este orden:
    descripción para una relación textual revisable;
 3. intenta canonicalizar la habilidad contra el catálogo de habilidades, primero por nombre exacto
    y luego con coincidencia lexical fuerte; si no hay evidencia suficiente, no inventa una fila
-   pública y la conserva en el reporte de fuente;
+   pública y la conserva como pendiente con propuesta/evidencia;
 4. busca herramientas explícitas solo en secciones curriculares estructuradas y las relaciona con la
    competencia principal de la habilidad, evitando productos cartesianos; y
 5. ejecuta un juez determinista que rechaza esquemas inválidos, IDs duplicados, relaciones huérfanas
    y competencias placeholder.
 
-Los cuatro CSV publicados conservan exactamente las columnas de los catálogos existentes; no se
+Los cuatro CSV del paquete candidato conservan exactamente las columnas de los catálogos existentes; no se
 agregan columnas ni archivos CSV alternativos:
 
 ```text
@@ -183,8 +226,10 @@ python -m scripts.generar_perfil_carrera \
 ```
 
 El resultado queda en `catalogos/carreras/MARKETING/2026-1/` con los tres catálogos y cobertura opcional.
-`perfil.json` lo identifica explícitamente como `REQUIERE_REVISION_HUMANA`; las habilidades no canónicas
-quedan en `reportes/habilidades_pendientes.jsonl`, no en columnas nuevas ni como conceptos inventados. Mientras
+`perfil.json` conserva `BORRADOR_CON_PENDIENTES` mientras exista cola abierta (o `BORRADOR` si está vacía);
+las habilidades, competencias y herramientas no canónicas quedan en
+`reportes/pendientes_curriculares.jsonl` y `habilidades_pendientes.jsonl`, no en columnas nuevas ni como
+conceptos inventados. Mientras
 un perfil está en bootstrap, especializa el espacio de **competencias**; las habilidades y herramientas aún se
 contrastan contra el catálogo global para que un perfil incompleto no elimine candidatos y fuerce falsos positivos.
 

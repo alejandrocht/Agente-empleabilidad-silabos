@@ -175,7 +175,7 @@ def _decision_para(
     decision = analista_llm.DecisionCurricular(
         id_habilidad_fuente=analista_llm._hash_id("HAB_SRC", "SIL_1", "L1", logro),
         competencia=analista_llm.ConceptoPropuesto(nombre="Gestión de campañas"),
-        habilidad=analista_llm.ConceptoPropuesto(nombre="Evaluar campañas de marketing"),
+        habilidad=analista_llm.ConceptoPropuesto(nombre=logro),
         evidencia=[logro],
         confianza=0.94,
     )
@@ -524,6 +524,53 @@ def test_allowlist_mantiene_comprender_como_no_observable() -> None:
         decision,
         {"logro": logro, "herramientas_detectadas": [], "evidencia_herramientas": []},
     )
+
+
+def test_grounding_no_reduce_aplicar_crm_a_su_verbo() -> None:
+    logro = "Aplicar CRM"
+    decision = _decision_para(
+        logro,
+        habilidad=analista_llm.ConceptoPropuesto(nombre=logro),
+        evidencia=["Aplicar"],
+    )
+    caso = {
+        "curso": "Herramientas de gestión",
+        "sumilla": logro,
+        "logro_general": logro,
+        "logro": logro,
+        "competencias_declaradas": [],
+        "herramientas_detectadas": [],
+        "evidencia_herramientas": [],
+    }
+
+    errores = analista_llm._validar_decision(decision, caso)
+
+    assert "HABILIDAD_SIN_ANCLA_EVIDENCIA" in errores
+
+
+@pytest.mark.parametrize("declarada", [False, True])
+def test_competencia_debe_anclarse_en_fuente_o_declararse(declarada: bool) -> None:
+    logro = "Analizar datos de mercado para identificar segmentos"
+    competencia = "Gestionar nóminas de personal"
+    decision = _decision_para(
+        logro,
+        competencia=analista_llm.ConceptoPropuesto(nombre=competencia),
+        habilidad=analista_llm.ConceptoPropuesto(nombre="Analizar datos de mercado"),
+        evidencia=[logro],
+    )
+    caso = {
+        "curso": "Investigación de mercados",
+        "sumilla": logro,
+        "logro_general": logro,
+        "logro": logro,
+        "competencias_declaradas": [competencia] if declarada else [],
+        "herramientas_detectadas": [],
+        "evidencia_herramientas": [],
+    }
+
+    errores = analista_llm._validar_decision(decision, caso)
+
+    assert ("COMPETENCIA_SIN_ANCLA_FUENTE" in errores) is not declarada
 
 
 def test_logro_respalda_balanced_scorecard_sin_autodetectarlo_como_herramienta() -> None:

@@ -1,0 +1,3 @@
+id_competencia,nombre_competencia,descripcion_breve_competencia,tipo_competencia
+COMP_DB,Diseño de bases de datos,Diseñar estructuras de datos relacionales.,dura
+COMP_ANALISIS,Análisis de datos,Analizar información para obtener hallazgos.,dura

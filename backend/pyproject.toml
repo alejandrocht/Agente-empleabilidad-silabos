@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["mypy>=1.10.0", "pytest>=8.0.0", "ruff>=0.9.0"]
+dev = ["mypy>=1.10.0", "pytest>=8.0.0", "ruff>=0.9.0", "types-openpyxl"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -42,6 +42,7 @@ select = ["E", "F", "I", "UP"]
 
 [tool.mypy]
 python_version = "3.11"
+mypy_path = "."
 strict = true
 
 [[tool.mypy.overrides]]

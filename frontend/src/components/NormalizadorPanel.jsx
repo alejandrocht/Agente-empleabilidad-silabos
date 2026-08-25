@@ -29,6 +29,7 @@ import {
   listarEjecucionesNormalizador,
 } from "../api/normalizador";
 import Neo4jImportPanel from "./Neo4jImportPanel";
+import CurricularApprovalPanel from "./CurricularApprovalPanel";
 import HistorialEjecucionesPanel from "./HistorialEjecucionesPanel";
 
 const ESTADOS_TERMINALES = new Set([
@@ -164,6 +165,40 @@ const ETIQUETAS_SEVERIDAD = {
   warning: "Advertencia",
   info: "Información",
 };
+
+const TIPOS_OUTPUT_AUDITABLES = new Set([
+  "provenance",
+  "pendientes_curriculares",
+  "candidatos_curriculares",
+  "release_gate",
+  "decisiones_curriculares",
+]);
+
+function aprobacionCurricularDe(ejecucion) {
+  return ejecucion?.aprobacion_curricular && typeof ejecucion.aprobacion_curricular === "object"
+    ? ejecucion.aprobacion_curricular
+    : null;
+}
+
+function releaseGatePermiteImportar(ejecucion) {
+  const gate = ejecucion?.release_gate;
+  const aprobacion = aprobacionCurricularDe(ejecucion);
+  return gate?.decision === "ALLOW_IMPORT"
+    && gate?.checks?.approval?.canonical_materialized === true
+    && Number(gate?.checks?.approval?.pending_decision ?? 0) === 0
+    && aprobacion?.materializacion?.csv_canonicos_disponibles === true;
+}
+
+function salidaCurricularCanonica(output) {
+  return output?.tipo === "csv_curricular"
+    || /^salidas\/catalogo_(competencias|habilidades|herramientas)\.csv$/.test(String(output?.archivo || ""))
+    || output?.archivo === "salidas/cobertura_curricular.csv";
+}
+
+function salidaCurricularAuditable(output) {
+  return TIPOS_OUTPUT_AUDITABLES.has(String(output?.tipo || ""))
+    || String(output?.archivo || "").includes("/reportes/");
+}
 
 function tipoFlujo(ejecucion, modo) {
   return ejecucion?.tipo === "silabos" || modo === "silabos" ? "silabos" : "empleabilidad";
@@ -487,6 +522,7 @@ export default function NormalizadorPanel() {
   const [errorRed, setErrorRed] = useState("");
   const [cancelando, setCancelando] = useState(false);
   const [cancelacionEnviada, setCancelacionEnviada] = useState(false);
+  const [aprobacionCurricular, setAprobacionCurricular] = useState(null);
   const [pollingDetenido, setPollingDetenido] = useState(false);
   const [recuperando, setRecuperando] = useState(true);
 
@@ -494,6 +530,7 @@ export default function NormalizadorPanel() {
     const datos = await obtenerEjecucionNormalizador(id);
     if (!puedeAplicar()) return datos;
     setEjecucion(datos);
+    if (datos?.aprobacion_curricular) setAprobacionCurricular(datos.aprobacion_curricular);
     if (esEstadoTerminal(datos)) {
       const [detalleErrores, detalleCuarentena] = await Promise.all([
         obtenerErroresNormalizador(id),
@@ -565,6 +602,7 @@ export default function NormalizadorPanel() {
     setErrores([]);
     setCancelando(false);
     setCancelacionEnviada(false);
+    setAprobacionCurricular(null);
     setPollingDetenido(false);
     try {
       if (modo === "silabos" && (!carrera.trim() || !periodo.trim())) {
@@ -615,6 +653,7 @@ export default function NormalizadorPanel() {
     setErrorRed("");
     setCancelando(false);
     setCancelacionEnviada(false);
+    setAprobacionCurricular(null);
     setPollingDetenido(false);
     setRecuperando(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -627,9 +666,14 @@ export default function NormalizadorPanel() {
   const pasos = pasosPara(ejecucion, modo);
   const controlesBloqueados = recuperando || cargando || Boolean(ejecucion);
   const ejecucionActiva = recuperando || cargando || Boolean(ejecucion && !esFinal);
+  const aprobacion = aprobacionCurricularDe(ejecucion);
+  const procesoCurricularCompletado = esCurricular
+    && ["limpiado", "limpiado_con_advertencias"].includes(estado)
+    && ejecucion?.validacion_silabos?.valida === true;
+  const aprobacionPendiente = esCurricular
+    && (aprobacion?.requiere_decision === true || Number(aprobacion?.pendientes_por_decidir ?? 0) > 0);
   const resultadoListo = esCurricular
-    ? ["limpiado", "limpiado_con_advertencias"].includes(estado)
-      && ejecucion?.validacion_silabos?.valida === true
+    ? procesoCurricularCompletado && releaseGatePermiteImportar(ejecucion)
     : ejecucion?.normalizacion?.publicable === true;
   const resumenMetricas = useMemo(() => metricas(ejecucion, cuarentena), [ejecucion, cuarentena]);
   const progresoLimpiezaLLM = useMemo(() => progresoLLM(ejecucion), [ejecucion]);
@@ -656,7 +700,23 @@ export default function NormalizadorPanel() {
         : esCurricular
           ? "Procesamos los sílabos por lotes, conservamos las evidencias y hallazgos de cada etapa, y habilitaremos los CSV y la inspección al completar el ETL."
           : "Procesamos la fuente por etapas y conservamos las evidencias y hallazgos de cada etapa; los resultados y la inspección se habilitarán al completar el ETL.";
-  const tituloEstado = recuperando ? "Recuperando ejecución" : ETIQUETAS_ESTADO[estado] || "Preparando ejecución";
+  const tituloEstado = recuperando
+    ? "Recuperando ejecución"
+    : esCurricular && aprobacionPendiente && ["limpiado", "limpiado_con_advertencias"].includes(estado)
+      ? "Revisión curricular pendiente"
+      : ETIQUETAS_ESTADO[estado] || "Preparando ejecución";
+  const outputs = Array.isArray(ejecucion?.outputs) ? ejecucion.outputs : [];
+  const outputsCurricularesCanonicos = outputs.filter(salidaCurricularCanonica);
+  const outputsCurricularesAuditables = outputs.filter(salidaCurricularAuditable);
+  const tituloResultado = !esCurricular
+    ? resultadoListo ? "Paquete listo para la siguiente etapa" : "La fuente no se publica todavía"
+    : resultadoListo
+      ? "CSV curriculares listos"
+      : aprobacionPendiente
+        ? "Revisión requerida antes de generar CSV"
+        : procesoCurricularCompletado
+          ? "CSV curriculares bloqueados por el release gate"
+          : "La fuente curricular requiere corrección";
 
   return (
     <main className="h-[100dvh] w-full overflow-y-auto overscroll-contain bg-fondo text-ink">
@@ -1120,9 +1180,9 @@ export default function NormalizadorPanel() {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">04 / resultado</p>
-                  <h2 className="mt-2 text-xl font-extrabold tracking-[-0.025em]">{resultadoListo ? (esCurricular ? "CSV curriculares listos" : "Paquete listo para la siguiente etapa") : esCurricular ? "La fuente curricular requiere corrección" : "La fuente no se publica todavía"}</h2>
+                  <h2 className="mt-2 text-xl font-extrabold tracking-[-0.025em]">{tituloResultado}</h2>
                 </div>
-                {resultadoListo ? <Check className="text-emerald-600" size={25} /> : <XCircle className="text-red-600" size={25} />}
+                {resultadoListo ? <Check className="text-emerald-600" size={25} /> : aprobacionPendiente ? <Clock3 className="text-amber-600" size={25} /> : <XCircle className="text-red-600" size={25} />}
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -1134,17 +1194,30 @@ export default function NormalizadorPanel() {
                 ))}
               </div>
 
-              {Array.isArray(ejecucion.outputs) && ejecucion.outputs.length ? (
+              {esCurricular && procesoCurricularCompletado ? (
+                <CurricularApprovalPanel
+                  idEjecucion={ejecucion.id_ejecucion}
+                  onSummary={setAprobacionCurricular}
+                  onResolved={async () => {
+                    const actualizado = await consultar(ejecucion.id_ejecucion);
+                    if (actualizado?.aprobacion_curricular) {
+                      setAprobacionCurricular(actualizado.aprobacion_curricular);
+                    }
+                  }}
+                />
+              ) : null}
+
+              {!esCurricular && outputs.length ? (
                 <div className="mt-5 border-t border-line pt-5">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <div>
                       <h3 className="font-bold">Archivos disponibles</h3>
                       <p className="mt-1 text-sm leading-5 text-muted">Descarga los resultados registrados por esta ejecución.</p>
                     </div>
-                    <span className="font-mono text-xs text-muted">{ejecucion.outputs.length} archivo{ejecucion.outputs.length === 1 ? "" : "s"}</span>
+                    <span className="font-mono text-xs text-muted">{outputs.length} archivo{outputs.length === 1 ? "" : "s"}</span>
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {ejecucion.outputs.map((output) => (
+                    {outputs.map((output) => (
                       <a
                         key={output.archivo}
                         href={obtenerUrlOutputNormalizador(ejecucion.id_ejecucion, output.archivo)}
@@ -1164,7 +1237,73 @@ export default function NormalizadorPanel() {
                 </div>
               ) : null}
 
-              {!resultadoListo && esFinal ? (
+              {esCurricular ? (
+                <div className="mt-5 space-y-5 border-t border-line pt-5">
+                  <section aria-label="Artefactos de auditoría y proveniencia">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <div>
+                        <h3 className="font-bold">Auditoría y proveniencia</h3>
+                        <p className="mt-1 text-sm leading-5 text-muted">Estos artefactos conservan fuentes, propuestas, decisiones y release gate para revisión; no son CSV canónicos.</p>
+                      </div>
+                      <span className="font-mono text-xs text-muted">{outputsCurricularesAuditables.length} artefacto{outputsCurricularesAuditables.length === 1 ? "" : "s"}</span>
+                    </div>
+                    {outputsCurricularesAuditables.length ? (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {outputsCurricularesAuditables.map((output) => (
+                          <a
+                            key={output.archivo}
+                            href={obtenerUrlOutputNormalizador(ejecucion.id_ejecucion, output.archivo)}
+                            download
+                            className="group flex items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/60 px-3.5 py-3 transition hover:border-sky-400 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-300/50"
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-extrabold text-ink">{nombreOutput(output.archivo)}</span>
+                              <span className="mt-1 block text-xs text-sky-900/75">
+                                {output.tipo || "auditoría"}{output.registros !== undefined ? ` · ${output.registros} registros` : ""}
+                              </span>
+                            </span>
+                            <Download className="shrink-0 text-sky-700 transition group-hover:translate-y-0.5" size={17} aria-hidden="true" />
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 rounded-xl border border-dashed border-line bg-fondo px-3.5 py-3 text-sm leading-5 text-muted">La ejecución no reportó artefactos de auditoría descargables.</p>
+                    )}
+                  </section>
+
+                  <section aria-label="CSV canónicos">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <div>
+                        <h3 className="font-bold">CSV canónicos</h3>
+                        <p className="mt-1 text-sm leading-5 text-muted">Solo aparecen cuando todas las decisiones están registradas y el release gate permite importar.</p>
+                      </div>
+                      <span className="font-mono text-xs text-muted">{outputsCurricularesCanonicos.length} archivo{outputsCurricularesCanonicos.length === 1 ? "" : "s"}</span>
+                    </div>
+                    {outputsCurricularesCanonicos.length ? (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {outputsCurricularesCanonicos.map((output) => (
+                          <a
+                            key={output.archivo}
+                            href={obtenerUrlOutputNormalizador(ejecucion.id_ejecucion, output.archivo)}
+                            download
+                            className="group flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3.5 py-3 transition hover:border-emerald-400 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-300/50"
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-extrabold text-ink">{nombreOutput(output.archivo)}</span>
+                              <span className="mt-1 block text-xs text-emerald-900/75">CSV curricular canónico{output.registros !== undefined ? ` · ${output.registros} registros` : ""}</span>
+                            </span>
+                            <Download className="shrink-0 text-emerald-700 transition group-hover:translate-y-0.5" size={17} aria-hidden="true" />
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <p role="status" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm leading-5 text-amber-900">Los CSV canónicos no están disponibles hasta completar las decisiones curriculares.</p>
+                    )}
+                  </section>
+                </div>
+              ) : null}
+
+              {!resultadoListo && esFinal && !aprobacionPendiente ? (
                 <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="mt-0.5 shrink-0 text-red-600" size={18} />
@@ -1202,7 +1341,7 @@ export default function NormalizadorPanel() {
                   {esCurricular ? "Contexto CHH disponible para la siguiente extracción" : `Catálogo ${ejecucion.catalogo_chh.version} · ${ejecucion.catalogo_chh.competencias} competencias · ${ejecucion.catalogo_chh.habilidades} habilidades · ${ejecucion.catalogo_chh.herramientas} herramientas`}
                 </p>
               ) : null}
-              {esCurricular && resultadoListo ? (
+              {esCurricular && resultadoListo && releaseGatePermiteImportar(ejecucion) ? (
                 <Neo4jImportPanel idEjecucion={ejecucion.id_ejecucion} />
               ) : null}
             </section>

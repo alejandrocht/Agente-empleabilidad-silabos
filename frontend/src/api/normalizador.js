@@ -63,6 +63,38 @@ export async function obtenerCuarentenaNormalizador(idEjecucion, opciones = {}) 
   return datos;
 }
 
+export async function obtenerPendientesNormalizador(idEjecucion, opciones = {}) {
+  const parametros = new URLSearchParams({
+    desde: String(opciones.desde ?? 0),
+    limite: String(opciones.limite ?? 200),
+    incluir_resueltas: String(opciones.incluirResueltas ?? false),
+  });
+  const respuesta = await fetch(
+    `/api/normalizador/ejecuciones/${encodeURIComponent(idEjecucion)}/pendientes?${parametros.toString()}`,
+  );
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudieron consultar las propuestas curriculares.");
+  }
+  return datos;
+}
+
+export async function decidirPendientesNormalizador(idEjecucion, decisiones, actor = "ejecutor") {
+  const respuesta = await fetch(
+    `/api/normalizador/ejecuciones/${encodeURIComponent(idEjecucion)}/pendientes/decidir`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decisiones, actor }),
+    },
+  );
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudieron guardar las decisiones curriculares.");
+  }
+  return datos;
+}
+
 export async function cancelarEjecucionNormalizador(idEjecucion) {
   const respuesta = await fetch(
     `/api/normalizador/ejecuciones/${encodeURIComponent(idEjecucion)}/cancelar`,

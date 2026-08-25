@@ -7,6 +7,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from agente.api import neo4j_importacion, servidor
+from agente.utils import neo4j_schema
 
 
 class FakeImportador:
@@ -60,3 +61,62 @@ def test_publicacion_exige_confirmacion_y_expone_reversion(monkeypatch: Any) -> 
     )
     assert revertir.status_code == 200
     assert revertir.json()["estado"] == "revertida"
+
+
+def test_estado_neo4j_reports_a_verified_ciar_graph(monkeypatch: Any) -> None:
+    snapshot = neo4j_schema.Neo4jSchemaSnapshot(
+        text="schema CIAR",
+        structured={"node_props": {"Carrera": {}, "Empresa": {}, "OfertaLaboral": {}}},
+    )
+    monkeypatch.setattr(
+        neo4j_importacion,
+        "get_cached_neo4j_schema",
+        lambda *, force_refresh: snapshot,
+        raising=False,
+    )
+
+    response = TestClient(servidor.app).get("/neo4j/estado")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "connected"
+    assert isinstance(body["latency_ms"], (int, float))
+    assert body["latency_ms"] >= 0
+    assert body["checked_at"].endswith("Z")
+    assert "password" not in body
+
+
+def test_estado_neo4j_distinguishes_a_reachable_incompatible_graph(monkeypatch: Any) -> None:
+    def incompatible_schema(*, force_refresh: bool) -> neo4j_schema.Neo4jSchemaSnapshot:
+        raise neo4j_schema.Neo4jSchemaMismatchError(["OfertaLaboral"])
+
+    monkeypatch.setattr(
+        neo4j_importacion,
+        "get_cached_neo4j_schema",
+        incompatible_schema,
+        raising=False,
+    )
+
+    response = TestClient(servidor.app).get("/neo4j/estado")
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "schema_mismatch"
+    assert response.json()["missing_labels"] == ["OfertaLaboral"]
+
+
+def test_estado_neo4j_maps_connectivity_failures_to_disconnected(monkeypatch: Any) -> None:
+    def unavailable_schema(*, force_refresh: bool) -> neo4j_schema.Neo4jSchemaSnapshot:
+        raise ConnectionError("unreachable")
+
+    monkeypatch.setattr(
+        neo4j_importacion,
+        "get_cached_neo4j_schema",
+        unavailable_schema,
+        raising=False,
+    )
+
+    response = TestClient(servidor.app).get("/neo4j/estado")
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "disconnected"
+    assert "missing_labels" not in response.json()

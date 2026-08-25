@@ -6,6 +6,11 @@ async function leerRespuesta(respuesta, mensaje) {
   return datos;
 }
 
+export async function obtenerEstadoNeo4j({ signal } = {}) {
+  const respuesta = await fetch("/api/neo4j/estado", { signal });
+  return leerRespuesta(respuesta, "No se pudo consultar el estado de Neo4j.");
+}
+
 export async function validarImportacionNeo4j(idEjecucion) {
   const respuesta = await fetch("/api/neo4j/validar", {
     method: "POST",

@@ -4,6 +4,10 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.csv
+!backend/tests/fixtures/
+!backend/tests/fixtures/catalogos/
+!backend/tests/fixtures/catalogos/matches/
+!backend/tests/fixtures/catalogos/matches/*.csv
 .env
 .serena
 .claude

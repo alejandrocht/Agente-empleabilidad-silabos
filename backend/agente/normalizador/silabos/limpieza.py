@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,13 @@ from typing import Any
 from docx import Document
 from pypdf import PdfReader
 
+from agente.config.settings import booleano
+from agente.normalizador.embeddings import (
+    DEFAULT_EMBEDDING_LIMITS,
+    EmbeddingProvider,
+    crear_retriever_curricular_opt_in,
+    normalizar_limites,
+)
 from agente.normalizador.empleabilidad.catalogo import (
     CatalogoCHH,
     cargar_catalogo,
@@ -30,6 +38,7 @@ from agente.normalizador.modelos import (
     ResultadoValidacionSilabos,
 )
 from agente.normalizador.silabos.analista_llm import analizar_registros_curriculares
+from agente.normalizador.silabos.entrada import PATRON_PERIODO, normalizar_periodo
 from agente.normalizador.silabos.salida import (
     ResultadoCatalogoCurricular,
     _catalogo_curricular,
@@ -44,6 +53,39 @@ _SECCIONES_HERRAMIENTAS = (
     "software",
     "herramientas digitales",
 )
+
+
+def _carreras_confiables_para_embeddings() -> frozenset[tuple[str, str]]:
+    """Lee solo parejas ``carrera@periodo`` explícitamente habilitadas."""
+
+    configuradas = os.getenv("NORMALIZADOR_CURRICULAR_EMBEDDING_CARRERAS", "")
+    parejas: set[tuple[str, str]] = set()
+    for entrada in configuradas.split(","):
+        carrera, separador, periodo = entrada.partition("@")
+        carrera_normalizada = normalizar_etiqueta(carrera)
+        periodo_normalizado = normalizar_periodo(periodo)
+        if (
+            separador
+            and carrera_normalizada
+            and PATRON_PERIODO.fullmatch(periodo_normalizado) is not None
+        ):
+            parejas.add((carrera_normalizada, periodo_normalizado))
+    return frozenset(parejas)
+
+
+def _embeddings_curriculares_habilitados(
+    carrera: str,
+    periodo: str,
+    enabled: bool,
+) -> bool:
+    """Requiere opt-in general y una pareja carrera-periodo confiable."""
+
+    pareja = (normalizar_etiqueta(carrera), normalizar_periodo(periodo))
+    return (
+        enabled
+        and PATRON_PERIODO.fullmatch(pareja[1]) is not None
+        and pareja in _carreras_confiables_para_embeddings()
+    )
 
 
 def _texto(valor: object) -> str:
@@ -483,6 +525,10 @@ def limpiar_archivo(
     progreso_inicial: ProgresoLimpiezaLLM | None = None,
     id_ejecucion: str = "",
     cancelada: Callable[[], bool] | None = None,
+    embedding_enabled: bool | None = None,
+    embedding_provider: EmbeddingProvider | None = None,
+    embedding_limits: Mapping[str, int] | None = None,
+    embedding_pool: int | None = None,
 ) -> ResultadoLimpiezaSilabos:
     """Materializa la fuente y construye el paquete curricular CSV.
 
@@ -524,6 +570,9 @@ def limpiar_archivo(
     def verificar_cancelacion() -> None:
         if cancelada is not None and cancelada():
             raise CancelacionSolicitada()
+
+    if embedding_limits is not None:
+        normalizar_limites(embedding_limits, defaults=DEFAULT_EMBEDDING_LIMITS)
 
     if usar_llm and progreso_inicial is None:
         publicar_progreso(progreso_extraccion)
@@ -650,6 +699,27 @@ def limpiar_archivo(
                     catalogo_base,
                     catalogo_carrera,
                 )
+                embeddings_habilitados = _embeddings_curriculares_habilitados(
+                    validacion.carrera,
+                    validacion.periodo,
+                    booleano("NORMALIZADOR_CURRICULAR_EMBEDDINGS")
+                    if embedding_enabled is None
+                    else embedding_enabled,
+                )
+                # El catálogo para el LLM puede mezclar vocabulario global y
+                # curricular. El índice semántico solo acepta la capa específica
+                # de carrera/ciclo; sin ella, se conserva el fallback léxico.
+                retriever_embedding = (
+                    crear_retriever_curricular_opt_in(
+                        catalogo_carrera,
+                        career=validacion.carrera,
+                        period=validacion.periodo,
+                        enabled=embeddings_habilitados,
+                        provider=embedding_provider,
+                    )
+                    if catalogo_carrera is not None
+                    else None
+                )
                 analisis_llm = analizar_registros_curriculares(
                     registros,
                     catalogo_para_llm,
@@ -661,6 +731,9 @@ def limpiar_archivo(
                     progreso_inicial=progreso_extraccion,
                     id_ejecucion=id_ejecucion,
                     cancelada=cancelada,
+                    embedding_retriever=retriever_embedding,
+                    limites_candidatos=embedding_limits,
+                    pool_retrieval=embedding_pool,
                 )
                 decisiones_llm = analisis_llm.decisiones
             except CancelacionSolicitada:
@@ -817,6 +890,8 @@ def limpiar_archivo(
         competencias=resultado_catalogo.competencias,
         habilidades=resultado_catalogo.habilidades,
         herramientas=resultado_catalogo.herramientas,
+        pendientes=resultado_catalogo.pendientes,
+        release_gate=resultado_catalogo.release_gate,
     )
 
 

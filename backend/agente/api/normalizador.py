@@ -7,9 +7,11 @@ import mimetypes
 import re
 import shutil
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field
 
 from agente.config.settings import entero
 from agente.normalizador.ejecuciones import (
@@ -18,9 +20,24 @@ from agente.normalizador.ejecuciones import (
     gestor_ejecuciones,
 )
 from agente.normalizador.modelos import Hallazgo
+from agente.normalizador.silabos import aprobaciones
 
 router = APIRouter()
 MAX_UPLOAD_BYTES = entero("NORMALIZADOR_MAX_UPLOAD_BYTES", 100 * 1024 * 1024)
+
+
+class DecisionCurricularIn(BaseModel):
+    """Decisión explícita sobre una propuesta no catalogada."""
+
+    id_pendiente: str = Field(..., min_length=1, max_length=200)
+    decision: Literal["ADD", "KEEP_PENDING"]
+
+
+class DecidirPendientesIn(BaseModel):
+    """Lote atómico de decisiones del ejecutor de la normalización."""
+
+    decisiones: list[DecisionCurricularIn] = Field(..., min_length=1, max_length=1000)
+    actor: str = Field(default="ejecutor", min_length=1, max_length=200)
 
 
 @router.post("/empleabilidad", status_code=202)
@@ -266,3 +283,130 @@ def cuarentena_ejecucion(
         "limite": limite,
         "filas": filas,
     }
+
+
+@router.get("/ejecuciones/{id_ejecucion}/pendientes")
+def pendientes_ejecucion(
+    id_ejecucion: str,
+    desde: int = Query(default=0, ge=0),
+    limite: int = Query(default=50, ge=1, le=200),
+    incluir_resueltas: bool = Query(default=True),
+) -> dict[str, object]:
+    """Devuelve la cola curricular explícita sin ocultar propuestas no catalogadas."""
+
+    _exigir_ejecucion_normalizador(id_ejecucion)
+    ruta = (
+        gestor_ejecuciones.base_dir
+        / id_ejecucion
+        / "salidas"
+        / "reportes"
+        / "pendientes_curriculares.jsonl"
+    )
+    filas: list[object]
+    if incluir_resueltas:
+        filas, total = _leer_ventana_jsonl(ruta, desde, limite)
+    else:
+        todas = aprobaciones.pendientes_para_revision(gestor_ejecuciones.base_dir / id_ejecucion)
+        total = len(todas)
+        filas = []
+        filas.extend(todas[desde : desde + limite])
+    return {
+        "id_ejecucion": id_ejecucion,
+        "total": total,
+        "desde": desde,
+        "limite": limite,
+        "filas": filas,
+        "aprobacion": aprobaciones.resumen_aprobacion_curricular(
+            gestor_ejecuciones.base_dir / id_ejecucion
+        ),
+    }
+
+
+@router.post("/ejecuciones/{id_ejecucion}/pendientes/decidir")
+def decidir_pendientes_ejecucion(
+    id_ejecucion: str,
+    solicitud: DecidirPendientesIn,
+) -> dict[str, object]:
+    """Promueve o mantiene pendientes sin bloquear el worker curricular."""
+
+    estado = _exigir_ejecucion_normalizador(id_ejecucion)
+    if estado.get("tipo") != "silabos":
+        raise HTTPException(
+            status_code=409,
+            detail="Las decisiones curriculares solo aplican a ejecuciones de sílabos.",
+        )
+    try:
+        resultado = aprobaciones.aplicar_decisiones_curriculares(
+            gestor_ejecuciones.base_dir / id_ejecucion,
+            [decision.model_dump() for decision in solicitud.decisiones],
+            actor=solicitud.actor,
+        )
+    except aprobaciones.AprobacionNoPermitida as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except aprobaciones.DecisionCurricularInvalida as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {
+        "id_ejecucion": id_ejecucion,
+        "estado": estado.get("estado"),
+        **resultado,
+    }
+
+
+@router.get("/ejecuciones/{id_ejecucion}/release-gate")
+def release_gate_ejecucion(id_ejecucion: str) -> dict[str, object]:
+    """Expone la decisión de publicación y sus bloqueadores auditables."""
+
+    estado = _exigir_ejecucion_normalizador(id_ejecucion)
+    gate = estado.get("release_gate")
+    if not isinstance(gate, dict):
+        limpieza = estado.get("limpieza_silabos")
+        if isinstance(limpieza, dict):
+            gate = limpieza.get("release_gate")
+    if not isinstance(gate, dict):
+        ruta = (
+            gestor_ejecuciones.base_dir
+            / id_ejecucion
+            / "salidas"
+            / "reportes"
+            / "release_gate.json"
+        )
+        if ruta.is_file():
+            try:
+                contenido = json.loads(ruta.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                contenido = None
+            if isinstance(contenido, dict):
+                gate = contenido
+    return {
+        "id_ejecucion": id_ejecucion,
+        "estado": estado.get("estado"),
+        "release_gate": gate if isinstance(gate, dict) else None,
+    }
+
+
+def _exigir_ejecucion_normalizador(id_ejecucion: str) -> dict[str, object]:
+    if re.fullmatch(r"NOR_[0-9a-f]{16}", id_ejecucion) is None:
+        raise HTTPException(status_code=404, detail="Ejecución no encontrada.")
+    try:
+        return gestor_ejecuciones.obtener(id_ejecucion)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Ejecución no encontrada.") from exc
+
+
+def _leer_ventana_jsonl(
+    ruta: Path,
+    desde: int,
+    limite: int,
+) -> tuple[list[object], int]:
+    if not ruta.is_file():
+        return [], 0
+    filas: list[object] = []
+    total = 0
+    with ruta.open("r", encoding="utf-8") as archivo:
+        for linea in archivo:
+            if not linea.strip():
+                continue
+            if desde <= total < desde + limite:
+                filas.append(json.loads(linea))
+            total += 1
+    return filas, total

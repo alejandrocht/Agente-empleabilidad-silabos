@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BarChart3, Menu, Upload } from "lucide-react";
+import Neo4jStatusIndicator from "./Neo4jStatusIndicator";
 
 export default function Topbar({ conversacion, onAbrirMenu }) {
   return (
@@ -25,6 +26,7 @@ export default function Topbar({ conversacion, onAbrirMenu }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Neo4jStatusIndicator />
           <Link
             href="/normalizador"
             className="hidden items-center gap-1.5 rounded-xl border border-line px-3 py-2 text-xs font-bold text-ink transition hover:border-ulima hover:text-ulima focus:outline-none focus:ring-2 focus:ring-ulima/40 sm:inline-flex"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -41,6 +42,53 @@ def _ahora() -> str:
     """Genera timestamps UTC comparables entre procesos y ejecuciones."""
 
     return datetime.now(UTC).isoformat()
+
+
+def _actualizar_metadatos_outputs(
+    directorio: Path,
+    outputs: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Recalcula hashes cuando una aprobación cambia un CSV ya publicado."""
+
+    resultado: list[dict[str, object]] = []
+    vistos: set[str] = set()
+    for output in outputs:
+        if not isinstance(output, dict):
+            continue
+        archivo = output.get("archivo")
+        if not isinstance(archivo, str) or not archivo:
+            continue
+        vistos.add(archivo)
+        actualizado = dict(output)
+        ruta = (directorio / archivo).resolve()
+        raiz = directorio.resolve()
+        if raiz in ruta.parents and ruta.is_file():
+            digest = hashlib.sha256()
+            with ruta.open("rb") as contenido:
+                for bloque in iter(lambda: contenido.read(1024 * 1024), b""):
+                    digest.update(bloque)
+            actualizado["bytes"] = ruta.stat().st_size
+            actualizado["sha256"] = digest.hexdigest()
+        resultado.append(actualizado)
+
+    decisiones = directorio / "salidas" / "reportes" / "decisiones_curriculares.jsonl"
+    relativo = "salidas/reportes/decisiones_curriculares.jsonl"
+    if relativo not in vistos and decisiones.is_file():
+        decision_digest = hashlib.sha256(decisiones.read_bytes()).hexdigest()
+        resultado.append(
+            {
+                "tipo": "decisiones_curriculares",
+                "archivo": relativo,
+                "registros": sum(
+                    1
+                    for linea in decisiones.read_text(encoding="utf-8").splitlines()
+                    if linea.strip()
+                ),
+                "bytes": decisiones.stat().st_size,
+                "sha256": decision_digest,
+            }
+        )
+    return resultado
 
 
 _ESTADOS_TERMINALES: frozenset[str] = frozenset(
@@ -155,6 +203,37 @@ class Ejecucion:
     def a_dict(self) -> dict[str, object]:
         """Expone el contrato público sin filtrar rutas internas del servidor."""
 
+        release_gate = dict(self.limpieza_silabos.release_gate) if self.limpieza_silabos else None
+        if self.tipo == "silabos":
+            reporte_gate = self.directorio / "salidas" / "reportes" / "release_gate.json"
+            try:
+                contenido_gate = json.loads(reporte_gate.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                contenido_gate = None
+            if isinstance(contenido_gate, dict):
+                release_gate = contenido_gate
+
+        outputs = (
+            list(self.normalizacion.outputs)
+            if self.normalizacion
+            else list(self.limpieza.outputs)
+            if self.limpieza
+            else list(self.limpieza_silabos.outputs)
+            if self.limpieza_silabos
+            else []
+        )
+        outputs = _actualizar_metadatos_outputs(self.directorio, outputs)
+        aprobacion_curricular: dict[str, object] | None = None
+        if self.tipo == "silabos":
+            try:
+                from agente.normalizador.silabos.aprobaciones import (
+                    resumen_aprobacion_curricular,
+                )
+
+                aprobacion_curricular = resumen_aprobacion_curricular(self.directorio)
+            except (OSError, ValueError, TypeError):
+                aprobacion_curricular = None
+
         return {
             "id_ejecucion": self.id_ejecucion,
             "tipo": self.tipo,
@@ -172,18 +251,12 @@ class Ejecucion:
             "limpieza": self.limpieza.a_dict() if self.limpieza else None,
             "limpieza_silabos": (self.limpieza_silabos.a_dict() if self.limpieza_silabos else None),
             "normalizacion": self.normalizacion.a_dict() if self.normalizacion else None,
+            "release_gate": release_gate,
+            "aprobacion_curricular": aprobacion_curricular,
             "catalogo_chh": self.catalogo_chh,
             "progreso_llm": self.progreso_llm.a_dict() if self.progreso_llm else None,
             "hallazgos": [hallazgo.a_dict() for hallazgo in self.hallazgos],
-            "outputs": (
-                list(self.normalizacion.outputs)
-                if self.normalizacion
-                else list(self.limpieza.outputs)
-                if self.limpieza
-                else list(self.limpieza_silabos.outputs)
-                if self.limpieza_silabos
-                else []
-            ),
+            "outputs": outputs,
         }
 
 
@@ -386,10 +459,15 @@ class GestorEjecuciones:
                 if not reportes.is_dir() or reportes.is_symlink():
                     continue
                 for reporte in reportes.iterdir():
-                    if reporte.is_file() and not reporte.is_symlink() and reporte.suffix in {
-                        ".json",
-                        ".jsonl",
-                    }:
+                    if (
+                        reporte.is_file()
+                        and not reporte.is_symlink()
+                        and reporte.suffix
+                        in {
+                            ".json",
+                            ".jsonl",
+                        }
+                    ):
                         self._migrar_json_legacy(reporte)
             except OSError:
                 # Una ejecución legacy aislada no debe impedir leer las demás.
@@ -627,9 +705,7 @@ class GestorEjecuciones:
                 ejecucion.progreso_llm,
                 fase="cancelado",
                 reporte_final="cancelado",
-            ).con_evento(
-                "Procesamiento cancelado; se conservaron los artefactos de auditoría."
-            )
+            ).con_evento("Procesamiento cancelado; se conservaron los artefactos de auditoría.")
         self._asegurar_reportes_cancelacion(ejecucion)
         ejecucion.actualizada_en = _ahora()
 

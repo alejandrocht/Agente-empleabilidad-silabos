@@ -48,6 +48,7 @@ ID_PATTERNS = {
 RECOMENDACION = "Recomendamos revisar los datos antes de subirlos a la base de datos."
 ESTADOS_CURRICULARES_PUBLICABLES = {"limpiado", "limpiado_con_advertencias"}
 MAX_FILAS_POR_ARCHIVO = 100_000
+RELEASE_GATE_DECISION = "ALLOW_IMPORT"
 
 
 class SesionNeo4j(Protocol):
@@ -267,6 +268,21 @@ class ImportadorNeo4j:
             }
 
     def _analizar(self, id_ejecucion: str) -> AnalisisImportacion:
+        gate_error = self._validar_release_gate(id_ejecucion)
+        if gate_error is not None:
+            preview = self._preview_base(id_ejecucion, "")
+            preview.update(
+                {
+                    "puede_importar": False,
+                    "mensaje": gate_error["mensaje"],
+                    "errores": [gate_error],
+                }
+            )
+            return AnalisisImportacion(
+                preview,
+                FuenteCurricular(self._filas_vacias(), ""),
+                self._filas_vacias(),
+            )
         try:
             fuente = self._cargar_fuente(id_ejecucion)
         except ImportacionNeo4jError as exc:
@@ -300,6 +316,57 @@ class ImportadorNeo4j:
         analisis = self._comparar_con_grafo(id_ejecucion, fuente)
         return analisis
 
+    def _validar_release_gate(self, id_ejecucion: str) -> dict[str, str] | None:
+        """Require the producer-owned gate before reading importable CSVs."""
+
+        if ID_EJECUCION_RE.fullmatch(id_ejecucion) is None:
+            return None
+        try:
+            estado = self.gestor.obtener(id_ejecucion)
+        except KeyError as exc:
+            raise ImportacionNeo4jError("La ejecución no existe.", status_code=404) from exc
+        gate = estado.get("release_gate")
+        if not isinstance(gate, dict):
+            limpieza = estado.get("limpieza_silabos")
+            gate = limpieza.get("release_gate") if isinstance(limpieza, dict) else None
+        if not isinstance(gate, dict):
+            return {
+                "codigo": "RELEASE_GATE_AUSENTE",
+                "mensaje": "La ejecución no tiene un release gate curricular verificable.",
+            }
+        aprobacion = estado.get("aprobacion_curricular")
+        pendientes_por_decidir = 0
+        if isinstance(aprobacion, dict):
+            try:
+                pendientes_por_decidir = int(aprobacion.get("pendientes_por_decidir", 0) or 0)
+            except (TypeError, ValueError):
+                pendientes_por_decidir = 1
+        if isinstance(aprobacion, dict) and (
+            aprobacion.get("requiere_decision") is True or pendientes_por_decidir > 0
+        ):
+            return {
+                "codigo": "PENDING_DECISIONS",
+                "mensaje": (
+                    "La ejecución no puede importarse mientras existan propuestas "
+                    "curriculares sin una decisión explícita."
+                ),
+            }
+        if gate.get("decision") != RELEASE_GATE_DECISION:
+            blockers = gate.get("blockers")
+            detalle = (
+                "; ".join(str(item) for item in blockers)
+                if isinstance(blockers, list)
+                else "sin detalle"
+            )
+            return {
+                "codigo": "RELEASE_GATE_BLOQUEADO",
+                "mensaje": (
+                    "La ejecución no puede importarse porque el release gate está bloqueado. "
+                    f"Motivos: {detalle}."
+                ),
+            }
+        return None
+
     def _cargar_fuente(self, id_ejecucion: str) -> FuenteCurricular:
         if ID_EJECUCION_RE.fullmatch(id_ejecucion) is None:
             raise ImportacionNeo4jError("La ejecución solicitada no es válida.")
@@ -321,6 +388,9 @@ class ImportadorNeo4j:
                 "La ejecución curricular no superó la validación requerida.",
                 status_code=409,
             )
+        gate_error = self._validar_release_gate(id_ejecucion)
+        if gate_error is not None:
+            raise ImportacionNeo4jError(gate_error["mensaje"], status_code=409)
 
         directorio = (self.base_dir / id_ejecucion / "salidas").resolve()
         raiz = (self.base_dir / id_ejecucion).resolve()
@@ -660,6 +730,7 @@ class ImportadorNeo4j:
                 "resumen": resumen,
                 "conflictos": conflictos,
                 "archivos": self._resumen_archivos(fuente.filas, filas_nuevas, existentes),
+                "release_gate": {"decision": RELEASE_GATE_DECISION},
             }
         )
         return AnalisisImportacion(preview, fuente, filas_nuevas)
@@ -687,6 +758,7 @@ class ImportadorNeo4j:
             "conflictos": [],
             "errores": [],
             "advertencias": [],
+            "release_gate": None,
         }
 
     @staticmethod

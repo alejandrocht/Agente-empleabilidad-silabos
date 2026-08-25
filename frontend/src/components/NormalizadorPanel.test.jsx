@@ -6,9 +6,11 @@ import {
   iniciarNormalizadorEmpleabilidad,
   iniciarNormalizadorSilabos,
   listarEjecucionesNormalizador,
+  decidirPendientesNormalizador,
   obtenerCuarentenaNormalizador,
   obtenerEjecucionNormalizador,
   obtenerErroresNormalizador,
+  obtenerPendientesNormalizador,
 } from "../api/normalizador";
 
 vi.mock("../api/normalizador", () => ({
@@ -16,12 +18,14 @@ vi.mock("../api/normalizador", () => ({
   iniciarNormalizadorEmpleabilidad: vi.fn(),
   iniciarNormalizadorSilabos: vi.fn(),
   listarEjecucionesNormalizador: vi.fn(),
+  decidirPendientesNormalizador: vi.fn(),
   obtenerReporteEjecucionNormalizador: vi.fn(),
   obtenerUrlReporteEjecucionNormalizador: vi.fn((idEjecucion) => `/api/normalizador/ejecuciones/${idEjecucion}/reporte`),
   eliminarEjecucionHistorialNormalizador: vi.fn(),
   obtenerCuarentenaNormalizador: vi.fn(),
   obtenerEjecucionNormalizador: vi.fn(),
   obtenerErroresNormalizador: vi.fn(),
+  obtenerPendientesNormalizador: vi.fn(),
   obtenerUrlOutputNormalizador: vi.fn((idEjecucion, archivo) => `/api/normalizador/ejecuciones/${idEjecucion}/outputs/${archivo}`),
 }));
 
@@ -235,7 +239,7 @@ describe("panel del normalizador", () => {
 
     await waitFor(() => expect(cancelarEjecucionNormalizador).toHaveBeenCalledWith("NOR_cancelar12345678"));
     expect(confirmacion).toHaveBeenCalledWith("¿Estás seguro de que deseas cancelar el procesamiento?");
-    expect(screen.getByRole("status").textContent).toMatch(/Cancelación solicitada/);
+    expect(screen.getByText("Cancelación solicitada. Recomendamos revisar el historial cuando el worker termine de cerrar la ejecución.")).toBeTruthy();
     confirmacion.mockRestore();
   });
 
@@ -283,6 +287,123 @@ describe("panel del normalizador", () => {
     expect(within(registro).getByText("Advertencia")).toBeTruthy();
     expect(within(registro).getByText("SILABO_CAMPO_FALTANTE")).toBeTruthy();
     expect(within(registro).getByText(/Falta una competencia/)).toBeTruthy();
+  });
+
+  it("muestra la revisión curricular antes de los CSV y mantiene separados los artefactos de auditoría", async () => {
+    const idEjecucion = "NOR_pre_csv12345678";
+    const aprobacionPendiente = {
+      requiere_decision: true,
+      total: 1,
+      pendientes_por_decidir: 1,
+      remaining_pending: 1,
+      materializacion: {
+        candidatos_persistidos: true,
+        csv_canonicos_disponibles: false,
+      },
+    };
+    iniciarNormalizadorSilabos.mockResolvedValue({
+      id_ejecucion: idEjecucion,
+      tipo: "silabos",
+      archivo: "curriculo.zip",
+      estado: "validando",
+    });
+    obtenerEjecucionNormalizador.mockResolvedValue({
+      id_ejecucion: idEjecucion,
+      tipo: "silabos",
+      archivo: "curriculo.zip",
+      estado: "limpiado",
+      parametros: { carrera: "Marketing", periodo: "2026-1" },
+      validacion_silabos: { valida: true, archivos: [] },
+      limpieza_silabos: { registros: 1, relaciones: 1 },
+      release_gate: {
+        decision: "BLOCK_IMPORT",
+        checks: { approval: { pending_decision: 1, canonical_materialized: false } },
+      },
+      aprobacion_curricular: aprobacionPendiente,
+      outputs: [
+        { tipo: "provenance", archivo: "salidas/reportes/competencias_fuente.jsonl", registros: 1 },
+        { tipo: "pendientes_curriculares", archivo: "salidas/reportes/pendientes_curriculares.jsonl", registros: 1 },
+        { tipo: "candidatos_curriculares", archivo: "salidas/reportes/candidatos_curriculares.json", registros: 1 },
+        { tipo: "release_gate", archivo: "salidas/reportes/release_gate.json", registros: 1 },
+      ],
+      hallazgos: [],
+    });
+    obtenerPendientesNormalizador.mockResolvedValue({
+      filas: [{
+        id_pendiente: "PEND_1",
+        tipo: "herramienta",
+        archivo: "marketing.pdf",
+        id_curso: "MKT-101",
+        id_silabo: "SIL-1",
+        propuesta: { nombre: "Google Analytics", descripcion: "Métrica de campañas" },
+        evidencia: ["Analiza campañas con Google Analytics"],
+        flags: ["SUSPICIOUS_UNRELATED_TOOL"],
+        relevancia_herramienta: "SUSPICIOUS_UNRELATED",
+      }],
+      aprobacion: aprobacionPendiente,
+    });
+
+    const { container } = await renderPanelAfterRecovery();
+    fireEvent.click(screen.getByRole("tab", { name: "Sílabos" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), { target: { value: "Marketing" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), { target: { value: "2026-1" } });
+    fireEvent.change(container.querySelector('input[type="file"]'), { target: { files: [new File(["zip"], "curriculo.zip", { type: "application/zip" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar limpieza curricular" }));
+
+    await waitFor(() => expect(screen.getByText("Revisión requerida antes de generar CSV")).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Revisión curricular requerida" })).toBeTruthy());
+    expect(screen.getByRole("heading", { name: "Auditoría y proveniencia" })).toBeTruthy();
+    expect(screen.getByText("competencias_fuente.jsonl")).toBeTruthy();
+    expect(screen.getByText("Google Analytics")).toBeTruthy();
+    expect(screen.getByText("Herramienta sospechosa / no relacionada")).toBeTruthy();
+    expect(screen.getByText("Los CSV canónicos no están disponibles hasta completar las decisiones curriculares.")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "CSV curriculares listos" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Subir catálogos a Neo4j" })).toBeNull();
+  });
+
+  it("habilita la publicación en Neo4j solo con CSV materializados y release gate permitido", async () => {
+    const idEjecucion = "NOR_allow_csv123456";
+    iniciarNormalizadorSilabos.mockResolvedValue({
+      id_ejecucion: idEjecucion,
+      tipo: "silabos",
+      archivo: "curriculo.zip",
+      estado: "validando",
+    });
+    obtenerEjecucionNormalizador.mockResolvedValue({
+      id_ejecucion: idEjecucion,
+      tipo: "silabos",
+      archivo: "curriculo.zip",
+      estado: "limpiado",
+      parametros: { carrera: "Marketing", periodo: "2026-1" },
+      validacion_silabos: { valida: true, archivos: [] },
+      release_gate: {
+        decision: "ALLOW_IMPORT",
+        checks: { approval: { pending_decision: 0, canonical_materialized: true } },
+      },
+      aprobacion_curricular: {
+        requiere_decision: false,
+        pendientes_por_decidir: 0,
+        materializacion: { csv_canonicos_disponibles: true },
+      },
+      outputs: [
+        { tipo: "csv_curricular", archivo: "salidas/catalogo_competencias.csv", registros: 1 },
+        { tipo: "provenance", archivo: "salidas/reportes/provenance.jsonl", registros: 1 },
+      ],
+      hallazgos: [],
+    });
+    obtenerPendientesNormalizador.mockResolvedValue({ filas: [], aprobacion: null });
+
+    const { container } = await renderPanelAfterRecovery();
+    fireEvent.click(screen.getByRole("tab", { name: "Sílabos" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), { target: { value: "Marketing" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), { target: { value: "2026-1" } });
+    fireEvent.change(container.querySelector('input[type="file"]'), { target: { files: [new File(["zip"], "curriculo.zip", { type: "application/zip" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar limpieza curricular" }));
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "CSV curriculares listos" })).toBeTruthy());
+    expect(screen.getByRole("heading", { name: "Subir catálogos a Neo4j" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /catalogo_competencias\.csv/ })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Revisión curricular requerida" })).toBeNull();
   });
 });
 
