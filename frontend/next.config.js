@@ -1,6 +1,8 @@
-const backendUrl = process.env.API_URL || "http://127.0.0.1:8002";
+const backendUrl = process.env.API_URL || "http://127.0.0.1:8001";
 
 const nextConfig = {
+  // Keep the dev HMR channel working when the app is opened through loopback.
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   experimental: {
     // El backend admite cargas de hasta 100 MB; se deja margen para multipart.
     proxyClientMaxBodySize: "120mb",

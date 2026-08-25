@@ -105,6 +105,21 @@ def test_borrador_excluye_aliases_y_ejemplos_positivos() -> None:
     assert perfil_prompt["contraejemplos"] == ["VPN financiera no es una herramienta de red."]
 
 
+def test_perfil_con_pendientes_se_audita_sin_promoverlo_a_aprobado() -> None:
+    perfil = _perfil("BORRADOR_CON_PENDIENTES", "bootstrap-r1")
+    contexto = construir_contexto_por_logro(
+        {"logro": "Analizar marketing"},
+        _catalogo(),
+        perfil,
+    )
+
+    assert contexto["perfil_referencia"]["estado"] == "BORRADOR_CON_PENDIENTES"
+    assert contexto["perfil_referencia"]["revision"] == "bootstrap-r1"
+    assert contexto["recuperacion"]["profile_status"] == "BORRADOR_CON_PENDIENTES"
+    assert contexto["recuperacion"]["profile_revision"] == "bootstrap-r1"
+    assert "competencias_preferidas" not in construir_perfil_para_prompt(perfil)
+
+
 def test_aprobado_incluye_contexto_positivo_solo_en_perfil_global() -> None:
     perfil = _perfil("APROBADO")
     contexto = construir_contexto_por_logro({"logro": "Analizar marketing"}, _catalogo(), perfil)

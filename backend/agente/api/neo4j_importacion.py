@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from datetime import UTC, datetime
+from time import perf_counter
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agente.db.neo4j_importador import ImportacionNeo4jError, importador_neo4j
 from agente.observabilidad.logger import log_paso
+from agente.utils.neo4j_schema import (
+    Neo4jSchemaMismatchError,
+    get_cached_neo4j_schema,
+)
 
 router = APIRouter()
 
@@ -34,6 +40,15 @@ class ConfirmarIn(BaseModel):
     confirmar: bool = False
 
 
+class EstadoNeo4jOut(BaseModel):
+    """Safe read-only status of the Neo4j dependency used by CIAR."""
+
+    state: Literal["connected", "schema_mismatch", "disconnected"]
+    checked_at: str
+    latency_ms: float
+    missing_labels: list[str] | None = None
+
+
 def _ejecutar(nombre: str, operacion: Callable[[], dict[str, Any]]) -> dict[str, Any]:
     try:
         return operacion()
@@ -55,6 +70,43 @@ def _ejecutar(nombre: str, operacion: Callable[[], dict[str, Any]]) -> dict[str,
             status_code=500,
             detail="La operación de importación no pudo completarse.",
         ) from exc
+
+
+def _estado_neo4j(
+    state: Literal["connected", "schema_mismatch", "disconnected"],
+    started_at: float,
+    *,
+    missing_labels: list[str] | None = None,
+) -> EstadoNeo4jOut:
+    return EstadoNeo4jOut(
+        state=state,
+        checked_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        latency_ms=round((perf_counter() - started_at) * 1000, 2),
+        missing_labels=missing_labels,
+    )
+
+
+@router.get("/estado", response_model=EstadoNeo4jOut, response_model_exclude_none=True)
+def obtener_estado_neo4j() -> EstadoNeo4jOut:
+    """Verify the live CIAR schema without exposing Neo4j configuration or secrets."""
+    started_at = perf_counter()
+    try:
+        get_cached_neo4j_schema(force_refresh=True)
+    except Neo4jSchemaMismatchError as exc:
+        return _estado_neo4j(
+            "schema_mismatch",
+            started_at,
+            missing_labels=list(exc.missing_labels),
+        )
+    except Exception as exc:
+        log_paso(
+            "api.neo4j_importacion",
+            "estado_no_disponible",
+            data={"tipo": type(exc).__name__},
+            nivel="warning",
+        )
+        return _estado_neo4j("disconnected", started_at)
+    return _estado_neo4j("connected", started_at)
 
 
 @router.post("/validar")

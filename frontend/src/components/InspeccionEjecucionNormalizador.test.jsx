@@ -2,11 +2,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import InspeccionEjecucionNormalizador, { parseCsvPreview } from "./InspeccionEjecucionNormalizador";
 import {
+  decidirPendientesNormalizador,
+  obtenerPendientesNormalizador,
   obtenerReporteEjecucionNormalizador,
   obtenerUrlOutputNormalizador,
 } from "../api/normalizador";
 
 vi.mock("../api/normalizador", () => ({
+  decidirPendientesNormalizador: vi.fn(),
+  obtenerPendientesNormalizador: vi.fn(),
   obtenerReporteEjecucionNormalizador: vi.fn(),
   obtenerUrlOutputNormalizador: vi.fn((id, archivo) => `/outputs/${id}/${archivo}`),
   obtenerUrlReporteEjecucionNormalizador: vi.fn((id) => `/reports/${id}`),
@@ -28,6 +32,15 @@ describe("inspección de ejecución normalizada", () => {
         estado: "limpiado",
         parametros: { carrera: "Marketing", periodo: "2026-1" },
         validacion_silabos: { valida: true },
+        release_gate: {
+          decision: "ALLOW_IMPORT",
+          checks: { approval: { pending_decision: 0, canonical_materialized: true } },
+        },
+        aprobacion_curricular: {
+          requiere_decision: false,
+          pendientes_por_decidir: 0,
+          materializacion: { csv_canonicos_disponibles: true },
+        },
         limpieza_silabos: {
           registros: 3,
           competencias: 2,
@@ -54,6 +67,8 @@ describe("inspección de ejecución normalizada", () => {
         "analisis_llm.json": { estado: "COMPLETADO", decisiones_aceptadas: 1 },
       },
     });
+    obtenerPendientesNormalizador.mockResolvedValue({ filas: [], aprobacion: null });
+    decidirPendientesNormalizador.mockResolvedValue({ aprobacion: null });
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation(async (url) => ({
@@ -72,6 +87,121 @@ describe("inspección de ejecución normalizada", () => {
         },
       })),
     );
+  });
+
+  it("muestra el checkpoint humano histórico y explica por qué no habilita Neo4j sin CSV canónicos", async () => {
+    const idEjecucion = "NOR_b468b1fb2b9c4268";
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: {
+        id_ejecucion: idEjecucion,
+        tipo: "silabos",
+        estado: "limpiado_con_advertencias",
+        parametros: { carrera: "Marketing", periodo: "2026-1" },
+        limpieza_silabos: {
+          outputs: [
+            { archivo: "salidas/reportes/pendientes_curriculares.jsonl", tipo: "pendientes_curriculares", registros: 174 },
+            { archivo: "salidas/reportes/release_gate.json", tipo: "release_gate", registros: 1 },
+          ],
+        },
+        aprobacion_curricular: {
+          requiere_decision: true,
+          pendientes_por_decidir: 174,
+          remaining_pending: 174,
+          materializacion: { csv_canonicos_disponibles: false },
+        },
+        release_gate: {
+          decision: "BLOCK_IMPORT",
+          blockers: ["PENDING_DECISIONS", "CANONICAL_MATERIALIZATION_PENDING"],
+          checks: { approval: { pending_decision: 174, canonical_materialized: false } },
+        },
+      },
+      reportes: {},
+    });
+    obtenerPendientesNormalizador.mockResolvedValueOnce({
+      filas: [{
+        id_pendiente: "PEND_1",
+        tipo: "habilidad",
+        propuesta: { nombre: "Analítica digital", descripcion: "Propuesta curricular" },
+        evidencia: ["Evidencia del sílabo"],
+      }],
+      aprobacion: { requiere_decision: true, pendientes_por_decidir: 174, remaining_pending: 174 },
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion={idEjecucion} />);
+
+    expect(await screen.findByRole("heading", { name: "Revisión curricular requerida" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /ADD: agregar Analítica digital/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Subir datos a Neo4j" })).toBeNull();
+    expect(screen.getByText("174", { exact: true })).toBeTruthy();
+    const publicacion = screen.getByRole("status", { name: "Estado de publicación curricular" });
+    expect(within(publicacion).getByText(/JSON\/JSONL persistidos.*no equivalen a CSV canónicos/i)).toBeTruthy();
+    expect(screen.queryByText(/CSV listos con advertencias/i)).toBeNull();
+  });
+
+  it("mantiene Neo4j bloqueado aunque existan tres CSV cuando quedan decisiones sin resolver", async () => {
+    const idEjecucion = "NOR_BLOCKED_CSV123456";
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: {
+        id_ejecucion: idEjecucion,
+        tipo: "silabos",
+        estado: "limpiado",
+        parametros: { carrera: "Marketing", periodo: "2026-1" },
+        validacion_silabos: { valida: true },
+        limpieza_silabos: {
+          outputs: [
+            { archivo: "salidas/catalogo_competencias.csv", tipo: "csv_curricular", registros: 1 },
+            { archivo: "salidas/catalogo_habilidades.csv", tipo: "csv_curricular", registros: 1 },
+            { archivo: "salidas/catalogo_herramientas.csv", tipo: "csv_curricular", registros: 1 },
+          ],
+        },
+        aprobacion_curricular: {
+          requiere_decision: true,
+          pendientes_por_decidir: 1,
+          materializacion: { csv_canonicos_disponibles: false },
+        },
+        release_gate: {
+          decision: "BLOCK_IMPORT",
+          blockers: ["PENDING_DECISIONS"],
+          checks: { approval: { pending_decision: 1, canonical_materialized: false } },
+        },
+      },
+      reportes: {},
+    });
+    obtenerPendientesNormalizador.mockResolvedValueOnce({
+      filas: [{ id_pendiente: "PEND_BLOCKED", tipo: "habilidad", propuesta: { nombre: "Habilidad pendiente" } }],
+      aprobacion: { requiere_decision: true, pendientes_por_decidir: 1 },
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion={idEjecucion} />);
+
+    expect(await screen.findByRole("heading", { name: "Revisión curricular requerida" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Subir datos a Neo4j" })).toBeNull();
+    const publicacion = screen.getByRole("status", { name: "Estado de publicación curricular" });
+    expect(within(publicacion).getByText(/release gate BLOCK_IMPORT/i)).toBeTruthy();
+    expect(within(publicacion).getByText(/1 decisión humana pendiente/i)).toBeTruthy();
+  });
+
+  it("tolera filas, eventos y hallazgos malformados en reportes legados", async () => {
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: {
+        id_ejecucion: "NOR_LEGACY_SHAPES",
+        tipo: "silabos",
+        estado: "limpiado",
+        carrera: "Marketing legacy",
+        periodo: "2025-2",
+        hallazgos: [null, { codigo: "LEGACY_WARNING", severidad: "warning", mensaje: "Advertencia legada." }],
+      },
+      reportes: {
+        "decisiones_llm.jsonl": [null, { estado: "ACEPTADA", justificacion: "Decisión legada." }],
+        eventos_llm: { eventos: [null, { fase: "legacy", mensaje: "Evento legado." }] },
+      },
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_LEGACY_SHAPES" />);
+
+    expect(await screen.findByText("Decisión legada.")).toBeTruthy();
+    expect(screen.getByText("Evento legado.")).toBeTruthy();
+    expect(screen.getByText("Advertencia legada.")).toBeTruthy();
   });
 
   afterEach(() => {

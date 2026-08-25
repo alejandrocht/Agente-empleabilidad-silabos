@@ -209,6 +209,13 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
         "salidas/catalogo_habilidades.csv",
         "salidas/catalogo_herramientas.csv",
         "salidas/cobertura_curricular.csv",
+        "salidas/competencias_fuente.jsonl",
+        "salidas/habilidades_fuente.jsonl",
+        "salidas/herramientas_fuente.jsonl",
+        "salidas/cobertura_curricular_fuente.jsonl",
+        "salidas/cobertura_curricular_canonica.jsonl",
+        "salidas/pendientes_curriculares.jsonl",
+        "salidas/release_gate.json",
     }
     schemas = {
         "catalogo_competencias.csv": [

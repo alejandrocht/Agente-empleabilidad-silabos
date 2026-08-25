@@ -278,22 +278,59 @@ def test_inicia_y_consulta_ejecucion_de_silabos(monkeypatch, tmp_path: Path) -> 
     ejecucion = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()
     assert ejecucion["validacion_silabos"]["valida"] is True
     assert ejecucion["limpieza_silabos"]["registros"] == 1
+    assert ejecucion["release_gate"]["decision"] == "ALLOW_IMPORT"
     assert {
         "salidas/catalogo_competencias.csv",
         "salidas/catalogo_habilidades.csv",
         "salidas/catalogo_herramientas.csv",
         "salidas/cobertura_curricular.csv",
     } <= {output["archivo"] for output in ejecucion["outputs"]}
+    assert "salidas/reportes/habilidades_fuente.jsonl" in {
+        output["archivo"] for output in ejecucion["outputs"]
+    }
     descarga = cliente.get(
         f"/normalizador/ejecuciones/{id_ejecucion}/outputs/salidas/cobertura_curricular.csv"
     )
     assert descarga.status_code == 200
     assert "attachment" in descarga.headers["content-disposition"]
     assert descarga.content
+    provenance = cliente.get(
+        f"/normalizador/ejecuciones/{id_ejecucion}/outputs/salidas/reportes/habilidades_fuente.jsonl"
+    )
+    assert provenance.status_code == 200
+    assert provenance.content
     cuarentena = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/cuarentena")
     assert cuarentena.status_code == 200
     assert cuarentena.json()["total"] == 0
     assert not any(hallazgo["severidad"] == "error" for hallazgo in ejecucion["hallazgos"])
+
+
+def test_expone_pendientes_y_release_gate(monkeypatch, tmp_path: Path) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app)
+    id_ejecucion, directorio = gestor.crear("silabos", "entrada.zip")
+    reportes = directorio / "salidas" / "reportes"
+    reportes.mkdir(parents=True)
+    (reportes / "pendientes_curriculares.jsonl").write_text(
+        '{"tipo":"habilidad","estado_resolucion":"PENDIENTE_CATALOGACION"}\n'
+        '{"tipo":"competencia","estado_resolucion":"PENDIENTE_AMPLIACION_PERFIL"}\n',
+        encoding="utf-8",
+    )
+    (reportes / "release_gate.json").write_text(
+        '{"version":"curricular-release-gate/v1","decision":"BLOCK_IMPORT",'
+        '"blockers":["PROVENANCE_INCOMPLETE"]}',
+        encoding="utf-8",
+    )
+
+    pendientes = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/pendientes?limite=1")
+    assert pendientes.status_code == 200
+    assert pendientes.json()["total"] == 2
+    assert len(pendientes.json()["filas"]) == 1
+
+    gate = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/release-gate")
+    assert gate.status_code == 200
+    assert gate.json()["release_gate"]["decision"] == "BLOCK_IMPORT"
 
 
 def test_warning_de_ingestion_marca_limpieza_curricular_con_advertencias(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -332,6 +332,8 @@ class ResultadoLimpiezaSilabos:
     competencias: int = 0
     habilidades: int = 0
     herramientas: int = 0
+    pendientes: int = 0
+    release_gate: dict[str, object] = field(default_factory=dict)
 
     def a_dict(self) -> dict[str, object]:
         return {
@@ -341,6 +343,8 @@ class ResultadoLimpiezaSilabos:
             "competencias": self.competencias,
             "habilidades": self.habilidades,
             "herramientas": self.herramientas,
+            "pendientes": self.pendientes,
+            "release_gate": dict(self.release_gate),
             "outputs": list(self.outputs),
             "hallazgos": [hallazgo.a_dict() for hallazgo in self.hallazgos],
         }

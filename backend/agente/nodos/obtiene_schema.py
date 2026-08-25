@@ -8,14 +8,23 @@ from collections.abc import Callable
 
 from agente.grafo.estado import Estado
 from agente.utils.logger import log_error, log_event
-from agente.utils.neo4j_schema import Neo4jSchemaSnapshot, get_cached_neo4j_schema
+from agente.utils.neo4j_schema import (
+    Neo4jSchemaMismatchError,
+    Neo4jSchemaSnapshot,
+    get_cached_neo4j_schema,
+)
 from agente.utils.verbose import verbose_step
 
 SchemaLoader = Callable[[], Neo4jSchemaSnapshot]
 SCHEMA_LOAD_ERROR = "schema_unavailable"
+SCHEMA_MISMATCH_ERROR = "schema_mismatch"
 SAFE_SCHEMA_ERROR = (
     "La fuente de datos de empleabilidad no está disponible o no corresponde al grafo CIAR. "
     "Verificá la conexión de Neo4j e intentá nuevamente."
+)
+SAFE_SCHEMA_MISMATCH_ERROR = (
+    "La fuente de datos de empleabilidad está disponible, "
+    "pero no corresponde al grafo CIAR esperado."
 )
 
 
@@ -38,6 +47,19 @@ async def obtiene_schema(
     try:
         loader = schema_loader or get_cached_neo4j_schema
         snapshot = await asyncio.to_thread(loader)
+    except Neo4jSchemaMismatchError as exc:
+        log_error(
+            "neo4j_schema",
+            "load_failed",
+            exc,
+            status="schema_mismatch",
+            duration_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
+        return {
+            "respuesta": SAFE_SCHEMA_MISMATCH_ERROR,
+            "filas": [],
+            "error": SCHEMA_MISMATCH_ERROR,
+        }
     except Exception as exc:
         log_error(
             "neo4j_schema",

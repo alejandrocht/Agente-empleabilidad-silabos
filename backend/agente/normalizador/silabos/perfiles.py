@@ -62,23 +62,37 @@ def crear_perfil_bootstrap(
         conteos[nombre] = len(filas)
 
     reportes_origen = salida / "reportes"
-    pendientes = _filtrar_habilidades_pendientes(reportes_origen / "habilidades_fuente.jsonl")
+    pendientes = _cargar_pendientes(reportes_origen)
     reportes_destino = destino / "reportes"
     reportes_destino.mkdir()
     _escribir_jsonl(reportes_destino / "habilidades_pendientes.jsonl", pendientes)
     for nombre in (
+        "pendientes_curriculares.jsonl",
         "herramientas_fuente.jsonl",
         "competencias_fuente.jsonl",
+        "habilidades_fuente.jsonl",
+        "cobertura_curricular_fuente.jsonl",
+        "cobertura_curricular_canonica.jsonl",
+        "decisiones_curriculares.jsonl",
         "decisiones_llm.jsonl",
         "analisis_llm.json",
+        "release_gate.json",
     ):
         origen = reportes_origen / nombre
         if origen.is_file():
             shutil.copyfile(origen, reportes_destino / nombre)
 
+    release_gate = _leer_json_dict(reportes_origen / "release_gate.json")
+    pendientes_por_estado = _contar_estados(pendientes)
+    estado = "BORRADOR_CON_PENDIENTES" if pendientes else "BORRADOR"
+    provenance = {}
+    checks = release_gate.get("checks")
+    if isinstance(checks, dict) and isinstance(checks.get("provenance"), dict):
+        provenance = dict(checks["provenance"])
+
     manifiesto = {
         "tipo": "bootstrap_silabos",
-        "estado": "REQUIERE_REVISION_HUMANA",
+        "estado": estado,
         "carrera": _clave_carrera(carrera),
         "periodo": _periodo(periodo),
         "origen_ejecucion": directorio_ejecucion.name,
@@ -93,6 +107,9 @@ def crear_perfil_bootstrap(
             "cobertura": conteos.get("cobertura_curricular.csv", 0),
             "habilidades_pendientes": len(pendientes),
         },
+        "pendientes_por_estado": pendientes_por_estado,
+        "release_gate": release_gate,
+        "provenance": provenance,
     }
     (destino / "perfil.json").write_text(
         json.dumps(manifiesto, ensure_ascii=False, indent=2) + "\n",
@@ -130,8 +147,7 @@ def _leer_y_validar_csv(ruta: Path, columnas: tuple[str, ...]) -> list[dict[str,
         if tuple(lector.fieldnames or ()) != columnas:
             raise ValueError(f"El esquema de {ruta.name} no coincide con el contrato público.")
         return [
-            {columna: str(fila.get(columna, "") or "") for columna in columnas}
-            for fila in lector
+            {columna: str(fila.get(columna, "") or "") for columna in columnas} for fila in lector
         ]
 
 
@@ -148,9 +164,57 @@ def _filtrar_habilidades_pendientes(ruta: Path) -> list[dict[str, object]]:
     pendientes: list[dict[str, object]] = []
     for linea in ruta.read_text(encoding="utf-8").splitlines():
         fila = json.loads(linea)
-        if isinstance(fila, dict) and fila.get("estado_resolucion") == "REVISAR":
+        if isinstance(fila, dict) and _es_pendiente(fila):
             pendientes.append(fila)
     return pendientes
+
+
+def _cargar_pendientes(reportes: Path) -> list[dict[str, object]]:
+    """Carga la cola explícita y mantiene compatibilidad con ejecuciones viejas."""
+
+    ruta = reportes / "pendientes_curriculares.jsonl"
+    if ruta.is_file():
+        return [fila for fila in _leer_jsonl(ruta) if _es_pendiente(fila)]
+    return _filtrar_habilidades_pendientes(reportes / "habilidades_fuente.jsonl")
+
+
+def _leer_jsonl(ruta: Path) -> list[dict[str, object]]:
+    filas: list[dict[str, object]] = []
+    for linea in ruta.read_text(encoding="utf-8").splitlines():
+        if not linea.strip():
+            continue
+        fila = json.loads(linea)
+        if isinstance(fila, dict):
+            filas.append(fila)
+    return filas
+
+
+def _leer_json_dict(ruta: Path) -> dict[str, object]:
+    if not ruta.is_file():
+        return {}
+    try:
+        valor = json.loads(ruta.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return valor if isinstance(valor, dict) else {}
+
+
+def _es_pendiente(fila: dict[str, object]) -> bool:
+    return str(fila.get("estado_resolucion") or "") in {
+        "REVISAR",
+        "PENDIENTE_CATALOGACION",
+        "PENDIENTE_AMPLIACION_PERFIL",
+        "REQUIERE_REVISION_HUMANA",
+        "MANTENIDA_PENDIENTE",
+    }
+
+
+def _contar_estados(filas: list[dict[str, object]]) -> dict[str, int]:
+    conteos: dict[str, int] = {}
+    for fila in filas:
+        estado = str(fila.get("estado_resolucion") or "PENDIENTE")
+        conteos[estado] = conteos.get(estado, 0) + 1
+    return conteos
 
 
 def _escribir_jsonl(ruta: Path, filas: list[dict[str, object]]) -> None:

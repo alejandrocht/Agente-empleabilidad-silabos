@@ -10,7 +10,7 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
-from openpyxl import load_workbook  # type: ignore[import-untyped]
+from openpyxl import load_workbook
 
 from agente.normalizador.modelos import (
     ResultadoLimpieza,

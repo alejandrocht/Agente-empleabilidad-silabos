@@ -85,6 +85,11 @@ def _manifest_y_salidas(
                 "tipo": "silabos",
                 "estado": "limpiado",
                 "validacion_silabos": {"valida": True},
+                "release_gate": {
+                    "version": "curricular-release-gate/v1",
+                    "decision": "ALLOW_IMPORT",
+                    "blockers": [],
+                },
             }
         ),
         encoding="utf-8",
