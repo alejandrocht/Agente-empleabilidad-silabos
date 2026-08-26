@@ -6,7 +6,7 @@ import agente.utils.neo4j_schema as neo4j_schema
 
 
 class FakeGraph:
-    get_schema = "schema ajeno a CIAR"
+    get_schema = "schema extraido"
     get_structured_schema = {
         "node_props": {"Empresa": ["nombre"]},
         "rel_props": {},
@@ -23,43 +23,44 @@ class FakeGraph:
         self.closed = True
 
 
-class FakeCiarGraph(FakeGraph):
-    get_schema = "schema CIAR"
+class FakeLiveGraph(FakeGraph):
+    get_schema = "schema extraido"
     get_structured_schema = {
         "node_props": {
             "Carrera": ["nombre"],
             "Empresa": ["nombre"],
-            "OfertaLaboral": ["titulo"],
+            "Oferta_Laboral": ["titulo"],
         },
         "rel_props": {},
         "relationships": [],
     }
 
 
-def test_schema_loader_rechaza_una_base_que_no_es_la_de_ciar(
+def test_schema_loader_preserves_any_labels_extracted_from_neo4j(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     graph = FakeGraph()
     monkeypatch.setattr(neo4j_schema, "create_schema_graph", lambda: graph)
 
-    with pytest.raises(ValueError, match="CIAR"):
-        neo4j_schema.extract_neo4j_schema()
+    snapshot = neo4j_schema.extract_neo4j_schema()
 
+    assert snapshot.text == "schema extraido"
+    assert set(snapshot.structured["node_props"]) == {"Empresa"}
     assert graph.closed is True
 
 
-def test_schema_loader_accepts_the_live_ciar_offer_label(
+def test_schema_loader_preserves_the_live_ciar_offer_label(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    graph = FakeCiarGraph()
+    graph = FakeLiveGraph()
     monkeypatch.setattr(neo4j_schema, "create_schema_graph", lambda: graph)
 
     snapshot = neo4j_schema.extract_neo4j_schema()
 
-    assert snapshot.text == "schema CIAR"
+    assert snapshot.text == "schema extraido"
     assert set(snapshot.structured["node_props"]) == {
         "Carrera",
         "Empresa",
-        "OfertaLaboral",
+        "Oferta_Laboral",
     }
     assert graph.closed is True
