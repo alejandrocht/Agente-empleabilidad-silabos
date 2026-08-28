@@ -11,7 +11,7 @@ from typing import Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from agente.config.settings import entero
 from agente.normalizador.ejecuciones import (
@@ -29,15 +29,32 @@ MAX_UPLOAD_BYTES = entero("NORMALIZADOR_MAX_UPLOAD_BYTES", 100 * 1024 * 1024)
 class DecisionCurricularIn(BaseModel):
     """Decisión explícita sobre una propuesta no catalogada."""
 
-    id_pendiente: str = Field(..., min_length=1, max_length=200)
+    id_pendiente: str | None = Field(default=None, min_length=1, max_length=200)
+    id_paquete_chh: str | None = Field(default=None, min_length=1, max_length=200)
+    package_id: str | None = Field(default=None, min_length=1, max_length=200)
+    id_paquete: str | None = Field(default=None, min_length=1, max_length=200)
     decision: Literal["ADD", "KEEP_PENDING"]
 
 
 class DecidirPendientesIn(BaseModel):
     """Lote atómico de decisiones del ejecutor de la normalización."""
 
-    decisiones: list[DecisionCurricularIn] = Field(..., min_length=1, max_length=1000)
+    decisiones: list[DecisionCurricularIn] = Field(default_factory=list, max_length=1000)
+    paquetes: list[DecisionCurricularIn] = Field(default_factory=list, max_length=1000)
+    decisiones_paquetes: list[DecisionCurricularIn] = Field(default_factory=list, max_length=1000)
     actor: str = Field(default="ejecutor", min_length=1, max_length=200)
+    revision: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class IniciarSilabosCactusIn(BaseModel):
+    """Solicitud para extraer sílabos desde Cactus sin guardar credenciales."""
+
+    carrera: str = Field(..., min_length=1, max_length=200)
+    periodo: str = Field(..., min_length=1, max_length=20)
+    usuario: str = Field(..., min_length=1, max_length=200)
+    # La longitud se valida en la ruta para que los errores de Pydantic no hagan
+    # eco de una contraseña enviada en el campo `input` de la respuesta 422.
+    contrasena: SecretStr
 
 
 @router.post("/empleabilidad", status_code=202)
@@ -106,6 +123,31 @@ def iniciar_silabos(
         ruta_entrada,
         parametros["carrera"],
         parametros["periodo"],
+    )
+    return gestor_ejecuciones.obtener(id_ejecucion)
+
+
+@router.post("/silabos/cactus", status_code=202)
+def iniciar_silabos_cactus(solicitud: IniciarSilabosCactusIn) -> dict[str, object]:
+    """Extrae una carrera/periodo desde Cactus y ejecuta el pipeline curricular."""
+
+    carrera = solicitud.carrera.strip()
+    periodo = solicitud.periodo.strip()
+    contrasena = solicitud.contrasena.get_secret_value()
+    if not contrasena or len(contrasena) > 200:
+        raise HTTPException(
+            status_code=422,
+            detail="La contraseña de ULima debe tener entre 1 y 200 caracteres.",
+        )
+    nombre = "cactus.zip"
+    parametros = {"carrera": carrera, "periodo": periodo, "fuente": "cactus"}
+    id_ejecucion, _directorio = gestor_ejecuciones.crear("silabos", nombre, parametros)
+    gestor_ejecuciones.iniciar_extraccion_silabos(
+        id_ejecucion,
+        carrera,
+        periodo,
+        solicitud.usuario.strip(),
+        contrasena,
     )
     return gestor_ejecuciones.obtener(id_ejecucion)
 
@@ -305,17 +347,29 @@ def pendientes_ejecucion(
     filas: list[object]
     if incluir_resueltas:
         filas, total = _leer_ventana_jsonl(ruta, desde, limite)
+        todas_filas = aprobaciones._filas_clasificadas(gestor_ejecuciones.base_dir / id_ejecucion)
     else:
         todas = aprobaciones.pendientes_para_revision(gestor_ejecuciones.base_dir / id_ejecucion)
         total = len(todas)
         filas = []
         filas.extend(todas[desde : desde + limite])
+        todas_filas = aprobaciones._filas_clasificadas(gestor_ejecuciones.base_dir / id_ejecucion)
+    paquetes = aprobaciones._paquetes(
+        gestor_ejecuciones.base_dir / id_ejecucion,
+        todas_filas,
+    )
+    paquetes = [
+        paquete for paquete in paquetes if incluir_resueltas or paquete.get("requiere_decision")
+    ]
     return {
         "id_ejecucion": id_ejecucion,
         "total": total,
         "desde": desde,
         "limite": limite,
         "filas": filas,
+        "paquetes": paquetes,
+        "paquetes_total": len(paquetes),
+        "revision": aprobaciones.revision_paquetes_chh(paquetes),
         "aprobacion": aprobaciones.resumen_aprobacion_curricular(
             gestor_ejecuciones.base_dir / id_ejecucion
         ),
@@ -335,13 +389,32 @@ def decidir_pendientes_ejecucion(
             status_code=409,
             detail="Las decisiones curriculares solo aplican a ejecuciones de sílabos.",
         )
+    grupos = (
+        ("decisiones", solicitud.decisiones),
+        ("paquetes", solicitud.paquetes),
+        ("decisiones_paquetes", solicitud.decisiones_paquetes),
+    )
+    grupos_contenido = [(nombre, valores) for nombre, valores in grupos if valores]
+    if len(grupos_contenido) > 1:
+        nombres = ", ".join(nombre for nombre, _ in grupos_contenido)
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Payload ambiguo: envíe contenido en una sola lista de decisiones "
+                f"(recibidas: {nombres})."
+            ),
+        )
+    decisiones = grupos_contenido[0][1] if grupos_contenido else []
     try:
         resultado = aprobaciones.aplicar_decisiones_curriculares(
             gestor_ejecuciones.base_dir / id_ejecucion,
-            [decision.model_dump() for decision in solicitud.decisiones],
+            [decision.model_dump() for decision in decisiones],
             actor=solicitud.actor,
+            revision=solicitud.revision,
         )
     except aprobaciones.AprobacionNoPermitida as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except aprobaciones.RevisionCurricularInvalida as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except aprobaciones.DecisionCurricularInvalida as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

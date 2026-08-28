@@ -218,6 +218,63 @@ function DecisionButton({ decision, activa, nombre, onClick, disabled }) {
   );
 }
 
+function componentesDe(paquete, tipo) {
+  const componentes = paquete?.componentes;
+  const directos = paquete?.[tipo];
+  const valores = Array.isArray(directos) ? directos : componentes?.[tipo];
+  return Array.isArray(valores) ? valores : [];
+}
+
+function nombreComponente(componente) {
+  return texto(componente?.nombre || componente?.id_canonico || componente?.id_fuente) || "Sin nombre";
+}
+
+function PackageCard({ paquete, decision, onDecision, disabled }) {
+  const competencias = componentesDe(paquete, "competencias");
+  const habilidades = componentesDe(paquete, "habilidades");
+  const herramientas = componentesDe(paquete, "herramientas");
+  const filas = Array.isArray(paquete?.filas) ? paquete.filas : [];
+  const identidad = paquete?.source_identity || {};
+  const evidencia = filas.flatMap((fila) => evidenciaDe(fila));
+  const packageId = texto(paquete?.id_paquete_chh || paquete?.package_id);
+  return (
+    <article className="rounded-xl border border-line bg-paper p-4 shadow-sm" data-testid="curricular-package-card" data-package-id={packageId}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-ulima">Paquete fuente</p>
+            <span className="rounded-full border border-line bg-fondo px-2 py-1 font-mono text-[9px] font-bold text-muted">{packageId}</span>
+          </div>
+          <h3 className="mt-2 text-base font-extrabold text-ink">Competencia, habilidad y herramienta del mismo logro</h3>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3" aria-label={`Componentes del paquete ${packageId}`}>
+            {[['Competencia', competencias], ['Habilidad opcional', habilidades], ['Herramienta opcional', herramientas]].map(([label, values]) => (
+              <div key={label} className="rounded-lg border border-line bg-fondo px-3 py-2">
+                <p className="font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-muted">{label}</p>
+                <p className="mt-1 text-sm font-bold text-ink">{values.length ? values.map(nombreComponente).join(" · ") : "No presente"}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 rounded-lg border border-sky-200/70 bg-sky-50/60 p-3" aria-label={`Proveniencia y evidencia del paquete ${packageId}`}>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-sky-800">Proveniencia, relaciones y evidencia</p>
+            <p className="mt-1 text-xs leading-5 text-sky-950">{texto(identidad.carrera || paquete?.career) || "Carrera no reportada"} · {texto(identidad.periodo || paquete?.period) || "Periodo no reportado"} · curso {texto(identidad.id_curso || paquete?.id_curso) || "no reportado"} · sílabo {texto(identidad.id_silabo || paquete?.id_silabo) || "no reportado"}</p>
+            <p className="mt-1 text-xs leading-5 text-sky-950">{Array.isArray(paquete?.relaciones) ? paquete.relaciones.length : 0} relación(es) conservada(s) · {filas.length} fila(s) fuente · {Array.isArray(paquete?.aliases) ? paquete.aliases.length : 0} alias auditable(s)</p>
+            {evidencia.length ? <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-sky-950">{evidencia.map((item, index) => <li key={`${packageId}-evidence-${index}`}>{item}</li>)}</ul> : <p className="mt-2 text-xs text-sky-950/80">No se adjuntó evidencia textual.</p>}
+          </div>
+        </div>
+        <div className="shrink-0 rounded-lg border border-line bg-fondo p-3 lg:w-64" aria-label={`Decisión para paquete ${packageId}`}>
+          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted">Una decisión por paquete</p>
+          <p className="mt-1 text-xs leading-5 text-muted">ADD o KEEP_PENDING se aplican atómicamente a todas sus filas accionables.</p>
+          <div className="mt-3 grid gap-2">
+            <DecisionButton decision="ADD" activa={decision === "ADD"} nombre={`paquete ${packageId}`} onClick={() => onDecision(packageId, "ADD")} disabled={disabled} />
+            <DecisionButton decision="KEEP_PENDING" activa={decision === "KEEP_PENDING"} nombre={`paquete ${packageId}`} onClick={() => onDecision(packageId, "KEEP_PENDING")} disabled={disabled} />
+          </div>
+          <p className="mt-2 text-[11px] leading-4 text-muted" aria-live="polite">{decision ? `Seleccionado: ${decision}` : "Sin decisión; seguirá pendiente."}</p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function ProposalCard({ fila, decision, onDecision, disabled }) {
   const nombre = nombrePropuesto(fila);
   const señales = etiquetasDeSeñal(fila);
@@ -326,7 +383,9 @@ function ProposalCard({ fila, decision, onDecision, disabled }) {
 
 export default function CurricularApprovalPanel({ idEjecucion, onSummary, onResolved }) {
   const [filas, setFilas] = useState(null);
+  const [paquetes, setPaquetes] = useState(null);
   const [resumen, setResumen] = useState(null);
+  const [revision, setRevision] = useState(null);
   const [decisiones, setDecisiones] = useState({});
   const [filtro, setFiltro] = useState("all");
   const [busqueda, setBusqueda] = useState("");
@@ -347,6 +406,8 @@ export default function CurricularApprovalPanel({ idEjecucion, onSummary, onReso
       });
       const siguientes = Array.isArray(datos?.filas) ? datos.filas : [];
       setFilas(siguientes);
+      setPaquetes(Array.isArray(datos?.paquetes) ? datos.paquetes : null);
+      setRevision(texto(datos?.revision) || null);
       setResumen(datos?.aprobacion || null);
       onSummary?.(datos?.aprobacion || null);
     } catch (errorCarga) {
@@ -362,14 +423,26 @@ export default function CurricularApprovalPanel({ idEjecucion, onSummary, onReso
   }, [cargar]);
 
   const conteos = useMemo(() => conteosDe(filas || []), [filas]);
+  const modoPaquetes = Array.isArray(paquetes) && paquetes.length > 0;
+  const paquetesVisibles = useMemo(() => {
+    const query = claveBusqueda(busqueda);
+    return (paquetes || []).filter((paquete) => !query || textoBuscable({
+      ...paquete,
+      propuesta: { nombre: paquete?.id_paquete_chh },
+      evidencia: (paquete?.filas || []).flatMap((fila) => evidenciaDe(fila)),
+      id_pendiente: paquete?.id_paquete_chh,
+    }).includes(query));
+  }, [paquetes, busqueda]);
   const filasVisibles = useMemo(() => {
     const query = claveBusqueda(busqueda);
     return (filas || []).filter((fila) => coincideFiltro(fila, filtro) && (!query || textoBuscable(fila).includes(query)));
   }, [filas, filtro, busqueda]);
   const grupos = useMemo(() => gruposDe(filasVisibles), [filasVisibles]);
   const decisionesSeleccionadas = useMemo(
-    () => (filas || []).filter((fila) => !autoDeduplicadaDe(fila) && (decisiones[fila.id_pendiente] === "ADD" || decisiones[fila.id_pendiente] === "KEEP_PENDING")).length,
-    [filas, decisiones],
+    () => modoPaquetes
+      ? (paquetes || []).filter((paquete) => decisiones[paquete.id_paquete_chh || paquete.package_id] === "ADD" || decisiones[paquete.id_paquete_chh || paquete.package_id] === "KEEP_PENDING").length
+      : (filas || []).filter((fila) => !autoDeduplicadaDe(fila) && (decisiones[fila.id_pendiente] === "ADD" || decisiones[fila.id_pendiente] === "KEEP_PENDING")).length,
+    [filas, paquetes, decisiones, modoPaquetes],
   );
   const requiereDecision = Boolean(resumen?.requiere_decision || resumen?.pendientes_por_decidir);
 
@@ -382,12 +455,13 @@ export default function CurricularApprovalPanel({ idEjecucion, onSummary, onReso
 
   const guardar = async () => {
     if (guardando) return;
-    const solicitud = (filas || [])
-      .filter((fila) => !autoDeduplicadaDe(fila) && (decisiones[fila.id_pendiente] === "ADD" || decisiones[fila.id_pendiente] === "KEEP_PENDING"))
-      .map((fila) => ({
-        id_pendiente: fila.id_pendiente,
-        decision: decisiones[fila.id_pendiente],
-      }));
+    const solicitud = modoPaquetes
+      ? (paquetes || [])
+        .filter((paquete) => decisiones[paquete.id_paquete_chh || paquete.package_id] === "ADD" || decisiones[paquete.id_paquete_chh || paquete.package_id] === "KEEP_PENDING")
+        .map((paquete) => ({ id_paquete_chh: paquete.id_paquete_chh || paquete.package_id, decision: decisiones[paquete.id_paquete_chh || paquete.package_id] }))
+      : (filas || [])
+        .filter((fila) => !autoDeduplicadaDe(fila) && (decisiones[fila.id_pendiente] === "ADD" || decisiones[fila.id_pendiente] === "KEEP_PENDING"))
+        .map((fila) => ({ id_pendiente: fila.id_pendiente, decision: decisiones[fila.id_pendiente] }));
     if (!solicitud.length) {
       setError("Selecciona ADD o KEEP_PENDING antes de guardar. Las propuestas sin decisión permanecerán visibles.");
       return;
@@ -395,7 +469,9 @@ export default function CurricularApprovalPanel({ idEjecucion, onSummary, onReso
     setGuardando(true);
     setError("");
     try {
-      const datos = await decidirPendientesNormalizador(idEjecucion, solicitud);
+      const datos = modoPaquetes
+        ? await decidirPendientesNormalizador(idEjecucion, solicitud, "ejecutor", revision)
+        : await decidirPendientesNormalizador(idEjecucion, solicitud);
       setResultado(datos?.aprobacion || null);
       onSummary?.(datos?.aprobacion || null);
       setDecisiones({});
@@ -419,7 +495,7 @@ export default function CurricularApprovalPanel({ idEjecucion, onSummary, onReso
     );
   }
 
-  if (!filas?.length && !resultado && !error && !requiereDecision && !resumen?.remaining_pending) return null;
+  if (!filas?.length && !paquetes?.length && !resultado && !error && !requiereDecision && !resumen?.remaining_pending) return null;
 
   return (
     <section className="mt-5 rounded-2xl border border-amber-200 bg-paper p-5 shadow-panel sm:p-6" aria-label="Aprobación de propuestas curriculares">
@@ -451,7 +527,19 @@ export default function CurricularApprovalPanel({ idEjecucion, onSummary, onReso
         </div>
       </div>
 
-      {filas?.length ? (
+      {modoPaquetes ? (
+        paquetesVisibles.length ? (
+          <>
+            <div className="mt-5 rounded-xl border border-line bg-fondo p-3.5">
+              <label className="block text-xs font-bold text-ink" htmlFor={`buscar-paquetes-${idEjecucion}`}>Buscar en paquetes, evidencia y origen</label>
+              <div className="relative mt-2"><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} aria-hidden="true" /><input id={`buscar-paquetes-${idEjecucion}`} aria-label="Buscar paquetes curriculares" type="search" value={busqueda} onChange={(event) => setBusqueda(event.target.value)} className="w-full rounded-lg border border-line bg-paper py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-ulima focus:ring-2 focus:ring-ulima/20" /></div>
+              <p className="mt-2 text-xs leading-5 text-muted" aria-live="polite">Mostrando {paquetesVisibles.length} de {paquetes.length} paquetes fuente. Las filas y alias permanecen dentro del paquete para auditoría.</p>
+            </div>
+            <div className="mt-5 space-y-4">{paquetesVisibles.map((paquete) => <PackageCard key={paquete.id_paquete_chh || paquete.package_id} paquete={paquete} decision={decisiones[paquete.id_paquete_chh || paquete.package_id]} onDecision={(id, decision) => setDecisiones((actuales) => ({ ...actuales, [id]: actuales[id] === decision ? undefined : decision }))} disabled={guardando} />)}</div>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-amber-200 pt-4"><p className="max-w-2xl text-xs leading-5 text-muted">{decisionesSeleccionadas ? `${decisionesSeleccionadas} paquete${decisionesSeleccionadas === 1 ? "" : "s"} seleccionado${decisionesSeleccionadas === 1 ? "" : "s"}.` : "Selecciona una decisión por paquete; no se promoverán componentes parciales."}</p><button type="button" onClick={guardar} disabled={guardando || !decisionesSeleccionadas} className="inline-flex items-center gap-2 rounded-xl bg-ulima px-4 py-2.5 text-sm font-extrabold text-white shadow-sm transition hover:-translate-y-px hover:shadow-[0_8px_20px_rgba(255,81,23,0.24)] focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-60">{guardando ? <LoaderCircle className="animate-girar" size={16} /> : <Check size={16} />}{guardando ? "Guardando decisiones…" : `Guardar decisiones${decisionesSeleccionadas ? ` (${decisionesSeleccionadas})` : ""}`}</button></div>
+          </>
+        ) : <div className="mt-5 rounded-xl border border-dashed border-line bg-fondo px-3.5 py-4 text-sm leading-6 text-muted" role="status">No hay coincidencias para esta búsqueda.</div>
+      ) : filas?.length ? (
         <>
           <div className="mt-5 rounded-xl border border-line bg-fondo p-3.5">
             <label className="block text-xs font-bold text-ink" htmlFor={`buscar-propuestas-${idEjecucion}`}>

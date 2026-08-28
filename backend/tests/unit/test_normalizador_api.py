@@ -305,6 +305,79 @@ def test_inicia_y_consulta_ejecucion_de_silabos(monkeypatch, tmp_path: Path) -> 
     assert not any(hallazgo["severidad"] == "error" for hallazgo in ejecucion["hallazgos"])
 
 
+def test_inicia_extraccion_cactus_sin_persistir_credenciales(monkeypatch, tmp_path: Path) -> None:
+    """El endpoint automático recibe credenciales, pero nunca las guarda en el manifest."""
+
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    llamada: dict[str, object] = {}
+
+    def fake_iniciar(
+        id_ejecucion: str,
+        carrera: str,
+        periodo: str,
+        usuario: str,
+        contrasena: str,
+    ) -> None:
+        llamada.update(
+            id_ejecucion=id_ejecucion,
+            carrera=carrera,
+            periodo=periodo,
+            usuario=usuario,
+            contrasena=contrasena,
+        )
+
+    monkeypatch.setattr(gestor, "iniciar_extraccion_silabos", fake_iniciar)
+    cliente = TestClient(servidor.app)
+
+    respuesta = cliente.post(
+        "/normalizador/silabos/cactus",
+        json={
+            "carrera": "Marketing",
+            "periodo": "2026-1",
+            "usuario": "usuario@ulima.edu.pe",
+            "contrasena": "secreto-no-persistir",
+        },
+    )
+
+    assert respuesta.status_code == 202
+    datos = respuesta.json()
+    assert llamada["carrera"] == "Marketing"
+    assert llamada["periodo"] == "2026-1"
+    assert llamada["usuario"] == "usuario@ulima.edu.pe"
+    assert llamada["contrasena"] == "secreto-no-persistir"
+    assert datos["parametros"] == {
+        "carrera": "Marketing",
+        "periodo": "2026-1",
+        "fuente": "cactus",
+    }
+    assert "usuario@ulima.edu.pe" not in respuesta.text
+    assert "secreto-no-persistir" not in respuesta.text
+
+
+def test_valida_longitud_de_contrasena_sin_hacer_echo_del_secreto(
+    monkeypatch, tmp_path: Path
+) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app)
+
+    secreto = "secreto-demasiado-largo" * 20
+    respuesta = cliente.post(
+        "/normalizador/silabos/cactus",
+        json={
+            "carrera": "Marketing",
+            "periodo": "2026-1",
+            "usuario": "usuario@ulima.edu.pe",
+            "contrasena": secreto,
+        },
+    )
+
+    assert respuesta.status_code == 422
+    assert secreto not in respuesta.text
+    assert "entre 1 y 200 caracteres" in respuesta.json()["detail"]
+
+
 def test_expone_pendientes_y_release_gate(monkeypatch, tmp_path: Path) -> None:
     gestor = GestorEjecuciones(tmp_path)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)

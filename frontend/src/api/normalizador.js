@@ -30,6 +30,19 @@ export async function iniciarNormalizadorSilabos(archivo, carrera, periodo) {
   return datos;
 }
 
+export async function iniciarNormalizadorSilabosCactus(carrera, periodo, usuario, contrasena) {
+  const respuesta = await fetch("/api/normalizador/silabos/cactus", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ carrera, periodo, usuario, contrasena }),
+  });
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudo iniciar la extracción desde Cactus.");
+  }
+  return datos;
+}
+
 export async function obtenerEjecucionNormalizador(idEjecucion) {
   const respuesta = await fetch(`/api/normalizador/ejecuciones/${idEjecucion}`);
   const datos = await respuesta.json().catch(() => ({}));
@@ -79,13 +92,13 @@ export async function obtenerPendientesNormalizador(idEjecucion, opciones = {}) 
   return datos;
 }
 
-export async function decidirPendientesNormalizador(idEjecucion, decisiones, actor = "ejecutor") {
+export async function decidirPendientesNormalizador(idEjecucion, decisiones, actor = "ejecutor", revision = null) {
   const respuesta = await fetch(
     `/api/normalizador/ejecuciones/${encodeURIComponent(idEjecucion)}/pendientes/decidir`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decisiones, actor }),
+      body: JSON.stringify({ decisiones, actor, ...(revision ? { revision } : {}) }),
     },
   );
   const datos = await respuesta.json().catch(() => ({}));

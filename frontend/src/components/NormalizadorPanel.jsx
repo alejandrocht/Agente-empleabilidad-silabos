@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   iniciarNormalizadorEmpleabilidad,
   iniciarNormalizadorSilabos,
+  iniciarNormalizadorSilabosCactus,
   cancelarEjecucionNormalizador,
   obtenerCuarentenaNormalizador,
   obtenerEjecucionNormalizador,
@@ -52,6 +53,7 @@ const ESTADOS_TERMINALES_SILABOS = new Set([
 
 const ESTADOS_RECONOCIDOS = new Set([
   "recibido",
+  "extrayendo",
   "validando",
   "validado",
   "validado_con_advertencias",
@@ -99,6 +101,7 @@ function esEstadoTerminal(ejecucion) {
 
 const ETIQUETAS_ESTADO = {
   recibido: "Recibido",
+  extrayendo: "Extrayendo desde Cactus",
   validando: "Validando estructura",
   validado: "Estructura validada",
   validado_con_advertencias: "Validada con advertencias",
@@ -122,7 +125,8 @@ const PASOS_POR_TIPO = {
     { id: "gate", label: "Gate" },
   ],
   silabos: [
-    { id: "entrada", label: "Carga" },
+    { id: "entrada", label: "Fuente" },
+    { id: "extraccion", label: "Extracción" },
     { id: "validacion", label: "Validación" },
     { id: "limpieza", label: "Limpieza" },
     { id: "resultado", label: "CSV curriculares" },
@@ -210,8 +214,9 @@ function pasosPara(ejecucion, modo) {
 
 function pasoActivo(estado, paso, tipo) {
   if (tipo === "silabos") {
-    if (["recibido", "validando", "rechazado"].includes(estado)) return paso === "entrada";
-    if (["validado", "validado_con_advertencias"].includes(estado)) return paso === "validacion";
+    if (["recibido", "rechazado"].includes(estado)) return paso === "entrada";
+    if (estado === "extrayendo") return paso === "extraccion";
+    if (["validando", "validado", "validado_con_advertencias"].includes(estado)) return paso === "validacion";
     if (estado === "limpiando") return paso === "limpieza";
     return false;
   }
@@ -229,13 +234,14 @@ function pasoCompletado(estado, indice, tipo) {
   const orden = tipo === "silabos"
     ? {
         recibido: 0,
-        validando: 0,
-        validado: 1,
-        validado_con_advertencias: 1,
-        limpiando: 2,
-        limpiado: 4,
-        limpiado_con_advertencias: 4,
-        no_publicado: 4,
+        extrayendo: 1,
+        validando: 2,
+        validado: 2,
+        validado_con_advertencias: 2,
+        limpiando: 3,
+        limpiado: 5,
+        limpiado_con_advertencias: 5,
+        no_publicado: 5,
         rechazado: 0,
         error: 0,
         cancelado: 0,
@@ -310,10 +316,15 @@ function actividadPorEtapas(ejecucion) {
   const validacion = esSilabo ? ejecucion.validacion_silabos : ejecucion.validacion;
   const limpieza = esSilabo ? ejecucion.limpieza_silabos : ejecucion.limpieza;
   const tieneSalida = Array.isArray(ejecucion.outputs) && ejecucion.outputs.length > 0;
+  const fuenteCactus = ejecucion.fuente?.tipo === "cactus";
+  const estadoFuente = String(ejecucion.fuente?.estado || "").toLowerCase();
   const fallida = ["rechazado", "error", "no_publicado", "cancelado"].includes(estado);
   const validacionCompletada = Boolean(validacion) || ["validado", "validado_con_advertencias", "limpiando", "limpiado", "limpiado_con_advertencias", "normalizando", "normalizado", "normalizado_con_advertencias", "no_publicado"].includes(estado);
   const limpiezaCompletada = Boolean(limpieza) || ["limpiado", "limpiado_con_advertencias", "normalizando", "normalizado", "normalizado_con_advertencias", "no_publicado"].includes(estado);
   const normalizacionCompletada = Boolean(ejecucion.normalizacion) || ["normalizado", "normalizado_con_advertencias", "no_publicado"].includes(estado);
+  const extraccionCompletada = fuenteCactus
+    ? Boolean(ejecucion.fuente?.completa) || ["completada", "parcial", "rechazada"].includes(estadoFuente) || validacionCompletada
+    : estado !== "recibido";
 
   const etapas = [
     {
@@ -322,6 +333,26 @@ function actividadPorEtapas(ejecucion) {
       detalle: ejecucion.archivo ? `Fuente recibida: ${ejecucion.archivo}` : "Fuente recibida.",
       estado: estadoActividad({ completada: true, requiereAtencion: estado === "rechazado" }),
     },
+    ...(esSilabo ? [{
+      id: "extraccion",
+      titulo: "Extracción",
+      detalle: fuenteCactus
+        ? estado === "extrayendo"
+          ? "Descargando los sílabos desde Cactus y registrando su cobertura."
+          : extraccionCompletada
+            ? ejecucion.fuente?.completa === false
+              ? "La extracción terminó con cobertura incompleta; el resultado queda bloqueado para publicación."
+              : "La extracción desde Cactus terminó."
+            : "Pendiente de extracción desde Cactus."
+        : extraccionCompletada
+          ? "Carga manual lista; no se ejecutó extracción automática."
+          : "Pendiente de carga.",
+      estado: estadoActividad({
+        completada: extraccionCompletada,
+        activa: estado === "extrayendo",
+        requiereAtencion: fuenteCactus && (estado === "error" || (extraccionCompletada && ejecucion.fuente?.completa === false)),
+      }),
+    }] : []),
     {
       id: "validacion",
       titulo: "Validación",
@@ -484,6 +515,28 @@ function progresoLLM(ejecucion) {
   };
 }
 
+function progresoFuenteCactus(ejecucion) {
+  if (ejecucion?.tipo !== "silabos") return null;
+  const progreso = ejecucion?.progreso_fuente;
+  if (!progreso || typeof progreso !== "object") return null;
+  const cursosEncontrados = numeroProgreso(progreso.cursos_encontrados);
+  const cursosProcesados = numeroProgreso(progreso.cursos_procesados);
+  const archivosDescargados = numeroProgreso(progreso.archivos_descargados);
+  const errores = numeroProgreso(progreso.errores);
+  return {
+    ...progreso,
+    cursosEncontrados,
+    cursosProcesados,
+    archivosDescargados,
+    errores,
+    porcentaje: cursosEncontrados
+      ? Math.min(100, Math.round((cursosProcesados / cursosEncontrados) * 100))
+      : 0,
+    fase: String(progreso.fase || "preparando"),
+    mensaje: String(progreso.mensaje || "Preparando la extracción desde Cactus."),
+  };
+}
+
 function metricas(ejecucion, cuarentena) {
   if (ejecucion?.tipo === "silabos") {
     return [
@@ -513,8 +566,11 @@ export default function NormalizadorPanel() {
   const restauracionRef = useRef(0);
   const [modo, setModo] = useState("empleabilidad");
   const [archivo, setArchivo] = useState(null);
+  const [fuenteSilabos, setFuenteSilabos] = useState("cactus");
   const [carrera, setCarrera] = useState("");
   const [periodo, setPeriodo] = useState("");
+  const [usuario, setUsuario] = useState("");
+  const [contrasena, setContrasena] = useState("");
   const [ejecucion, setEjecucion] = useState(null);
   const [cuarentena, setCuarentena] = useState(null);
   const [errores, setErrores] = useState([]);
@@ -560,6 +616,7 @@ export default function NormalizadorPanel() {
         const tipo = ejecucionActiva.tipo === "silabos" ? "silabos" : "empleabilidad";
         const parametros = ejecucionActiva.parametros || {};
         setModo(tipo);
+        setFuenteSilabos(tipo === "silabos" && parametros.fuente === "cactus" ? "cactus" : "manual");
         setCarrera(tipo === "silabos" ? String(parametros.carrera || "") : "");
         setPeriodo(tipo === "silabos" ? String(parametros.periodo || "") : "");
         const detalle = await consultar(ejecucionActiva.id_ejecucion, puedeAplicar);
@@ -567,6 +624,7 @@ export default function NormalizadorPanel() {
           const tipoDetalle = detalle?.tipo === "silabos" ? "silabos" : tipo;
           const parametrosDetalle = detalle?.parametros || parametros;
           setModo(tipoDetalle);
+          setFuenteSilabos(tipoDetalle === "silabos" && parametrosDetalle.fuente === "cactus" ? "cactus" : "manual");
           setCarrera(tipoDetalle === "silabos" ? String(parametrosDetalle.carrera || "") : "");
           setPeriodo(tipoDetalle === "silabos" ? String(parametrosDetalle.periodo || "") : "");
         }
@@ -592,7 +650,8 @@ export default function NormalizadorPanel() {
   }, [consultar, ejecucion, pollingDetenido]);
 
   const iniciar = async () => {
-    if (!archivo) return;
+    const requiereArchivo = modo === "empleabilidad" || (modo === "silabos" && fuenteSilabos === "manual");
+    if (requiereArchivo && !archivo) return;
     restauracionRef.current += 1;
     setRecuperando(false);
     setCargando(true);
@@ -606,12 +665,19 @@ export default function NormalizadorPanel() {
     setPollingDetenido(false);
     try {
       if (modo === "silabos" && (!carrera.trim() || !periodo.trim())) {
-        setErrorRed("Para limpiar sílabos debes indicar carrera y periodo.");
+        setErrorRed("Para procesar sílabos debes indicar carrera y periodo.");
+        return;
+      }
+      if (modo === "silabos" && fuenteSilabos === "cactus" && (!usuario.trim() || !contrasena)) {
+        setErrorRed("Para extraer desde Cactus debes indicar usuario y contraseña de ULima.");
         return;
       }
       const datos = modo === "silabos"
-        ? await iniciarNormalizadorSilabos(archivo, carrera.trim(), periodo.trim())
+        ? fuenteSilabos === "cactus"
+          ? await iniciarNormalizadorSilabosCactus(carrera.trim(), periodo.trim(), usuario.trim(), contrasena)
+          : await iniciarNormalizadorSilabos(archivo, carrera.trim(), periodo.trim())
         : await iniciarNormalizadorEmpleabilidad(archivo);
+      if (modo === "silabos" && fuenteSilabos === "cactus") setContrasena("");
       setEjecucion(datos);
       await consultar(datos.id_ejecucion);
     } catch (error) {
@@ -641,6 +707,7 @@ export default function NormalizadorPanel() {
   const seleccionarArchivo = (event) => {
     const siguiente = event.target.files?.[0] || null;
     setArchivo(siguiente);
+    if (modo === "silabos" && siguiente) setFuenteSilabos("manual");
     setErrorRed("");
   };
 
@@ -656,6 +723,9 @@ export default function NormalizadorPanel() {
     setAprobacionCurricular(null);
     setPollingDetenido(false);
     setRecuperando(false);
+    setFuenteSilabos("cactus");
+    setUsuario("");
+    setContrasena("");
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -665,6 +735,11 @@ export default function NormalizadorPanel() {
   const flujo = tipoFlujo(ejecucion, modo);
   const pasos = pasosPara(ejecucion, modo);
   const controlesBloqueados = recuperando || cargando || Boolean(ejecucion);
+  const fuenteLista = modo === "empleabilidad"
+    ? Boolean(archivo)
+    : fuenteSilabos === "cactus"
+      ? Boolean(carrera.trim() && periodo.trim() && usuario.trim() && contrasena)
+      : Boolean(archivo && carrera.trim() && periodo.trim());
   const ejecucionActiva = recuperando || cargando || Boolean(ejecucion && !esFinal);
   const aprobacion = aprobacionCurricularDe(ejecucion);
   const procesoCurricularCompletado = esCurricular
@@ -676,6 +751,7 @@ export default function NormalizadorPanel() {
     ? procesoCurricularCompletado && releaseGatePermiteImportar(ejecucion)
     : ejecucion?.normalizacion?.publicable === true;
   const resumenMetricas = useMemo(() => metricas(ejecucion, cuarentena), [ejecucion, cuarentena]);
+  const progresoFuente = useMemo(() => progresoFuenteCactus(ejecucion), [ejecucion]);
   const progresoLimpiezaLLM = useMemo(() => progresoLLM(ejecucion), [ejecucion]);
   const registroActividad = useMemo(() => actividadPorEtapas(ejecucion), [ejecucion]);
   const hallazgosRegistro = useMemo(() => hallazgosActividad(ejecucion), [ejecucion]);
@@ -696,9 +772,13 @@ export default function NormalizadorPanel() {
     : esFinal
       ? (esCurricular ? "La estructura quedó registrada y ya puedes revisar sus hallazgos." : "La ejecución terminó y el gate dejó su resultado registrado.")
       : cancelacionEnviada
-        ? "Cancelación solicitada. El lote actual puede terminar, pero no se enviarán nuevos lotes al LLM."
+        ? estado === "extrayendo"
+          ? "Cancelación solicitada. La navegación o descarga actual puede terminar antes de cerrar la ejecución."
+          : "Cancelación solicitada. El lote actual puede terminar, pero no se enviarán nuevos lotes al LLM."
         : esCurricular
-          ? "Procesamos los sílabos por lotes, conservamos las evidencias y hallazgos de cada etapa, y habilitaremos los CSV y la inspección al completar el ETL."
+          ? estado === "extrayendo"
+            ? "Cactus está navegando el periodo seleccionado y descargando los sílabos de la carrera."
+            : "Procesamos los sílabos por lotes, conservamos las evidencias y hallazgos de cada etapa, y habilitaremos los CSV y la inspección al completar el ETL."
           : "Procesamos la fuente por etapas y conservamos las evidencias y hallazgos de cada etapa; los resultados y la inspección se habilitarán al completar el ETL.";
   const tituloEstado = recuperando
     ? "Recuperando ejecución"
@@ -780,7 +860,7 @@ export default function NormalizadorPanel() {
                 aria-selected={modo === "empleabilidad"}
                 aria-controls="panel-fuente"
                 disabled={controlesBloqueados}
-                onClick={() => { setModo("empleabilidad"); setArchivo(null); if (inputRef.current) inputRef.current.value = ""; }}
+                onClick={() => { setModo("empleabilidad"); setArchivo(null); setUsuario(""); setContrasena(""); if (inputRef.current) inputRef.current.value = ""; }}
                 className={`group flex items-center gap-3 rounded-xl border px-4 py-2.5 text-left transition focus:outline-none focus:ring-2 focus:ring-ulima/30 disabled:cursor-not-allowed disabled:opacity-50 ${modo === "empleabilidad" ? "border-ulima bg-[#FFF5F1]" : "border-line bg-paper hover:border-ulima/50 hover:bg-fondo"}`}
               >
                 <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg transition ${modo === "empleabilidad" ? "bg-ulima text-white" : "bg-ash text-muted group-hover:text-ulima"}`}>
@@ -799,7 +879,7 @@ export default function NormalizadorPanel() {
                 aria-selected={modo === "silabos"}
                 aria-controls="panel-fuente"
                 disabled={controlesBloqueados}
-                onClick={() => { setModo("silabos"); setArchivo(null); if (inputRef.current) inputRef.current.value = ""; }}
+                onClick={() => { setModo("silabos"); setFuenteSilabos("cactus"); setArchivo(null); if (inputRef.current) inputRef.current.value = ""; }}
                 className={`group flex items-center gap-3 rounded-xl border px-4 py-2.5 text-left transition focus:outline-none focus:ring-2 focus:ring-ulima/30 disabled:cursor-not-allowed disabled:opacity-50 ${modo === "silabos" ? "border-ulima bg-[#FFF5F1]" : "border-line bg-paper hover:border-ulima/50 hover:bg-fondo"}`}
               >
                 <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg transition ${modo === "silabos" ? "bg-ulima text-white" : "bg-ash text-muted group-hover:text-ulima"}`}>
@@ -807,7 +887,7 @@ export default function NormalizadorPanel() {
                 </span>
                 <span className="min-w-0">
                   <span className="block text-sm font-extrabold text-ink">Sílabos</span>
-                  <span className="mt-0.5 block text-xs leading-5 text-muted">DOCX, PDF o ZIP curricular</span>
+                  <span className="mt-0.5 block text-xs leading-5 text-muted">Cactus automático o archivo curricular</span>
                 </span>
                 <span className={`ml-auto h-2.5 w-2.5 shrink-0 rounded-full border transition ${modo === "silabos" ? "border-ulima bg-ulima" : "border-line bg-paper"}`} aria-hidden="true" />
               </button>
@@ -864,19 +944,85 @@ export default function NormalizadorPanel() {
                 </div>
               ) : null}
 
+              {modo === "silabos" ? (
+                <div className="mt-4 rounded-xl border border-line bg-fondo p-3.5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-extrabold text-ink">Origen de los sílabos</p>
+                      <p className="mt-1 text-xs leading-5 text-muted">Elige extracción automática desde Cactus o carga un paquete existente.</p>
+                    </div>
+                    <span className="rounded-full bg-paper px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-muted">Fuente curricular</span>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2" role="group" aria-label="Origen de los sílabos">
+                    <button
+                      type="button"
+                      aria-pressed={fuenteSilabos === "cactus"}
+                      disabled={controlesBloqueados}
+                      onClick={() => { setFuenteSilabos("cactus"); setArchivo(null); if (inputRef.current) inputRef.current.value = ""; }}
+                      className={`rounded-lg border px-3 py-2 text-left text-xs font-extrabold transition focus:outline-none focus:ring-2 focus:ring-ulima/30 disabled:cursor-not-allowed disabled:opacity-50 ${fuenteSilabos === "cactus" ? "border-ulima bg-[#FFF5F1] text-ulima" : "border-line bg-paper text-muted hover:border-ulima/50"}`}
+                    >
+                      Extraer desde Cactus
+                      <span className="mt-0.5 block text-[11px] font-normal leading-4 text-muted">Navegación y descarga automática</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={fuenteSilabos === "manual"}
+                      disabled={controlesBloqueados}
+                      onClick={() => setFuenteSilabos("manual")}
+                      className={`rounded-lg border px-3 py-2 text-left text-xs font-extrabold transition focus:outline-none focus:ring-2 focus:ring-ulima/30 disabled:cursor-not-allowed disabled:opacity-50 ${fuenteSilabos === "manual" ? "border-ulima bg-[#FFF5F1] text-ulima" : "border-line bg-paper text-muted hover:border-ulima/50"}`}
+                    >
+                      Cargar archivo manual
+                      <span className="mt-0.5 block text-[11px] font-normal leading-4 text-muted">ZIP, DOCX o PDF ya descargado</span>
+                    </button>
+                  </div>
+
+                  {fuenteSilabos === "cactus" ? (
+                    <div className="mt-3 border-t border-line pt-3">
+                      <p className="text-xs leading-5 text-muted">Tus credenciales solo se usan durante esta ejecución y no se guardan en el manifest.</p>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <label className="text-sm font-bold text-ink">
+                          Usuario ULima
+                          <input
+                            aria-label="Usuario ULima"
+                            type="text"
+                            autoComplete="username"
+                            disabled={controlesBloqueados}
+                            value={usuario}
+                            onChange={(event) => setUsuario(event.target.value)}
+                            className="mt-2 w-full rounded-xl border border-line bg-paper px-3 py-2.5 text-sm font-normal outline-none transition focus:border-ulima focus:ring-2 focus:ring-ulima/20 disabled:cursor-not-allowed disabled:bg-ash disabled:text-muted"
+                          />
+                        </label>
+                        <label className="text-sm font-bold text-ink">
+                          Contraseña ULima
+                          <input
+                            aria-label="Contraseña ULima"
+                            type="password"
+                            autoComplete="current-password"
+                            disabled={controlesBloqueados}
+                            value={contrasena}
+                            onChange={(event) => setContrasena(event.target.value)}
+                            className="mt-2 w-full rounded-xl border border-line bg-paper px-3 py-2.5 text-sm font-normal outline-none transition focus:border-ulima focus:ring-2 focus:ring-ulima/20 disabled:cursor-not-allowed disabled:bg-ash disabled:text-muted"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               <label className={`mt-4 flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed border-ulima/45 bg-[#FFF9F7] px-5 text-center transition focus-within:ring-2 focus-within:ring-ulima/30 ${controlesBloqueados ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-ulima hover:bg-[#FFF5F1]"}`}>
                 <span className="grid h-11 w-11 place-items-center rounded-full bg-white text-ulima shadow-sm">
                   <Upload size={21} />
                 </span>
-                <span className="mt-3 max-w-full truncate text-sm font-extrabold">{archivo ? archivo.name : esCurricular ? "Seleccionar ZIP, DOCX o PDF" : "Seleccionar archivo XLSX"}</span>
-                <span className="mt-1 text-xs leading-5 text-muted">{esCurricular ? "Puedes cargar un archivo o un paquete de sílabos." : "Los años de las hojas pueden variar."}</span>
+                <span className="mt-3 max-w-full truncate text-sm font-extrabold">{archivo ? archivo.name : modo === "silabos" && fuenteSilabos === "cactus" ? "Cargar un paquete manual (opcional)" : esCurricular ? "Seleccionar ZIP, DOCX o PDF" : "Seleccionar archivo XLSX"}</span>
+                <span className="mt-1 text-xs leading-5 text-muted">{modo === "silabos" && fuenteSilabos === "cactus" ? "Si eliges un archivo, cambiaremos al modo manual." : esCurricular ? "Puedes cargar un archivo o un paquete de sílabos." : "Los años de las hojas pueden variar."}</span>
                 <input disabled={controlesBloqueados} ref={inputRef} type="file" accept={esCurricular ? ".zip,.docx,.pdf,application/zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" : ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"} className="sr-only" onChange={seleccionarArchivo} />
               </label>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button type="button" onClick={iniciar} disabled={!archivo || controlesBloqueados || (modo === "silabos" && (!carrera.trim() || !periodo.trim()))} className="inline-flex items-center gap-2 rounded-xl bg-ulima px-4 py-2.5 text-sm font-extrabold text-white shadow-sm transition hover:-translate-y-px hover:shadow-[0_8px_20px_rgba(255,81,23,0.24)] focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none">
+                <button type="button" onClick={iniciar} disabled={!fuenteLista || controlesBloqueados} className="inline-flex items-center gap-2 rounded-xl bg-ulima px-4 py-2.5 text-sm font-extrabold text-white shadow-sm transition hover:-translate-y-px hover:shadow-[0_8px_20px_rgba(255,81,23,0.24)] focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none">
                   {cargando ? <LoaderCircle className="animate-girar" size={16} /> : <Database size={16} />}
-                  {esCurricular ? "Iniciar limpieza curricular" : "Iniciar normalización"}
+                  {esCurricular ? fuenteSilabos === "cactus" ? "Extraer y normalizar sílabos" : "Iniciar limpieza curricular" : "Iniciar normalización"}
                 </button>
                 {(archivo || ejecucion) ? (
                   <button type="button" onClick={resetear} disabled={ejecucionActiva} className="inline-flex items-center gap-2 rounded-xl border border-line bg-paper px-4 py-2.5 text-sm font-bold text-muted transition hover:border-ink hover:text-ink focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-45">
@@ -923,7 +1069,7 @@ export default function NormalizadorPanel() {
                 </div>
               </div>
 
-              {esCurricular && ["validando", "limpiando", "normalizando"].includes(estado) && !cancelacionEnviada ? (
+              {esCurricular && ["extrayendo", "validando", "limpiando", "normalizando"].includes(estado) && !cancelacionEnviada ? (
                 <div className="mt-3 flex justify-end">
                   <button
                     type="button"
@@ -937,7 +1083,7 @@ export default function NormalizadorPanel() {
                 </div>
               ) : null}
 
-              <div className="mt-5 grid grid-cols-4" aria-label="Etapas del flujo">
+              <div className={`mt-5 grid ${flujo === "silabos" ? "grid-cols-5" : "grid-cols-4"}`} aria-label="Etapas del flujo">
                 {pasos.map((paso, indice) => {
                   const completado = pasoCompletado(estado, indice, flujo);
                   const activo = pasoActivo(estado, paso.id, flujo);
@@ -1009,6 +1155,50 @@ export default function NormalizadorPanel() {
                     <p className="mt-0.5 text-sm leading-5">Esta ejecución sigue sin estado terminal, pero no se actualiza desde hace {minutosInactivo} min. Espera una nueva actualización o revisa el proceso antes de asumir que continúa activo.</p>
                   </div>
                 </div>
+              ) : null}
+
+              {progresoFuente ? (
+                <section
+                  className="mt-5 rounded-xl border border-ulima/20 bg-[#FFF9F7] p-4"
+                  aria-label="Progreso de extracción Cactus"
+                  aria-live="polite"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-ulima">Extracción Cactus</p>
+                      <h3 className="mt-1 text-base font-extrabold text-ink">{progresoFuente.fase}</h3>
+                      <p className="mt-1 text-xs leading-5 text-muted">{progresoFuente.mensaje}</p>
+                    </div>
+                    <span className="rounded-full border border-ulima/20 bg-paper px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-ulima">
+                      {progresoFuente.cursosProcesados}/{progresoFuente.cursosEncontrados || "—"} cursos
+                    </span>
+                  </div>
+                  <div
+                    className="mt-3 h-2 overflow-hidden rounded-full bg-ulima/10"
+                    role="progressbar"
+                    aria-label="Avance de extracción Cactus"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow={progresoFuente.porcentaje}
+                    aria-valuetext={`${progresoFuente.porcentaje}% de cursos procesados`}
+                  >
+                    <div className="h-full rounded-full bg-ulima transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${progresoFuente.porcentaje}%` }} />
+                  </div>
+                  <dl className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
+                    <div className="rounded-lg border border-line bg-paper px-3 py-2">
+                      <dt className="font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-muted">Cursos encontrados</dt>
+                      <dd className="mt-1 font-extrabold text-ink">{progresoFuente.cursosEncontrados}</dd>
+                    </div>
+                    <div className="rounded-lg border border-line bg-paper px-3 py-2">
+                      <dt className="font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-muted">Archivos descargados</dt>
+                      <dd className="mt-1 font-extrabold text-ink">{progresoFuente.archivosDescargados}</dd>
+                    </div>
+                    <div className="rounded-lg border border-line bg-paper px-3 py-2">
+                      <dt className="font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-muted">Incidencias</dt>
+                      <dd className="mt-1 font-extrabold text-ink">{progresoFuente.errores}</dd>
+                    </div>
+                  </dl>
+                </section>
               ) : null}
 
               {progresoLimpiezaLLM ? (

@@ -5,6 +5,7 @@ import {
   cancelarEjecucionNormalizador,
   iniciarNormalizadorEmpleabilidad,
   iniciarNormalizadorSilabos,
+  iniciarNormalizadorSilabosCactus,
   listarEjecucionesNormalizador,
   decidirPendientesNormalizador,
   obtenerCuarentenaNormalizador,
@@ -17,6 +18,7 @@ vi.mock("../api/normalizador", () => ({
   cancelarEjecucionNormalizador: vi.fn(),
   iniciarNormalizadorEmpleabilidad: vi.fn(),
   iniciarNormalizadorSilabos: vi.fn(),
+  iniciarNormalizadorSilabosCactus: vi.fn(),
   listarEjecucionesNormalizador: vi.fn(),
   decidirPendientesNormalizador: vi.fn(),
   obtenerReporteEjecucionNormalizador: vi.fn(),
@@ -65,6 +67,51 @@ describe("panel del normalizador", () => {
     });
     obtenerErroresNormalizador.mockResolvedValue({ hallazgos: [] });
     obtenerCuarentenaNormalizador.mockResolvedValue({ total: 0, filas: [] });
+  });
+
+  it("inicia la extracción Cactus con carrera, periodo y credenciales", async () => {
+    iniciarNormalizadorSilabosCactus.mockResolvedValue({
+      id_ejecucion: "NOR_cactus12345678",
+      tipo: "silabos",
+      archivo: "cactus.zip",
+      estado: "extrayendo",
+      parametros: { carrera: "Marketing", periodo: "2026-1", fuente: "cactus" },
+    });
+    obtenerEjecucionNormalizador.mockResolvedValue({
+      id_ejecucion: "NOR_cactus12345678",
+      tipo: "silabos",
+      archivo: "cactus.zip",
+      estado: "extrayendo",
+      parametros: { carrera: "Marketing", periodo: "2026-1", fuente: "cactus" },
+      fuente: { tipo: "cactus", estado: "extrayendo" },
+      progreso_fuente: {
+        fase: "autenticando",
+        cursos_encontrados: 0,
+        cursos_procesados: 0,
+        archivos_descargados: 0,
+        errores: 0,
+        mensaje: "Abriendo una sesión autenticada en Cactus.",
+      },
+      outputs: [],
+      hallazgos: [],
+    });
+
+    await renderPanelAfterRecovery();
+    fireEvent.click(screen.getByRole("tab", { name: "Sílabos" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), { target: { value: "Marketing" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), { target: { value: "2026-1" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Usuario ULima" }), { target: { value: "usuario.ulima" } });
+    fireEvent.change(screen.getByLabelText("Contraseña ULima"), { target: { value: "secreto" } });
+    fireEvent.click(screen.getByRole("button", { name: "Extraer y normalizar sílabos" }));
+
+    await waitFor(() => expect(iniciarNormalizadorSilabosCactus).toHaveBeenCalledWith(
+      "Marketing",
+      "2026-1",
+      "usuario.ulima",
+      "secreto",
+    ));
+    expect(screen.getByText("Extrayendo desde Cactus")).toBeTruthy();
+    expect(screen.getByLabelText("Progreso de extracción Cactus")).toBeTruthy();
   });
 
   it("recupera al montar una ejecución curricular activa y continúa su seguimiento", async () => {

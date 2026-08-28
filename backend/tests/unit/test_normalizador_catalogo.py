@@ -11,8 +11,9 @@ from agente.normalizador.empleabilidad.catalogo import (
     cargar_catalogo_carrera,
     clave_concepto,
 )
+from agente.normalizador.silabos.perfil_carrera import cargar_perfil_carrera
 from agente.normalizador.silabos.perfiles import crear_perfil_bootstrap
-from agente.normalizador.silabos.salida import _catalogo_curricular
+from agente.normalizador.silabos.salida import ARCHIVOS_SALIDA, _catalogo_curricular
 
 
 def _crear_catalogos(directorio: Path) -> None:
@@ -84,6 +85,21 @@ def test_carga_catalogo_directo_de_carrera(tmp_path: Path) -> None:
     assert catalogo is not None
     assert catalogo.obtener("competencia", "Gestión estratégica") is not None
     assert catalogo.obtener("herramienta", "Google Analytics") is not None
+
+
+def test_carrera_nueva_arranca_sin_reglas_de_marketing(tmp_path: Path) -> None:
+    perfil = cargar_perfil_carrera(
+        "Finanzas",
+        "2026-1",
+        directorio_perfiles=tmp_path / "perfiles",
+        directorio_catalogos=tmp_path / "catalogos",
+    )
+
+    assert perfil["carrera"] == "FINANZAS"
+    assert perfil["periodo"] == "2026-1"
+    assert perfil["perfil_disponible"] is False
+    assert "normalizaciones_habilidad" not in perfil
+    assert all("marketing" not in str(valor).lower() for valor in perfil.values())
 
 
 def test_overlay_de_carrera_precede_y_conserva_fallback_global(tmp_path: Path) -> None:
@@ -189,6 +205,30 @@ def test_crea_perfil_bootstrap_sin_alterar_los_esquemas_csv(tmp_path: Path) -> N
     catalogo = cargar_catalogo_carrera("Marketing", "2026-1", str(tmp_path / "catalogos"))
     assert catalogo is not None
     assert catalogo.obtener("herramienta", "Google Analytics") is not None
+
+
+def test_bootstrap_mantiene_borrador_si_el_release_gate_bloquea(tmp_path: Path) -> None:
+    ejecucion = tmp_path / "NOR_TEST" / "salidas"
+    ejecucion.mkdir(parents=True)
+    for nombre, columnas in ARCHIVOS_SALIDA:
+        (ejecucion / nombre).write_text(",".join(columnas) + "\n", encoding="utf-8-sig")
+    reportes = ejecucion / "reportes"
+    reportes.mkdir()
+    (reportes / "release_gate.json").write_text(
+        '{"decision":"BLOCK_IMPORT"}\n', encoding="utf-8"
+    )
+
+    crear_perfil_bootstrap(
+        ejecucion.parent,
+        tmp_path / "catalogos",
+        "Finanzas",
+        "2026-1",
+    )
+
+    perfil = (tmp_path / "catalogos/carreras/FINANZAS/2026-1/perfil.json").read_text(
+        encoding="utf-8"
+    )
+    assert '"estado": "BORRADOR_CON_PENDIENTES"' in perfil
 
 
 def test_rechaza_id_duplicado_en_catalogo(tmp_path: Path) -> None:

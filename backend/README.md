@@ -10,9 +10,12 @@ From the repository root:
 
 ```powershell
 cd backend
-python -m pip install -e ".[dev]"
+uv sync --locked --extra dev
 Copy-Item .env.example .env  # only when .env does not exist
 ```
+
+Use the project environment for every backend command. If invoking Python directly,
+use `backend/.venv/bin/python` from the repository root; do not use a bare `python`.
 
 Fill `.env` with OpenAI credentials and Neo4j credentials. Use a read-only Neo4j
 principal for domain queries.
@@ -23,7 +26,7 @@ The console uses the async `responder` entrypoint:
 
 ```powershell
 cd backend
-python scripts/consola.py
+uv run --locked python scripts/consola.py
 ```
 
 Exit with `/salir`.
@@ -54,12 +57,36 @@ individual, o un ZIP con varios archivos seguros:
 ```text
 POST /normalizador/silabos
      multipart: archivo, carrera, periodo
+POST /normalizador/silabos/cactus
+     JSON: carrera, periodo, usuario, contrasena
 GET  /normalizador/ejecuciones/{id_ejecucion}
 GET  /normalizador/ejecuciones/{id_ejecucion}/errores
 GET  /normalizador/ejecuciones/{id_ejecucion}/cuarentena
 GET  /normalizador/ejecuciones/{id_ejecucion}/pendientes
 POST /normalizador/ejecuciones/{id_ejecucion}/pendientes/decidir
 GET  /normalizador/ejecuciones/{id_ejecucion}/release-gate
+```
+
+`/normalizador/silabos/cactus` ejecuta el adapter de extracción sobre Cactus/ULima y entrega
+los archivos PDF/DOCX descargados al mismo pipeline de validación, limpieza, revisión y release
+gate. El usuario selecciona carrera y periodo desde la interfaz y proporciona sus credenciales
+solo para esa ejecución: no se incluyen en el manifest, reportes ni parámetros persistidos. La
+sesión del navegador y sus cookies viven en el directorio temporal de la ejecución y se purgan al
+finalizar. Si Cactus entrega una cobertura parcial, los archivos se conservan como evidencia,
+pero `EXTRACTION_COVERAGE_INCOMPLETE` bloquea la publicación.
+
+El extractor requiere Playwright y un navegador Chromium instalado en el entorno del backend:
+
+```powershell
+cd backend
+uv run --locked python -m playwright install chromium
+```
+
+Durante desarrollo puede configurarse el comportamiento del navegador y la concurrencia:
+
+```dotenv
+NORMALIZADOR_CACTUS_HEADLESS=false
+NORMALIZADOR_CACTUS_DOWNLOAD_WORKERS=3
 ```
 
 El corte curricular valida el paquete, extrae metadatos, sumilla, logro general, logros específicos
@@ -219,7 +246,7 @@ revisar qué declaró cada sílabo sin publicar placeholders.
 Después de revisar una ejecución, se puede generar un perfil inicial sin alterar los esquemas CSV:
 
 ```bash
-python -m scripts.generar_perfil_carrera \
+uv run --locked python -m scripts.generar_perfil_carrera \
   --ejecucion .normalizador/NOR_xxx \
   --catalogos "/ruta/Normalizacion CIAR/catalogos" \
   --carrera Marketing --periodo 2026-1
@@ -238,7 +265,7 @@ The current FastAPI application is `api.servidor:app`:
 
 ```powershell
 cd backend
-python -m uvicorn api.servidor:app --reload --port 8001
+uv run --locked python -m uvicorn api.servidor:app --reload --port 8001
 ```
 
 It exposes `/health`, `/chat`, `/chat/stream`, `/preguntar`, and the typed read-only
@@ -276,9 +303,9 @@ Source syllabi and job descriptions can be reviewed and imported offline with:
 
 ```powershell
 cd backend
-python -m scripts.ingest_documents .\imports\syllabus.md .\imports\jobs.json
+uv run --locked python -m scripts.ingest_documents .\imports\syllabus.md .\imports\jobs.json
 # Example: cap this dry run to one source while keeping the default batch size.
-python -m scripts.ingest_documents --max-documents 1 .\imports\syllabus.md
+uv run --locked python -m scripts.ingest_documents --max-documents 1 .\imports\syllabus.md
 ```
 
 Run the CLI from `backend/` with the module form above; this is the supported and
@@ -310,11 +337,11 @@ OpenAI settings.
 From `backend/`:
 
 ```powershell
-python -m pytest -q
-python -m ruff check .
-python -m mypy agente
-python -m compileall -q agente api scripts
-python -c "from agente.grafo.constructor import langgraph_entrypoint; langgraph_entrypoint()"
+uv run --locked python -m pytest -q
+uv run --locked python -m ruff check .
+uv run --locked python -m mypy agente
+uv run --locked python -m compileall -q agente api scripts
+uv run --locked python -c "from agente.grafo.constructor import langgraph_entrypoint; langgraph_entrypoint()"
 ```
 
 The last command validates the LangGraph no-argument entrypoint and builds the graph

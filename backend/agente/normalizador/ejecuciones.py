@@ -34,6 +34,11 @@ from agente.normalizador.modelos import (
     ResultadoValidacionSilabos,
 )
 from agente.normalizador.silabos.entrada import validar_archivo as validar_silabos
+from agente.normalizador.silabos.fuente_cactus import (
+    CactusExtractor,
+    CactusExtractorError,
+    empaquetar_archivos_cactus,
+)
 from agente.normalizador.silabos.limpieza import limpiar_archivo as limpiar_silabos
 from agente.observabilidad.langsmith import contexto_ejecucion, ejecutar_flujo
 
@@ -104,7 +109,7 @@ _ESTADOS_TERMINALES: frozenset[str] = frozenset(
     }
 )
 _ESTADOS_CANCELABLES: frozenset[str] = frozenset(
-    {"recibido", "validando", "limpiando", "normalizando"}
+    {"recibido", "extrayendo", "validando", "limpiando", "normalizando"}
 )
 _ID_EJECUCION = r"NOR_[0-9a-f]{16}"
 _WARNING_MACOS_OBSOLETO = "METADATO_MACOS_IGNORADO"
@@ -196,6 +201,9 @@ class Ejecucion:
         self.catalogo_chh: dict[str, object] | None = None
         self.hallazgos: list[Hallazgo] = []
         self.progreso_llm: ProgresoLimpiezaLLM | None = None
+        self.fuente: dict[str, object] | None = None
+        self.progreso_fuente: dict[str, object] | None = None
+        self.outputs_fuente: list[dict[str, object]] = []
         self.cancelada = Event()
         self.cancelacion_solicitada = False
         self.cancelada_en: str | None = None
@@ -213,7 +221,7 @@ class Ejecucion:
             if isinstance(contenido_gate, dict):
                 release_gate = contenido_gate
 
-        outputs = (
+        outputs_procesamiento = (
             list(self.normalizacion.outputs)
             if self.normalizacion
             else list(self.limpieza.outputs)
@@ -222,6 +230,7 @@ class Ejecucion:
             if self.limpieza_silabos
             else []
         )
+        outputs = [*self.outputs_fuente, *outputs_procesamiento]
         outputs = _actualizar_metadatos_outputs(self.directorio, outputs)
         aprobacion_curricular: dict[str, object] | None = None
         if self.tipo == "silabos":
@@ -254,6 +263,8 @@ class Ejecucion:
             "release_gate": release_gate,
             "aprobacion_curricular": aprobacion_curricular,
             "catalogo_chh": self.catalogo_chh,
+            "fuente": self.fuente,
+            "progreso_fuente": self.progreso_fuente,
             "progreso_llm": self.progreso_llm.a_dict() if self.progreso_llm else None,
             "hallazgos": [hallazgo.a_dict() for hallazgo in self.hallazgos],
             "outputs": outputs,
@@ -313,6 +324,43 @@ class GestorEjecuciones:
         ejecucion.actualizada_en = _ahora()
         self._persistir(ejecucion)
         self._executor.submit(self._validar_silabos, ejecucion, ruta_entrada, carrera, periodo)
+
+    def iniciar_extraccion_silabos(
+        self,
+        id_ejecucion: str,
+        carrera: str,
+        periodo: str,
+        usuario: str,
+        contrasena: str,
+    ) -> None:
+        """Programa Cactus y el pipeline curricular en una sola ejecución."""
+
+        ejecucion = self._obtener_objeto(id_ejecucion)
+        ejecucion.estado = "extrayendo"
+        ejecucion.fuente = {
+            "tipo": "cactus",
+            "estado": "extrayendo",
+            "carrera": carrera,
+            "periodo": periodo,
+        }
+        ejecucion.progreso_fuente = {
+            "fase": "preparando",
+            "mensaje": "Preparando la extracción desde Cactus.",
+            "cursos_encontrados": 0,
+            "cursos_procesados": 0,
+            "archivos_descargados": 0,
+            "errores": 0,
+        }
+        ejecucion.actualizada_en = _ahora()
+        self._persistir(ejecucion)
+        self._executor.submit(
+            self._extraer_y_validar_silabos,
+            ejecucion,
+            carrera,
+            periodo,
+            usuario,
+            contrasena,
+        )
 
     def marcar_rechazo(self, id_ejecucion: str, hallazgo: Hallazgo) -> None:
         """Marca un rechazo inmediato, por ejemplo por límite de carga."""
@@ -766,7 +814,12 @@ class GestorEjecuciones:
         """Elimina fuentes binarias/staging, manteniendo CSV y reportes auditables."""
 
         raiz = ejecucion.directorio.resolve()
-        for relativo in ("entrada", "fuentes_curriculares", "limpios"):
+        for relativo in (
+            "entrada",
+            "fuentes_curriculares",
+            "limpios",
+            "cactus_chrome_profile",
+        ):
             ruta = (raiz / relativo).resolve()
             if raiz not in ruta.parents or not ruta.is_dir():
                 continue
@@ -981,6 +1034,7 @@ class GestorEjecuciones:
                 tags=tags_traza,
                 metadata={**metadata_traza, "flow": "curricular"},
             )
+            limpieza = self._aplicar_gate_de_extraccion(ejecucion, limpieza)
             self._verificar_cancelacion(ejecucion)
             ejecucion.limpieza_silabos = limpieza
             ejecucion.hallazgos = ejecucion.hallazgos + list(limpieza.hallazgos)
@@ -1017,6 +1071,197 @@ class GestorEjecuciones:
             )
         finally:
             self._finalizar(ejecucion)
+
+    def _extraer_y_validar_silabos(
+        self,
+        ejecucion: Ejecucion,
+        carrera: str,
+        periodo: str,
+        usuario: str,
+        contrasena: str,
+    ) -> None:
+        """Descarga desde Cactus y entrega un ZIP interno al flujo curricular actual."""
+
+        try:
+            self._verificar_cancelacion(ejecucion)
+            directorio_descarga = ejecucion.directorio / "fuentes_curriculares" / "cactus"
+            extractor = CactusExtractor(
+                headless=booleano("NORMALIZADOR_CACTUS_HEADLESS", False),
+                download_workers=entero("NORMALIZADOR_CACTUS_DOWNLOAD_WORKERS", 3),
+            )
+
+            def actualizar_progreso(progreso: dict[str, object]) -> None:
+                ejecucion.progreso_fuente = dict(progreso)
+                ejecucion.actualizada_en = _ahora()
+                self._persistir(ejecucion)
+
+            resultado = extractor.extraer(
+                carrera=carrera,
+                periodo=periodo,
+                usuario=usuario,
+                contrasena=contrasena,
+                directorio_salida=directorio_descarga,
+                directorio_perfil=ejecucion.directorio / "cactus_chrome_profile",
+                al_actualizar_progreso=actualizar_progreso,
+                cancelada=ejecucion.cancelada.is_set,
+            )
+            # La contraseña solo es necesaria para la sesión Cactus. Liberar
+            # ambas referencias antes de entrar al pipeline de normalización.
+            usuario = ""
+            contrasena = ""
+            reporte = resultado.a_dict(directorio_descarga)
+            ejecucion.fuente = reporte
+            reporte_path = ejecucion.directorio / "salidas" / "reportes" / "extraccion_cactus.json"
+            reporte_path.parent.mkdir(parents=True, exist_ok=True)
+            reporte_path.write_text(
+                json.dumps(reporte, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            ejecucion.outputs_fuente = _actualizar_metadatos_outputs(
+                ejecucion.directorio,
+                [
+                    {
+                        "tipo": "fuente_cactus",
+                        "archivo": "salidas/reportes/extraccion_cactus.json",
+                        "registros": 1,
+                    }
+                ],
+            )
+            ejecucion.actualizada_en = _ahora()
+            self._persistir(ejecucion)
+
+            if not resultado.archivos_procesables:
+                ejecucion.estado = "rechazado"
+                ejecucion.hallazgos.append(
+                    Hallazgo(
+                        codigo="CACTUS_SIN_SILABOS_PROCESABLES",
+                        severidad="error",
+                        mensaje="Cactus no produjo sílabos PDF o DOCX procesables.",
+                        detalle=(
+                            f"cursos={resultado.cursos_encontrados}; "
+                            f"descargados={resultado.archivos_descargados}"
+                        ),
+                    )
+                )
+                self._finalizar(ejecucion)
+                return
+
+            ruta_entrada = ejecucion.directorio / "entrada" / ejecucion.archivo
+            empaquetar_archivos_cactus(directorio_descarga, ruta_entrada)
+            ejecucion.estado = "validando"
+            ejecucion.actualizada_en = _ahora()
+            self._persistir(ejecucion)
+            self._validar_silabos(ejecucion, ruta_entrada, carrera, periodo)
+        except CancelacionSolicitada:
+            self._marcar_cancelado(ejecucion)
+            self._finalizar(ejecucion)
+        except CactusExtractorError as exc:
+            self._registrar_error_fuente(ejecucion, exc.codigo, exc.mensaje)
+        except Exception as exc:
+            self._registrar_error_fuente(
+                ejecucion,
+                "ERROR_INTERNO_EXTRACCION_CACTUS",
+                f"{type(exc).__name__}: {str(exc)[:200]}",
+            )
+        finally:
+            # Evita conservar referencias innecesarias a la contraseña en el worker.
+            usuario = ""
+            contrasena = ""
+
+    def _registrar_error_fuente(
+        self,
+        ejecucion: Ejecucion,
+        codigo: str,
+        detalle: str,
+    ) -> None:
+        if ejecucion.fuente is None:
+            ejecucion.fuente = {"tipo": "cactus"}
+        ejecucion.fuente = {
+            **ejecucion.fuente,
+            "estado": "error",
+            "codigo": codigo,
+            "detalle": detalle,
+        }
+        reportes = ejecucion.directorio / "salidas" / "reportes"
+        reportes.mkdir(parents=True, exist_ok=True)
+        reporte = reportes / "extraccion_cactus.json"
+        reporte.write_text(
+            json.dumps(ejecucion.fuente, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        ejecucion.outputs_fuente = _actualizar_metadatos_outputs(
+            ejecucion.directorio,
+            [
+                {
+                    "tipo": "fuente_cactus",
+                    "archivo": "salidas/reportes/extraccion_cactus.json",
+                    "registros": 1,
+                }
+            ],
+        )
+        ejecucion.estado = "error"
+        ejecucion.hallazgos.append(
+            Hallazgo(
+                codigo=codigo,
+                severidad="error",
+                mensaje="La extracción desde Cactus no pudo completarse.",
+                detalle=detalle,
+            )
+        )
+        self._finalizar(ejecucion)
+
+    def _aplicar_gate_de_extraccion(
+        self,
+        ejecucion: Ejecucion,
+        limpieza: ResultadoLimpiezaSilabos,
+    ) -> ResultadoLimpiezaSilabos:
+        """Bloquea la publicación cuando Cactus entregó una fuente incompleta."""
+
+        fuente = ejecucion.fuente
+        if not isinstance(fuente, dict) or fuente.get("completa") is not False:
+            return limpieza
+
+        gate = dict(limpieza.release_gate)
+        blockers_value = gate.get("blockers")
+        blockers_items: list[object] = blockers_value if isinstance(blockers_value, list) else []
+        blockers = {str(item) for item in blockers_items if item}
+        blockers.add("EXTRACTION_COVERAGE_INCOMPLETE")
+        checks_value = gate.get("checks")
+        checks = dict(checks_value) if isinstance(checks_value, dict) else {}
+        checks["source_extraction"] = {
+            "ok": False,
+            "cursos_encontrados": fuente.get("cursos_encontrados", 0),
+            "archivos_descargados": fuente.get("archivos_descargados", 0),
+            "archivos_procesables": fuente.get("archivos_procesables", 0),
+            "sin_silabo": fuente.get("sin_silabo", 0),
+            "fetch_fallidos": fuente.get("fetch_fallidos", 0),
+            "sesiones_fallidas": fuente.get("sesiones_fallidas", 0),
+            "archivos_no_soportados": fuente.get("archivos_no_soportados", 0),
+        }
+        gate["checks"] = checks
+        gate["blockers"] = sorted(blockers)
+        gate["decision"] = "BLOCK_IMPORT"
+        reporte = ejecucion.directorio / "salidas" / "reportes" / "release_gate.json"
+        reporte.parent.mkdir(parents=True, exist_ok=True)
+        reporte.write_text(
+            json.dumps(gate, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        hallazgo = Hallazgo(
+            codigo="EXTRACCION_CACTUS_INCOMPLETA",
+            severidad="warning",
+            mensaje="La extracción desde Cactus fue parcial; la publicación quedó bloqueada.",
+            detalle=(
+                f"{fuente.get('archivos_procesables', 0)}/"
+                f"{fuente.get('cursos_encontrados', 0)} sílabos procesables."
+            ),
+        )
+        return replace(
+            limpieza,
+            publicable=False,
+            release_gate=gate,
+            hallazgos=(*limpieza.hallazgos, hallazgo),
+        )
 
     def _persistir(self, ejecucion: Ejecucion) -> None:
         """Escribe el manifest para conservar evidencia aunque el proceso reinicie."""

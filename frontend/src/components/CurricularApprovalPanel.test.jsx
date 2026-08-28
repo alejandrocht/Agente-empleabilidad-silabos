@@ -178,6 +178,64 @@ describe("aprobación de propuestas curriculares", () => {
     expect(screen.getByTestId("curricular-proposal-card")).toBeTruthy();
   });
 
+  it("renderiza el paquete completo y envía una sola decisión atómica", async () => {
+    const paquete = {
+      id_paquete_chh: "PKG_CHH_123",
+      source_identity: { carrera: "MARKETING", periodo: "2026-1", id_curso: "MKT-101", id_silabo: "SIL-1" },
+      componentes: {
+        competencias: [{ nombre: "Diseño omnicanal" }],
+        habilidades: [{ nombre: "Diseñar campañas" }],
+        herramientas: [],
+      },
+      filas: [{ id_pendiente: "PEN_COMP", evidencia: ["Diseñar campañas omnicanal."] }],
+      relaciones: [{ id_competencia: "COMP_1", id_habilidad: "HAB_1", id_herramienta: "" }],
+    };
+    obtenerPendientesNormalizador.mockResolvedValueOnce({
+      filas: [],
+      paquetes: [paquete],
+      revision: "rev-1",
+      aprobacion: { requiere_decision: true, pendientes_por_decidir: 1 },
+    }).mockResolvedValueOnce({ filas: [], paquetes: [], aprobacion: { requiere_decision: false } });
+    decidirPendientesNormalizador.mockResolvedValue({ aprobacion: { accepted_in_request: 1 } });
+
+    render(<CurricularApprovalPanel idEjecucion="NOR_0123456789abcdef" />);
+    const card = await screen.findByTestId("curricular-package-card");
+    expect(within(card).getByText("Diseño omnicanal")).toBeTruthy();
+    fireEvent.click(within(card).getByRole("button", { name: /ADD: agregar paquete PKG_CHH_123/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar decisiones (1)" }));
+
+    await waitFor(() => expect(decidirPendientesNormalizador).toHaveBeenCalledWith(
+      "NOR_0123456789abcdef",
+      [{ id_paquete_chh: "PKG_CHH_123", decision: "ADD" }],
+      "ejecutor",
+      "rev-1",
+    ));
+  });
+
+  it("usa el fallback legacy cuando el API devuelve paquetes vacío", async () => {
+    obtenerPendientesNormalizador
+      .mockResolvedValueOnce({
+        filas: [propuestas[0]],
+        paquetes: [],
+        aprobacion: { requiere_decision: true, pendientes_por_decidir: 1 },
+      })
+      .mockResolvedValueOnce({ filas: [], paquetes: [], aprobacion: { requiere_decision: false } });
+    decidirPendientesNormalizador.mockResolvedValue({ aprobacion: { accepted_in_request: 1 } });
+
+    render(<CurricularApprovalPanel idEjecucion="NOR_0123456789abcdef" />);
+
+    const card = await screen.findByTestId("curricular-proposal-card");
+    expect(within(card).getByText("Diseño omnicanal")).toBeTruthy();
+    expect(screen.queryByTestId("curricular-package-card")).toBeNull();
+    fireEvent.click(within(card).getByRole("button", { name: /ADD: agregar Diseño omnicanal/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar decisiones (1)" }));
+
+    await waitFor(() => expect(decidirPendientesNormalizador).toHaveBeenCalledWith(
+      "NOR_0123456789abcdef",
+      [{ id_pendiente: "PEN_EXACT_1", decision: "ADD" }],
+    ));
+  });
+
   it("no muestra el checkpoint cuando no hay propuestas abiertas", async () => {
     obtenerPendientesNormalizador.mockResolvedValue({
       filas: [],

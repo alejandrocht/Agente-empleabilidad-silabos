@@ -91,6 +91,8 @@ def test_concepto_llm_fuera_del_catalogo_queda_pendiente_de_ampliacion(
         ).read_text(encoding="utf-8").splitlines()
     ]
     pendientes_por_tipo = {fila["tipo"]: fila for fila in pendientes}
+    assert pendientes_por_tipo["competencia"]["carrera"] == "MARKETING"
+    assert pendientes_por_tipo["competencia"]["periodo"] == "2026-1"
     assert pendientes_por_tipo["competencia"]["estado_resolucion"] == (
         "PENDIENTE_AMPLIACION_PERFIL"
     )

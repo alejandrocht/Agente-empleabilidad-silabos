@@ -34,6 +34,15 @@
     "Usar herramientas",
     "Analizar información"
   ],
+  "normalizaciones_habilidad": {
+    "Estimación y predicción multivariante": "Estimar y predecir fenómenos de marketing mediante métodos multivariantes",
+    "Elaboración y seguimiento de cronogramas de proyectos": "Elaborar y seguir cronogramas de proyectos",
+    "Procesamiento y tabulación de datos de mercado": "Procesar y tabular datos de mercado",
+    "Diagnóstico y delimitación de problemas de investigación de mercados": "Diagnosticar y delimitar problemas de investigación de mercados",
+    "Ejecución y selección de conceptos creativos": "Ejecutar y seleccionar conceptos creativos",
+    "Planificación y ejecución estratégica de negociaciones": "Planificar y ejecutar negociaciones estratégicas",
+    "Evaluación del aporte de promociones BTL a la cadena de valor": "Evaluar el aporte de promociones BTL a la cadena de valor"
+  },
   "exclusiones": [
     "No convertir un código E/G en una competencia universal.",
     "No usar competencias de Sistemas solo porque el logro mencione datos, análisis o tecnología.",

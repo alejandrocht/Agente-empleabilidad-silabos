@@ -573,6 +573,88 @@ def test_competencia_debe_anclarse_en_fuente_o_declararse(declarada: bool) -> No
     assert ("COMPETENCIA_SIN_ANCLA_FUENTE" in errores) is not declarada
 
 
+def test_fuente_estructurada_debe_pertenecer_al_silabo_correspondiente() -> None:
+    logro = "Analizar datos de mercado para identificar segmentos"
+    decision = _decision_para(
+        logro,
+        competencia=analista_llm.ConceptoPropuesto(nombre="Analítica de mercado"),
+        evidencia=[],
+        fuentes=[
+            analista_llm.FuenteCurricular(
+                texto=logro,
+                seccion="Logro de aprendizaje",
+                id_silabo="SIL_1",
+            )
+        ],
+    )
+    caso = {
+        "id_silabo": "SIL_1",
+        "curso": "Investigación de mercados",
+        "sumilla": logro,
+        "logro_general": logro,
+        "logro": logro,
+        "competencias_declaradas": [],
+        "herramientas_detectadas": [],
+        "evidencia_herramientas": [],
+    }
+
+    errores = analista_llm._validar_decision(decision, caso)
+
+    assert "SIN_EVIDENCIA_LLM" not in errores
+    assert "EVIDENCIA_NO_ENCONTRADA" not in errores
+    assert "FUENTE_SILABO_INCORRECTO" not in errores
+
+    errores_fuera_de_scope = analista_llm._validar_decision(
+        decision.model_copy(
+            update={
+                "fuentes": [
+                    analista_llm.FuenteCurricular(texto=logro, id_silabo="SIL_2")
+                ]
+            }
+        ),
+        caso,
+    )
+
+    assert "FUENTE_SILABO_INCORRECTO" in errores_fuera_de_scope
+
+
+def test_normalizacion_especifica_vive_en_el_perfil_de_la_carrera(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    logro = "Estimación y predicción multivariante"
+    decision = _decision_para(
+        logro,
+        competencia=analista_llm.ConceptoPropuesto(nombre="Predicción multivariante"),
+    )
+    analista = _LLMDecisionesFalso("gpt-test", decision)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: analista)
+    monkeypatch.setattr(
+        analista_llm,
+        "_cargar_perfil",
+        lambda _carrera, _periodo: {
+            "carrera": "FINANZAS",
+            "periodo": "2026-1",
+            "normalizaciones_habilidad": {
+                logro: "Estimar y predecir multivariante financiero"
+            },
+        },
+    )
+
+    resultado = analista_llm.analizar_registros_curriculares(
+        _registros_para(logro),
+        _catalogo_vacio(),
+        "FINANZAS",
+        "2026-1",
+        tmp_path,
+        inspeccionar=False,
+    )
+
+    assert next(iter(resultado.decisiones.values())).habilidad.nombre == (
+        "Estimar y predecir multivariante financiero"
+    )
+
+
 def test_logro_respalda_balanced_scorecard_sin_autodetectarlo_como_herramienta() -> None:
     logro = (
         "Desarrollar el Tablero de comando (Balanced Scorecard) para hacer seguimiento "

@@ -256,6 +256,7 @@ def _perfil_contextual(perfil: dict[str, object]) -> dict[str, object]:
         "exclusiones": _lista(perfil.get("exclusiones")),
         "contraejemplos": _lista(perfil.get("contraejemplos")),
         "habilidades_evitar": _lista(perfil.get("habilidades_evitar")),
+        "normalizaciones_habilidad": _mapa_texto(perfil.get("normalizaciones_habilidad")),
     }
     if estado == "APROBADO":
         resultado["competencias_preferidas"] = _lista(perfil.get("competencias_preferidas"))
@@ -272,6 +273,18 @@ def _coleccion(valor: object) -> dict[str, object] | list[object]:
     if isinstance(valor, dict):
         return cast(dict[str, object], valor)
     return _lista(valor)
+
+
+def _mapa_texto(valor: object) -> dict[str, str]:
+    """Conserva solo equivalencias textuales declaradas por el perfil."""
+
+    if not isinstance(valor, Mapping):
+        return {}
+    return {
+        str(clave): str(resultado)
+        for clave, resultado in valor.items()
+        if str(clave).strip() and str(resultado).strip()
+    }
 
 
 def _fingerprint(valor: object) -> str:

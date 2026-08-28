@@ -9,6 +9,7 @@ herramientas sospechosas siguen requiriendo una decisión humana.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import re
 import unicodedata
@@ -58,21 +59,21 @@ def clasificar_propuestas(
     """
 
     resultado = [dict(fila) for fila in propuestas]
-    nombres = {
-        indice: normalizar_texto(_nombre(fila))
-        for indice, fila in enumerate(resultado)
-    }
+    nombres = {indice: normalizar_texto(_nombre(fila)) for indice, fila in enumerate(resultado)}
     tipos = {indice: normalizar_texto(fila.get("tipo")) for indice, fila in enumerate(resultado)}
 
-    exact_groups: dict[tuple[str, str], list[int]] = defaultdict(list)
+    # Exact names are only aliases inside the same source package.  A course,
+    # syllabus, execution or source skill with the same label is a different
+    # audit unit and must remain independently decidable.
+    exact_groups: dict[tuple[str, str, str], list[int]] = defaultdict(list)
     for indice, clave in nombres.items():
         if clave:
-            exact_groups[(tipos[indice], clave)].append(indice)
+            exact_groups[(_alcance_fila(resultado[indice]), tipos[indice], clave)].append(indice)
 
     exact_ids: dict[int, str] = {}
     exact_representatives: dict[int, str] = {}
     auto_deduplicated: set[int] = set()
-    for (tipo, clave), indices in sorted(exact_groups.items()):
+    for (_alcance, tipo, clave), indices in sorted(exact_groups.items()):
         if len(indices) < 2:
             continue
         grupo = _grupo("EXACT", tipo, clave)
@@ -91,6 +92,8 @@ def clasificar_propuestas(
         for right in range(left + 1, len(resultado)):
             if not nombres[right] or tipos[left] != tipos[right]:
                 continue
+            if _alcance_fila(resultado[left]) != _alcance_fila(resultado[right]):
+                continue
             if (tipos[left], nombres[left]) == (tipos[right], nombres[right]):
                 continue
             if _posible_equivalencia(nombres[left], nombres[right]):
@@ -102,7 +105,12 @@ def clasificar_propuestas(
         if len(indices) < 2:
             continue
         firma = sorted(
-            (tipos[indice], nombres[indice], _id_fila(resultado[indice]))
+            (
+                _alcance_fila(resultado[indice]),
+                tipos[indice],
+                nombres[indice],
+                _id_fila(resultado[indice]),
+            )
             for indice in indices
         )
         grupo = _grupo("SEMANTIC", *("|".join(partes) for partes in firma))
@@ -160,12 +168,8 @@ def clasificar_propuestas(
                 "representative_id": exact_representatives.get(indice),
                 "auto_dedup_representative_id": exact_representatives.get(indice),
                 "auto_dedup_group": grupo_exacto,
-                "representante_duplicado_exacto": bool(
-                    grupo_exacto and not es_auto_deduplicada
-                ),
-                "auto_dedup_representative": bool(
-                    grupo_exacto and not es_auto_deduplicada
-                ),
+                "representante_duplicado_exacto": bool(grupo_exacto and not es_auto_deduplicada),
+                "auto_dedup_representative": bool(grupo_exacto and not es_auto_deduplicada),
                 "exact_duplicate_role": (
                     "SUPPRESSED"
                     if es_auto_deduplicada
@@ -174,9 +178,7 @@ def clasificar_propuestas(
                     else None
                 ),
                 "auto_deduplicated": es_auto_deduplicada,
-                "auto_deduplication_state": (
-                    "AUTO_DEDUPLICATED" if es_auto_deduplicada else None
-                ),
+                "auto_deduplication_state": ("AUTO_DEDUPLICATED" if es_auto_deduplicada else None),
                 "posible_duplicado_semantico": bool(grupo_semantico),
                 "semantic_duplicate": bool(grupo_semantico),
                 "grupo_duplicado_semantico": grupo_semantico,
@@ -252,9 +254,7 @@ def resumen_clasificacion(propuestas: list[dict[str, object]]) -> dict[str, int]
                 if fila.get("grupo_duplicado_semantico")
             }
         ),
-        "auto_deduplicated_rows": sum(
-            bool(fila.get("auto_deduplicated")) for fila in propuestas
-        ),
+        "auto_deduplicated_rows": sum(bool(fila.get("auto_deduplicated")) for fila in propuestas),
         "auto_deduplicated_groups": len(
             {
                 fila.get("grupo_duplicado_exacto")
@@ -276,9 +276,41 @@ def _id_fila(fila: dict[str, object]) -> str:
     return str(fila.get("id_pendiente") or "")
 
 
-def _representante_exacto(
-    indices: list[int], propuestas: list[dict[str, object]]
-) -> int:
+def _alcance_fila(fila: dict[str, object]) -> str:
+    """Return a stable source scope for deduplication, never a global name key."""
+
+    identity = fila.get("source_identity")
+    if isinstance(identity, dict):
+        values = {
+            key: str(identity.get(key) or "")
+            for key in (
+                "id_ejecucion",
+                "carrera",
+                "periodo",
+                "id_curso",
+                "id_silabo",
+                "id_habilidad_fuente",
+            )
+        }
+    else:
+        values = {
+            "id_ejecucion": str(fila.get("id_ejecucion") or fila.get("execution_id") or ""),
+            "carrera": str(fila.get("carrera") or fila.get("career") or ""),
+            "periodo": str(fila.get("periodo") or fila.get("period") or ""),
+            "id_curso": str(fila.get("id_curso") or fila.get("course_id") or ""),
+            "id_silabo": str(
+                fila.get("id_silabo") or fila.get("syllabus_id") or fila.get("silabo") or ""
+            ),
+            "id_habilidad_fuente": str(
+                fila.get("id_habilidad_fuente") or fila.get("source_skill_id") or ""
+            ),
+        }
+    package_id = str(fila.get("id_paquete_chh") or fila.get("package_id") or "")
+    values["package_id"] = package_id
+    return json.dumps(values, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _representante_exacto(indices: list[int], propuestas: list[dict[str, object]]) -> int:
     """Choose a representative without relying on the input order.
 
     A numeric confidence is strongest evidence when present. Ties then use the
@@ -299,8 +331,10 @@ def _representante_exacto(
 
 def _confianza(fila: dict[str, object]) -> float:
     valor = fila.get("confianza")
+    if valor is None:
+        return -1.0
     try:
-        numero = float(valor) if valor is not None else -1.0
+        numero = float(str(valor))
     except (TypeError, ValueError):
         return -1.0
     return numero if math.isfinite(numero) else -1.0

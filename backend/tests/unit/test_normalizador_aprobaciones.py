@@ -150,6 +150,30 @@ def test_aprobar_y_mantener_pendiente_promueve_solo_al_perfil_y_conserva_evidenc
     assert all("revisor@example.com" in linea for linea in decisiones)
 
 
+def test_decision_de_paquete_resuelve_todas_las_filas_accionables_de_forma_atomica(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directorio, _ = _preparar(tmp_path, monkeypatch)
+    paquete = aprobaciones._paquetes(directorio, aprobaciones._filas_clasificadas(directorio))[0]
+
+    resultado = aprobaciones.aplicar_decisiones_curriculares(
+        directorio,
+        [{"id_paquete_chh": paquete["id_paquete_chh"], "decision": "KEEP_PENDING"}],
+        actor="package-reviewer",
+    )
+
+    assert resultado["aprobacion"]["accepted_in_request"] == 0
+    assert resultado["aprobacion"]["kept_pending_in_request"] == 2
+    filas = [
+        json.loads(line)
+        for line in (directorio / "salidas/reportes/pendientes_curriculares.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert {fila["decision"] for fila in filas} == {"KEEP_PENDING"}
+    assert {fila["id_paquete_chh"] for fila in filas} == {paquete["id_paquete_chh"]}
+
+
 def test_repetir_la_misma_decision_es_idempotente_y_los_ids_duplicados_se_rechazan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -178,6 +202,50 @@ def test_repetir_la_misma_decision_es_idempotente_y_los_ids_duplicados_se_rechaz
         )
 
 
+def test_aprobar_los_tres_extremos_materializa_una_cadena_chh_valida(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directorio, _ = _preparar(tmp_path, monkeypatch)
+    ruta = directorio / "salidas/reportes/pendientes_curriculares.jsonl"
+    filas = [json.loads(linea) for linea in ruta.read_text(encoding="utf-8").splitlines()]
+    filas.append(
+        {
+            "id_pendiente": "PEN_SKILL",
+            "tipo": "habilidad",
+            "estado_resolucion": "PENDIENTE_AMPLIACION_PERFIL",
+            "id_curso": "CUR_1",
+            "id_silabo": "SIL_1",
+            "archivo": "curso.docx",
+            "id_habilidad_fuente": "HAB_SRC_1",
+            "descripcion_fuente": "Analizar campañas.",
+            "propuesta": {
+                "nombre": "Analizar campañas",
+                "descripcion": "Analizar campañas.",
+            },
+            "evidencia": ["Analizar campañas."],
+        }
+    )
+    ruta.write_text("".join(json.dumps(fila) + "\n" for fila in filas), encoding="utf-8")
+
+    resultado = aprobaciones.aplicar_decisiones_curriculares(
+        directorio,
+        [
+            {"id_pendiente": "PEN_COMP", "decision": "ADD"},
+            {"id_pendiente": "PEN_TOOL", "decision": "ADD"},
+            {"id_pendiente": "PEN_SKILL", "decision": "ADD"},
+        ],
+    )
+
+    gate = resultado["aprobacion"]["release_gate"]
+    assert gate["decision"] == "ALLOW_IMPORT"
+    assert gate["checks"]["chh_graph"]["ok"] is True
+    cobertura = list(
+        csv.DictReader((directorio / "salidas/cobertura_curricular.csv").open(encoding="utf-8-sig"))
+    )
+    assert len(cobertura) == 1
+    assert cobertura[0]["id_herramienta"]
+
+
 def test_no_permite_aprobacion_de_ejecucion_en_curso_o_id_desconocido(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -186,6 +254,23 @@ def test_no_permite_aprobacion_de_ejecucion_en_curso_o_id_desconocido(
     with pytest.raises(aprobaciones.AprobacionNoPermitida, match="terminado"):
         aprobaciones.aplicar_decisiones_curriculares(
             directorio, [{"id_pendiente": "PEN_COMP", "decision": "ADD"}]
+        )
+
+
+def test_no_permite_promover_un_pendiente_de_otra_carrera_o_periodo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directorio, _ = _preparar(tmp_path, monkeypatch)
+    ruta = directorio / "salidas/reportes/pendientes_curriculares.jsonl"
+    filas = [json.loads(linea) for linea in ruta.read_text(encoding="utf-8").splitlines()]
+    filas[0]["carrera"] = "INGENIERIA_DE_SISTEMAS"
+    filas[0]["periodo"] = "2030-1"
+    ruta.write_text("".join(json.dumps(fila) + "\n" for fila in filas), encoding="utf-8")
+
+    with pytest.raises(aprobaciones.DecisionCurricularInvalida, match="alcance"):
+        aprobaciones.aplicar_decisiones_curriculares(
+            directorio,
+            [{"id_pendiente": "PEN_COMP", "decision": "ADD"}],
         )
 
 
@@ -224,6 +309,87 @@ def test_endpoint_expone_y_aplica_el_checkpoint_curricular(
     estado_reiniciado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}")
     assert estado_reiniciado.status_code == 200
     assert estado_reiniciado.json()["aprobacion_curricular"]["accepted"] == 1
+
+
+def test_endpoint_acepta_decision_de_paquete_y_expone_revision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directorio, id_ejecucion = _preparar(tmp_path, monkeypatch)
+    gestor_api = GestorEjecuciones(directorio.parent)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor_api)
+    cliente = TestClient(servidor.app)
+
+    pendientes = cliente.get(
+        f"/normalizador/ejecuciones/{id_ejecucion}/pendientes?incluir_resueltas=false"
+    ).json()
+    assert pendientes["paquetes_total"] == 1
+    assert pendientes["revision"]
+    package_id = pendientes["paquetes"][0]["id_paquete_chh"]
+    respuesta = cliente.post(
+        f"/normalizador/ejecuciones/{id_ejecucion}/pendientes/decidir",
+        json={
+            "paquetes": [{"id_paquete_chh": package_id, "decision": "KEEP_PENDING"}],
+            "revision": pendientes["revision"],
+        },
+    )
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["aprobacion"]["kept_pending_in_request"] == 2
+
+
+def test_endpoint_rechaza_payload_con_listas_de_decision_ambiguas(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, id_ejecucion = _preparar(tmp_path, monkeypatch)
+    gestor_api = GestorEjecuciones(tmp_path / "ejecuciones")
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor_api)
+    respuesta = TestClient(servidor.app).post(
+        f"/normalizador/ejecuciones/{id_ejecucion}/pendientes/decidir",
+        json={
+            "decisiones": [{"id_pendiente": "PEN_COMP", "decision": "KEEP_PENDING"}],
+            "paquetes": [{"id_paquete_chh": "PKG_UNKNOWN", "decision": "KEEP_PENDING"}],
+        },
+    )
+
+    assert respuesta.status_code == 422
+    assert "Payload ambiguo" in respuesta.json()["detail"]
+
+
+def test_relaciones_de_evidencia_no_cruzan_competencias_de_otro_source_package() -> None:
+    scope = {
+        "id_ejecucion": "NOR_1",
+        "carrera": "MARKETING",
+        "periodo": "2026-1",
+        "id_curso": "CUR_1",
+        "id_silabo": "SIL_1",
+        "id_habilidad_fuente": "SRC_1",
+    }
+    fila = {**scope, "id_pendiente": "PEN_1"}
+    archivos = {
+        "catalogo_competencias.csv": [{"id_competencia": "COMP_1"}, {"id_competencia": "COMP_2"}],
+        "catalogo_habilidades.csv": [{"id_habilidad": "HAB_1"}],
+        "catalogo_herramientas.csv": [],
+    }
+    fuentes = {
+        "competencias_fuente.jsonl": [
+            {**scope, "id_competencia_canonica": "COMP_1"},
+            {**{**scope, "id_habilidad_fuente": "SRC_2"}, "id_competencia_canonica": "COMP_2"},
+        ],
+        "habilidades_fuente.jsonl": [{**scope, "id_habilidad_canonica": "HAB_1"}],
+        "herramientas_fuente.jsonl": [],
+    }
+    relaciones: list[dict[str, str]] = []
+
+    aprobaciones._añadir_relaciones_de_evidencia(
+        fila,
+        "habilidad",
+        "HAB_1",
+        archivos,
+        fuentes,
+        relaciones,
+    )
+
+    assert [relation["id_competencia"] for relation in relaciones] == ["COMP_1"]
 
 
 def test_clasifica_repetidas_exactas_semanticas_y_herramienta_no_relacionada() -> None:
@@ -276,9 +442,10 @@ def test_clasifica_repetidas_exactas_semanticas_y_herramienta_no_relacionada() -
     por_id = {fila["id_pendiente"]: fila for fila in filas}
     assert por_id["PEN_EXACT_1"]["duplicado_exacto"] is True
     assert por_id["PEN_EXACT_2"]["duplicado_exacto"] is True
-    assert por_id["PEN_EXACT_1"]["grupo_duplicado_exacto"] == por_id["PEN_EXACT_2"][
-        "grupo_duplicado_exacto"
-    ]
+    assert (
+        por_id["PEN_EXACT_1"]["grupo_duplicado_exacto"]
+        == por_id["PEN_EXACT_2"]["grupo_duplicado_exacto"]
+    )
     assert por_id["PEN_EXACT_2"]["auto_deduplicated"] is False
     assert por_id["PEN_EXACT_2"]["exact_duplicate_representative_id"] == "PEN_EXACT_2"
     assert por_id["PEN_EXACT_2"]["requiere_decision"] is True
@@ -300,7 +467,7 @@ def test_clasifica_repetidas_exactas_semanticas_y_herramienta_no_relacionada() -
     }
 
 
-def test_deduplicados_exactos_no_bloquean_cola_ni_gate_y_semanticos_siguen_pendientes(
+def test_deduplicacion_exacta_se_limita_al_paquete_fuente_y_no_cruza_cursos(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     directorio, _ = _preparar(tmp_path, monkeypatch)
@@ -310,6 +477,7 @@ def test_deduplicados_exactos_no_bloquean_cola_ni_gate_y_semanticos_siguen_pendi
             "tipo": "competencia",
             "id_curso": "CUR_1",
             "id_silabo": "SIL_1",
+            "id_habilidad_fuente": "SRC_1",
             "propuesta": {"nombre": "Gestión de campañas", "descripcion": "Diseñar."},
             "evidencia": ["Diseñar campañas omnicanal."],
             "confianza": 0.95,
@@ -319,6 +487,7 @@ def test_deduplicados_exactos_no_bloquean_cola_ni_gate_y_semanticos_siguen_pendi
             "tipo": "competencia",
             "id_curso": "CUR_2",
             "id_silabo": "SIL_2",
+            "id_habilidad_fuente": "SRC_2",
             "propuesta": {"nombre": "Gestión de campañas", "descripcion": "Gestionar."},
             "evidencia": ["Gestionar campañas omnicanal."],
             "confianza": 0.40,
@@ -328,6 +497,7 @@ def test_deduplicados_exactos_no_bloquean_cola_ni_gate_y_semanticos_siguen_pendi
             "tipo": "habilidad",
             "id_curso": "CUR_3",
             "id_silabo": "SIL_3",
+            "id_habilidad_fuente": "SRC_3",
             "propuesta": {"nombre": "Analizar datos empresariales"},
             "evidencia": ["Analizar datos."],
         },
@@ -336,6 +506,7 @@ def test_deduplicados_exactos_no_bloquean_cola_ni_gate_y_semanticos_siguen_pendi
             "tipo": "habilidad",
             "id_curso": "CUR_4",
             "id_silabo": "SIL_4",
+            "id_habilidad_fuente": "SRC_4",
             "propuesta": {"nombre": "Analizar datos comerciales"},
             "evidencia": ["Analizar datos."],
         },
@@ -348,22 +519,23 @@ def test_deduplicados_exactos_no_bloquean_cola_ni_gate_y_semanticos_siguen_pendi
     cola = aprobaciones.pendientes_para_revision(directorio)
     assert {fila["id_pendiente"] for fila in cola} == {
         "PEN_EXACT_REP",
+        "PEN_EXACT_SUPPRESSED",
         "PEN_SEM_1",
         "PEN_SEM_2",
     }
     resumen = aprobaciones.resumen_aprobacion_curricular(directorio)
-    assert resumen["pendientes_por_decidir"] == 3
-    assert resumen["remaining_pending"] == 3
-    assert resumen["clasificacion"]["auto_deduplicated_rows"] == 1
+    assert resumen["pendientes_por_decidir"] == 4
+    assert resumen["remaining_pending"] == 4
+    assert resumen["clasificacion"]["auto_deduplicated_rows"] == 0
 
     resultado = aprobaciones.aplicar_decisiones_curriculares(
         directorio,
         [{"id_pendiente": "PEN_EXACT_REP", "decision": "ADD"}],
     )
     aprobacion = resultado["aprobacion"]
-    assert aprobacion["pendientes_por_decidir"] == 2
-    assert aprobacion["remaining_pending"] == 2
-    assert aprobacion["release_gate"]["checks"]["approval"]["pending_decision"] == 2
+    assert aprobacion["pendientes_por_decidir"] == 3
+    assert aprobacion["remaining_pending"] == 3
+    assert aprobacion["release_gate"]["checks"]["approval"]["pending_decision"] == 3
     assert "PENDING_DECISIONS" in aprobacion["release_gate"]["blockers"]
 
     persistidas = [
@@ -372,22 +544,16 @@ def test_deduplicados_exactos_no_bloquean_cola_ni_gate_y_semanticos_siguen_pendi
         .read_text(encoding="utf-8")
         .splitlines()
     ]
-    suprimida = next(
+    independiente = next(
         fila for fila in persistidas if fila["id_pendiente"] == "PEN_EXACT_SUPPRESSED"
     )
-    assert suprimida["evidencia"] == ["Gestionar campañas omnicanal."]
-    assert suprimida["auto_deduplicated"] is True
-    assert suprimida["exact_duplicate_representative_id"] == "PEN_EXACT_REP"
-
-    with pytest.raises(aprobaciones.DecisionCurricularInvalida, match="deduplicado"):
-        aprobaciones.aplicar_decisiones_curriculares(
-            directorio,
-            [{"id_pendiente": "PEN_EXACT_SUPPRESSED", "decision": "ADD"}],
-        )
+    assert independiente["evidencia"] == ["Gestionar campañas omnicanal."]
+    assert independiente["auto_deduplicated"] is False
 
     aprobaciones.aplicar_decisiones_curriculares(
         directorio,
         [
+            {"id_pendiente": "PEN_EXACT_SUPPRESSED", "decision": "ADD"},
             {"id_pendiente": "PEN_SEM_1", "decision": "KEEP_PENDING"},
             {"id_pendiente": "PEN_SEM_2", "decision": "KEEP_PENDING"},
         ],
@@ -426,17 +592,13 @@ def test_no_materializa_csv_canónico_mientras_haya_propuestas_sin_decidir(
             "herramientas_evidencia": [],
         },
     }
-    id_habilidad_fuente = analista_llm._hash_id(
-        "HAB_SRC", "SIL_1", "L1", "Analizar campañas."
-    )
+    id_habilidad_fuente = analista_llm._hash_id("HAB_SRC", "SIL_1", "L1", "Analizar campañas.")
     resultado = DecisionCurricular(
         id_habilidad_fuente=id_habilidad_fuente,
         competencia=ConceptoPropuesto(
             nombre="Diseño omnicanal", descripcion="Diseñar campañas omnicanal."
         ),
-        habilidad=ConceptoPropuesto(
-            nombre="Analizar campañas", descripcion="Analizar campañas."
-        ),
+        habilidad=ConceptoPropuesto(nombre="Analizar campañas", descripcion="Analizar campañas."),
         evidencia=["Analizar campañas."],
         confianza=0.9,
     )
@@ -505,6 +667,5 @@ def test_no_materializa_csv_canónico_mientras_haya_propuestas_sin_decidir(
     assert respuesta.json()["aprobacion"]["pendientes_por_decidir"] == 0
     assert all((salida / nombre).is_file() for nombre, _ in aprobaciones.ARCHIVOS_SALIDA)
     assert (
-        json.loads((reportes / "candidatos_curriculares.json").read_text())["materialized"]
-        is True
+        json.loads((reportes / "candidatos_curriculares.json").read_text())["materialized"] is True
     )

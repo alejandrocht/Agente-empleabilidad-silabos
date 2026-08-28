@@ -84,7 +84,11 @@ def crear_perfil_bootstrap(
 
     release_gate = _leer_json_dict(reportes_origen / "release_gate.json")
     pendientes_por_estado = _contar_estados(pendientes)
-    estado = "BORRADOR_CON_PENDIENTES" if pendientes else "BORRADOR"
+    estado = (
+        "BORRADOR_CON_PENDIENTES"
+        if pendientes or release_gate.get("decision") != "ALLOW_IMPORT"
+        else "BORRADOR"
+    )
     provenance = {}
     checks = release_gate.get("checks")
     if isinstance(checks, dict) and isinstance(checks.get("provenance"), dict):

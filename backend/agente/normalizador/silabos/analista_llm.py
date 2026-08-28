@@ -62,6 +62,14 @@ class HerramientaPropuesta(BaseModel):
     evidencia: str = Field(default="", max_length=500)
 
 
+class FuenteCurricular(BaseModel):
+    """Cita estructurada que el LLM debe asociar a un sílabo concreto."""
+
+    texto: str = Field(min_length=2, max_length=1000)
+    seccion: str = Field(default="", max_length=160)
+    id_silabo: str = Field(default="", max_length=120)
+
+
 class DecisionCurricular(BaseModel):
     """Decisión semántica para un logro específico."""
 
@@ -70,6 +78,7 @@ class DecisionCurricular(BaseModel):
     habilidad: ConceptoPropuesto
     herramientas: list[HerramientaPropuesta] = Field(default_factory=list, max_length=8)
     evidencia: list[str] = Field(default_factory=list, max_length=6)
+    fuentes: list[FuenteCurricular] = Field(default_factory=list, max_length=6)
     justificacion: str = Field(default="", max_length=1200)
     confianza: float = Field(ge=0, le=1)
     requiere_revision: bool = False
@@ -279,25 +288,6 @@ _NOMINALIZACIONES_HABILIDAD = {
     "prototipado": "prototipar",
     "diagnostico": "diagnosticar",
     "clasificacion": "clasificar",
-}
-_NORMALIZACIONES_FRASES_HABILIDAD = {
-    "estimacion y prediccion multivariante": (
-        "Estimar y predecir fenómenos de marketing mediante métodos multivariantes"
-    ),
-    "elaboracion y seguimiento de cronogramas de proyectos": (
-        "Elaborar y seguir cronogramas de proyectos"
-    ),
-    "procesamiento y tabulacion de datos de mercado": ("Procesar y tabular datos de mercado"),
-    "diagnostico y delimitacion de problemas de investigacion de mercados": (
-        "Diagnosticar y delimitar problemas de investigación de mercados"
-    ),
-    "ejecucion y seleccion de conceptos creativos": ("Ejecutar y seleccionar conceptos creativos"),
-    "planificacion y ejecucion estrategica de negociaciones": (
-        "Planificar y ejecutar negociaciones estratégicas"
-    ),
-    "evaluacion del aporte de promociones btl a la cadena de valor": (
-        "Evaluar el aporte de promociones BTL a la cadena de valor"
-    ),
 }
 _HABILIDADES_GENERICAS = {
     "comunicar",
@@ -666,7 +656,7 @@ def analizar_registros_curriculares(
                 # caso. Python puede completar únicamente con el logro literal;
                 # nunca fabrica una cita ni acepta un caso sin texto fuente.
                 decision = _completar_evidencia(decision, caso)
-                decision = _normalizar_habilidad(decision)
+                decision = _normalizar_habilidad(decision, perfil)
                 errores = _validar_decision(decision, caso)
                 if errores:
                     if usar_escalamiento and _errores_residuales_escalables(errores):
@@ -749,7 +739,7 @@ def analizar_registros_curriculares(
                     continue
                 procesados.add(decision.id_habilidad_fuente)
                 decision = _completar_evidencia(decision, caso)
-                decision = _normalizar_habilidad(decision)
+                decision = _normalizar_habilidad(decision, perfil)
                 errores = _validar_decision(decision, caso)
                 if errores:
                     reportes.append(
@@ -1064,12 +1054,13 @@ def _prompt_analista(
         "del catálogo. Propón una habilidad observable por logro, una competencia profesional "
         "que agrupe la habilidad y herramientas solo cuando aparezcan en la evidencia. Puedes "
         "crear conceptos nuevos si el sílabo los respalda. No inventes IDs ni evidencia. No uses "
-        "la taxonomía de Ingeniería de Sistemas para interpretar Marketing.\n\n"
+        "taxonomías de otra carrera: usa el perfil entregado como contexto específico.\n\n"
         "Perfil curado y defensivo:\n"
         f"{json.dumps(perfil_prompt, ensure_ascii=False, indent=2)}\n\n"
         "Devuelve una decisión por cada id_habilidad_fuente, incluso si requiere_revision=true. "
         "La habilidad debe comenzar con una acción profesional y tener verbo + objeto. La "
-        "evidencia debe copiar fragmentos exactos del caso.\n\n"
+        "evidencia debe copiar fragmentos exactos del caso. Cuando declares fuentes, devuelve "
+        "objetos con texto exacto, seccion e id_silabo del caso correspondiente.\n\n"
         f"CASOS:\n{json.dumps(list(lote), ensure_ascii=False, indent=2)}"
     )
 
@@ -1086,8 +1077,8 @@ def _prompt_inspector(
         "competencia es disciplinar. La herramienta es opcional: si no existe una herramienta "
         "concreta en el sílabo, aprueba la cadena sin herramienta. Si se propone una herramienta, "
         "exige evidencia explícita y rechaza herramientas genéricas o inventadas. Rechaza el uso "
-        "de competencias de Sistemas por sesgo de catálogo, las habilidades genéricas y cualquier "
-        "evidencia inventada. Si hay duda, usa REVISAR.\n\n"
+        "de conceptos del catálogo general que no estén respaldados por el perfil o el sílabo, "
+        "las habilidades genéricas y cualquier evidencia inventada. Si hay duda, usa REVISAR.\n\n"
         f"PERFIL CURADO:\n{json.dumps(perfil_prompt, ensure_ascii=False, indent=2)}\n\n"
         f"CASOS:\n{json.dumps(list(lote), ensure_ascii=False, indent=2)}\n\n"
         f"PROPUESTAS:\n{json.dumps(propuestas, ensure_ascii=False, indent=2)}"
@@ -1352,23 +1343,30 @@ def _validar_decision(
         errores.append("HABILIDAD_SIN_VERBO_OBSERVABLE")
     if not clave_concepto(decision.competencia.nombre):
         errores.append("COMPETENCIA_VACIA")
-    fuente = " ".join(
+    fuente_completa = " ".join(
         str(caso.get(campo) or "")
         for campo in ("curso", "sumilla", "logro_general", "logro", "contenido_relacionado")
     )
-    fuente_clave = clave_concepto(fuente)
+    fuente_clave = clave_concepto(fuente_completa)
     if not _competencia_anclada_en_fuente_o_declarada(
         decision.competencia.nombre,
         fuente_clave,
         caso,
     ):
         errores.append("COMPETENCIA_SIN_ANCLA_FUENTE")
+    id_silabo_caso = str(caso.get("id_silabo") or "").strip()
+    for fuente in decision.fuentes:
+        if not fuente.id_silabo:
+            errores.append("FUENTE_SILABO_AUSENTE")
+        elif fuente.id_silabo != id_silabo_caso:
+            errores.append("FUENTE_SILABO_INCORRECTO")
+    evidencias = evidencia_decision(decision)
     evidencias_en_fuente = [
         evidencia
-        for evidencia in decision.evidencia
+        for evidencia in evidencias
         if _evidencia_en_texto(evidencia, fuente_clave)
     ]
-    if not decision.evidencia:
+    if not evidencias:
         errores.append("SIN_EVIDENCIA_LLM")
     elif not evidencias_en_fuente:
         errores.append("EVIDENCIA_NO_ENCONTRADA")
@@ -1530,12 +1528,23 @@ def _completar_evidencia(
 ) -> DecisionCurricular:
     """Completa evidencia omitida por el LLM usando el logro ya extraído."""
 
-    if decision.evidencia:
+    if evidencia_decision(decision):
         return decision
     logro = str(caso.get("logro") or "").strip()
     if not logro:
         return decision
     return decision.model_copy(update={"evidencia": [logro]})
+
+
+def evidencia_decision(decision: DecisionCurricular) -> list[str]:
+    """Devuelve citas legacy y fuentes estructuradas sin duplicarlas."""
+
+    citas: list[str] = []
+    for valor in [*decision.evidencia, *(fuente.texto for fuente in decision.fuentes)]:
+        texto = str(valor or "").strip()
+        if texto and texto not in citas:
+            citas.append(texto)
+    return citas
 
 
 def _normalizar_habilidad_nominalizada(
@@ -1574,11 +1583,22 @@ def _normalizar_habilidad_forma_conjugada(
 
 def _normalizar_habilidad_frase_cerrada(
     decision: DecisionCurricular,
+    perfil: Mapping[str, object] | None,
 ) -> DecisionCurricular:
-    """Aplica solo las siete frases auditadas, sin ampliar el patrón."""
+    """Aplica únicamente equivalencias explícitas del perfil de carrera."""
 
     nombre = decision.habilidad.nombre
-    reemplazo = _NORMALIZACIONES_FRASES_HABILIDAD.get(clave_concepto(nombre))
+    reglas = perfil.get("normalizaciones_habilidad") if isinstance(perfil, Mapping) else None
+    if not isinstance(reglas, Mapping):
+        return decision
+    reemplazo = next(
+        (
+            str(valor).strip()
+            for origen, valor in reglas.items()
+            if clave_concepto(origen) == clave_concepto(nombre) and str(valor).strip()
+        ),
+        None,
+    )
     if reemplazo is None:
         return decision
     if nombre[:1].islower():
@@ -1587,12 +1607,15 @@ def _normalizar_habilidad_frase_cerrada(
     return decision.model_copy(update={"habilidad": habilidad})
 
 
-def _normalizar_habilidad(decision: DecisionCurricular) -> DecisionCurricular:
-    """Normaliza solo formas verbales, nominalizaciones y frases autorizadas."""
+def _normalizar_habilidad(
+    decision: DecisionCurricular,
+    perfil: Mapping[str, object] | None = None,
+) -> DecisionCurricular:
+    """Normaliza formas globales y equivalencias explícitas del perfil."""
 
     decision = _normalizar_habilidad_forma_conjugada(decision)
     decision = _normalizar_habilidad_nominalizada(decision)
-    return _normalizar_habilidad_frase_cerrada(decision)
+    return _normalizar_habilidad_frase_cerrada(decision, perfil)
 
 
 def _evidencia_en_texto(fragmento: str, fuente_normalizada: str) -> bool:

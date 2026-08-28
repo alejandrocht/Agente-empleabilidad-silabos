@@ -31,10 +31,18 @@ from agente.normalizador.silabos.analista_llm import (
     _coincide_nombre_herramienta_en_texto,
     _herramienta_nueva_evidenciada,
     _nombre_herramienta_canonico,
+    evidencia_decision,
 )
 from agente.normalizador.silabos.clasificacion import (
     clasificar_propuestas,
     puede_recibir_decision,
+)
+from agente.normalizador.silabos.integridad_chh import validar_integridad_chh
+from agente.normalizador.silabos.paquetes import (
+    IdentidadFuenteIncompleta,
+    ensamblar_paquetes_chh,
+    preparar_fila_paquete,
+    validar_integridad_paquetes_chh,
 )
 
 COMPETENCIAS_SCHEMA: tuple[str, ...] = (
@@ -82,19 +90,100 @@ _VERBOS_GENERICOS = {
 }
 
 _PALABRAS_NO_EVIDENCIA = {
-    "a", "al", "ante", "bajo", "como", "con", "contra", "cual", "cuales",
-    "de", "del", "desde", "donde", "durante", "el", "ella", "ellas", "ellos",
-    "en", "entre", "es", "esta", "este", "estos", "la", "las", "lo", "los",
-    "mediante", "para", "por", "que", "se", "segun", "sin", "sobre", "su",
-    "sus", "un", "una", "unas", "uno", "unos", "y",
-    "analiza", "analizar", "aplica", "aplicar", "argumenta", "argumentar",
-    "conoce", "conocer", "construye", "construir", "crea", "crear", "describe",
-    "describir", "determina", "determinar", "desarrolla", "desarrollar", "diseña",
-    "diseñar", "elabora", "elaborar", "evalua", "evaluar", "examina", "examinar",
-    "explica", "explicar", "fundamenta", "fundamentar", "genera", "generar",
-    "identifica", "identificar", "interpreta", "interpretar", "organiza", "organizar",
-    "plantea", "plantear", "propone", "proponer", "reconoce", "reconocer", "realiza",
-    "realizar", "selecciona", "seleccionar", "utiliza", "utilizar",
+    "a",
+    "al",
+    "ante",
+    "bajo",
+    "como",
+    "con",
+    "contra",
+    "cual",
+    "cuales",
+    "de",
+    "del",
+    "desde",
+    "donde",
+    "durante",
+    "el",
+    "ella",
+    "ellas",
+    "ellos",
+    "en",
+    "entre",
+    "es",
+    "esta",
+    "este",
+    "estos",
+    "la",
+    "las",
+    "lo",
+    "los",
+    "mediante",
+    "para",
+    "por",
+    "que",
+    "se",
+    "segun",
+    "sin",
+    "sobre",
+    "su",
+    "sus",
+    "un",
+    "una",
+    "unas",
+    "uno",
+    "unos",
+    "y",
+    "analiza",
+    "analizar",
+    "aplica",
+    "aplicar",
+    "argumenta",
+    "argumentar",
+    "conoce",
+    "conocer",
+    "construye",
+    "construir",
+    "crea",
+    "crear",
+    "describe",
+    "describir",
+    "determina",
+    "determinar",
+    "desarrolla",
+    "desarrollar",
+    "diseña",
+    "diseñar",
+    "elabora",
+    "elaborar",
+    "evalua",
+    "evaluar",
+    "examina",
+    "examinar",
+    "explica",
+    "explicar",
+    "fundamenta",
+    "fundamentar",
+    "genera",
+    "generar",
+    "identifica",
+    "identificar",
+    "interpreta",
+    "interpretar",
+    "organiza",
+    "organizar",
+    "plantea",
+    "plantear",
+    "propone",
+    "proponer",
+    "reconoce",
+    "reconocer",
+    "realiza",
+    "realizar",
+    "selecciona",
+    "seleccionar",
+    "utiliza",
+    "utilizar",
 }
 
 TCompetencia = TypeVar("TCompetencia", ConceptoCHH, dict[str, str])
@@ -188,10 +277,7 @@ def construir_salidas_curriculares(
                 hallazgos,
                 cuarentena,
                 "REGISTRO_FUERA_DE_CARRERA",
-                (
-                    "El registro no pertenece a la carrera y periodo declarados "
-                    "para esta ejecución."
-                ),
+                ("El registro no pertenece a la carrera y periodo declarados para esta ejecución."),
                 archivo,
                 id_silabo,
                 (
@@ -306,9 +392,9 @@ def construir_salidas_curriculares(
                 catalogo_curricular,
             )
             if codigos_problematicos:
-                declarados_detalle = ", ".join(
-                    sorted({item["codigo"] for item in declaraciones})
-                ) or "ninguno"
+                declarados_detalle = (
+                    ", ".join(sorted({item["codigo"] for item in declaraciones})) or "ninguno"
+                )
                 hallazgos.append(
                     Hallazgo(
                         codigo="LOGRO_CODIGO_INCONSISTENTE",
@@ -354,24 +440,19 @@ def construir_salidas_curriculares(
                         "descripcion_fuente": declaracion["descripcion"],
                         "id_competencia_canonica": competencia.id,
                         "estado_resolucion": "RESUELTA_POR_EVIDENCIA",
-                        "metodo_resolucion": _texto(
-                            declaracion.get("_metodo_resolucion")
-                        ) or resolucion_competencia.metodo,
+                        "metodo_resolucion": _texto(declaracion.get("_metodo_resolucion"))
+                        or resolucion_competencia.metodo,
                         "puntaje_resolucion": declaracion.get("_puntaje_resolucion"),
                         "puntaje_segundo": declaracion.get("_puntaje_segundo"),
                     }
                 else:
                     competencia_fuente = fuente_resuelta[0]
                 fuente = competencias_fuente[competencia_fuente]
-                fuente["metodo_vinculacion_logro"] = _texto(
-                    declaracion.get("_metodo_resolucion")
-                ) or "CODIGO_DECLARADO"
-                fuente["puntaje_vinculacion_logro"] = declaracion.get(
-                    "_puntaje_resolucion", 1.0
+                fuente["metodo_vinculacion_logro"] = (
+                    _texto(declaracion.get("_metodo_resolucion")) or "CODIGO_DECLARADO"
                 )
-                fuente["puntaje_segundo_vinculacion"] = declaracion.get(
-                    "_puntaje_segundo"
-                )
+                fuente["puntaje_vinculacion_logro"] = declaracion.get("_puntaje_resolucion", 1.0)
+                fuente["puntaje_segundo_vinculacion"] = declaracion.get("_puntaje_segundo")
                 competencias_fuente_logro.append(competencia_fuente)
                 competencias_logro.append(competencia)
                 competencias[competencia.id] = {
@@ -451,7 +532,7 @@ def construir_salidas_curriculares(
                         etiqueta=etiqueta,
                         descripcion=descripcion,
                         propuesta=propuesta_competencia,
-                        evidencia=decision_llm.evidencia,
+                        evidencia=evidencia_decision(decision_llm),
                         confianza=decision_llm.confianza,
                     )
 
@@ -481,7 +562,7 @@ def construir_salidas_curriculares(
                         etiqueta=etiqueta,
                         descripcion=descripcion,
                         propuesta=propuesta_habilidad,
-                        evidencia=decision_llm.evidencia,
+                        evidencia=evidencia_decision(decision_llm),
                         confianza=decision_llm.confianza,
                     )
                 else:
@@ -498,7 +579,7 @@ def construir_salidas_curriculares(
                         etiqueta=etiqueta,
                         descripcion=descripcion,
                         propuesta=propuesta_habilidad,
-                        evidencia=decision_llm.evidencia,
+                        evidencia=evidencia_decision(decision_llm),
                         confianza=decision_llm.confianza,
                     )
             elif habilidad_canonica is None:
@@ -534,7 +615,8 @@ def construir_salidas_curriculares(
                     else resolucion_habilidad.metodo
                 ),
                 "puntaje_resolucion": (
-                    decision_llm.confianza if decision_llm is not None
+                    decision_llm.confianza
+                    if decision_llm is not None
                     else resolucion_habilidad.puntaje
                 ),
                 "puntaje_segundo": resolucion_habilidad.puntaje_segundo,
@@ -563,7 +645,7 @@ def construir_salidas_curriculares(
                     "metodo_resolucion": "LLM_CATALOGO",
                     "puntaje_resolucion": decision_llm.confianza,
                     "id_habilidad_fuente": id_habilidad_fuente,
-                    "evidencia_fuente": list(decision_llm.evidencia),
+                    "evidencia_fuente": evidencia_decision(decision_llm),
                 }
                 competencias_fuente_logro.append(competencia_fuente)
             if habilidad_canonica is None:
@@ -695,8 +777,7 @@ def construir_salidas_curriculares(
                     etiqueta,
                 )
         if not any(
-            relacion[0] == id_curso and relacion[1] == id_silabo
-            for relacion in relaciones_fuente
+            relacion[0] == id_curso and relacion[1] == id_silabo for relacion in relaciones_fuente
         ):
             _error(
                 hallazgos,
@@ -743,6 +824,14 @@ def construir_salidas_curriculares(
     }
     reportes = salida / "reportes"
     reportes.mkdir(parents=True, exist_ok=True)
+    for fuente in (
+        *competencias_fuente.values(),
+        *habilidades_fuente.values(),
+        *herramientas_fuente.values(),
+    ):
+        fuente["id_ejecucion"] = directorio_ejecucion.name
+        fuente["carrera"] = carrera_ejecucion
+        fuente["periodo"] = periodo_ejecucion
     _escribir_jsonl(reportes / "competencias_fuente.jsonl", competencias_fuente.values())
     _escribir_jsonl(reportes / "habilidades_fuente.jsonl", habilidades_fuente.values())
     _escribir_jsonl(reportes / "herramientas_fuente.jsonl", herramientas_fuente.values())
@@ -754,8 +843,40 @@ def construir_salidas_curriculares(
         reportes / "cobertura_curricular_canonica.jsonl",
         (_fila_cobertura(relacion, "COB_CUR_CAN") for relacion in sorted(relaciones_canonicas)),
     )
+    for pendiente in pendientes_curriculares:
+        # The execution scope is part of every pending decision. It prevents a
+        # later approval consumer from moving a proposal into another career or
+        # period while keeping the CSV contract unchanged.
+        pendiente["carrera"] = carrera_ejecucion
+        pendiente["periodo"] = periodo_ejecucion
+    pendientes_curriculares = [
+        preparar_fila_paquete(
+            pendiente,
+            id_ejecucion=directorio_ejecucion.name,
+            carrera=carrera_ejecucion,
+            periodo=periodo_ejecucion,
+        )
+        for pendiente in pendientes_curriculares
+    ]
     pendientes_curriculares = clasificar_propuestas(pendientes_curriculares)
     _escribir_jsonl(reportes / PENDIENTES_ARCHIVO, pendientes_curriculares)
+    graph_hallazgos = validar_integridad_chh(filas_por_archivo, relaciones_canonicas)
+    graph_error_codes = {
+        hallazgo.codigo for hallazgo in graph_hallazgos if hallazgo.severidad == "error"
+    }
+    if graph_error_codes:
+        hallazgos.append(
+            Hallazgo(
+                codigo="CHH_GRAPH_GATE_BLOCKED",
+                severidad="warning",
+                mensaje=(
+                    "La salida conserva sus candidatos, pero el release gate bloquea "
+                    "la publicación hasta completar las relaciones CHH."
+                ),
+                hoja="cobertura_curricular.csv",
+                detalle="; ".join(sorted(graph_error_codes)),
+            )
+        )
     _escribir_candidatos_curriculares(
         reportes,
         filas_por_archivo,
@@ -763,6 +884,15 @@ def construir_salidas_curriculares(
             puede_recibir_decision(fila) and not _texto(fila.get("decision"))
             for fila in pendientes_curriculares
         ),
+        pendientes=pendientes_curriculares,
+        id_ejecucion=directorio_ejecucion.name,
+        carrera=carrera_ejecucion,
+        periodo=periodo_ejecucion,
+        fuentes={
+            "competencias_fuente.jsonl": list(competencias_fuente.values()),
+            "habilidades_fuente.jsonl": list(habilidades_fuente.values()),
+            "herramientas_fuente.jsonl": list(herramientas_fuente.values()),
+        },
     )
     canonical_materialized = not any(
         puede_recibir_decision(fila) and not _texto(fila.get("decision"))
@@ -780,6 +910,14 @@ def construir_salidas_curriculares(
             habilidades_fuente,
             herramientas_fuente,
             relaciones_canonicas,
+        )
+        # Graph failures are already represented by the dedicated release
+        # check above. Keep them out of the generic extraction-error channel so
+        # a candidate package remains reviewable while import stays blocked.
+        hallazgos_validacion = tuple(
+            hallazgo
+            for hallazgo in hallazgos_validacion
+            if hallazgo.codigo not in graph_error_codes
         )
     else:
         _retirar_csv_canónico(salida)
@@ -959,8 +1097,7 @@ def _concepto_declarado(
     return ConceptoCHH(
         id=_hash_id("COMP", nombre),
         nombre=nombre,
-        descripcion=declaracion.get("descripcion", "")
-        or f"Capacidad para {nombre.lower()}.",
+        descripcion=declaracion.get("descripcion", "") or f"Capacidad para {nombre.lower()}.",
         tipo=tipo,
     )
 
@@ -1029,9 +1166,7 @@ def _hallazgos_consistencia_silabo(
         )
 
     etiquetas = [
-        _texto(logro.get("etiqueta")).upper()
-        for logro in outcomes
-        if _texto(logro.get("etiqueta"))
+        _texto(logro.get("etiqueta")).upper() for logro in outcomes if _texto(logro.get("etiqueta"))
     ]
     etiquetas_duplicadas = sorted(
         etiqueta for etiqueta in set(etiquetas) if etiquetas.count(etiqueta) > 1
@@ -1046,18 +1181,11 @@ def _hallazgos_consistencia_silabo(
                     "descripciones como evidencias independientes."
                 ),
                 hoja=archivo,
-                detalle=(
-                    f"etiquetas={', '.join(etiquetas_duplicadas)}; "
-                    f"id_silabo={id_silabo}"
-                ),
+                detalle=(f"etiquetas={', '.join(etiquetas_duplicadas)}; id_silabo={id_silabo}"),
             )
         )
 
-    usados = {
-        codigo
-        for logro in outcomes
-        for codigo in _codigos_del_logro(logro)
-    }
+    usados = {codigo for logro in outcomes for codigo in _codigos_del_logro(logro)}
     declarados = {item["codigo"] for item in declaraciones if item["codigo"]}
     no_declarados = sorted(usados - declarados)
     if no_declarados:
@@ -1070,10 +1198,7 @@ def _hallazgos_consistencia_silabo(
                     "competencias del mismo sílabo; se conservará su evidencia."
                 ),
                 hoja=archivo,
-                detalle=(
-                    f"códigos={', '.join(no_declarados)}; "
-                    f"id_silabo={id_silabo}"
-                ),
+                detalle=(f"códigos={', '.join(no_declarados)}; id_silabo={id_silabo}"),
             )
         )
     no_usados = sorted(declarados - usados)
@@ -1153,13 +1278,7 @@ def _codigos_del_logro(logro: dict[str, object]) -> tuple[str, ...]:
     valor = logro.get("codigos_competencia")
     if not isinstance(valor, list):
         return ()
-    return tuple(
-        dict.fromkeys(
-            _texto(codigo).upper()
-            for codigo in valor
-            if _texto(codigo)
-        )
-    )
+    return tuple(dict.fromkeys(_texto(codigo).upper() for codigo in valor if _texto(codigo)))
 
 
 def _competencias_por_texto(
@@ -1261,9 +1380,7 @@ def _seleccionar_competencia_por_puntaje(
     segundo_puntaje = puntuadas[1][0] if len(puntuadas) > 1 else 0
     # El fallback no puede elegir una competencia por una palabra genérica ni
     # resolver empates: para esos casos la evidencia queda en revisión.
-    if mejor_puntaje < 8 or (
-        len(puntuadas) > 1 and mejor_puntaje - segundo_puntaje < 3
-    ):
+    if mejor_puntaje < 8 or (len(puntuadas) > 1 and mejor_puntaje - segundo_puntaje < 3):
         return None
     return mejor_puntaje, segundo_puntaje, mejor
 
@@ -1367,9 +1484,7 @@ def _resolver_habilidad_canonica(
         if len(tokens_nombre | tokens_descripcion) < 2:
             continue
         cobertura_nombre = (
-            len(evidencia & tokens_nombre) / len(tokens_nombre)
-            if tokens_nombre
-            else 0.0
+            len(evidencia & tokens_nombre) / len(tokens_nombre) if tokens_nombre else 0.0
         )
         cobertura_descripcion = (
             len(evidencia & tokens_descripcion) / len(tokens_descripcion)
@@ -1393,9 +1508,7 @@ def _resolver_habilidad_canonica(
         return ResolucionConcepto(None, "SIN_CANDIDATA")
     mejor_score, metodo, mejor = candidatos[0]
     segundo_score = candidatos[1][0] if len(candidatos) > 1 else 0.0
-    if mejor_score < 0.85 or (
-        len(candidatos) > 1 and mejor_score - segundo_score < 0.15
-    ):
+    if mejor_score < 0.85 or (len(candidatos) > 1 and mejor_score - segundo_score < 0.15):
         return ResolucionConcepto(
             None,
             "AMBIGUA_O_INSUFICIENTE",
@@ -1447,9 +1560,7 @@ def _herramientas_explicitas(
             )
             if coincidencia is None:
                 continue
-            clave = "|".join(
-                (herramienta.id, evidencia["seccion"], texto, coincidencia)
-            )
+            clave = "|".join((herramienta.id, evidencia["seccion"], texto, coincidencia))
             if clave not in vistos:
                 vistos.add(clave)
                 encontrados.append(
@@ -1537,10 +1648,7 @@ def _herramienta_decidida(nombre: str, decision: DecisionCurricular) -> bool:
     """Limita las herramientas publicadas a las detectadas por Python."""
 
     clave = _clave_herramienta_canonica(nombre)
-    return any(
-        _clave_herramienta_canonica(item.nombre) == clave
-        for item in decision.herramientas
-    )
+    return any(_clave_herramienta_canonica(item.nombre) == clave for item in decision.herramientas)
 
 
 def _herramientas_llm_nuevas(
@@ -1552,9 +1660,7 @@ def _herramientas_llm_nuevas(
 
     if decision is None:
         return ()
-    existentes = {
-        _clave_herramienta_canonica(item.concepto.nombre) for item in detectadas
-    }
+    existentes = {_clave_herramienta_canonica(item.concepto.nombre) for item in detectadas}
     resultado: list[tuple[ConceptoCHH, dict[str, str]]] = []
     evidencias = _evidencias_herramientas_candidatas(datos)
     for propuesta in decision.herramientas:
@@ -1569,9 +1675,7 @@ def _herramientas_llm_nuevas(
             (
                 item
                 for item in evidencias
-                if _coincide_nombre_herramienta_en_texto(
-                    nombre_canonico, item["texto"]
-                )
+                if _coincide_nombre_herramienta_en_texto(nombre_canonico, item["texto"])
             ),
             None,
         )
@@ -1680,15 +1784,27 @@ def _escribir_candidatos_curriculares(
     filas_por_archivo: dict[str, list[dict[str, str]]],
     *,
     materialized: bool,
+    pendientes: list[dict[str, object]] | None = None,
+    id_ejecucion: str = "",
+    carrera: str = "",
+    periodo: str = "",
+    fuentes: dict[str, list[dict[str, object]]] | None = None,
 ) -> None:
     """Persists canonical candidates separately from importable CSV files."""
 
     contenido = {
         "version": "curricular-candidates/v1",
         "materialized": materialized,
-        "archivos": {
-            nombre: list(filas_por_archivo[nombre]) for nombre, _ in ARCHIVOS_SALIDA
-        },
+        "archivos": {nombre: list(filas_por_archivo[nombre]) for nombre, _ in ARCHIVOS_SALIDA},
+        "paquetes": ensamblar_paquetes_chh(
+            pendientes or [],
+            id_ejecucion=id_ejecucion,
+            carrera=carrera,
+            periodo=periodo,
+            fuentes=fuentes,
+            relaciones=filas_por_archivo.get("cobertura_curricular.csv", []),
+            archivos=filas_por_archivo,
+        ),
         "decision_policy": {
             "exact_duplicates": "AUTO_DEDUPLICATE",
             "semantic_duplicates": "REVIEW_ONLY",
@@ -1850,8 +1966,9 @@ def validar_salidas_curriculares(
 
     ids_cobertura_canonica = {
         (id_curso, id_silabo, id_competencia, id_habilidad, id_herramienta)
-        for id_curso, id_silabo, id_competencia, id_habilidad, id_herramienta
-        in relaciones_canonicas
+        for id_curso, id_silabo, id_competencia, id_habilidad, id_herramienta in (
+            relaciones_canonicas
+        )
     }
     csv_cobertura = {
         (
@@ -1872,11 +1989,15 @@ def validar_salidas_curriculares(
                 hoja="cobertura_curricular.csv",
             )
         )
+    hallazgos.extend(
+        validar_integridad_chh(
+            filas_leidas,
+            ids_cobertura_canonica,
+        )
+    )
 
     declaraciones = _declaraciones_de_registros(registros)
-    nombres_declarados = {
-        clave_concepto(declaracion["nombre"]) for declaracion in declaraciones
-    }
+    nombres_declarados = {clave_concepto(declaracion["nombre"]) for declaracion in declaraciones}
     nombres_publicados = {
         clave_concepto(fila.get("nombre_competencia", "")) for fila in competencias_csv
     }
@@ -1892,9 +2013,8 @@ def validar_salidas_curriculares(
             )
         )
 
-    if (
-        not (salida / "reportes" / "competencias_fuente.jsonl").is_file()
-        or (not competencias_fuente and declaraciones)
+    if not (salida / "reportes" / "competencias_fuente.jsonl").is_file() or (
+        not competencias_fuente and declaraciones
     ):
         hallazgos.append(
             Hallazgo(
@@ -1904,12 +2024,8 @@ def validar_salidas_curriculares(
                 hoja="reportes/competencias_fuente.jsonl",
             )
         )
-    if (
-        not (salida / "reportes" / "habilidades_fuente.jsonl").is_file()
-        or (
-            not ids_habilidad_fuente
-            and any(_logros(datos) for datos in _datos_registros(registros))
-        )
+    if not (salida / "reportes" / "habilidades_fuente.jsonl").is_file() or (
+        not ids_habilidad_fuente and any(_logros(datos) for datos in _datos_registros(registros))
     ):
         hallazgos.append(
             Hallazgo(
@@ -1919,9 +2035,7 @@ def validar_salidas_curriculares(
                 hoja="reportes/habilidades_fuente.jsonl",
             )
         )
-    ids_competencias_salida = {
-        _texto(fila.get("id_competencia")) for fila in competencias_csv
-    }
+    ids_competencias_salida = {_texto(fila.get("id_competencia")) for fila in competencias_csv}
     ids_competencias_fuente = {
         _texto(fila.get("id_competencia_canonica"))
         for fila in competencias_fuente.values()
@@ -2081,8 +2195,54 @@ def evaluar_release_gate(
             )
         }
     )
+    graph_hallazgos = validar_integridad_chh(filas_por_archivo, relaciones_canonicas)
+    graph_errors = tuple(hallazgo for hallazgo in graph_hallazgos if hallazgo.severidad == "error")
+    package_errors: tuple[Hallazgo, ...] = ()
+    package_identity_errors = 0
+    package_rows: list[dict[str, object]] = []
+    for pendiente in pendientes:
+        try:
+            package_rows.append(
+                preparar_fila_paquete(
+                    pendiente,
+                    id_ejecucion=_texto(pendiente.get("id_ejecucion")),
+                    carrera=carrera,
+                    periodo=periodo,
+                )
+            )
+        except IdentidadFuenteIncompleta:
+            package_identity_errors += 1
+    if package_identity_errors:
+        package_errors = (
+            Hallazgo(
+                codigo="PAQUETE_IDENTIDAD_INCOMPLETA",
+                severidad="error",
+                mensaje="Una fila pendiente no tiene identidad completa de paquete fuente.",
+                hoja="pendientes_curriculares.jsonl",
+                detalle=f"filas={package_identity_errors}",
+            ),
+        )
+    elif package_rows:
+        packages = ensamblar_paquetes_chh(
+            package_rows,
+            carrera=carrera,
+            periodo=periodo,
+            fuentes={
+                "competencias_fuente.jsonl": competencias_fuente,
+                "habilidades_fuente.jsonl": habilidades_fuente,
+                "herramientas_fuente.jsonl": herramientas_fuente,
+            },
+            relaciones=filas_por_archivo.get("cobertura_curricular.csv", []),
+            archivos=filas_por_archivo,
+        )
+        package_errors = tuple(validar_integridad_paquetes_chh(packages))
     source_complete = registros > 0 and len(habilidades_fuente) >= logros_fuente
-    no_structural_errors = not any(hallazgo.severidad == "error" for hallazgo in hallazgos)
+    errores_estructurales = {
+        (hallazgo.codigo, hallazgo.hoja, hallazgo.fila, hallazgo.campo, hallazgo.detalle)
+        for hallazgo in (*hallazgos, *graph_errors)
+        if hallazgo.severidad == "error"
+    }
+    no_structural_errors = not errores_estructurales
     blockers: list[str] = []
     if not source_complete:
         blockers.append("SOURCE_COVERAGE_INCOMPLETE")
@@ -2092,6 +2252,10 @@ def evaluar_release_gate(
         blockers.append("CANONICAL_RELATION_UNVERIFIED")
     if relation_references:
         blockers.append("CANONICAL_REFERENCE_MISSING")
+    if graph_errors:
+        blockers.append("CHH_GRAPH_INVALID")
+    if package_errors:
+        blockers.append("CHH_PACKAGE_INVALID")
     if not no_structural_errors:
         blockers.append("STRUCTURAL_ERRORS_PRESENT")
     pendientes_sin_decidir = sum(
@@ -2136,11 +2300,17 @@ def evaluar_release_gate(
                 "ok": not relation_references,
                 "missing": relation_references,
             },
+            "chh_graph": {
+                "ok": not graph_errors,
+                "errors": [hallazgo.a_dict() for hallazgo in graph_errors],
+            },
+            "chh_packages": {
+                "ok": not package_errors,
+                "errors": [hallazgo.a_dict() for hallazgo in package_errors],
+            },
             "structural_errors": {
                 "ok": no_structural_errors,
-                "count": sum(
-                    1 for hallazgo in hallazgos if hallazgo.severidad == "error"
-                ),
+                "count": len(errores_estructurales),
             },
             "pending_preserved": {
                 "ok": len(pendientes) >= max(0, logros_fuente - len(habilidades)),
@@ -2197,9 +2367,7 @@ def _registrar_pendiente(
     evidencia: list[str] | None = None,
     confianza: float | None = None,
 ) -> None:
-    nombre_propuesta = _texto(
-        (propuesta or {}).get("nombre") or (propuesta or {}).get("id")
-    )
+    nombre_propuesta = _texto((propuesta or {}).get("nombre") or (propuesta or {}).get("id"))
     pendientes.append(
         {
             "id_pendiente": _hash_id(
@@ -2280,11 +2448,7 @@ def _ids_unicos(
 
 
 def _datos_registros(registros: list[dict[str, object]]) -> list[dict[str, object]]:
-    return [
-        datos
-        for registro in registros
-        if isinstance((datos := registro.get("datos")), dict)
-    ]
+    return [datos for registro in registros if isinstance((datos := registro.get("datos")), dict)]
 
 
 def _escribir_csv(ruta: Path, columnas: tuple[str, ...], filas: list[dict[str, str]]) -> None:
