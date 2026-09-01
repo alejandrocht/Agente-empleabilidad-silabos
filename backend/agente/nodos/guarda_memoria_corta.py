@@ -47,15 +47,18 @@ def guarda_memoria_corta(
         return {}
     scope = estado.get("memory_scope")
     original = estado.get("pregunta")
-    contextualized = estado.get("pregunta_contextualizada")
     answer = estado.get("respuesta")
     if not is_trusted_memory_scope(scope):
         return {}
     if not isinstance(original, str) or not original:
         return {}
-    if not isinstance(contextualized, str) or not contextualized:
-        return {}
     if not isinstance(answer, str) or not answer:
         return {}
-    memory_store.remember(scope, original, result_anchor=_course_result_anchor(estado.get("filas")))
+    # Context enrichment is intentionally disabled for now; retain the original
+    # question so re-enabling follow-ups later does not lose prior turns.
+    memory_store.remember(
+        scope,
+        original,
+        result_anchor=_course_result_anchor(estado.get("filas")),
+    )
     return {}

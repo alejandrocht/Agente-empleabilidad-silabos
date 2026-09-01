@@ -12,7 +12,7 @@ The script uses the configured .env credentials. It prints:
 
 Probes:
 1. Direct greeting (responder_directo)
-2. Curriculum fact (usar_plantilla or generar_cypher)
+2. Curriculum fact (generar_cypher)
 3. Labor-market ranking (generar_cypher)
 4. Independent entity query
 5. Independent graph query
@@ -70,29 +70,19 @@ async def main() -> None:
 
     print(f"Thread ID: {thread_id}")
     def _eff_bool(name: str, default: str) -> bool:
-        value = os.getenv(name, os.getenv("OPENAI_USE_RESPONSES_API", default))
+        value = os.getenv(name, default)
         return value.strip().lower() in {"1", "true", "yes", "on"}
 
-    shared_model = os.getenv("OPENAI_MODEL", "NOT SET")
-    print(f"Planner model: {os.getenv('OPENAI_MODEL_PLANIFICADOR', shared_model)}")
-    print(f"Generator model: {os.getenv('OPENAI_MODEL_GENERADOR_CYPHER', shared_model)}")
-    print(f"Formatter model: {os.getenv('OPENAI_MODEL_FORMATEADOR', shared_model)}")
-    print(f"Direct model: {os.getenv('OPENAI_MODEL_RESPONDER_DIRECTO', shared_model)}")
-    print(
-        "Responses API planner (effective): "
-        f"{_eff_bool('OPENAI_USE_RESPONSES_API_PLANIFICADOR', 'true')}"
-    )
+    print(f"Orchestrator model: {os.getenv('OPENAI_MODEL_ORQUESTADOR', 'NOT SET')}")
+    print(f"Generator model: {os.getenv('OPENAI_MODEL_GENERADOR_CYPHER', 'NOT SET')}")
+    print(f"Analyst model: {os.getenv('OPENAI_MODEL_ANALISTA', 'NOT SET')}")
     print(
         "Responses API generator (effective): "
         f"{_eff_bool('OPENAI_USE_RESPONSES_API_GENERADOR_CYPHER', 'true')}"
     )
     print(
-        "Responses API formatter (effective): "
-        f"{_eff_bool('OPENAI_USE_RESPONSES_API_FORMATEADOR', 'true')}"
-    )
-    print(
-        "Responses API direct (effective): "
-        f"{_eff_bool('OPENAI_USE_RESPONSES_API_RESPONDER_DIRECTO', 'true')}"
+        "Responses API analyst (effective): "
+        f"{_eff_bool('OPENAI_USE_RESPONSES_API_ANALISTA', 'true')}"
     )
     print()
 

@@ -216,6 +216,158 @@ def test_position_tool_semantics_are_independent_from_variables_and_return_alias
     assert failures == []
 
 
+def test_ranking_rejects_unrequested_identifier_projections_that_fragment_results() -> None:
+    failures = evaluar_semantica(
+        "¿Qué relación existe entre las herramientas requeridas por las ofertas "
+        "y los puestos más demandados?",
+        {
+            "cypher": (
+                "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto) "
+                "MATCH (o)-[:TIENE]->(:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta) "
+                "RETURN p.id_puesto AS puesto_id, p.nombre AS puesto, "
+                "h.id_herramienta AS herramienta_id, h.nombre_herramienta AS herramienta, "
+                "count(DISTINCT o) AS total_ofertas "
+                "ORDER BY total_ofertas DESC LIMIT $limite"
+            ),
+            "parameters": {"limite": 20},
+            "query_limit": 20,
+        },
+        [],
+    )
+
+    assert "ranking_projects_unrequested_identifiers" in failures
+
+
+def test_ranking_allows_identifier_used_only_inside_distinct_count() -> None:
+    failures = evaluar_semantica(
+        "¿Qué empresas tienen más puestos?",
+        {
+            "cypher": (
+                "MATCH (e:Empresa)-[:PUBLICA]->(:Oferta_Laboral)-[:OFRECE]->(p:Puesto) "
+                "RETURN e.nombre AS empresa, count(DISTINCT p.id_puesto) AS total_puestos "
+                "ORDER BY total_puestos DESC LIMIT $limite"
+            ),
+            "parameters": {"limite": 10},
+            "query_limit": 10,
+        },
+        [{"empresa": "Krowdy", "total_puestos": 8}],
+    )
+
+    assert "ranking_projects_unrequested_identifiers" not in failures
+
+
+def test_ranking_rejects_unrequested_identifier_inside_projected_map() -> None:
+    failures = evaluar_semantica(
+        "¿Cuáles son los puestos más demandados?",
+        {
+            "cypher": (
+                "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto) "
+                "RETURN {puesto_id: p.id_puesto, puesto: p.nombre} AS dimension, "
+                "count(DISTINCT o) AS total_ofertas "
+                "ORDER BY total_ofertas DESC LIMIT $limite"
+            ),
+            "parameters": {"limite": 10},
+            "query_limit": 10,
+        },
+        [{"dimension": {"puesto_id": "PUE_1", "puesto": "Analista"}, "total_ofertas": 8}],
+    )
+
+    assert "ranking_projects_unrequested_identifiers" in failures
+
+
+def test_ranking_allows_identifier_count_inside_projected_map() -> None:
+    failures = evaluar_semantica(
+        "¿Qué empresas tienen más puestos?",
+        {
+            "cypher": (
+                "MATCH (e:Empresa)-[:PUBLICA]->(:Oferta_Laboral)-[:OFRECE]->(p:Puesto) "
+                "RETURN e.nombre AS empresa, "
+                "{total_puestos: count(DISTINCT p.id_puesto)} AS metricas "
+                "ORDER BY metricas.total_puestos DESC LIMIT $limite"
+            ),
+            "parameters": {"limite": 10},
+            "query_limit": 10,
+        },
+        [{"empresa": "Krowdy", "metricas": {"total_puestos": 8}}],
+    )
+
+    assert "ranking_projects_unrequested_identifiers" not in failures
+
+
+def test_ranking_does_not_treat_id_in_company_name_as_identifier_intent() -> None:
+    failures = evaluar_semantica(
+        "¿Qué puestos demanda más ID Logistics?",
+        {
+            "cypher": (
+                "MATCH (:Empresa)-[:PUBLICA]->(o:Oferta_Laboral)-[:OFRECE]->(p:Puesto) "
+                "RETURN p.id_puesto AS puesto_id, p.nombre AS puesto, "
+                "count(DISTINCT o) AS total_ofertas "
+                "ORDER BY total_ofertas DESC LIMIT $limite"
+            ),
+            "parameters": {"limite": 10},
+            "query_limit": 10,
+        },
+        [{"puesto_id": "PUE_1", "puesto": "Analista", "total_ofertas": 8}],
+    )
+
+    assert "ranking_projects_unrequested_identifiers" in failures
+
+
+def test_ranking_rejects_blank_visible_dimensions_in_returned_rows() -> None:
+    failures = evaluar_semantica(
+        "¿Cuáles son los puestos más demandados?",
+        {
+            "cypher": (
+                "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto) "
+                "RETURN p.nombre AS puesto, count(DISTINCT o) AS total_ofertas "
+                "ORDER BY total_ofertas DESC LIMIT $limite"
+            ),
+            "parameters": {"limite": 10},
+            "query_limit": 10,
+        },
+        [{"puesto": "", "total_ofertas": 55}],
+    )
+
+    assert "ranking_contains_blank_dimension" in failures
+
+
+def test_ranking_ignores_blank_non_dimension_metadata() -> None:
+    failures = evaluar_semantica(
+        "¿Cuáles son los puestos más demandados?",
+        {
+            "cypher": (
+                "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto) "
+                "RETURN p.nombre AS puesto, count(DISTINCT o) AS total_ofertas "
+                "ORDER BY total_ofertas DESC LIMIT $limite"
+            ),
+            "parameters": {"limite": 10},
+            "query_limit": 10,
+        },
+        [{"puesto": "Analista", "descripcion": "", "total_ofertas": 55}],
+    )
+
+    assert "ranking_contains_blank_dimension" not in failures
+
+
+def test_ranking_rejects_blank_visible_dimension_inside_projected_map() -> None:
+    failures = evaluar_semantica(
+        "¿Cuáles son los puestos más demandados?",
+        {
+            "cypher": (
+                "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto) "
+                "RETURN {puesto: p.nombre} AS dimension, "
+                "count(DISTINCT o) AS total_ofertas "
+                "ORDER BY total_ofertas DESC LIMIT $limite"
+            ),
+            "parameters": {"limite": 10},
+            "query_limit": 10,
+        },
+        [{"dimension": {"puesto": ""}, "total_ofertas": 8}],
+    )
+
+    assert "ranking_contains_blank_dimension" in failures
+
+
 def test_position_tool_semantics_reject_expected_alias_on_wrong_dimension() -> None:
     failures = evaluar_semantica(
         "¿Qué relación existe entre las herramientas requeridas por las ofertas "
@@ -376,8 +528,7 @@ VALID_TEN_RESULTS = (
         "cypher": (
             "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto) "
             "MATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta) "
-            "RETURN p.id_puesto AS puesto_id, p.nombre AS puesto, "
-            "h.id_herramienta AS herramienta_id, h.nombre_herramienta AS herramienta, "
+            "RETURN p.nombre AS puesto, h.nombre_herramienta AS herramienta, "
             "count(DISTINCT o) AS total_ofertas "
             "ORDER BY total_ofertas DESC LIMIT $limite"
         ),

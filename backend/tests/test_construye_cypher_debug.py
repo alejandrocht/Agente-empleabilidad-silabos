@@ -174,3 +174,99 @@ def test_technology_follow_up_retries_when_generated_query_ignores_tool_node() -
     assert len(generator.calls) == 2
     assert result["cypher"] == good.cypher
     assert "Herramienta" in str(generator.calls[1][1].content)
+
+
+def test_gap_question_retries_optional_match_that_does_not_filter_covered_tools() -> None:
+    bad = GeneratedQuery(
+        cypher=(
+            "MATCH (o:Oferta_Laboral)-[:DIRIGE_A]->(c:Carrera) "
+            "MATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta) "
+            "OPTIONAL MATCH (c)-[:ENSENIA]->(cu:Curso)-[:TIENE]->"
+            "(cc:Cobertura_Curricular)-[:ENSENIA]->(hc:Herramienta) "
+            "WHERE toLower(c.nombre_carrera) CONTAINS toLower($carrera) "
+            "AND toLower(hc.nombre_herramienta) = toLower(h.nombre_herramienta) "
+            "AND hc IS NULL "
+            "RETURN h.nombre_herramienta AS herramienta, "
+            "count(DISTINCT o) AS total_ofertas "
+            "ORDER BY total_ofertas DESC LIMIT $limite"
+        ),
+        parameters={"carrera": "ingenieria de sistemas", "limite": 20},
+    )
+    good = GeneratedQuery(
+        cypher=(
+            "MATCH (o:Oferta_Laboral)-[:DIRIGE_A]->(c:Carrera) "
+            "MATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta) "
+            "WHERE toLower(c.nombre_carrera) CONTAINS toLower($carrera) "
+            "AND h.nombre_herramienta IS NOT NULL "
+            "AND size(trim(h.nombre_herramienta)) > 0 "
+            "AND NOT (c)-[:ENSENIA]->(:Curso)-[:TIENE]->"
+            "(:Cobertura_Curricular)-[:ENSENIA]->(h) "
+            "RETURN h.nombre_herramienta AS herramienta, true AS brecha_curricular, "
+            "count(DISTINCT o) AS total_ofertas "
+            "ORDER BY total_ofertas DESC LIMIT $limite"
+        ),
+        parameters={"carrera": "ingenieria de sistemas", "limite": 20},
+    )
+    generator = SequenceGenerator([bad, good])
+    snapshot = Neo4jSchemaSnapshot(
+        text="schema",
+        structured={
+            "node_props": {
+                "Carrera": ["id_carrera", "nombre_carrera"],
+                "Curso": ["id_curso", "nombre_curso"],
+                "Cobertura_Curricular": ["id_cob_curricular"],
+                "Oferta_Laboral": ["id_ofe_laboral"],
+                "Requerimiento_Laboral": ["id_req_laboral"],
+                "Herramienta": ["id_herramienta", "nombre_herramienta"],
+            },
+            "rel_props": {
+                "DIRIGE_A": [],
+                "TIENE": [],
+                "REQUIERE": [],
+                "ENSENIA": [],
+            },
+            "relationships": [
+                {"start": "Oferta_Laboral", "type": "DIRIGE_A", "end": "Carrera"},
+                {
+                    "start": "Oferta_Laboral",
+                    "type": "TIENE",
+                    "end": "Requerimiento_Laboral",
+                },
+                {
+                    "start": "Requerimiento_Laboral",
+                    "type": "REQUIERE",
+                    "end": "Herramienta",
+                },
+                {"start": "Carrera", "type": "ENSENIA", "end": "Curso"},
+                {
+                    "start": "Curso",
+                    "type": "TIENE",
+                    "end": "Cobertura_Curricular",
+                },
+                {
+                    "start": "Cobertura_Curricular",
+                    "type": "ENSENIA",
+                    "end": "Herramienta",
+                },
+            ],
+        },
+    )
+
+    result = asyncio.run(
+        construye_cypher(
+            {
+                "pregunta": (
+                    "Dime qué herramientas falta cubrir por Ingeniería de Sistemas "
+                    "que el mercado laboral exija"
+                ),
+                "schema": snapshot,
+            },
+            generated_runnable=generator,
+        )
+    )
+
+    assert len(generator.calls) == 2
+    assert result["cypher"] == good.cypher
+    retry_prompt = str(generator.calls[1][1].content)
+    assert "brecha currícula-mercado" in retry_prompt
+    assert "OPTIONAL MATCH" in retry_prompt

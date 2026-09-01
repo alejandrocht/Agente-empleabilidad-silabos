@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Mapping
 from typing import Any
 
 import pytest
-from neo4j.exceptions import CypherSyntaxError
+from neo4j.exceptions import ClientError, CypherSyntaxError
 
-from agente.grafo.constructor import construir_grafo
-from agente.grafo.plan import Plan
 from agente.nodos.resuelve_entidades import resuelve_entidades
 from agente.utils.cypher_guard import guard_cypher
 from agente.utils.db import Neo4jExplainError
@@ -84,24 +83,73 @@ class ResolverShapeGateway:
         return self.rows
 
 
-class CountingPlanner:
-    def __init__(self, plan: Plan) -> None:
-        self.plan = plan
-        self.calls = 0
+class TextValueGateway:
+    def __init__(self, values: list[str]) -> None:
+        self.values = values
+        self.calls: list[tuple[str, dict[str, Any]]] = []
 
-    def invoke(self, _: object) -> Plan:
-        self.calls += 1
-        return self.plan
-
-
-class DirectRunnable:
-    async def ainvoke(self, _: object) -> object:
-        return type("Message", (), {"content": "Necesito una entidad válida."})()
+    async def run(
+        self, cypher: str, parameters: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        self.calls.append((cypher, dict(parameters or {})))
+        return [{"value": value} for value in self.values]
 
 
-class GroundedRunnable:
-    async def ainvoke(self, _: object) -> object:
-        return type("Message", (), {"content": "Encontré 3 ofertas."})()
+class PagedTextValueGateway(TextValueGateway):
+    async def run(
+        self, cypher: str, parameters: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        self.calls.append((cypher, dict(parameters or {})))
+        match = re.search(r"\bSKIP\s+(\d+)", cypher)
+        offset = int(match.group(1)) if match else 0
+        return [
+            {"value": value}
+            for value in self.values[offset : offset + 64]
+        ]
+
+
+class FullTextGateway(TextValueGateway):
+    def __init__(self, values: list[str]) -> None:
+        super().__init__(values)
+        self.fulltext_calls: list[dict[str, Any]] = []
+
+    async def search_fulltext(
+        self,
+        *,
+        label: str,
+        property_name: str,
+        query: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        self.fulltext_calls.append(
+            {
+                "label": label,
+                "property_name": property_name,
+                "query": query,
+                "limit": limit,
+            }
+        )
+        return [{"value": value, "score": 0.9} for value in self.values]
+
+
+class UnavailableFullTextGateway(FullTextGateway):
+    async def search_fulltext(
+        self,
+        *,
+        label: str,
+        property_name: str,
+        query: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        self.fulltext_calls.append(
+            {
+                "label": label,
+                "property_name": property_name,
+                "query": query,
+                "limit": limit,
+            }
+        )
+        raise ClientError("full-text procedure unavailable")
 
 
 ALL_ENTITY_SCHEMA = {
@@ -192,7 +240,7 @@ def test_resolver_accepts_unique_alias_and_normalizes_accents_punctuation_and_sp
 
 
 @pytest.mark.parametrize("candidate", ["sistemas?", "sistemas.", "SISTEMAS"])
-def test_resolver_normalizes_planner_sentence_punctuation_before_lookup(
+def test_resolver_normalizes_upstream_sentence_punctuation_before_lookup(
     candidate: str,
 ) -> None:
     gateway = FakeGateway(
@@ -422,6 +470,22 @@ def test_plan_parameter_resolution_canonicalizes_aliases() -> None:
     assert resolved == {"carrera_id": "CAR_7"}
 
 
+def test_plan_parameter_resolution_canonicalizes_generated_text_alias() -> None:
+    gateway = FakeGateway(
+        [{"entity_id": "CAR_7", "entity_name": "Ingeniería de Sistemas"}]
+    )
+
+    resolved = asyncio.run(
+        resolve_plan_parameters(
+            {"carrera_texto": "ingenieria de sistemas"},
+            query_gateway=gateway,
+            schema=ALL_ENTITY_SCHEMA,
+        )
+    )
+
+    assert resolved == {"carrera_id": "CAR_7"}
+
+
 def test_resolver_matches_unaccented_competencia_text_against_catalog_fallback() -> None:
     gateway = CompetenciaCatalogFallbackGateway()
 
@@ -483,6 +547,316 @@ def test_generic_name_parameter_normalization_is_schema_driven() -> None:
         "competencia_texto": "PENSAMIENTO CRITICO",
         "limite": 10,
     }
+
+
+def test_generic_schema_text_parameter_resolves_accented_property_value() -> None:
+    gateway = TextValueGateway(["Ángela Mayhua", "Carlos Pérez"])
+    cypher = (
+        "MATCH (c:Curso) WHERE c.coordinador IS NOT NULL "
+        "AND toLower(c.coordinador) CONTAINS toLower($profesora) "
+        "RETURN DISTINCT c.nombre_curso AS curso LIMIT $limite"
+    )
+
+    result = asyncio.run(
+        resuelve_entidades(
+            {
+                "cypher": cypher,
+                "parameters": {"profesora": "Angela Mayhua", "limite": 20},
+                "schema": type(
+                    "Snapshot",
+                    (),
+                    {
+                        "structured": {
+                            "node_props": {
+                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
+                            }
+                        }
+                    },
+                )(),
+            },
+            entity_gateway=gateway,
+        )
+    )
+
+    assert result["error"] is None
+    assert result["parameters"] == {"profesora": "Ángela Mayhua", "limite": 20}
+    assert len(gateway.calls) == 1
+    assert "MATCH (n:Curso)" in gateway.calls[0][0]
+    assert "n.coordinador" in gateway.calls[0][0]
+
+
+def test_generic_schema_text_parameter_uses_conservative_fuzzy_fallback() -> None:
+    gateway = TextValueGateway(["Ángela Mayhua", "Carlos Pérez"])
+    cypher = (
+        "MATCH (c:Curso) WHERE c.coordinador IS NOT NULL "
+        "AND toLower(c.coordinador) CONTAINS toLower($profesora) "
+        "RETURN DISTINCT c.nombre_curso AS curso LIMIT $limite"
+    )
+
+    result = asyncio.run(
+        resuelve_entidades(
+            {
+                "cypher": cypher,
+                "parameters": {"profesora": "Angla Mayhua", "limite": 20},
+                "schema": type(
+                    "Snapshot",
+                    (),
+                    {
+                        "structured": {
+                            "node_props": {
+                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
+                            }
+                        }
+                    },
+                )(),
+            },
+            entity_gateway=gateway,
+        )
+    )
+
+    assert result["error"] is None
+    assert result["parameters"] == {"profesora": "Ángela Mayhua", "limite": 20}
+
+
+def test_generic_schema_text_parameter_matches_reordered_name_with_extra_tokens() -> None:
+    gateway = TextValueGateway(
+        ["Mayhua Quispe Angela Gabriela", "Carlos Pérez"]
+    )
+    cypher = (
+        "MATCH (c:Curso) WHERE c.coordinador IS NOT NULL "
+        "AND toLower(c.coordinador) CONTAINS toLower($coordinador) "
+        "RETURN DISTINCT c.nombre_curso AS curso LIMIT $limite"
+    )
+
+    result = asyncio.run(
+        resuelve_entidades(
+            {
+                "cypher": cypher,
+                "parameters": {"coordinador": "Angla Mayhua", "limite": 20},
+                "schema": type(
+                    "Snapshot",
+                    (),
+                    {
+                        "structured": {
+                            "node_props": {
+                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
+                            }
+                        }
+                    },
+                )(),
+            },
+            entity_gateway=gateway,
+        )
+    )
+
+    assert result["error"] is None
+    assert result["parameters"] == {
+        "coordinador": "Mayhua Quispe Angela Gabriela",
+        "limite": 20,
+    }
+
+
+def test_generic_schema_text_parameter_uses_fulltext_before_catalog_fallback() -> None:
+    gateway = FullTextGateway(["Ángela Mayhua", "Carlos Pérez"])
+    cypher = (
+        "MATCH (c:Curso) WHERE c.coordinador IS NOT NULL "
+        "AND toLower(c.coordinador) CONTAINS toLower($profesora) "
+        "RETURN DISTINCT c.nombre_curso AS curso LIMIT $limite"
+    )
+
+    result = asyncio.run(
+        resuelve_entidades(
+            {
+                "cypher": cypher,
+                "parameters": {"profesora": "Angla Mayhua", "limite": 20},
+                "schema": type(
+                    "Snapshot",
+                    (),
+                    {
+                        "structured": {
+                            "node_props": {
+                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
+                            }
+                        }
+                    },
+                )(),
+            },
+            entity_gateway=gateway,
+        )
+    )
+
+    assert result["error"] is None
+    assert result["parameters"] == {"profesora": "Ángela Mayhua", "limite": 20}
+    assert gateway.fulltext_calls == [
+        {
+            "label": "Curso",
+            "property_name": "coordinador",
+            "query": "angla~2 AND mayhua~2",
+            "limit": 64,
+        }
+    ]
+    assert gateway.calls == []
+
+
+def test_generic_schema_text_parameter_falls_back_when_fulltext_procedure_fails() -> None:
+    gateway = UnavailableFullTextGateway(["Ángela Mayhua", "Carlos Pérez"])
+    cypher = (
+        "MATCH (c:Curso) WHERE c.coordinador IS NOT NULL "
+        "AND toLower(c.coordinador) CONTAINS toLower($profesora) "
+        "RETURN DISTINCT c.nombre_curso AS curso LIMIT $limite"
+    )
+
+    result = asyncio.run(
+        resuelve_entidades(
+            {
+                "cypher": cypher,
+                "parameters": {"profesora": "Angla Mayhua", "limite": 20},
+                "schema": type(
+                    "Snapshot",
+                    (),
+                    {
+                        "structured": {
+                            "node_props": {
+                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
+                            }
+                        }
+                    },
+                )(),
+            },
+            entity_gateway=gateway,
+        )
+    )
+
+    assert result["error"] is None
+    assert result["parameters"] == {"profesora": "Ángela Mayhua", "limite": 20}
+    assert len(gateway.fulltext_calls) == 1
+    assert len(gateway.calls) == 1
+
+
+def test_generic_schema_text_parameter_preserves_intentional_contains_fragment() -> None:
+    gateway = FullTextGateway(["Sistemas Operativos"])
+    cypher = (
+        "MATCH (c:Curso) WHERE c.nombre_curso IS NOT NULL "
+        "AND toLower(c.nombre_curso) CONTAINS toLower($texto_busqueda) "
+        "RETURN c.nombre_curso AS curso LIMIT $limite"
+    )
+
+    result = asyncio.run(
+        resuelve_entidades(
+            {
+                "cypher": cypher,
+                "parameters": {"texto_busqueda": "sistemas", "limite": 20},
+                "schema": type(
+                    "Snapshot",
+                    (),
+                    {"structured": {"node_props": {"Curso": ["nombre_curso"]}}},
+                )(),
+            },
+            entity_gateway=gateway,
+        )
+    )
+
+    assert result["error"] is None
+    assert result["parameters"] == {"texto_busqueda": "sistemas", "limite": 20}
+
+
+def test_generic_schema_text_parameter_pages_catalog_past_first_page() -> None:
+    gateway = PagedTextValueGateway(
+        [f"Persona {index:02d}" for index in range(65)] + ["Ángela Mayhua"]
+    )
+    cypher = (
+        "MATCH (c:Curso) WHERE c.coordinador IS NOT NULL "
+        "AND toLower(c.coordinador) CONTAINS toLower($profesora) "
+        "RETURN c.nombre_curso AS curso LIMIT $limite"
+    )
+
+    result = asyncio.run(
+        resuelve_entidades(
+            {
+                "cypher": cypher,
+                "parameters": {"profesora": "Angela Mayhua", "limite": 20},
+                "schema": type(
+                    "Snapshot",
+                    (),
+                    {
+                        "structured": {
+                            "node_props": {
+                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
+                            }
+                        }
+                    },
+                )(),
+            },
+            entity_gateway=gateway,
+        )
+    )
+
+    assert result["error"] is None
+    assert result["parameters"] == {"profesora": "Ángela Mayhua", "limite": 20}
+    assert len(gateway.calls) == 2
+    assert "SKIP 64" in gateway.calls[1][0]
+
+
+def test_generic_schema_text_parameter_discovers_arbitrary_label_and_field() -> None:
+    gateway = TextValueGateway(["María López"])
+    cypher = (
+        "MATCH (p:Profesor) WHERE p.responsable IS NOT NULL "
+        "AND toLower(p.responsable) CONTAINS toLower($persona) "
+        "RETURN p.responsable AS responsable LIMIT $limite"
+    )
+
+    result = asyncio.run(
+        resuelve_entidades(
+            {
+                "cypher": cypher,
+                "parameters": {"persona": "Maria Lopez", "limite": 10},
+                "schema": type(
+                    "Snapshot",
+                    (),
+                    {"structured": {"node_props": {"Profesor": ["responsable"]}}},
+                )(),
+            },
+            entity_gateway=gateway,
+        )
+    )
+
+    assert result["error"] is None
+    assert result["parameters"] == {"persona": "María López", "limite": 10}
+    assert "MATCH (n:Profesor)" in gateway.calls[0][0]
+    assert "n.responsable" in gateway.calls[0][0]
+
+
+def test_generic_schema_text_parameter_preserves_ambiguous_accent_fold() -> None:
+    gateway = TextValueGateway(["Ángela Mayhua", "Angela Mayhua"])
+    cypher = (
+        "MATCH (c:Curso) WHERE c.coordinador IS NOT NULL "
+        "AND toLower(c.coordinador) CONTAINS toLower($profesora) "
+        "RETURN DISTINCT c.nombre_curso AS curso LIMIT $limite"
+    )
+
+    result = asyncio.run(
+        resuelve_entidades(
+            {
+                "cypher": cypher,
+                "parameters": {"profesora": "Angela Mayhua", "limite": 20},
+                "schema": type(
+                    "Snapshot",
+                    (),
+                    {
+                        "structured": {
+                            "node_props": {
+                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
+                            }
+                        }
+                    },
+                )(),
+            },
+            entity_gateway=gateway,
+        )
+    )
+
+    assert result["error"] is None
+    assert result["parameters"] == {"profesora": "Angela Mayhua", "limite": 20}
 
 
 def test_reconcile_rewrites_competencia_text_to_imported_canonical_id() -> None:
@@ -1039,50 +1413,3 @@ def test_canonical_ids_always_win_without_fuzzy_or_gateway_calls(
     assert result.status == "unique"
     assert result.matches[0].identifier == identifier
     assert gateway.calls == []
-
-
-@pytest.mark.skip(reason="Entity resolution is no longer part of the active graph")
-def test_fast_path_entity_miss_falls_back_to_planner() -> None:
-    planner = CountingPlanner(Plan(accion="responder_directo"))
-    resolver_gateway = FakeGateway([])
-    graph = construir_grafo(
-        planner_runnable=planner,
-        direct_runnable=DirectRunnable(),
-        entity_gateway=resolver_gateway,
-    )
-
-    result = asyncio.run(
-        graph.ainvoke({"pregunta": "¿Cuántas ofertas publicó la empresa BCP?"})
-    )
-
-    assert result["plantilla_rapida"] is False
-    assert planner.calls == 1
-    assert result["respuesta"] == "Necesito una entidad válida."
-
-
-@pytest.mark.skip(reason="Template and entity routes are no longer part of the active graph")
-def test_planner_template_uses_unique_resolved_identifier() -> None:
-    planner = CountingPlanner(
-        Plan(
-            accion="usar_plantilla",
-            template_id="ofertas_de_empresa",
-            parametros={"empresa_id": "Banco de Credito"},
-        )
-    )
-    resolver_gateway = FakeGateway(
-        [{"entity_id": "EMP_1", "entity_name": "Banco de Credito"}]
-    )
-    template_gateway = FakeGateway([{"total_ofertas": 3}])
-    graph = construir_grafo(
-        planner_runnable=planner,
-        entity_gateway=resolver_gateway,
-        template_gateway=template_gateway,
-        grounded_runnable=GroundedRunnable(),
-    )
-
-    result = asyncio.run(
-        graph.ainvoke({"pregunta": "¿Cuántas ofertas publicó Banco de Credito?"})
-    )
-
-    assert result["plan"].parametros == {"empresa_id": "EMP_1"}
-    assert template_gateway.calls[0][1] == {"empresa_id": "EMP_1"}

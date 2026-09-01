@@ -40,37 +40,34 @@ class ChatOpenAIProfile:
     max_retries: int | None = None
 
 
-# Responses API stays enabled by default because the project's default target
-# models (luna / gpt-5.6-luna) require it. It can be disabled per role for
-# standard chat models served through an OpenAI-compatible endpoint.
-PLANNER_CHAT_PROFILE = ChatOpenAIProfile(
-    model_env="OPENAI_MODEL_PLANIFICADOR",
-    reasoning_env="OPENAI_REASONING_EFFORT_PLANIFICADOR",
+# Each conversational responsibility has one explicit model. Direct and
+# grounded answers intentionally share the analyst profile.
+ORCHESTRATOR_CHAT_PROFILE = ChatOpenAIProfile(
+    model_env="OPENAI_MODEL_ORQUESTADOR",
+    reasoning_env="OPENAI_REASONING_EFFORT_ORQUESTADOR",
     default_reasoning_effort=None,
+    global_model_fallback=True,
     use_responses_api=True,
-    use_responses_api_env="OPENAI_USE_RESPONSES_API_PLANIFICADOR",
-)
-DIRECT_RESPONSE_CHAT_PROFILE = ChatOpenAIProfile(
-    model_env="OPENAI_MODEL_RESPONDER_DIRECTO",
-    reasoning_env="OPENAI_REASONING_EFFORT_RESPONDER_DIRECTO",
-    default_reasoning_effort=None,
-    use_responses_api=True,
-    use_responses_api_env="OPENAI_USE_RESPONSES_API_RESPONDER_DIRECTO",
+    use_responses_api_env="OPENAI_USE_RESPONSES_API_ORQUESTADOR",
 )
 GENERATED_QUERY_CHAT_PROFILE = ChatOpenAIProfile(
     model_env="OPENAI_MODEL_GENERADOR_CYPHER",
     reasoning_env="OPENAI_REASONING_EFFORT_GENERADOR_CYPHER",
     default_reasoning_effort=None,
+    global_model_fallback=True,
     use_responses_api=True,
     use_responses_api_env="OPENAI_USE_RESPONSES_API_GENERADOR_CYPHER",
 )
-GROUNDED_ANSWER_CHAT_PROFILE = ChatOpenAIProfile(
-    model_env="OPENAI_MODEL_FORMATEADOR",
-    reasoning_env="OPENAI_REASONING_EFFORT_FORMATEADOR",
+ANALYST_CHAT_PROFILE = ChatOpenAIProfile(
+    model_env="OPENAI_MODEL_ANALISTA",
+    reasoning_env="OPENAI_REASONING_EFFORT_ANALISTA",
     default_reasoning_effort=None,
+    global_model_fallback=True,
     use_responses_api=True,
-    use_responses_api_env="OPENAI_USE_RESPONSES_API_FORMATEADOR",
+    use_responses_api_env="OPENAI_USE_RESPONSES_API_ANALISTA",
 )
+
+
 def _model_for_profile(profile: ChatOpenAIProfile) -> str:
     configured = os.getenv(profile.model_env)
     if profile.strip_model_env and configured is not None:
@@ -83,7 +80,9 @@ def _model_for_profile(profile: ChatOpenAIProfile) -> str:
             return shared
     if profile.default_model:
         return profile.default_model
-    raise RuntimeError(f"{profile.model_env} u OPENAI_MODEL debe estar configurado")
+    if profile.global_model_fallback:
+        raise RuntimeError(f"{profile.model_env} u OPENAI_MODEL debe estar configurado")
+    raise RuntimeError(f"{profile.model_env} debe estar configurado")
 
 
 def _reasoning_for_profile(profile: ChatOpenAIProfile) -> str | None:

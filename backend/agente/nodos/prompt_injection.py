@@ -22,7 +22,7 @@ def prompt_injection(estado: Estado) -> Estado:
 
 
 def contextualized_prompt_injection(estado: Estado) -> Estado:
-    """Revalidate memory-enriched text before schema, model, or database work."""
+    """Revalidate the contextualized question before models or database access."""
     return _validate_question_field(
         estado,
         field="pregunta_contextualizada",

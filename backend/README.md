@@ -271,22 +271,31 @@ uv run --locked python -m uvicorn api.servidor:app --reload --port 8001
 It exposes `/health`, `/chat`, `/chat/stream`, `/preguntar`, and the typed read-only
 dashboard endpoints under `/dashboard/`. No endpoint accepts arbitrary Cypher.
 
+For a local graph diagnosis, set `CIAR_LOG_SCOPE=nodes` and
+`CIAR_LOG_FORMAT=human`. The output is one `START/END` block with numbered nodes;
+each node shows only `Enviados` and `Recibidos`. Set `CIAR_NODE_LOG_VALUES=1` only
+during a local diagnosis to include bounded previews of the values; credentials and
+other sensitive fields remain redacted. Keep `CIAR_LOG_FORMAT=json` for collectors.
+
 ## Active architecture
 
 - `agente/grafo/constructor.py` contains the graph factory and the no-argument
   `langgraph_entrypoint` referenced by `langgraph.json`.
-- `agente/utils/tooler.py` contains exactly 20 immutable, parameter-validated Cypher
-  templates. A deterministic exact match skips planning; uncertain questions use the
-  planner/dynamic route.
-- `agente/cache/consultas.py` provides a thread-safe process-local LRU cache of
-  successful normalized query rows. It uses a 600-second TTL and 256-entry limit by
-  default, configured by `QUERY_RESULT_CACHE_TTL_SECONDS` and
-  `QUERY_RESULT_CACHE_MAX_ENTRIES`.
-- The graph is stateless and compiles without a LangGraph checkpointer. `thread_id` is
-  retained only as an HTTP correlation identifier; requests do not share state.
-- `agente/utils/response_inspector.py` performs deterministic checks on every final
-  response. Invalid output is replaced by a safe fallback; no `INSPECTOR_LLM` setting
-  is active.
+- `agente/nodos/construye_cypher.py` generates one schema-proven query and retries a rejected
+  model output at most once.
+- `agente/nodos/orquestador.py` uses the configured orchestration model to choose only between
+  the direct and guarded graph routes; it never writes the user-facing answer.
+- `agente/nodos/construye_cypher.py` uses the configured generator for schema-grounded Cypher.
+- `agente/nodos/redacta_respuesta.py` uses the configured analyst to explain verified rows,
+  omitting IDs unless explicitly requested. The same analyst model handles direct replies.
+  The example and current local configuration map these roles to GPT-OSS 120B, Luna Max, and
+  GPT-OSS 20B.
+- `agente/cache/consultas.py` provides the bounded process-local LRU cache used by dashboard
+  services. The chat graph does not use a result cache.
+- The graph compiles without a LangGraph checkpointer. Bounded process-local conversation
+  memory is reused by the scope derived from the user identity and `thread_id`; it is not
+  durable across process restarts.
+- `agente/utils/response_inspector.py` performs bounded safety checks on grounded analyst output.
 - `agente/dashboard/consultas.py` and `agente/dashboard/servicio.py` expose the
   allow-listed dashboard data. The metadata endpoint reports supported and deferred
   datasets. Deferred datasets remain empty rather than being fabricated.
@@ -327,7 +336,7 @@ The transformer is probabilistic even with strict allow-lists. Extraction can cr
 incorrect entities or relationships, so previews must be reviewed and imports should
 not introduce unsupported academic labels. This write path is outside the chatbot's
 read-only request policy and is never called by `/chat`, `/chat/stream`, `/preguntar`,
-the planner, entity resolution, or the domain query gateway.
+entity resolution or the domain query gateway.
 
 See `.env.example` for all current schema-cache, query-cache, logging, and role-specific
 OpenAI settings.

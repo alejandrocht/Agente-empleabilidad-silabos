@@ -331,10 +331,10 @@ def _representante_exacto(indices: list[int], propuestas: list[dict[str, object]
 
 def _confianza(fila: dict[str, object]) -> float:
     valor = fila.get("confianza")
-    if valor is None:
+    if not isinstance(valor, (str, int, float)):
         return -1.0
     try:
-        numero = float(str(valor))
+        numero = float(valor)
     except (TypeError, ValueError):
         return -1.0
     return numero if math.isfinite(numero) else -1.0

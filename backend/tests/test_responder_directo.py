@@ -190,7 +190,7 @@ def test_prompt_directo_declara_limites_de_datos() -> None:
     ("direct_model", "direct_effort", "expected_model", "expected_effort"),
     [
         ("direct-test-model", None, "direct-test-model", None),
-        (None, "high", "shared-test-model", "high"),
+        ("direct-test-model", "high", "direct-test-model", "high"),
     ],
 )
 def test_build_direct_response_runnable_uses_responses_api_by_default_and_fallbacks(
@@ -208,16 +208,15 @@ def test_build_direct_response_runnable_uses_responses_api_by_default_and_fallba
         calls.update(kwargs)
         return expected
 
-    monkeypatch.setenv("OPENAI_MODEL", "shared-test-model")
-    monkeypatch.delenv("OPENAI_USE_RESPONSES_API_RESPONDER_DIRECTO", raising=False)
+    monkeypatch.delenv("OPENAI_USE_RESPONSES_API_ANALISTA", raising=False)
     if direct_model is None:
-        monkeypatch.delenv("OPENAI_MODEL_RESPONDER_DIRECTO", raising=False)
+        monkeypatch.delenv("OPENAI_MODEL_ANALISTA", raising=False)
     else:
-        monkeypatch.setenv("OPENAI_MODEL_RESPONDER_DIRECTO", direct_model)
+        monkeypatch.setenv("OPENAI_MODEL_ANALISTA", direct_model)
     if direct_effort is None:
-        monkeypatch.delenv("OPENAI_REASONING_EFFORT_RESPONDER_DIRECTO", raising=False)
+        monkeypatch.delenv("OPENAI_REASONING_EFFORT_ANALISTA", raising=False)
     else:
-        monkeypatch.setenv("OPENAI_REASONING_EFFORT_RESPONDER_DIRECTO", direct_effort)
+        monkeypatch.setenv("OPENAI_REASONING_EFFORT_ANALISTA", direct_effort)
     monkeypatch.setattr(module, "ChatOpenAI", fake_chat_openai)
 
     assert build_direct_response_runnable() is expected

@@ -11,6 +11,7 @@ from agente.utils.entity_resolver import (
     normalize_entity_text_parameters,
     reconcile_entity_parameters,
     resolve_plan_parameters_result,
+    resolve_schema_text_parameters,
 )
 from agente.utils.logger import log_error, log_event
 
@@ -105,6 +106,12 @@ async def resuelve_entidades(
         cardinality=cardinality,
     )
     try:
+        parameters = await resolve_schema_text_parameters(
+            cypher,
+            parameters,
+            schema,
+            query_gateway=entity_gateway,
+        )
         result = await resolve_plan_parameters_result(
             parameters,
             cardinality=cardinality,

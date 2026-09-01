@@ -41,6 +41,18 @@ _SURROUNDING_SENTENCE_PUNCTUATION = ".,!?\u00a1\u00bf\u2026"
 _IDENTIFIER_SHAPED_TEXT = re.compile(r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_-]+$")
 _CYPHER_PARAMETER = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
 _CYPHER_NAME = r"[A-Za-z_][A-Za-z0-9_]*"
+_TEXT_PROPERTY_CONTAINS = re.compile(
+    rf"(?i)(?P<property_expr>(?:toLower\s*\(\s*)?"
+    rf"(?P<variable>{_CYPHER_NAME})\.(?P<property>{_CYPHER_NAME})(?:\s*\))?)"
+    rf"\s*CONTAINS\s*"
+    rf"(?P<parameter_expr>(?:toLower\s*\(\s*)?"
+    rf"\$(?P<parameter>{_CYPHER_NAME})(?:\s*\))?)"
+)
+_NODE_LABEL_FOR_VARIABLE = re.compile(
+    rf"(?i)\(\s*(?P<variable>{_CYPHER_NAME})\s*:\s*(?P<label>{_CYPHER_NAME})"
+)
+TEXT_SEARCH_CANDIDATE_LIMIT = 64
+TEXT_SEARCH_MAX_CANDIDATES = 1024
 
 
 class EntityResolutionGateway(Protocol):
@@ -118,7 +130,13 @@ ENTITY_CONTRACTS: Mapping[str, EntityContract] = {
         label="Carrera",
         identifier="id_carrera",
         names=("nombre_carrera",),
-        parameter_aliases=("carrera_id", "carrera", "career_id", "career"),
+        parameter_aliases=(
+            "carrera_id",
+            "carrera",
+            "carrera_texto",
+            "career_id",
+            "career",
+        ),
         allowed_id_prefixes=("CAR_",),
         canonical_prefix="CAR_",
         supported_relationships=("DIRIGE_A",),
@@ -317,6 +335,308 @@ def normalize_entity_text_parameters(
     normalized_parameters = dict(parameters)
     normalized_parameters[text_parameter] = normalized_parameters.pop("texto")
     return normalized_cypher, normalized_parameters
+
+
+def _known_entity_text_parameters(schema: Mapping[str, Any]) -> set[str]:
+    """Return entity parameters that must keep their existing ID resolution path."""
+    names: set[str] = set()
+    for contract in available_entity_contracts(schema).values():
+        names.update(contract.parameter_aliases)
+        names.add(contract.parameter)
+        names.add(f"{contract.parameter.removesuffix('_id')}_texto")
+    return names
+
+
+def _schema_text_search_targets(
+    cypher: str,
+    parameters: Mapping[str, Any],
+    schema: Mapping[str, Any],
+) -> Mapping[str, tuple[str, str]]:
+    """Discover safe ``parameter -> (label, property)`` text predicates.
+
+    Only ``CONTAINS`` predicates in the generated query are eligible. The
+    variable's label and property must both exist in the runtime schema, and
+    entity-name parameters remain on their canonical ID resolver path.
+    """
+    properties = _schema_properties(schema)
+    variable_labels = {
+        match.group("variable"): match.group("label")
+        for match in _NODE_LABEL_FOR_VARIABLE.finditer(cypher)
+    }
+    predicate_region = re.split(r"\bRETURN\b", cypher, maxsplit=1, flags=re.IGNORECASE)[0]
+    known_entity_parameters = _known_entity_text_parameters(schema)
+    discovered: dict[str, set[tuple[str, str]]] = {}
+    for match in _TEXT_PROPERTY_CONTAINS.finditer(predicate_region):
+        parameter = match.group("parameter")
+        value = parameters.get(parameter)
+        if (
+            parameter not in parameters
+            or parameter in known_entity_parameters
+            or not isinstance(value, str)
+            or _candidate_text(value) is None
+            or _looks_like_identifier(value.strip())
+        ):
+            continue
+        variable = match.group("variable")
+        property_name = match.group("property")
+        label = variable_labels.get(variable)
+        if (
+            label is None
+            or label not in properties
+            or property_name not in properties[label]
+            or _IDENTIFIER_SUFFIX.fullmatch(label) is None
+            or _IDENTIFIER_SUFFIX.fullmatch(property_name) is None
+        ):
+            continue
+        discovered.setdefault(parameter, set()).add((label, property_name))
+
+    return {
+        parameter: next(iter(targets))
+        for parameter, targets in discovered.items()
+        if len(targets) == 1
+    }
+
+
+def _text_catalog_query(label: str, property_name: str, *, offset: int = 0) -> str:
+    """Build a bounded read-only catalog query from validated schema names."""
+    skip = f" SKIP {offset}" if offset else ""
+    return (
+        f"MATCH (n:{label}) WHERE n.{property_name} IS NOT NULL "
+        f"RETURN DISTINCT n.{property_name} AS value ORDER BY value ASC "
+        f"{skip} LIMIT {TEXT_SEARCH_CANDIDATE_LIMIT}"
+    )
+
+
+def _text_value_from_row(row: object) -> str | None:
+    if not isinstance(row, Mapping):
+        return None
+    value = row.get("value")
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _text_value_score(candidate: str, value: str) -> float:
+    """Score a display value after folding accents, punctuation, and case.
+
+    A person or display name can be stored with more tokens and in a
+    different order than the name used by the question (for example,
+    ``"Angla Mayhua"`` versus ``"Mayhua Quispe Angela Gabriela"``).  The
+    previous whole-string score treated that as an unrelated value.  Match
+    every query token against a distinct stored token instead, while keeping
+    the conservative threshold for actual spelling errors.
+    """
+    if _normalized_text(candidate) == _normalized_text(value):
+        return 1.0
+    if _matches_complete_name(candidate, value):
+        return FUZZY_MIN_SCORE
+    token_score = _unordered_name_token_score(candidate, value)
+    if token_score:
+        return token_score
+    return SequenceMatcher(None, _normalized_text(candidate), _normalized_text(value)).ratio()
+
+
+def _fulltext_search_query(candidate: str) -> str | None:
+    """Build a bounded Lucene fuzzy query from normalized user tokens."""
+    normalized = _normalized_text(candidate)
+    tokens = tuple(token for token in normalized.split() if len(token) >= 3)
+    if not tokens:
+        return None
+    return " AND ".join(
+        f"{token}~{'2' if len(token) >= 5 else '1'}" for token in tokens
+    )
+
+
+def _matches_complete_name(candidate: str, value: str) -> bool:
+    """Match a complete name alias without collapsing a CONTAINS fragment."""
+    candidate_tokens = _normalized_text(candidate).split()
+    value_tokens = _normalized_text(value).split()
+    if not candidate_tokens or len(candidate_tokens) != len(value_tokens):
+        return False
+    remaining = list(value_tokens)
+    for candidate_token in candidate_tokens:
+        match_index = next(
+            (
+                index
+                for index, value_token in enumerate(remaining)
+                if _equivalent_name_tokens(candidate_token, value_token)
+            ),
+            None,
+        )
+        if match_index is None:
+            return False
+        remaining.pop(match_index)
+    return not remaining
+
+
+def _matches_name_token_subset(candidate: str, value: str) -> bool:
+    """Match a multi-token name contained in a longer stored display name.
+
+    A single token remains a normal ``CONTAINS`` fragment and is deliberately
+    not canonicalized.  Requiring at least two complete tokens prevents a
+    query such as ``"sistemas"`` from being rewritten to ``"Sistemas
+    Operativos"`` while still accepting reordered full-name fragments.
+    """
+    candidate_tokens = _normalized_text(candidate).split()
+    value_tokens = _normalized_text(value).split()
+    if (
+        len(candidate_tokens) < 2
+        or len(candidate_tokens) >= len(value_tokens)
+        or not value_tokens
+    ):
+        return False
+    remaining = list(value_tokens)
+    for candidate_token in candidate_tokens:
+        match_index = next(
+            (
+                index
+                for index, value_token in enumerate(remaining)
+                if _equivalent_name_tokens(candidate_token, value_token)
+            ),
+            None,
+        )
+        if match_index is None:
+            return False
+        remaining.pop(match_index)
+    return True
+
+
+def _unordered_name_token_score(candidate: str, value: str) -> float:
+    """Score distinct candidate tokens independently of order or extra names."""
+    candidate_tokens = _normalized_text(candidate).split()
+    value_tokens = _normalized_text(value).split()
+    if (
+        not candidate_tokens
+        or not value_tokens
+        or len(candidate_tokens) > len(value_tokens)
+        or (len(candidate_tokens) != len(value_tokens) and len(candidate_tokens) < 2)
+    ):
+        return 0.0
+
+    # Match longer tokens first so short common tokens cannot consume a token
+    # that is a better match for a more specific query token.
+    remaining = sorted(value_tokens, key=lambda token: (-len(token), token))
+    scores: list[float] = []
+    for candidate_token in sorted(candidate_tokens, key=lambda token: (-len(token), token)):
+        if not remaining:
+            return 0.0
+        best_index, best_score = max(
+            enumerate(
+                1.0
+                if _equivalent_name_tokens(candidate_token, value_token)
+                else SequenceMatcher(None, candidate_token, value_token).ratio()
+                for value_token in remaining
+            ),
+            key=lambda item: (item[1], -len(remaining[item[0]]), remaining[item[0]]),
+        )
+        if best_score < FUZZY_MIN_SCORE:
+            return 0.0
+        scores.append(best_score)
+        remaining.pop(best_index)
+    return min(scores, default=0.0)
+
+
+def _select_text_value(candidate: str, rows: Sequence[object]) -> str | None:
+    """Choose one canonical stored value, or return ``None`` when unsafe."""
+    values = tuple(dict.fromkeys(
+        value for value in (_text_value_from_row(row) for row in rows) if value is not None
+    ))
+    if not values:
+        return None
+
+    normalized_candidate = _normalized_text(candidate)
+    exact = tuple(
+        value
+        for value in values
+        if _normalized_text(value) == normalized_candidate
+        or _matches_complete_name(candidate, value)
+        or _matches_name_token_subset(candidate, value)
+    )
+    if exact:
+        return exact[0] if len(exact) == 1 else None
+
+    scored = sorted(
+        (
+            (score, value)
+            for value in values
+            if (score := _text_value_score(candidate, value)) >= FUZZY_MIN_SCORE
+        ),
+        key=lambda item: (-item[0], _normalized_text(item[1]), item[1]),
+    )
+    if not scored:
+        return None
+    if len(scored) > 1 and scored[0][0] - scored[1][0] < FUZZY_MIN_MARGIN:
+        return None
+    return scored[0][1]
+
+
+async def resolve_schema_text_parameters(
+    cypher: str,
+    parameters: Mapping[str, Any],
+    schema: Mapping[str, Any],
+    *,
+    query_gateway: EntityResolutionGateway | None = None,
+) -> dict[str, Any]:
+    """Canonicalize generic text parameters against schema-backed stored values.
+
+    The generated query remains unchanged. When a unique accent-insensitive or
+    conservative fuzzy match is found, only its parameter is replaced with the
+    exact value stored in Neo4j. Unknown, ambiguous, and non-text parameters are
+    preserved so free-text queries keep their original semantics.
+    """
+    targets = _schema_text_search_targets(cypher, parameters, schema)
+    if not targets:
+        return dict(parameters)
+
+    async def run(gateway: EntityResolutionGateway) -> dict[str, Any]:
+        resolved = dict(parameters)
+        fulltext_search = getattr(gateway, "search_fulltext", None)
+        for parameter, (label, property_name) in targets.items():
+            candidate = str(parameters[parameter])
+            selected: str | None = None
+            fuzzy_query = _fulltext_search_query(candidate)
+            if callable(fulltext_search) and fuzzy_query is not None:
+                try:
+                    fulltext_rows = await fulltext_search(
+                        label=label,
+                        property_name=property_name,
+                        query=fuzzy_query,
+                        limit=TEXT_SEARCH_CANDIDATE_LIMIT,
+                    )
+                except (Neo4jExplainError, ClientError):
+                    # Older Neo4j versions or unavailable indexes use the
+                    # guarded catalog fallback below.
+                    fulltext_rows = []
+                selected = _select_text_value(candidate, fulltext_rows)
+
+            if selected is None:
+                catalog_rows: list[dict[str, Any]] = []
+                for offset in range(0, TEXT_SEARCH_MAX_CANDIDATES, TEXT_SEARCH_CANDIDATE_LIMIT):
+                    query = _text_catalog_query(label, property_name, offset=offset)
+                    try:
+                        guarded = guard_cypher(query, {})
+                    except ValueError:
+                        catalog_rows = []
+                        break
+                    page = await run_gateway_with_diagnostics(
+                        gateway,
+                        guarded.text,
+                        guarded.parameters,
+                        stage="entity_resolution",
+                    )
+                    catalog_rows.extend(page)
+                    if len(page) < TEXT_SEARCH_CANDIDATE_LIMIT:
+                        break
+                selected = _select_text_value(candidate, catalog_rows)
+            if selected is not None:
+                resolved[parameter] = selected
+        return resolved
+
+    if query_gateway is not None:
+        return await run(query_gateway)
+    async with open_query_gateway() as gateway:
+        return await run(gateway)
 
 
 def _contract_for_parameter(
@@ -986,7 +1306,11 @@ async def resolve_plan_parameters_result(
             continue
 
         contract = next(
-            (item for item in available.values() if parameter in item.parameter_aliases),
+            (
+                item
+                for item in available.values()
+                if parameter in item.parameter_aliases
+            ),
             None,
         )
         if contract is None:

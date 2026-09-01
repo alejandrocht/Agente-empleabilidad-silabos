@@ -11,6 +11,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
+from threading import RLock
 from typing import Literal
 from uuid import uuid4
 
@@ -34,6 +35,31 @@ _LEVELS: dict[str, int] = {
     "ERROR": logging.ERROR,
     "CRITICAL": logging.CRITICAL,
 }
+_NODE_ONLY_EVENTS = frozenset({"node_started", "node_completed", "node_failed"})
+_NODE_IO_CONTEXT_KEYS = frozenset({"node_input", "node_output"})
+_HUMAN_NODE_EVENTS = frozenset({"node_started", "node_completed", "node_failed"})
+_NODE_IO_MAX_FIELDS = 64
+_NODE_IO_MAX_ITEMS = 16
+_NODE_IO_PREVIEW_CHARS = 240
+_HUMAN_MAX_VALUE_CHARS = 360
+_HUMAN_IGNORED_FIELDS = frozenset({"trace_id", "memory_scope", "historial"})
+_HUMAN_TRACE_LOCK = RLock()
+_HUMAN_TRACES: dict[
+    str, tuple[int, dict[str, int], dict[str, object], dict[str, dict[str, object]]]
+] = {}
+_NODE_SCOPE_QUIET_LOGGERS = frozenset(
+    {
+        "langsmith",
+        "langchain",
+        "httpx",
+        "httpcore",
+    }
+)
+_NODE_SCOPE_QUIET_PREFIXES = ("langsmith.", "langchain.", "httpx.", "httpcore.")
+_NODE_HARD_SENSITIVE_KEY = re.compile(
+    r"(?:api[_ -]?key|authorization|password|secret|token|cookie|credential)",
+    re.IGNORECASE,
+)
 _SAFE_CONTEXT_KEYS = frozenset(
     {
         "action",
@@ -88,6 +114,8 @@ _SAFE_CONTEXT_KEYS = frozenset(
         "emission_index",
         "payload_size",
         "payload_preview",
+        "node_input",
+        "node_output",
     }
 )
 _SAFE_STRING_KEYS = frozenset(
@@ -199,27 +227,15 @@ _SAFE_STEPS = frozenset(
         "responder_directo",
         "obtiene_schema",
         "construye_cypher",
+        "resuelve_entidades",
         "cypher_guard",
         "devuelve_respuesta",
+        "redacta_respuesta",
         "guarda_memoria_corta",
     }
 )
 _SAFE_GUARD_DECISIONS = frozenset({"accepted", "rejected"})
 _SAFE_EMISSIONS = frozenset({"text", "state", "end", "error"})
-_PRIVATE_STATE_FIELDS = frozenset(
-    {
-        "cypher",
-        "filas",
-        "historial",
-        "memory_scope",
-        "parameters",
-        "pregunta",
-        "pregunta_contextualizada",
-        "schema",
-    }
-)
-
-
 class _CurrentStdoutHandler(logging.Handler):
     """Write JSON to the current stdout object so CLI and test capture both work."""
 
@@ -257,6 +273,277 @@ def debug_trace_enabled() -> bool:
     return os.getenv("CIAR_DEBUG_TRACE") == "1"
 
 
+def node_logs_only_enabled() -> bool:
+    """Return whether operational output should be restricted to graph node events."""
+    configured = os.getenv("CIAR_LOG_SCOPE", "all").strip().lower()
+    return configured in {"node", "nodes", "graph_nodes"}
+
+
+def configure_node_log_scope() -> None:
+    """Silence framework/exporter chatter when the operator asks for node-only logs."""
+    if not node_logs_only_enabled():
+        return
+
+    for name, candidate in list(logging.Logger.manager.loggerDict.items()):
+        if not isinstance(candidate, logging.Logger):
+            continue
+        if name in _NODE_SCOPE_QUIET_LOGGERS or name.startswith(_NODE_SCOPE_QUIET_PREFIXES):
+            candidate.setLevel(logging.CRITICAL + 1)
+            candidate.propagate = False
+
+    for name in ("uvicorn.access", "uvicorn.error", "watchfiles.main"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
+def node_log_values_enabled() -> bool:
+    """Allow bounded state previews only during an explicit local debugging session."""
+    configured = os.getenv("CIAR_NODE_LOG_VALUES", "0").strip().lower()
+    return configured in {"1", "true", "yes", "on", "si", "sí"}
+
+
+def _node_value_type(value: object) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "str"
+    if isinstance(value, Mapping):
+        return "dict"
+    if isinstance(value, (list, tuple, set)):
+        return "list"
+    return type(value).__name__
+
+
+def _node_preview(value: object, field: str, depth: int = 0) -> object:
+    """Produce a bounded, local-debug preview without serializing credentials."""
+    if _NODE_HARD_SENSITIVE_KEY.search(field):
+        return "[REDACTADO]"
+    if field.casefold() in {
+        "filas",
+        "parameters",
+        "parametros",
+        "pregunta",
+        "pregunta_contextualizada",
+        "respuesta",
+        "rows",
+    }:
+        return "[REDACTADO]"
+    if depth >= 3:
+        return "[PROFUNDIDAD_LIMITADA]"
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        single_line = value.replace("\r", "\\r").replace("\n", "\\n")
+        if len(single_line) > _NODE_IO_PREVIEW_CHARS:
+            return single_line[:_NODE_IO_PREVIEW_CHARS] + "…"
+        return single_line
+    if isinstance(value, Mapping):
+        return {
+            str(key): _node_preview(item, str(key), depth + 1)
+            for key, item in list(value.items())[:_NODE_IO_MAX_ITEMS]
+            if isinstance(key, str)
+        }
+    if isinstance(value, (list, tuple, set)):
+        return [_node_preview(item, field, depth + 1) for item in list(value)[:_NODE_IO_MAX_ITEMS]]
+    # Dataclasses and schema snapshots can contain large private payloads. Keep their type only.
+    return f"<{type(value).__name__}>"
+
+
+def _node_state_snapshot(value: object) -> object:
+    """Summarize a graph state so node boundaries are inspectable and bounded."""
+    if not isinstance(value, Mapping):
+        return {"type": _node_value_type(value)}
+
+    include_values = node_log_values_enabled()
+    snapshot: dict[str, object] = {}
+    for field, field_value in list(value.items())[:_NODE_IO_MAX_FIELDS]:
+        if not isinstance(field, str) or not _SAFE_IDENTIFIER.fullmatch(field):
+            continue
+        metadata: dict[str, object] = {"type": _node_value_type(field_value)}
+        if isinstance(field_value, str):
+            metadata["chars"] = len(field_value)
+        elif isinstance(field_value, Mapping):
+            metadata["keys"] = len(field_value)
+        elif isinstance(field_value, (list, tuple, set)):
+            metadata["items"] = len(field_value)
+        if include_values:
+            metadata["preview"] = _node_preview(field_value, field)
+        snapshot[field] = metadata
+    if len(value) > _NODE_IO_MAX_FIELDS:
+        snapshot["_truncated"] = {"type": "bool", "preview": True}
+    return snapshot
+
+
+def _configured_log_format() -> str:
+    """Return the operator-selected output format for local diagnostics."""
+    configured = os.getenv("CIAR_LOG_FORMAT", "json").strip().lower()
+    return "human" if configured in {"human", "text", "texto"} else "json"
+
+
+def _human_value(value: object) -> str:
+    """Render one already-sanitized node field without adding log noise."""
+    if not isinstance(value, Mapping):
+        return _human_clip(str(value))
+
+    if "preview" in value:
+        preview = value["preview"]
+        if preview is None:
+            return "null"
+        if isinstance(preview, str) and preview.startswith("<") and preview.endswith(">"):
+            return preview
+        try:
+            rendered = json.dumps(preview, ensure_ascii=False, separators=(",", ":"))
+        except (TypeError, ValueError):
+            rendered = str(preview)
+        return _human_clip(rendered)
+
+    value_type = value.get("type", "valor")
+    if value_type == "str" and isinstance(value.get("chars"), int):
+        return f"<str; {value['chars']} caracteres>"
+    if value_type == "dict" and isinstance(value.get("keys"), int):
+        return f"<dict; {value['keys']} claves>"
+    if value_type == "list" and isinstance(value.get("items"), int):
+        return f"<list; {value['items']} elementos>"
+    return f"<{value_type}>"
+
+
+def _human_clip(value: str) -> str:
+    if len(value) <= _HUMAN_MAX_VALUE_CHARS:
+        return value
+    return value[:_HUMAN_MAX_VALUE_CHARS] + "…"
+
+
+def _human_fields(snapshot: object) -> list[str]:
+    """Render a concise list of fields from a sanitized node snapshot."""
+    if not isinstance(snapshot, Mapping):
+        return [f"    valor: {_human_value(snapshot)}"]
+
+    lines: list[str] = []
+    for field, value in snapshot.items():
+        if not isinstance(field, str) or field in _HUMAN_IGNORED_FIELDS or field == "_truncated":
+            continue
+        lines.append(f"    {field}: {_human_value(value)}")
+    return lines or ["    (sin datos nuevos)"]
+
+
+def _human_node_event(event: str, context: Mapping[str, object]) -> str | None:
+    """Build one readable node block from the sanitized event context.
+
+    ``node_started`` is buffered so each node is printed once with both its
+    input and output. The input is reduced to fields that changed since the
+    previous node, which avoids repeating the accumulated LangGraph state.
+    """
+    trace = context.get("trace_id")
+    trace_key = trace if isinstance(trace, str) else "sin-trace"
+    trace_text = trace_key[:8]
+    step = context.get("step")
+    step_text = step if isinstance(step, str) else "desconocido"
+
+    with _HUMAN_TRACE_LOCK:
+        tracker = _HUMAN_TRACES.get(trace_key)
+        if event == "node_started":
+            snapshot = context.get("node_input")
+            previous_snapshot: Mapping[str, object] = tracker[2] if tracker else {}
+            next_number = tracker[0] if tracker else 1
+            indexes = dict(tracker[1]) if tracker else {}
+            pending = dict(tracker[3]) if tracker else {}
+            current_snapshot = snapshot if isinstance(snapshot, Mapping) else {}
+            changed: dict[str, object] = {}
+            # Keep the user question visible at every boundary. Other
+            # unchanged fields are omitted because the graph carries them.
+            if "pregunta" in current_snapshot:
+                changed["pregunta"] = current_snapshot["pregunta"]
+            changed.update(
+                {
+                    key: value
+                    for key, value in current_snapshot.items()
+                    if key != "pregunta"
+                    and (key not in previous_snapshot or previous_snapshot[key] != value)
+                }
+            )
+            indexes[step_text] = next_number
+            pending[step_text] = changed
+            _HUMAN_TRACES[trace_key] = (
+                next_number + 1,
+                indexes,
+                dict(current_snapshot),
+                pending,
+            )
+            return None
+
+        if tracker is None:
+            number = 1
+            pending = {}
+            input_snapshot: object = context.get("node_input", {})
+        else:
+            number = tracker[1].get(step_text, max(tracker[0] - 1, 1))
+            pending = dict(tracker[3])
+            input_snapshot = pending.pop(step_text, {})
+            _HUMAN_TRACES[trace_key] = (tracker[0], dict(tracker[1]), tracker[2], pending)
+
+    lines: list[str] = []
+    is_first_node = number == 1
+    if tracker is None:
+        question_snapshot = (
+            input_snapshot.get("pregunta")
+            if isinstance(input_snapshot, Mapping)
+            else None
+        )
+        lines.extend(
+            [
+                f"----- START trace={trace_text} -----",
+                f"Pregunta: {_human_value(question_snapshot)}",
+            ]
+        )
+    elif is_first_node:
+        question_snapshot = (
+            input_snapshot.get("pregunta")
+            if isinstance(input_snapshot, Mapping)
+            else None
+        )
+        lines.extend(
+            [
+                f"----- START trace={trace_text} -----",
+                f"Pregunta: {_human_value(question_snapshot)}",
+            ]
+        )
+
+    lines.extend(
+        [
+            "",
+            f"[{number:02d}] Nodo: {step_text}",
+            "  Enviados:",
+            *_human_fields(input_snapshot),
+        ]
+    )
+    if event == "node_failed":
+        lines.extend(
+            [
+                "  Recibidos:",
+                f"    estado: ERROR ({context.get('error_type', 'Error')})",
+            ]
+        )
+        lines.append(f"\n----- END estado=failed trace={trace_text} -----")
+        with _HUMAN_TRACE_LOCK:
+            _HUMAN_TRACES.pop(trace_key, None)
+        return "\n".join(lines)
+
+    lines.extend(["  Recibidos:", *_human_fields(context.get("node_output", {}))])
+    status = context.get("status")
+    if isinstance(status, str):
+        lines.append(f"  Estado: {status}")
+    if step_text == "guarda_memoria_corta":
+        lines.append(f"\n----- END estado={status or 'success'} trace={trace_text} -----")
+        with _HUMAN_TRACE_LOCK:
+            _HUMAN_TRACES.pop(trace_key, None)
+    return "\n".join(lines)
+
+
 @contextmanager
 def trace_context(value: str | None = None) -> Iterator[str]:
     """Correlate nested API, graph, LLM, and database events safely."""
@@ -290,6 +577,8 @@ def _redact_trace_text(value: str, *, max_length: int = _MAX_TRACE_TEXT) -> str:
 
 
 def _safe_value(key: str, value: object) -> object:
+    if key in _NODE_IO_CONTEXT_KEYS:
+        return _node_state_snapshot(value)
     if key in {"payload_preview", "query_structure"}:
         return None
     safe_diagnostic_key = key in {
@@ -371,7 +660,10 @@ def _safe_value(key: str, value: object) -> object:
         return value
     if isinstance(value, (list, tuple)):
         if key in {"input_keys", "output_keys", "parameter_names"}:
-            private_fields = _PRIVATE_STATE_FIELDS if key != "parameter_names" else frozenset()
+            # Field names are safe metadata. Keep the graph's private state
+            # names visible so the boundary summary matches the snapshots;
+            # values remain gated by CIAR_NODE_LOG_VALUES and redaction.
+            private_fields = frozenset()
             return [
                 item
                 for item in value[:32]
@@ -427,6 +719,11 @@ def log_event(
 
     merged_context = dict(context or {})
     merged_context.update(extra_context)
+    configure_node_log_scope()
+    if node_logs_only_enabled() and (component, event) not in {
+        ("graph", node_event) for node_event in _NODE_ONLY_EVENTS
+    }:
+        return
     active_trace_id = trace_id()
     if active_trace_id is not None and "trace_id" not in merged_context:
         merged_context["trace_id"] = active_trace_id
@@ -441,6 +738,19 @@ def log_event(
         "event": event,
         "context": sanitize_context(merged_context),
     }
+    safe_context = entry["context"]
+    if (
+        _configured_log_format() == "human"
+        and component == "graph"
+        and event in _HUMAN_NODE_EVENTS
+        and isinstance(safe_context, Mapping)
+    ):
+        human_event = _human_node_event(event, safe_context)
+        if human_event is None:
+            return
+        logger.log(numeric_level, human_event)
+        return
+
     logger.log(numeric_level, json.dumps(entry, ensure_ascii=False, allow_nan=False))
 
 

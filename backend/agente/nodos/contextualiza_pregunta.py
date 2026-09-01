@@ -15,6 +15,7 @@ def contextualiza_pregunta(
     *,
     memory_store: ConversationMemory,
 ) -> Estado:
+    """Resolve a follow-up against the trusted short-term conversation scope."""
     if estado.get("error"):
         return {}
     question = estado.get("pregunta")

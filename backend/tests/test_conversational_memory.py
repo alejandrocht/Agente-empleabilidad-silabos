@@ -395,6 +395,20 @@ class SequenceGateway:
         return [{"cargo": "Analista"}]
 
 
+class SequenceOrchestrator:
+    async def ainvoke(self, _messages: list[BaseMessage]) -> object:
+        return {"ruta": "cypher"}
+
+
+class SequenceAnalyst:
+    async def ainvoke(self, _messages: list[BaseMessage]) -> object:
+        return {
+            "statements": [
+                {"row_index": 0, "text": "El cargo encontrado es Analista."}
+            ]
+        }
+
+
 def _sequence_schema() -> Neo4jSchemaSnapshot:
     return Neo4jSchemaSnapshot(
         text="",
@@ -409,12 +423,14 @@ def _sequence_schema() -> Neo4jSchemaSnapshot:
     )
 
 
-def test_graph_sequence_keeps_original_question_and_generates_from_contextualized_data() -> None:
+def test_graph_sequence_contextualizes_follow_up_with_previous_entity() -> None:
     memory = ConversationMemory(ttl_seconds=60, max_turns=4)
     generator = SequenceGenerator()
     scope = derive_memory_scope("server-secret", "user-a", "thread-a")
     graph = construir_grafo(
+        orchestrator_runnable=SequenceOrchestrator(),
         generated_runnable=generator,
+        analyst_runnable=SequenceAnalyst(),
         schema_loader=_sequence_schema,
         cypher_gateway=SequenceGateway(),
         memory_store=memory,
@@ -434,11 +450,11 @@ def test_graph_sequence_keeps_original_question_and_generates_from_contextualize
     assert second["pregunta"] == "¿Cuáles son?"
     assert "Acme" in second["pregunta_contextualizada"]
     second_human_prompt = str(generator.calls[1][-1].content)
-    assert "Acme" in second_human_prompt
     assert "¿Cuáles son?" in second_human_prompt
+    assert "Acme" in second_human_prompt
 
 
-def test_remembered_injection_is_rejected_before_schema_or_generator() -> None:
+def test_remembered_injection_is_revalidated_and_rejected() -> None:
     memory = ConversationMemory(ttl_seconds=60, max_turns=4)
     generator = SequenceGenerator()
     scope = derive_memory_scope("server-secret", "user-a", "thread-a")
@@ -455,7 +471,9 @@ def test_remembered_injection_is_rejected_before_schema_or_generator() -> None:
         return _sequence_schema()
 
     graph = construir_grafo(
+        orchestrator_runnable=SequenceOrchestrator(),
         generated_runnable=generator,
+        analyst_runnable=SequenceAnalyst(),
         schema_loader=loader,
         cypher_gateway=SequenceGateway(),
         memory_store=memory,
@@ -473,7 +491,9 @@ def test_plain_external_memory_scope_cannot_activate_langgraph_memory() -> None:
     trusted_scope = derive_memory_scope("server-secret", "user-a", "thread-a")
     memory.remember(trusted_scope, "Listá puestos de Acme", "Listá puestos de Acme")
     graph = construir_grafo(
+        orchestrator_runnable=SequenceOrchestrator(),
         generated_runnable=SequenceGenerator(),
+        analyst_runnable=SequenceAnalyst(),
         schema_loader=_sequence_schema,
         cypher_gateway=SequenceGateway(),
         memory_store=memory,
@@ -489,7 +509,6 @@ def test_plain_external_memory_scope_cannot_activate_langgraph_memory() -> None:
     )
 
     assert result["pregunta_contextualizada"] == "¿Cuáles son?"
-    assert "Acme" not in result["pregunta_contextualizada"]
 
 
 def test_same_scope_requests_are_serialized_for_the_full_follow_up_cycle(

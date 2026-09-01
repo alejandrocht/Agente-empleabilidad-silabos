@@ -24,23 +24,24 @@ runner. The active package is `backend/agente`.
   the console/API plus `langgraph_entrypoint` for LangGraph's no-argument graph loader.
 - `backend/api/servidor.py` owns the HTTP boundary.
 - `backend/agente/utils/db.py` is the guarded, read-only domain query gateway.
-- `backend/agente/utils/neo4j_saver.py` owns LangGraph checkpoint lifecycle.
-- `backend/agente/utils/neo4j_long_term_memory.py` owns durable user-scoped memory.
-- `backend/agente/utils/tooler.py` contains the immutable 20-template catalog.
-- `backend/agente/cache/consultas.py` contains the bounded process-local query-result cache.
-- `backend/agente/memoria/` contains bounded short-term conversational context and
-  deterministic 12-turn compaction.
-- `backend/agente/utils/response_inspector.py` is always-on deterministic response
-  inspection; there is no active inspector LLM switch.
+- `backend/agente/memoria_corta.py` contains bounded process-local conversational context.
+- `backend/agente/nodos/redacta_respuesta.py` asks the analyst model to explain verified rows.
+- `backend/agente/cache/consultas.py` is used by the typed dashboard services, not the chat graph.
+- `backend/agente/utils/response_inspector.py` validates grounded analyst output.
 
 ## Active graph flow
 
-`START -> obtiene_pregunta -> prompt_injection -> contextualiza_pregunta -> contextualized_prompt_injection -> orquestador -> (responder_directo | obtiene_schema -> construye_cypher -> resuelve_entidades -> cypher_guard -> devuelve_respuesta) -> guarda_memoria_corta -> END`
+`START -> obtiene_pregunta -> prompt_injection -> orquestador -> (responder_directo | obtiene_schema -> construye_cypher -> resuelve_entidades -> cypher_guard -> devuelve_respuesta -> redacta_respuesta) -> guarda_memoria_corta -> END`
 
-The `orquestador` route sends greetings, capability questions, and non-domain
-conversation to `responder_directo`. Only questions that require academic or
-employment facts continue to schema loading and Cypher generation. All domain
-Cypher is guarded, executed with Neo4j `READ` routing, and bounded. No public
+La contextualización automática de seguimientos (`contextualiza_pregunta` y
+`contextualized_prompt_injection`) está desactivada temporalmente; el grafo usa la pregunta
+original validada en cada turno.
+
+The `orquestador` sends greetings, capability questions, and non-domain conversation to the
+analyst. Questions requiring academic or employment facts continue to the Cypher generator.
+With the current local configuration these roles use GPT-OSS 120B, GPT-OSS 20B, and Luna Max,
+respectively. All domain Cypher is guarded, executed with Neo4j `READ` routing, and bounded.
+Verified rows return to the analyst, with IDs removed unless explicitly requested. No public
 endpoint accepts arbitrary Cypher.
 
 ## Configuration
@@ -50,28 +51,20 @@ endpoint accepts arbitrary Cypher.
 - Domain reads prefer a complete `NEO4J_READ_URI`, `NEO4J_READ_USER`,
   `NEO4J_READ_PASSWORD` group and fall back as a whole to `NEO4J_URI`, `NEO4J_USER`,
   `NEO4J_PASSWORD`.
-- LangGraph checkpoints prefer a complete `NEO4J_CHECKPOINT_URI`,
-  `NEO4J_CHECKPOINT_USER`, `NEO4J_CHECKPOINT_PASSWORD` group and fall back as a whole
-  to the legacy `NEO4J_*` group. Partial higher-priority groups fail closed.
-- Durable memory selects complete groups in this order: `NEO4J_MEMORY_*`,
-  `NEO4J_CHECKPOINT_*`, then `NEO4J_*`.
 - `NEO4J_DATABASE`, `NEO4J_READ_DATABASE`, and `NEO4J_SCHEMA_CACHE_TTL_SECONDS`
   configure database reads and schema caching. See `backend/.env.example` for the
   complete template.
 
 ### OpenAI and runtime limits
 
-- Shared fallback: `OPENAI_API_KEY`, `OPENAI_MODEL`, and optional `OPENAI_BASE_URL`.
-- Role-specific models: `OPENAI_MODEL_PLANIFICADOR`, `OPENAI_MODEL_RESPONDER_DIRECTO`,
-  `OPENAI_MODEL_GENERADOR_CYPHER`, `OPENAI_MODEL_FORMATEADOR`, and
-  `OPENAI_MEMORY_MODEL`.
+- Credentials and endpoint: `OPENAI_API_KEY` and optional `OPENAI_BASE_URL`.
+- Conversational roles: `OPENAI_MODEL_ORQUESTADOR`,
+  `OPENAI_MODEL_GENERADOR_CYPHER`, and `OPENAI_MODEL_ANALISTA`.
 - Role-specific reasoning settings use the corresponding
   `OPENAI_REASONING_EFFORT_*` variables.
-- Short-term context uses `MEMORIA_TTL_SEGUNDOS` and `MEMORIA_MAX_THREADS`.
-- Query results use `QUERY_RESULT_CACHE_TTL_SECONDS` and
+- Short-term chat context is process-local and bounded to four turns with a 30-minute TTL.
+- Dashboard query results use `QUERY_RESULT_CACHE_TTL_SECONDS` and
   `QUERY_RESULT_CACHE_MAX_ENTRIES`.
-- Durable memory uses `CIAR_MEMORY_RECENT_LIMIT` and
-  `CIAR_MEMORY_TIMEOUT_SECONDS`.
 - Logging uses `CIAR_LOG_LEVEL` or the `LOG_LEVEL` fallback.
 - `ANONYMOUS_ID_SECRET` signs the anonymous identity cookie.
 

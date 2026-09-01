@@ -21,7 +21,10 @@ from typing import Any
 
 from agente.config.settings import booleano, entero, texto
 
-NOMBRE_LOGGER = "agente"
+# Keep the legacy importer/normalizer formatter isolated from the structured
+# conversational-agent logger. Sharing ``agente`` caused every JSON event to be
+# rendered a second time as ``evento.desconocido`` with an invalid timestamp.
+NOMBRE_LOGGER = "agente_legacy"
 _MODULO_LOGGER = __name__
 _MAX_CHARS = entero("LOG_MAX_CHARS_CAMPO", 800)
 _MOSTRAR_SESION_COMPLETA = booleano("LOG_SESION_COMPLETA", False)
@@ -91,6 +94,7 @@ def _crear_formateador() -> logging.Formatter:
 
 def _crear_logger() -> logging.Logger:
     logger = logging.getLogger(NOMBRE_LOGGER)
+    logger.propagate = False
     if not logger.handlers:
         logger.addHandler(logging.StreamHandler(sys.stdout))
     for handler in logger.handlers:

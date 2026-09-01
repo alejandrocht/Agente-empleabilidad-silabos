@@ -1,4 +1,4 @@
-"""Execute the validated read query and build a deterministic public answer."""
+"""Execute the validated read query and prepare a safe analyst fallback."""
 
 from __future__ import annotations
 
@@ -20,62 +20,15 @@ NO_RESULTS_RESPONSE = (
     "CIAR. Prueba con carreras, cursos, facultades, empresas, ofertas, puestos, herramientas o "
     "competencias."
 )
-_AGGREGATE_PREFIXES = (
-    "total_",
-    "cantidad_",
-    "conteo_",
-    "count_",
-    "numero_",
-    "num_",
+ANALYST_FALLBACK_RESPONSE = (
+    "La consulta se completó, pero no pude redactar una respuesta segura en este momento."
 )
-_AGGREGATE_KEYS = frozenset({"total", "cantidad", "conteo", "count", "numero", "num"})
 
 
 class ReadQueryGateway(Protocol):
     async def run(
         self, cypher: str, parameters: Mapping[str, Any] | None = None
     ) -> list[dict[str, Any]]: ...
-
-
-def _aggregate_response(rows: list[dict[str, Any]]) -> str | None:
-    """Render a single numeric aggregate using its returned alias."""
-    if len(rows) != 1 or len(rows[0]) != 1:
-        return None
-
-    key, value = next(iter(rows[0].items()))
-    if (
-        not isinstance(key, str)
-        or isinstance(value, bool)
-        or not isinstance(value, (int, float))
-    ):
-        return None
-
-    field = key.strip().casefold()
-    label = next(
-        (
-            field[len(prefix) :].replace("_", " ").strip()
-            for prefix in _AGGREGATE_PREFIXES
-            if field.startswith(prefix) and field[len(prefix) :].strip("_")
-        ),
-        None,
-    )
-    displayed_value = f"{value:g}" if isinstance(value, float) else str(value)
-    if label:
-        return f"Hay {displayed_value} {label}."
-    if field in _AGGREGATE_KEYS:
-        return f"El total es {displayed_value}."
-    return None
-
-
-def _deterministic_response(rows: list[dict[str, Any]]) -> str:
-    if not rows:
-        return NO_RESULTS_RESPONSE
-    aggregate = _aggregate_response(rows)
-    if aggregate is not None:
-        return aggregate
-    count = len(rows)
-    suffix = "resultado" if count == 1 else "resultados"
-    return f"Encontré {count} {suffix} para tu consulta."
 
 
 async def devuelve_respuesta(
@@ -170,8 +123,8 @@ async def devuelve_respuesta(
         rows_count=len(bounded_rows),
         output_keys=["filas"],
     )
-    response = _deterministic_response(bounded_rows)
-    verbose_label("devuelve_respuesta", "Respuesta determinista generada", response)
+    response = NO_RESULTS_RESPONSE if not bounded_rows else ANALYST_FALLBACK_RESPONSE
+    verbose_label("devuelve_respuesta", "Respaldo seguro preparado", response)
     log_event(
         "query_response",
         "response_ready",

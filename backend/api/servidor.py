@@ -24,7 +24,13 @@ from agente.dashboard import servicio as dashboard
 from agente.grafo.constructor import construir_grafo
 from agente.memoria_corta import DEFAULT_CONVERSATION_MEMORY, server_memory_scope
 from agente.utils.cypher_guard import CypherGuardError, guard_cypher
-from agente.utils.logger import attempt_context, log_error, log_event, trace_context
+from agente.utils.logger import (
+    attempt_context,
+    configure_node_log_scope,
+    log_error,
+    log_event,
+    trace_context,
+)
 from agente.utils.validacion import EntradaInvalida, validar_pregunta
 
 USER_FACING_STREAM_NODES: frozenset[str] = frozenset()
@@ -73,14 +79,13 @@ TEXT_BLOCK_TYPES = frozenset({"text", "output_text"})
 STREAM_PHASE_BY_NODE = {
     "obtiene_pregunta": "analizando",
     "prompt_injection": "analizando",
-    "contextualiza_pregunta": "analizando",
-    "contextualized_prompt_injection": "analizando",
     "orquestador": "analizando",
     "obtiene_schema": "preparando_consulta",
     "construye_cypher": "preparando_consulta",
     "resuelve_entidades": "preparando_consulta",
     "cypher_guard": "validando_consulta",
     "devuelve_respuesta": "consultando_grafo",
+    "redacta_respuesta": "redactando",
     "responder_directo": "redactando",
     "LangGraph": "completado",
 }
@@ -88,6 +93,9 @@ _UNSAFE_VALUE = object()
 ANONYMOUS_ID_COOKIE = "ciar_anon_identity"
 _ANONYMOUS_ID_MAX_AGE = 60 * 60 * 24 * 30
 _ANONYMOUS_SIGNING_SECRET = secrets.token_bytes(32)
+
+# Apply the operator-selected node-only scope before Uvicorn starts serving requests.
+configure_node_log_scope()
 
 
 @asynccontextmanager
