@@ -75,7 +75,7 @@ def test_langgraph_entrypoint_is_a_no_argument_factory() -> None:
     assert langgraph_entrypoint().get_graph().nodes
 
 
-def test_final_state_publishes_rows_but_hides_query_internals() -> None:
+def test_final_state_publishes_response_and_query_but_hides_rows() -> None:
     state = {
         "respuesta": "Encontré 1 resultado para tu consulta.",
         "cypher": "MATCH (n:Carrera) RETURN n.nombre AS nombre LIMIT $limit",
@@ -90,13 +90,12 @@ def test_final_state_publishes_rows_but_hides_query_internals() -> None:
     assert public == {
         "respuesta": "Encontré 1 resultado para tu consulta.",
         "cypher": "MATCH (n:Carrera) RETURN n.nombre AS nombre LIMIT $limit",
-        "filas": [{"total": 2}],
         "error": None,
     }
     assert json.loads(json.dumps(public)) == public
 
 
-def test_nested_query_keys_are_removed_from_public_rows() -> None:
+def test_rows_are_not_projected_to_public_state() -> None:
     state = {
         "filas": [
             {
@@ -111,18 +110,10 @@ def test_nested_query_keys_are_removed_from_public_rows() -> None:
         ],
     }
 
-    assert sanitize_public_state(state) == {
-        "filas": [
-            {
-                "empresa": "Acme",
-                "ofertas": 3,
-                "detalle": {"sector": "Tecnologia"},
-            }
-        ],
-    }
+    assert sanitize_public_state(state) == {}
 
 
-def test_public_rows_never_expose_identifiers_even_when_nested() -> None:
+def test_public_rows_are_not_exposed_even_when_nested() -> None:
     state = {
         "filas": [
             {
@@ -133,9 +124,7 @@ def test_public_rows_never_expose_identifiers_even_when_nested() -> None:
         ],
     }
 
-    assert sanitize_public_state(state) == {
-        "filas": [{"curso": "Analítica de Negocios", "detalle": {"area": "Datos"}}],
-    }
+    assert sanitize_public_state(state) == {}
 
 
 def test_query_internals_are_never_projected_publicly() -> None:
@@ -151,7 +140,6 @@ def test_query_internals_are_never_projected_publicly() -> None:
 
     assert sanitize_public_state(state) == {
         "respuesta": "Respuesta fundamentada",
-        "filas": [{"total": 2}],
     }
 
 

@@ -43,6 +43,21 @@ _NODE_IO_MAX_ITEMS = 16
 _NODE_IO_PREVIEW_CHARS = 240
 _HUMAN_MAX_VALUE_CHARS = 360
 _HUMAN_IGNORED_FIELDS = frozenset({"trace_id", "memory_scope", "historial"})
+_HUMAN_QUIET_EVENTS = frozenset(
+    {
+        # These events repeat a nearby node boundary or a more useful result.
+        "validation_started",
+        "model_configured",
+        "llm_request",
+        "llm_response",
+        "extraction_started",
+        "load_started",
+        "explain_started",
+        "execution_started",
+        "stream_opened",
+        "stream_emission",
+    }
+)
 _HUMAN_TRACE_LOCK = RLock()
 _HUMAN_TRACES: dict[
     str, tuple[int, dict[str, int], dict[str, object], dict[str, dict[str, object]]]
@@ -64,6 +79,7 @@ _SAFE_CONTEXT_KEYS = frozenset(
     {
         "action",
         "attempt",
+        "cardinality",
         "cache_state",
         "configured",
         "count",
@@ -72,6 +88,8 @@ _SAFE_CONTEXT_KEYS = frozenset(
         "length",
         "long_enabled",
         "model_configured",
+        "model_driven",
+        "question_improved",
         "candidate_hash",
         "contract_label",
         "node_count",
@@ -104,11 +122,17 @@ _SAFE_CONTEXT_KEYS = frozenset(
         "response_size",
         "parameter_count",
         "parameter_names",
+        "operation",
+        "index_name",
+        "label",
+        "property_name",
         "query_structure",
         "schema_text_length",
         "cache_age_ms",
         "cache_ttl_seconds",
         "guard_decision",
+        "model_driven",
+        "question_improved",
         "read_only",
         "emission",
         "emission_index",
@@ -122,6 +146,7 @@ _SAFE_STRING_KEYS = frozenset(
     {
         "action",
         "candidate_hash",
+        "cardinality",
         "cache_state",
         "contract_label",
         "error_type",
@@ -138,11 +163,16 @@ _SAFE_STRING_KEYS = frozenset(
         "step",
         "guard_decision",
         "emission",
+        "operation",
+        "index_name",
+        "label",
+        "property_name",
     }
 )
 _SAFE_STRING = re.compile(r"^[A-Za-z0-9_.-]{1,80}$")
 _SAFE_STRING_VALUES: dict[str, frozenset[str]] = {
     "action": frozenset({"responder_directo", "usar_plantilla", "generar_cypher"}),
+    "cardinality": frozenset({"one", "many"}),
     "cache_state": frozenset({"hit", "miss", "expired"}),
     "reason": frozenset(
         {
@@ -169,6 +199,8 @@ _SAFE_STRING_VALUES: dict[str, frozenset[str]] = {
             "shutdown",
             "missing_writer",
             "queue_rejected",
+            "timeout",
+            "failed",
         }
     ),
     "route": frozenset(
@@ -185,7 +217,9 @@ _SAFE_STRING_VALUES: dict[str, frozenset[str]] = {
             "finalizar",
         }
     ),
-    "status": frozenset({"success", "failed", "skipped", "structured", "degraded"}),
+    "status": frozenset(
+        {"success", "failed", "skipped", "structured", "degraded", "multiple", "not_found"}
+    ),
 }
 _SAFE_DIAGNOSTIC_VALUES: dict[str, frozenset[str]] = {
     "stage": frozenset(
@@ -221,8 +255,6 @@ _SAFE_STEPS = frozenset(
     {
         "obtiene_pregunta",
         "prompt_injection",
-        "contextualiza_pregunta",
-        "contextualized_prompt_injection",
         "orquestador",
         "responder_directo",
         "obtiene_schema",
@@ -328,7 +360,6 @@ def _node_preview(value: object, field: str, depth: int = 0) -> object:
         "parameters",
         "parametros",
         "pregunta",
-        "pregunta_contextualizada",
         "respuesta",
         "rows",
     }:
@@ -544,6 +575,49 @@ def _human_node_event(event: str, context: Mapping[str, object]) -> str | None:
     return "\n".join(lines)
 
 
+def _human_event_line(
+    component: str,
+    event: str,
+    context: Mapping[str, object],
+) -> str:
+    """Render one concise operational event for local human diagnostics."""
+    trace = context.get("trace_id")
+    trace_text = trace[:8] if isinstance(trace, str) else "sin-trace"
+    priority = (
+        "route",
+        "step",
+        "status",
+        "reason",
+        "error_type",
+        "attempt",
+        "stage",
+        "duration_ms",
+        "rows_count",
+        "cache_age_ms",
+        "cache_ttl_seconds",
+        "indexes_count",
+        "query_limit",
+        "index_name",
+        "label",
+        "property_name",
+        "operation",
+        "guard_decision",
+        "neo4j_category",
+        "neo4j_classification",
+        "neo4j_code",
+        "warning",
+        "question_improved",
+        "model_driven",
+    )
+    fields = [
+        f"{key}={_human_value(context[key])}"
+        for key in priority
+        if key in context
+    ]
+    suffix = f" | {' '.join(fields)}" if fields else ""
+    return f"[{trace_text}] [{component}] {event}{suffix}"
+
+
 @contextmanager
 def trace_context(value: str | None = None) -> Iterator[str]:
     """Correlate nested API, graph, LLM, and database events safely."""
@@ -610,6 +684,8 @@ def _safe_value(key: str, value: object) -> object:
         "cache_age_ms",
         "cache_ttl_seconds",
         "guard_decision",
+        "model_driven",
+        "question_improved",
         "read_only",
         "emission",
         "emission_index",
@@ -649,7 +725,15 @@ def _safe_value(key: str, value: object) -> object:
             return value if _SAFE_HASH.fullmatch(value) else None
         if key in _SAFE_DIAGNOSTIC_VALUES:
             return value if value in _SAFE_DIAGNOSTIC_VALUES[key] else None
-        if key in {"contract_label", "neo4j_code", "parameter"}:
+        if key in {
+            "contract_label",
+            "neo4j_code",
+            "parameter",
+            "operation",
+            "index_name",
+            "label",
+            "property_name",
+        }:
             return value if _SAFE_STRING.fullmatch(value) else None
         if key == "error_type":
             return value if _SAFE_ERROR_TYPE.fullmatch(value) else None
@@ -749,6 +833,12 @@ def log_event(
         if human_event is None:
             return
         logger.log(numeric_level, human_event)
+        return
+
+    if _configured_log_format() == "human":
+        if event in _HUMAN_QUIET_EVENTS:
+            return
+        logger.log(numeric_level, _human_event_line(component, event, safe_context))
         return
 
     logger.log(numeric_level, json.dumps(entry, ensure_ascii=False, allow_nan=False))

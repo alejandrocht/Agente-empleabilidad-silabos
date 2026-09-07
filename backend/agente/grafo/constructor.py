@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Awaitable, Callable
 from typing import cast
@@ -18,15 +19,14 @@ from agente.memoria_corta import (
     server_memory_scope,
 )
 from agente.nodos.construye_cypher import construye_cypher
-from agente.nodos.contextualiza_pregunta import contextualiza_pregunta
+from agente.nodos.contrato_cypher import GeneratedQueryRunnable
 from agente.nodos.cypher_guard import cypher_guard
 from agente.nodos.devuelve_respuesta import ReadQueryGateway, devuelve_respuesta
-from agente.nodos.generar_cypher import GeneratedQueryRunnable
 from agente.nodos.guarda_memoria_corta import guarda_memoria_corta
 from agente.nodos.obtiene_pregunta import obtiene_pregunta
 from agente.nodos.obtiene_schema import SchemaLoader, obtiene_schema
 from agente.nodos.orquestador import OrchestratorRunnable, Route, orquestador
-from agente.nodos.prompt_injection import contextualized_prompt_injection, prompt_injection
+from agente.nodos.prompt_injection import prompt_injection
 from agente.nodos.redacta_respuesta import AnalystRunnable, redacta_respuesta
 from agente.nodos.responder_directo import DirectResponseRunnable, responder_directo
 from agente.nodos.resuelve_entidades import resuelve_entidades
@@ -34,10 +34,10 @@ from agente.utils.logger import (
     attempt_context,
     log_error,
     log_event,
-    node_logs_only_enabled,
     trace_context,
     trace_id,
 )
+from agente.utils.prompt import build_orchestrator_system_prompt
 from agente.utils.verbose import verbose_scope, verbose_step
 
 
@@ -197,34 +197,21 @@ def construir_grafo(
 
     builder.add_node("prompt_injection", RunnableLambda(prompt_injection_node))
 
-    def contextualization_node(estado: Estado) -> Estado:
-        return run_sync_node(
-            "contextualiza_pregunta",
-            lambda value: contextualiza_pregunta(value, memory_store=memory_store),
-            estado,
-        )
-
-    builder.add_node("contextualiza_pregunta", RunnableLambda(contextualization_node))
-
-    def contextualized_prompt_injection_node(estado: Estado) -> Estado:
-        return run_sync_node(
-            "contextualized_prompt_injection",
-            contextualized_prompt_injection,
-            estado,
-        )
-
-    builder.add_node(
-        "contextualized_prompt_injection",
-        RunnableLambda(contextualized_prompt_injection_node),
-    )
-
     async def orchestrator_node(estado: Estado) -> Estado:
+        async def invoke(value: Estado) -> Estado:
+            if value.get("error"):
+                return {"ruta": "finalizar"}
+            question = value.get("pregunta")
+            result = await orquestador(
+                question if isinstance(question, str) else "",
+                build_orchestrator_system_prompt(),
+                orchestrator_runnable=orchestrator_runnable,
+            )
+            return cast(Estado, result)
+
         return await run_async_node(
             "orquestador",
-            lambda value: orquestador(
-                value,
-                orchestrator_runnable=orchestrator_runnable,
-            ),
+            invoke,
             estado,
         )
 
@@ -317,9 +304,7 @@ def construir_grafo(
 
     builder.add_edge(START, "obtiene_pregunta")
     builder.add_edge("obtiene_pregunta", "prompt_injection")
-    builder.add_edge("prompt_injection", "contextualiza_pregunta")
-    builder.add_edge("contextualiza_pregunta", "contextualized_prompt_injection")
-    builder.add_edge("contextualized_prompt_injection", "orquestador")
+    builder.add_edge("prompt_injection", "orquestador")
     builder.add_conditional_edges(
         "orquestador",
         route_after_orchestrator,
@@ -361,7 +346,9 @@ async def responder(
     with (
         trace_context(trace_id()) as active_trace,
         attempt_context(1),
-        verbose_scope(verbose and not node_logs_only_enabled()),
+        verbose_scope(
+            verbose or os.getenv("CIAR_VERBOSE") == "1"
+        ),
     ):
         verbose_step("request", "Solicitud recibida", f"input_size={len(pregunta)}")
         log_event("graph", "request_started", input_keys=["pregunta"], input_size=len(pregunta))

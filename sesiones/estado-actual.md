@@ -30,8 +30,7 @@ START
   -> END
 ```
 
-La contextualización automática (`contextualiza_pregunta` y
-`contextualized_prompt_injection`) está desactivada temporalmente. Cada turno continúa con
+Cada turno continúa con
 la pregunta original después de la primera validación.
 
 El orquestador GPT-OSS 120B clasifica la consulta sin responderla. Saludos y conversación pasan

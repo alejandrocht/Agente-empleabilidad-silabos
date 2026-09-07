@@ -42,7 +42,6 @@ GRAPH_TIMEOUT_RESPONSE = (
     "Intentá nuevamente o formulala de manera más específica."
 )
 PUBLIC_TEXT_FIELDS = ("respuesta", "error")
-PUBLIC_LIST_FIELDS = ("filas",)
 PUBLIC_PHASES = frozenset(
     {
         "analizando",
@@ -64,7 +63,8 @@ GRAPH_INTERNAL_KEYS = frozenset(
         "parameters",
         "plan",
         "pregunta",
-        "pregunta_contextualizada",
+        "pregunta_original",
+        "pregunta_mejorada",
         "memory_scope",
         "historial",
         "rows",
@@ -293,13 +293,6 @@ def sanitize_public_state(output: object) -> dict[str, object]:
     for field in PUBLIC_TEXT_FIELDS:
         value = output.get(field, _UNSAFE_VALUE)
         if value is None or isinstance(value, str):
-            public_state[field] = value
-    for field in PUBLIC_LIST_FIELDS:
-        value = output.get(field, _UNSAFE_VALUE)
-        if not isinstance(value, (list, tuple)):
-            continue
-        value = _json_safe_public_value(value)
-        if value is not _UNSAFE_VALUE:
             public_state[field] = value
     if isinstance(output, Mapping):
         cypher = _validated_public_cypher(output)
@@ -615,7 +608,6 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
             with trace_context(active_trace), attempt_context(1):
                 accumulated_text = ""
                 accumulated_state: dict[str, Any] = {}
-                emission_index = 0
 
                 def merge_public_state(state: object) -> None:
                     if isinstance(state, dict):
@@ -623,33 +615,20 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                     if accumulated_text:
                         accumulated_state["respuesta"] = accumulated_text
 
-                def emit_state(emission: str) -> str:
-                    nonlocal emission_index
+                def emit_state() -> str:
                     ordered_state: dict[str, Any] = {}
-                    for key in ("respuesta", "cypher", "filas", "error", "fase"):
+                    for key in ("respuesta", "cypher", "error", "fase"):
                         if key in accumulated_state:
                             ordered_state[key] = accumulated_state[key]
                     for key, value in accumulated_state.items():
                         if key not in ordered_state:
                             ordered_state[key] = value
                     payload = json.dumps(ordered_state, ensure_ascii=False)
-                    emission_index += 1
-                    filas = accumulated_state.get("filas")
-                    log_event(
-                        "api",
-                        "stream_emission",
-                        route="chat_stream",
-                        emission=emission,
-                        emission_index=emission_index,
-                        output_keys=sorted(accumulated_state),
-                        rows_count=len(filas) if isinstance(filas, list) else 0,
-                        payload_size=len(payload),
-                    )
                     return f"event: values\ndata: {payload}\n\n"
 
                 try:
                     merge_public_state({"fase": "analizando"})
-                    yield emit_state("phase")
+                    yield emit_state()
                     graph = construir_grafo()
                     async for event in _bounded_memory_serialized_events(
                         graph,
@@ -667,7 +646,7 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                         if kind == "on_chain_start":
                             if phase and phase != accumulated_state.get("fase"):
                                 merge_public_state({"fase": phase})
-                                yield emit_state("phase")
+                                yield emit_state()
                             continue
 
                         if kind == "on_chat_model_stream":
@@ -675,7 +654,7 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                             if content:
                                 accumulated_text += content
                                 merge_public_state({"fase": "redactando"})
-                                yield emit_state("text")
+                                yield emit_state()
                         elif kind == "on_chain_end":
                             data = event.get("data")
                             output = data.get("output", {}) if isinstance(data, dict) else {}
@@ -695,18 +674,18 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                                     phase_changed = accumulated_state.get("fase") != "redactando"
                                     merge_public_state({"fase": "redactando"})
                                     if remaining_text and phase_changed:
-                                        yield emit_state("phase")
+                                        yield emit_state()
                                     for chunk in _stream_text_chunks(remaining_text):
                                         accumulated_text += chunk
                                         merge_public_state({"fase": "redactando"})
-                                        yield emit_state("text")
+                                        yield emit_state()
                                         if accumulated_text != final_response:
                                             await asyncio.sleep(STREAM_TEXT_CHUNK_DELAY_SECONDS)
                                 if accumulated_text:
                                     sanitized["respuesta"] = accumulated_text
                                 sanitized["fase"] = "completado"
                                 merge_public_state(sanitized)
-                                yield emit_state("state")
+                                yield emit_state()
                                 continue
 
                             if sanitized:
@@ -719,10 +698,10 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                                 merge_public_state(sanitized)
                                 changed = any(
                                     accumulated_state.get(key) != previous_state.get(key)
-                                    for key in ("cypher", "filas", "error", "fase")
+                                    for key in ("cypher", "error", "fase")
                                 )
                                 if changed:
-                                    yield emit_state("state")
+                                    yield emit_state()
                 except TimeoutError as exc:
                     log_error(
                         "api",
@@ -737,7 +716,7 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                     merge_public_state(
                         {"error": "graph_timeout", "fase": "completado"}
                     )
-                    yield emit_state("timeout")
+                    yield emit_state()
                 except EntradaInvalida as exc:
                     log_error("api", "stream_rejected", exc, route="chat_stream", status="failed")
                     yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"

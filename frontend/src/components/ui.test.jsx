@@ -88,7 +88,6 @@ describe("interfaz del chat", () => {
       cypher: "",
       fase: "",
       entidades: [],
-      filas: [],
       pasos: [],
       error: "",
     });
@@ -151,6 +150,21 @@ describe("interfaz del chat", () => {
 
     expect(screen.getByText("Cypher generado")).toBeTruthy();
     expect(screen.getByText(/MATCH/)).toBeTruthy();
+  });
+
+  it("no muestra las filas internas del analista en el chat", () => {
+    const { container } = render(
+      <Burbuja
+        mensaje={{
+          rol: "agente",
+          texto: "El curso trata sobre algoritmos.",
+          filas: [{ nombre_curso: "Análisis y Diseño de Algoritmos" }],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("El curso trata sobre algoritmos.")).toBeTruthy();
+    expect(container.querySelector('[aria-label="Detalle de resultados"]')).toBeNull();
   });
 
   it("conserva el aviso de solo lectura para bloqueos Cypher", () => {

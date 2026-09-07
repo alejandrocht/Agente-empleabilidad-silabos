@@ -91,7 +91,7 @@ def obtener_estado_neo4j() -> EstadoNeo4jOut:
     """Verify the live CIAR schema without exposing Neo4j configuration or secrets."""
     started_at = perf_counter()
     try:
-        get_cached_neo4j_schema(force_refresh=True)
+        get_cached_neo4j_schema()
     except Neo4jSchemaMismatchError as exc:
         return _estado_neo4j(
             "schema_mismatch",

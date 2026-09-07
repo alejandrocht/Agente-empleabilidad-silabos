@@ -132,6 +132,7 @@ async def resuelve_entidades(
             "rejected",
             status=result.status,
             cardinality=cardinality,
+            parameter_names=sorted(str(name) for name in parameters),
         )
         return {
             "respuesta": SAFE_ENTITY_RESOLUTION_ERROR,

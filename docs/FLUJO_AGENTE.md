@@ -48,7 +48,8 @@ El backend (`backend/api/servidor.py`):
 5. emite eventos SSE `values` con fases y estado público;
 6. termina con un evento SSE `end`.
 
-Solo se exponen `respuesta`, `filas`, `cypher`, `error` y `fase`. El schema, historial,
+Solo se exponen `respuesta`, `cypher`, `error` y `fase`. Las `filas` se mantienen dentro del
+grafo para que el analista encuentre insights, pero nunca se envían al navegador. El schema, historial,
 parámetros internos y credenciales nunca se envían al navegador.
 
 ## 3. Nodos en orden
@@ -63,7 +64,7 @@ parámetros internos y credenciales nunca se envían al navegador.
 | `construye_cypher` | Genera Cypher parametrizado usando el schema | `cypher`, `parameters`, `query_limit` |
 | `resuelve_entidades` | Canonicaliza IDs y valores textuales contra el schema/datos | Parámetros resueltos o error seguro |
 | `cypher_guard` | Aplica la política final de solo lectura | Cypher aceptado o bloqueado |
-| `devuelve_respuesta` | Ejecuta la consulta por el gateway Neo4j `READ` | `filas` y respuesta determinista |
+| `devuelve_respuesta` | Ejecuta la consulta por el gateway Neo4j `READ` | `filas` internas y respuesta determinista |
 | `redacta_respuesta` | Explica las filas con afirmaciones ancladas a datos | Respuesta pública final |
 | `guarda_memoria_corta` | Guarda la pregunta solo si la ejecución fue exitosa | Turno persistido en memoria de proceso |
 
@@ -188,10 +189,8 @@ verificados en vez de inventar una explicación.
 
 ## 9. Memoria conversacional
 
-La contextualización automática de seguimientos está desactivada temporalmente: el grafo no
-ejecuta `contextualiza_pregunta` ni `contextualized_prompt_injection`. La memoria solo se
-escribe al final en `guarda_memoria_corta`, guardando la pregunta original cuando no hay error
-y existe una respuesta.
+El grafo usa únicamente la pregunta original validada. La memoria solo se escribe al final en
+`guarda_memoria_corta`, guardando la pregunta original cuando no hay error y existe una respuesta.
 
 Características actuales:
 
@@ -200,12 +199,9 @@ Características actuales:
 - TTL de 30 minutos;
 - límites globales de scopes y entradas;
 - serialización por scope para evitar carreras entre solicitudes concurrentes;
-- ancla acotada de resultados de cursos para preguntas de seguimiento;
 - memoria en proceso: se pierde al reiniciar el backend y no se comparte entre réplicas.
 
-Las utilidades de memoria/contextualización se conservan aisladas para una futura reactivación.
-Mientras tanto, ningún turno previo se inyecta en el prompt del orquestador o del generador de
-Cypher.
+Los turnos previos no se inyectan en el prompt del orquestador ni del generador de Cypher.
 
 ## 10. Errores visibles en el frontend
 

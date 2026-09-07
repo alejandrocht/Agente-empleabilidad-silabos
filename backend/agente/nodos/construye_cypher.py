@@ -6,14 +6,13 @@ import os
 import re
 import sys
 import time
-import unicodedata
 from collections.abc import Mapping
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import ValidationError
 
-from agente.grafo.estado import Estado
-from agente.nodos.generar_cypher import (
+from agente.grafo.estado import Estado, pregunta_para_procesar
+from agente.nodos.contrato_cypher import (
     GeneratedQuery,
     GeneratedQueryRunnable,
     SchemaValidationError,
@@ -36,14 +35,6 @@ from agente.utils.prompt import (
 from agente.utils.verbose import verbose_label, verbose_step
 
 MAX_GENERATION_ATTEMPTS = 2
-_TEXT_SEARCH_PARAMETER_NAMES = frozenset(
-    {"texto", "curso_texto", "herramienta_texto", "habilidad_texto", "competencia_texto"}
-)
-_GAP_DIMENSIONS = {
-    "herramient": ("Herramienta", "ENSENIA"),
-    "habilidad": ("Habilidad", "DESARROLLA"),
-    "competenc": ("Competencia", "CUBRE"),
-}
 SAFE_GENERATION_ERROR = (
     "No pude consultar la información de forma segura en este momento. "
     "Intentá nuevamente más tarde."
@@ -77,24 +68,13 @@ def _redact_quoted_literals(cypher: str) -> str:
     return "".join(redacted)
 
 
-def _fold_search_text(value: str) -> str:
-    """Fold case and accents only for structural intent checks."""
-    decomposed = unicodedata.normalize("NFKD", value.casefold())
-    without_marks = "".join(
-        character for character in decomposed if not unicodedata.combining(character)
-    )
-    return " ".join(re.findall(r"[a-z0-9]+", without_marks))
-
-
-def _normalize_text_search_parameters(
+def _normalize_string_parameters(
     parameters: Mapping[str, object],
-    question: object,
 ) -> dict[str, object]:
-    del question
     return {
         name: (
             value.strip()
-            if name in _TEXT_SEARCH_PARAMETER_NAMES and isinstance(value, str)
+            if isinstance(value, str)
             else value
         )
         for name, value in parameters.items()
@@ -143,117 +123,6 @@ def _reject_interpolated_values(cypher: str) -> None:
         raise CypherGuardError("Generated Cypher must parameterize string values")
 
 
-def _validate_follow_up_shape(cypher: str, question: object) -> None:
-    if not isinstance(question, str):
-        return
-    folded_question = _fold_search_text(question)
-    if not re.search(r"\bcon\s+que\s+(?:tecnologia|herramienta)", folded_question):
-        return
-    if not re.search(r":(?:Herramienta|Tecnologia)\b", cypher, re.IGNORECASE):
-        raise SchemaValidationError(
-            "Technology follow-up must traverse a Herramienta or Tecnologia node"
-        )
-
-
-def _gap_dimension(question: object) -> tuple[str, str] | None:
-    """Return the requested curriculum/market dimension for an explicit gap question."""
-    if not isinstance(question, str):
-        return None
-    folded = _fold_search_text(question)
-    asks_for_absence = any(
-        marker in folded
-        for marker in (
-            "brecha",
-            "falta",
-            "faltan",
-            "no cubre",
-            "no cubren",
-            "no ensena",
-            "no ensenan",
-            "carece",
-        )
-    )
-    mentions_market_demand = any(
-        marker in folded
-        for marker in (
-            "mercado",
-            "laboral",
-            "oferta",
-            "exige",
-            "exigen",
-            "pide",
-            "piden",
-            "requiere",
-            "requieren",
-            "solicita",
-            "solicitan",
-        )
-    )
-    if not asks_for_absence or not mentions_market_demand:
-        return None
-    return next(
-        (contract for stem, contract in _GAP_DIMENSIONS.items() if stem in folded),
-        None,
-    )
-
-
-def _validate_gap_shape(cypher: str, question: object) -> None:
-    """Reject executable-looking anti-joins that do not actually filter covered items."""
-    dimension = _gap_dimension(question)
-    if dimension is None:
-        return
-    label, curriculum_relationship = dimension
-    if re.search(r"(?i)\bOPTIONAL\s+MATCH\b", cypher):
-        raise SchemaValidationError(
-            f"Curriculum-market gap for {label} cannot use OPTIONAL MATCH"
-        )
-
-    demand = re.search(
-        rf"(?i)\[\s*:\s*REQUIERE\s*\]\s*->\s*"
-        rf"\(\s*(?P<variable>[A-Za-z_][A-Za-z0-9_]*)\s*:\s*{label}\b[^)]*\)",
-        cypher,
-    )
-    career = re.search(
-        r"(?i)\(\s*(?P<variable>[A-Za-z_][A-Za-z0-9_]*)\s*:\s*Carrera\b[^)]*\)",
-        cypher,
-    )
-    if demand is None or career is None:
-        raise SchemaValidationError(
-            f"Curriculum-market gap for {label} must connect demand and curriculum"
-        )
-
-    dimension_variable = re.escape(demand.group("variable"))
-    career_variable = re.escape(career.group("variable"))
-    node = r"\(\s*(?:[A-Za-z_][A-Za-z0-9_]*\s*)?(?::\s*{label}\s*)?\)"
-    course_node = node.format(label="Curso")
-    coverage_node = node.format(label="Cobertura_Curricular")
-    negative_curriculum_pattern = re.compile(
-        rf"(?is)\bNOT\s*\(\s*{career_variable}(?:\s*:\s*Carrera)?\s*\)\s*"
-        rf"-\[\s*:\s*ENSENIA\s*\]->\s*{course_node}\s*"
-        rf"-\[\s*:\s*TIENE\s*\]->\s*{coverage_node}\s*"
-        rf"-\[\s*:\s*{curriculum_relationship}\s*\]->\s*"
-        rf"\(\s*{dimension_variable}(?:\s*:\s*{label})?\s*\)"
-    )
-    negative_match = negative_curriculum_pattern.search(cypher)
-    if negative_match is None:
-        raise SchemaValidationError(
-            f"Curriculum-market gap for {label} must use a NOT pattern over the same "
-            "market-demand variable"
-        )
-    outside_negative_pattern = (
-        cypher[: negative_match.start()] + cypher[negative_match.end() :]
-    )
-    if re.search(r"(?i):\s*Cobertura_Curricular\b", outside_negative_pattern):
-        raise SchemaValidationError(
-            f"Curriculum-market gap for {label} cannot require curriculum coverage "
-            "outside the NOT pattern"
-        )
-    if re.search(r"(?i)\bTRUE\s+AS\s+brecha_curricular\b", cypher) is None:
-        raise SchemaValidationError(
-            f"Curriculum-market gap for {label} must project true AS brecha_curricular"
-        )
-
-
 async def construye_cypher(
     estado: Estado,
     *,
@@ -271,6 +140,9 @@ async def construye_cypher(
         raise ValueError("max_generation_attempts must be positive")
 
     attempts_allowed = min(max_generation_attempts, MAX_GENERATION_ATTEMPTS)
+    question = pregunta_para_procesar(estado)
+    if question is None:
+        return {"respuesta": SAFE_GENERATION_ERROR, "filas": [], "error": "question_missing"}
     schema_summary = summarize_schema(snapshot.structured)
     runnable = generated_runnable
     corrective_feedback: str | None = None
@@ -298,7 +170,7 @@ async def construye_cypher(
                     SystemMessage(content=build_cypher_system_prompt()),
                     HumanMessage(
                         content=build_cypher_user_prompt(
-                            estado.get("pregunta_contextualizada", estado["pregunta"]),
+                            question,
                             schema_summary,
                             corrective_feedback,
                         )
@@ -306,7 +178,7 @@ async def construye_cypher(
                 ]
                 prompt_breakdown: dict[str, object] = {
                     "system_prompt": messages[0].content,
-                    "question": estado.get("pregunta_contextualizada", estado["pregunta"]),
+                    "question": question,
                     "schema_summary": schema_summary,
                 }
                 if corrective_feedback is not None:
@@ -329,9 +201,8 @@ async def construye_cypher(
                 generated = GeneratedQuery.model_validate(await runnable.ainvoke(messages))
                 generated = generated.model_copy(
                     update={
-                        "parameters": _normalize_text_search_parameters(
+                        "parameters": _normalize_string_parameters(
                             generated.parameters,
-                            estado.get("pregunta_contextualizada", estado["pregunta"]),
                         )
                     }
                 )
@@ -376,14 +247,6 @@ async def construye_cypher(
                     context=_query_log_context(corrected_cypher, generated.parameters),
                 )
                 validate_generated_schema(corrected_cypher, snapshot.structured)
-                _validate_follow_up_shape(
-                    corrected_cypher,
-                    estado.get("pregunta_contextualizada", estado["pregunta"]),
-                )
-                _validate_gap_shape(
-                    corrected_cypher,
-                    estado.get("pregunta_contextualizada", estado["pregunta"]),
-                )
                 _debug_cypher("guard_cypher", corrected_cypher, generated.parameters)
                 guarded = guard_cypher(corrected_cypher, generated.parameters)
                 log_event(

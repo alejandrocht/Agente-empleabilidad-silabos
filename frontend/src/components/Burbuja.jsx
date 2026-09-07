@@ -2,11 +2,6 @@ import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import BotAvatar from "./BotAvatar";
 import PanelRazonamiento, { detalleError } from "./PanelRazonamiento";
-import TablaFilas, { resumenFilas } from "./TablaFilas";
-
-function esListadoDuplicado(texto) {
-  return /^estos son los resultados:\s*/i.test(String(texto || ""));
-}
 
 const ETIQUETAS_FASE = {
   analizando: "Analizando tu consulta…",
@@ -20,7 +15,6 @@ const ETIQUETAS_FASE = {
 export default function Burbuja({ mensaje }) {
   const esUsuario = mensaje.rol === "usuario";
   const [copiado, setCopiado] = useState(false);
-  const filas = Array.isArray(mensaje.filas) ? mensaje.filas : [];
   const pasos = Array.isArray(mensaje.pasos) ? mensaje.pasos : [];
   const entidades = Array.isArray(mensaje.entidades) ? mensaje.entidades : [];
   const texto = typeof mensaje.texto === "string" ? mensaje.texto : "";
@@ -29,9 +23,9 @@ export default function Burbuja({ mensaje }) {
   const cypher = typeof mensaje.cypher === "string" ? mensaje.cypher : "";
   const fase = typeof mensaje.fase === "string" ? mensaje.fase : "";
   const etiquetaFase = ETIQUETAS_FASE[fase] || "Procesando tu consulta…";
-  const textoVisible = esListadoDuplicado(texto) ? resumenFilas(filas) || texto : texto;
+  const textoVisible = texto;
   const detalle = error ? detalleError(error) : null;
-  const tieneContenidoStreaming = Boolean(texto || cypher || filas.length || error || errorRed);
+  const tieneContenidoStreaming = Boolean(texto || cypher || error || errorRed);
 
   const copiar = async () => {
     if (!textoVisible) return;
@@ -93,8 +87,6 @@ export default function Burbuja({ mensaje }) {
             Error de conexión/API: {errorRed}
           </div>
         ) : null}
-
-        <TablaFilas filas={filas} />
 
         <PanelRazonamiento
           pasos={pasos}

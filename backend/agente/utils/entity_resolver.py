@@ -1074,7 +1074,8 @@ async def resolve_entity_result(
             key=lambda item: (-item[0], _identifier_sort_key(item[1].identifier))
         )
         if exact_matches and exact_matches[0][0] > 0:
-            matches = tuple(item[1] for item in exact_matches)
+            best_score = exact_matches[0][0]
+            matches = tuple(item[1] for item in exact_matches if item[0] == best_score)
             status: ResolutionStatus = "unique" if len(matches) == 1 else "multiple"
             return EntityResolutionResult(status, contract.parameter, contract.label, matches)
 
@@ -1093,7 +1094,10 @@ async def resolve_entity_result(
             key=lambda item: (-item[0], _identifier_sort_key(item[1].identifier))
         )
         if exact_catalog_matches:
-            matches = tuple(item[1] for item in exact_catalog_matches)
+            best_score = exact_catalog_matches[0][0]
+            matches = tuple(
+                item[1] for item in exact_catalog_matches if item[0] == best_score
+            )
             status = "unique" if len(matches) == 1 else "multiple"
             return EntityResolutionResult(status, contract.parameter, contract.label, matches)
 

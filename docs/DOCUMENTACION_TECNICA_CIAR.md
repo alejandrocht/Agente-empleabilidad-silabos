@@ -145,9 +145,8 @@ flowchart TD
 9. `devuelve_respuesta`: ejecuta la consulta a través del gateway y produce una respuesta estable.
 10. `guarda_memoria_corta`: almacena únicamente turnos exitosos y acotados.
 
-La contextualización automática de seguimientos está temporalmente fuera del grafo. Las
-funciones auxiliares se conservan aisladas, pero no leen memoria ni inyectan texto en los
-prompts del orquestador o del generador.
+Cada turno usa únicamente la pregunta original validada. No se inyecta memoria de turnos
+anteriores en los prompts del orquestador ni del generador.
 
 ### 4.3 Routing determinista
 

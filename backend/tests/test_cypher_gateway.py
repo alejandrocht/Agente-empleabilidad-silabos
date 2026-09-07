@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Generator
 from dataclasses import dataclass
+from datetime import date as python_date
 from types import SimpleNamespace
 from typing import Any
 
@@ -23,6 +25,8 @@ from agente.utils.db import (
     Neo4jQueryError,
     Neo4jReadConfig,
     classify_neo4j_error,
+    format_temporal_year,
+    invalidate_fulltext_index_cache,
     neo4j_diagnostic_context,
     normalize_neo4j_value,
     query_fingerprint,
@@ -30,6 +34,13 @@ from agente.utils.db import (
 from agente.utils.logger import trace_context
 
 SAFE_QUERY = "MATCH (n:Carrera) RETURN n.nombre AS nombre LIMIT $limit"
+
+
+@pytest.fixture(autouse=True)
+def reset_fulltext_index_cache() -> Generator[None, None, None]:
+    invalidate_fulltext_index_cache()
+    yield
+    invalidate_fulltext_index_cache()
 
 
 @pytest.mark.parametrize(
@@ -700,3 +711,21 @@ def test_normalization_handles_nested_temporal_spatial_and_nonfinite_values() ->
         "nested": [{"value": "inf"}],
     }
     assert json.loads(json.dumps(normalized, allow_nan=False)) == normalized
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (Date(2025, 1, 2), 2025),
+        (DateTime(2024, 6, 3, 10, 0, 0), 2024),
+        (python_date(2023, 5, 1), 2023),
+        ("2022-09-15", 2022),
+        ("2021-09-15T10:30:00", 2021),
+        ("2,022", 2022),
+        (2020, 2020),
+        ("sin fecha", None),
+        (None, None),
+    ],
+)
+def test_temporal_year_formatter_covers_native_iso_and_invalid_values(value, expected) -> None:
+    assert format_temporal_year(value) == expected

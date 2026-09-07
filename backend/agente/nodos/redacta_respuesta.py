@@ -8,13 +8,15 @@ import math
 import os
 import re
 from collections.abc import Mapping
+from decimal import Decimal, InvalidOperation
+from itertools import combinations
 from typing import Any, Protocol, cast
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, ConfigDict, Field
 
-from agente.grafo.estado import Estado
+from agente.grafo.estado import Estado, pregunta_para_procesar
 from agente.utils.identifier_intent import requests_identifier
 from agente.utils.llm import ANALYST_CHAT_PROFILE, build_chat_openai
 from agente.utils.logger import log_error, log_event
@@ -37,6 +39,7 @@ _SAFE_SENTENCE_TOKENS = frozenset(
         "el",
         "ella",
         "en",
+        "entre",
         "esta",
         "estas",
         "este",
@@ -170,6 +173,109 @@ def _scalar_strings(value: object) -> set[str]:
     return set()
 
 
+def _parse_number_token(token: str) -> Decimal | None:
+    """Parse common Spanish/JSON number spellings into one comparable value."""
+    normalized = token.strip().rstrip("%").replace(" ", "")
+    if not normalized:
+        return None
+    try:
+        if "," in normalized and "." in normalized:
+            # The last separator is the decimal separator when both are present.
+            if normalized.rfind(",") > normalized.rfind("."):
+                normalized = normalized.replace(".", "").replace(",", ".")
+            else:
+                normalized = normalized.replace(",", "")
+        elif "," in normalized:
+            whole, fraction = normalized.rsplit(",", 1)
+            normalized = (
+                whole + fraction
+                if len(fraction) == 3 and whole.lstrip("+-").isdigit()
+                else whole + "." + fraction
+            )
+        elif "." in normalized:
+            whole, fraction = normalized.rsplit(".", 1)
+            normalized = (
+                whole + fraction
+                if len(fraction) == 3 and whole.lstrip("+-").isdigit()
+                else normalized
+            )
+        return Decimal(normalized)
+    except InvalidOperation:
+        return None
+
+
+def _number_values(value: object) -> set[Decimal]:
+    if isinstance(value, bool):
+        return set()
+    if isinstance(value, (int, float)):
+        try:
+            return {Decimal(str(value))}
+        except InvalidOperation:
+            return set()
+    if isinstance(value, str):
+        parsed = _parse_number_token(value)
+        return {parsed} if parsed is not None else set()
+    return set()
+
+
+def _is_metric_field(field_name: str) -> bool:
+    folded = field_name.casefold()
+    return any(
+        marker in folded
+        for marker in (
+            "total",
+            "cantidad",
+            "oferta",
+            "frecuencia",
+            "demanda",
+            "count",
+            "numero",
+            "número",
+            "variacion",
+            "variación",
+            "diferencia",
+        )
+    )
+
+
+def _derived_number_values(rows: list[dict[str, object]]) -> set[Decimal]:
+    """Allow bounded sums and deltas within one cited entity group."""
+    by_group: dict[tuple[str, str, str], list[Decimal]] = {}
+    for row in rows:
+        group_fields = [
+            (str(field_name), value.strip().casefold())
+            for field_name, value in row.items()
+            if not _is_metric_field(str(field_name))
+            and isinstance(value, str)
+            and len(value.strip()) >= 3
+        ]
+        if not group_fields:
+            continue
+        for field_name, value in row.items():
+            if not _is_metric_field(str(field_name)):
+                continue
+            numbers = _number_values(value)
+            if numbers:
+                for group_field, group_value in group_fields:
+                    key = (group_field, group_value, str(field_name))
+                    by_group.setdefault(key, []).extend(numbers)
+
+    derived: set[Decimal] = set()
+    for values in by_group.values():
+        if len(values) < 2:
+            continue
+        # Pair/triple combinations cover common company-year trends while keeping
+        # the validation bounded for the maximum 20 visible rows.
+        for size in (2, 3):
+            if len(values) >= size:
+                for group in combinations(values, size):
+                    derived.add(sum(group, Decimal(0)))
+        derived.add(sum(values, Decimal(0)))
+        for left, right in combinations(values, 2):
+            derived.add(abs(left - right))
+    return derived
+
+
 def _answer_is_grounded(
     answer: str,
     row_indices: list[int],
@@ -185,7 +291,17 @@ def _answer_is_grounded(
 
     cited_rows = [rows[index] for index in row_indices]
     cited_json = json.dumps(cited_rows, ensure_ascii=False, allow_nan=False)
-    if not set(_NUMBER.findall(answer)) <= set(_NUMBER.findall(cited_json)):
+    cited_numbers = {
+        parsed
+        for token in _NUMBER.findall(cited_json)
+        if (parsed := _parse_number_token(token)) is not None
+    }
+    answer_numbers = {
+        parsed
+        for token in _NUMBER.findall(answer)
+        if (parsed := _parse_number_token(token)) is not None
+    }
+    if not answer_numbers <= cited_numbers | _derived_number_values(cited_rows):
         return False
 
     folded_answer = answer.casefold()
@@ -403,7 +519,7 @@ async def redacta_respuesta(
     if estado.get("error"):
         return {}
     rows = estado.get("filas")
-    question = estado.get("pregunta_contextualizada") or estado.get("pregunta")
+    question = pregunta_para_procesar(estado)
     if (
         not isinstance(rows, list)
         or not all(isinstance(row, dict) for row in rows)

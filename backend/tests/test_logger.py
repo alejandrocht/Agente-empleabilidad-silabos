@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from agente.utils.logger import log_error, log_event, trace_context
+from agente.utils.verbose import verbose_scope, verbose_step
 
 
 def read_log(capsys) -> dict[str, object]:
@@ -23,6 +24,24 @@ def test_log_event_emits_stable_json_shape(capsys) -> None:
     assert entry["component"] == "test_component"
     assert entry["event"] == "operation_completed"
     assert entry["context"] == {"count": 3, "status": "success"}
+
+
+def test_log_event_keeps_entity_resolution_rejection_status(capsys) -> None:
+    log_event(
+        "entity_resolution",
+        "rejected",
+        status="multiple",
+        cardinality="one",
+        parameter_names=["herramienta"],
+    )
+
+    entry = read_log(capsys)
+
+    assert entry["context"] == {
+        "status": "multiple",
+        "cardinality": "one",
+        "parameter_names": ["herramienta"],
+    }
 
 
 def test_log_event_drops_prompts_queries_secrets_ids_and_raw_values(capsys) -> None:
@@ -246,3 +265,45 @@ def test_human_node_logs_group_input_and_output_in_one_block(capsys, monkeypatch
     assert 'respuesta: "[REDACTADO]"' in output
     assert "----- END estado=success trace=01234567 -----" in output
     assert '"node_started"' not in output
+
+
+def test_human_logs_render_concise_operational_events(capsys, monkeypatch) -> None:
+    monkeypatch.setenv("CIAR_LOG_FORMAT", "human")
+
+    with trace_context("0123456789abcdef0123456789abcdef"):
+        log_event(
+            "orchestrator",
+            "route_selected",
+            route="cypher",
+            status="success",
+            model_driven=True,
+            question_improved=True,
+            duration_ms=12.5,
+        )
+
+    output = capsys.readouterr().out
+    assert output.startswith("[01234567] [orchestrator] route_selected")
+    assert "route=cypher" in output
+    assert "status=success" in output
+    assert "question_improved=True" in output
+    assert "model_driven=True" in output
+    assert '"component"' not in output
+
+
+def test_human_logs_drop_stream_fragment_noise(capsys, monkeypatch) -> None:
+    monkeypatch.setenv("CIAR_LOG_FORMAT", "human")
+
+    log_event("api", "stream_emission", emission="text", payload_size=42)
+
+    assert capsys.readouterr().out == ""
+
+
+def test_verbose_trace_is_suppressed_when_human_logs_are_enabled(
+    capsys, monkeypatch
+) -> None:
+    monkeypatch.setenv("CIAR_LOG_FORMAT", "human")
+
+    with verbose_scope(True):
+        verbose_step("orquestador", "Prompt enviado al modelo", "privado")
+
+    assert capsys.readouterr().err == ""

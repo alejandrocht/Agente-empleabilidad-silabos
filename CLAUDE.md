@@ -24,7 +24,7 @@ runner. The active package is `backend/agente`.
   the console/API plus `langgraph_entrypoint` for LangGraph's no-argument graph loader.
 - `backend/api/servidor.py` owns the HTTP boundary.
 - `backend/agente/utils/db.py` is the guarded, read-only domain query gateway.
-- `backend/agente/memoria_corta.py` contains bounded process-local conversational context.
+- `backend/agente/memoria_corta.py` contains bounded process-local turn storage; prior turns are not injected into prompts.
 - `backend/agente/nodos/redacta_respuesta.py` asks the analyst model to explain verified rows.
 - `backend/agente/cache/consultas.py` is used by the typed dashboard services, not the chat graph.
 - `backend/agente/utils/response_inspector.py` validates grounded analyst output.
@@ -33,9 +33,8 @@ runner. The active package is `backend/agente`.
 
 `START -> obtiene_pregunta -> prompt_injection -> orquestador -> (responder_directo | obtiene_schema -> construye_cypher -> resuelve_entidades -> cypher_guard -> devuelve_respuesta -> redacta_respuesta) -> guarda_memoria_corta -> END`
 
-La contextualización automática de seguimientos (`contextualiza_pregunta` y
-`contextualized_prompt_injection`) está desactivada temporalmente; el grafo usa la pregunta
-original validada en cada turno.
+El grafo usa la pregunta original validada en cada turno; no reescribe preguntas con contexto
+de turnos anteriores.
 
 The `orquestador` sends greetings, capability questions, and non-domain conversation to the
 analyst. Questions requiring academic or employment facts continue to the Cypher generator.
@@ -62,7 +61,7 @@ endpoint accepts arbitrary Cypher.
   `OPENAI_MODEL_GENERADOR_CYPHER`, and `OPENAI_MODEL_ANALISTA`.
 - Role-specific reasoning settings use the corresponding
   `OPENAI_REASONING_EFFORT_*` variables.
-- Short-term chat context is process-local and bounded to four turns with a 30-minute TTL.
+- Successful turn storage is process-local and bounded to four turns with a 30-minute TTL; it does not rewrite subsequent questions.
 - Dashboard query results use `QUERY_RESULT_CACHE_TTL_SECONDS` and
   `QUERY_RESULT_CACHE_MAX_ENTRIES`.
 - Logging uses `CIAR_LOG_LEVEL` or the `LOG_LEVEL` fallback.

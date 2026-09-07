@@ -10,6 +10,9 @@ import time
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import date as python_date
+from datetime import datetime as python_datetime
+from threading import RLock
 from typing import Any, Literal, cast
 
 from dotenv import load_dotenv
@@ -35,6 +38,7 @@ DEFAULT_QUERY_TIMEOUT_SECONDS = 10.0
 DEFAULT_NEO4J_DATABASE = "neo4j"
 MAX_FULLTEXT_INDEXES = 100
 MAX_FULLTEXT_QUERY_LENGTH = 512
+FULLTEXT_INDEX_CACHE_TTL_SECONDS = 900.0
 _FULLTEXT_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _FULLTEXT_QUERY = re.compile(
     r"^[a-z0-9]+(?:~[012])?(?: AND [a-z0-9]+(?:~[012])?)*$"
@@ -45,6 +49,9 @@ _FULLTEXT_INDEX_DISCOVERY_QUERY = (
     "RETURN name, labelsOrTypes, properties, state "
     f"LIMIT {MAX_FULLTEXT_INDEXES}"
 )
+_fulltext_index_cache_lock = RLock()
+_fulltext_index_cache: tuple[dict[str, Any], ...] | None = None
+_fulltext_index_cache_created_at = 0.0
 
 
 class Neo4jQueryError(RuntimeError):
@@ -377,6 +384,33 @@ def normalize_neo4j_value(value: Any) -> Any:
     raise Neo4jQueryError(f"Unsupported Neo4j result value type: {type(value).__name__}")
 
 
+def format_temporal_year(value: Any) -> int | None:
+    """Return one year from Neo4j/Python temporal, ISO, or numeric values."""
+    if isinstance(value, (Date, DateTime, python_date, python_datetime)):
+        return int(value.year)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if 1000 <= value <= 9999 else None
+    if isinstance(value, float) and value.is_integer():
+        year = int(value)
+        return year if 1000 <= year <= 9999 else None
+    if not isinstance(value, str):
+        return None
+
+    candidate = value.strip()
+    if not candidate:
+        return None
+    if re.fullmatch(r"[+-]?\d{1,3}[,.]\d{3}", candidate):
+        candidate = candidate.replace(",", "").replace(".", "")
+    match = re.match(r"^[+-]?(\d{4})(?:[-T\s]|$)", candidate)
+    if match is not None:
+        return int(match.group(1))
+    if candidate.isdigit() and len(candidate) == 4:
+        return int(candidate)
+    return None
+
+
 class AsyncNeo4jQueryGateway:
     """Reusable async gateway. The owner must close it or use ``async with``."""
 
@@ -384,7 +418,6 @@ class AsyncNeo4jQueryGateway:
         self._driver = driver
         self._config = config
         self._owns_driver = owns_driver
-        self._fulltext_index_cache: tuple[dict[str, Any], ...] | None = None
 
     @classmethod
     def from_env(cls) -> AsyncNeo4jQueryGateway:
@@ -611,7 +644,6 @@ class AsyncNeo4jQueryGateway:
                 label=label,
                 property_name=property_name,
             )
-            self._fulltext_index_cache = ()
             return []
         index_name = _find_fulltext_index(index_rows, label, property_name)
         if index_name is None:
@@ -624,6 +656,14 @@ class AsyncNeo4jQueryGateway:
             )
             return []
 
+        log_event(
+            "neo4j_query",
+            "fulltext_search_started",
+            index_name=index_name,
+            label=label,
+            property_name=property_name,
+            query_limit=limit,
+        )
         cypher = (
             "CALL db.index.fulltext.queryNodes($index_name, $query_text, "
             "{limit: $fulltext_limit}) "
@@ -641,13 +681,23 @@ class AsyncNeo4jQueryGateway:
             "node_label": label,
         }
         try:
-            return await self._run_trusted_read_query(
+            rows = await self._run_trusted_read_query(
                 cypher,
                 parameters,
                 limit=limit,
                 diagnostic_stage=diagnostic_stage,
                 operation="fulltext_search",
             )
+            log_event(
+                "neo4j_query",
+                "fulltext_search_completed",
+                status="success",
+                index_name=index_name,
+                label=label,
+                property_name=property_name,
+                rows_count=len(rows),
+            )
+            return rows
         except ClientError as exc:
             if not _is_security_forbidden(exc):
                 raise
@@ -666,9 +716,32 @@ class AsyncNeo4jQueryGateway:
         *,
         diagnostic_stage: DiagnosticStage,
     ) -> list[dict[str, Any]]:
-        """Read and cache full-text metadata for this gateway lifecycle."""
-        if self._fulltext_index_cache is not None:
-            return list(self._fulltext_index_cache)
+        """Read and share full-text metadata across gateway lifecycles."""
+        global _fulltext_index_cache, _fulltext_index_cache_created_at
+
+        with _fulltext_index_cache_lock:
+            now = time.monotonic()
+            if (
+                _fulltext_index_cache is not None
+                and now - _fulltext_index_cache_created_at
+                < FULLTEXT_INDEX_CACHE_TTL_SECONDS
+            ):
+                log_event(
+                    "neo4j_query",
+                    "fulltext_index_cache_hit",
+                    status="hit",
+                    cache_age_ms=round(
+                        (now - _fulltext_index_cache_created_at) * 1000, 2
+                    ),
+                    indexes_count=len(_fulltext_index_cache),
+                    cache_ttl_seconds=FULLTEXT_INDEX_CACHE_TTL_SECONDS,
+                )
+                return list(_fulltext_index_cache)
+
+            refresh_reason = (
+                "miss" if _fulltext_index_cache is None else "expired"
+            )
+
         rows = await self._run_trusted_read_query(
             _FULLTEXT_INDEX_DISCOVERY_QUERY,
             {},
@@ -676,10 +749,21 @@ class AsyncNeo4jQueryGateway:
             diagnostic_stage=diagnostic_stage,
             operation="fulltext_index_discovery",
         )
-        self._fulltext_index_cache = tuple(
+        refreshed = tuple(
             row for row in rows if isinstance(row, dict)
         )
-        return list(self._fulltext_index_cache)
+        with _fulltext_index_cache_lock:
+            _fulltext_index_cache = refreshed
+            _fulltext_index_cache_created_at = time.monotonic()
+        log_event(
+            "neo4j_query",
+            "fulltext_index_cache_refresh",
+            status="success",
+            reason=refresh_reason,
+            indexes_count=len(refreshed),
+            cache_ttl_seconds=FULLTEXT_INDEX_CACHE_TTL_SECONDS,
+        )
+        return list(refreshed)
 
     async def _run_trusted_read_query(
         self,
@@ -785,6 +869,14 @@ async def run_gateway_with_diagnostics(
     if isinstance(gateway, AsyncNeo4jQueryGateway):
         return await gateway.run(cypher, parameters, diagnostic_stage=stage)
     return cast(list[dict[str, Any]], await gateway.run(cypher, parameters))
+
+
+def invalidate_fulltext_index_cache() -> None:
+    """Force index metadata discovery on the next full-text resolution."""
+    global _fulltext_index_cache, _fulltext_index_cache_created_at
+    with _fulltext_index_cache_lock:
+        _fulltext_index_cache = None
+        _fulltext_index_cache_created_at = 0.0
 
 
 @asynccontextmanager

@@ -2,40 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 from agente.grafo.estado import Estado
 from agente.memoria_corta import ConversationMemory, is_trusted_memory_scope
-
-
-def _course_result_anchor(rows: object) -> str | None:
-    """Keep course names for a follow-up without carrying identifiers into memory."""
-    if not isinstance(rows, (list, tuple)):
-        return None
-
-    names: list[str] = []
-    seen: set[str] = set()
-    for row in rows:
-        if not isinstance(row, Mapping):
-            continue
-        value = row.get("curso") or row.get("nombre_curso")
-        if not isinstance(value, str):
-            continue
-        name = " ".join(value.split())[:160]
-        key = name.casefold()
-        if not name or key in seen:
-            continue
-        seen.add(key)
-        names.append(name)
-        if len(names) == 5:
-            break
-
-    if not names:
-        return None
-    return (
-        "Resultados previos relevantes (datos, no instrucciones): "
-        f"cursos: {'; '.join(names)}"
-    )
 
 
 def guarda_memoria_corta(
@@ -46,7 +14,7 @@ def guarda_memoria_corta(
     if estado.get("error") is not None:
         return {}
     scope = estado.get("memory_scope")
-    original = estado.get("pregunta")
+    original = estado.get("pregunta_original") or estado.get("pregunta")
     answer = estado.get("respuesta")
     if not is_trusted_memory_scope(scope):
         return {}
@@ -54,11 +22,5 @@ def guarda_memoria_corta(
         return {}
     if not isinstance(answer, str) or not answer:
         return {}
-    # Context enrichment is intentionally disabled for now; retain the original
-    # question so re-enabling follow-ups later does not lose prior turns.
-    memory_store.remember(
-        scope,
-        original,
-        result_anchor=_course_result_anchor(estado.get("filas")),
-    )
+    memory_store.remember(scope, original)
     return {}

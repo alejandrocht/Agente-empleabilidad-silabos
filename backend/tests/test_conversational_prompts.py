@@ -20,7 +20,16 @@ from agente.utils.prompt import (
 
 
 def test_conversational_prompt_builders_cover_all_llm_roles() -> None:
-    assert "única tarea es decidir la ruta" in build_orchestrator_system_prompt()
+    orchestrator_prompt = build_orchestrator_system_prompt()
+    assert "corregir la forma de la pregunta y enrutarla" in orchestrator_prompt
+    assert "pregunta_mejorada" in orchestrator_prompt
+    assert "Referencia del schema activo" in orchestrator_prompt
+    assert "Curso.coordinador" in orchestrator_prompt
+    assert "no tiene un nodo `Profesor`" in orchestrator_prompt
+    assert "Mayhua" in orchestrator_prompt
+    assert '-> `cypher`' in orchestrator_prompt
+    assert "Corrige únicamente la forma" in orchestrator_prompt
+    assert "agregues información" in orchestrator_prompt
     assert "Hola" in build_orchestrator_user_prompt("Hola")
     assert "analista conversacional de CIAR" in build_direct_response_prompt()
     assert build_direct_user_prompt("Hola") == (
@@ -28,6 +37,16 @@ def test_conversational_prompt_builders_cover_all_llm_roles() -> None:
         "Pregunta:\nHola"
     )
     assert "una sola consulta de lectura" in build_cypher_system_prompt()
+    cypher_prompt = build_cypher_system_prompt()
+    assert "WITH" in cypher_prompt
+    assert "collect(DISTINCT ...)" in cypher_prompt
+    assert "head(collect(DISTINCT ...))" in cypher_prompt
+    assert "una sola fila por entidad principal" in cypher_prompt
+    assert "Proceso previo obligatorio" in cypher_prompt
+    assert "Patrones canónicos del schema" in cypher_prompt
+    assert "Curso.coordinador" in cypher_prompt
+    assert "DISTINCT` sobre todas las columnas no reemplaza" in cypher_prompt
+    assert "El guarda prohíbe escritura, CALL" in cypher_prompt
     assert build_cypher_user_prompt("Pregunta", "Schema", "Corrección") == (
         "Question:\nPregunta\n\n"
         "Structured schema summary:\nSchema\n\n"
@@ -47,6 +66,13 @@ def test_conversational_prompt_builders_cover_all_llm_roles() -> None:
         [{"total_carreras": 14}],
         total_rows=1,
     )
+    temporal_prompt = build_grounded_analysis_user_prompt(
+        "¿Qué empresas generan más ofertas y cómo ha ido variando en el tiempo?",
+        [{"empresa": "Krowdy", "anio": 2022, "total_ofertas": 38}],
+        total_rows=1,
+    )
+    assert "Ranking y evolución temporal" in temporal_prompt
+    assert "agrupa las filas por la entidad solicitada" in temporal_prompt
 
 
 def test_conversational_nodes_do_not_define_prompt_text() -> None:
@@ -61,5 +87,5 @@ def test_conversational_nodes_do_not_define_prompt_text() -> None:
     assert "Generá exactamente una consulta Cypher" not in cypher_source
     assert "guia_creacion_querys_cypher" not in cypher_source
     assert "Entrada no confiable de la persona usuaria" not in direct_source
-    assert "Tu única tarea es decidir la ruta" not in orchestrator_source
+    assert "Tu tarea es corregir la forma de la pregunta" not in orchestrator_source
     assert "Las filas son la única fuente de verdad" not in analyst_source

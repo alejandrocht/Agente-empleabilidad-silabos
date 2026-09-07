@@ -8,7 +8,6 @@ export function normalizeChatValues(values) {
     cypher: typeof source.cypher === "string" ? source.cypher : "",
     fase: typeof source.fase === "string" ? source.fase : "",
     entidades: Array.isArray(source.entidades) ? source.entidades : [],
-    filas: Array.isArray(source.filas) ? source.filas : [],
     pasos: Array.isArray(source.pasos) ? source.pasos : [],
     error: typeof source.error === "string" ? source.error : "",
   };
@@ -39,7 +38,6 @@ export function useChat({ conversacion, agregarMensaje }) {
         cypher: finalValues.cypher,
         fase: finalValues.fase,
         entidades: finalValues.entidades,
-        filas: finalValues.filas,
         pasos: finalValues.pasos,
         error: finalValues.error,
         creado: Date.now(),
@@ -55,7 +53,6 @@ export function useChat({ conversacion, agregarMensaje }) {
         cypher: current.cypher,
         fase: "completado",
         entidades: current.entidades,
-        filas: current.filas,
         pasos: current.pasos,
         error: current.texto ? "stream_interrupted" : "stream_failed",
         errorRed:

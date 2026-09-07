@@ -10,9 +10,9 @@ from langchain_core.messages import BaseMessage
 
 import agente.grafo.constructor as constructor
 from agente.grafo.constructor import construir_grafo as compile_graph
+from agente.nodos.contrato_cypher import GeneratedQuery
 from agente.nodos.cypher_guard import cypher_guard
 from agente.nodos.devuelve_respuesta import devuelve_respuesta
-from agente.nodos.generar_cypher import GeneratedQuery
 from agente.nodos.redacta_respuesta import redacta_respuesta
 from agente.utils.neo4j_schema import Neo4jSchemaSnapshot
 from api.servidor import sanitize_public_state
@@ -47,7 +47,8 @@ class FakeGenerator:
 
 class FakeOrchestrator:
     async def ainvoke(self, messages: list[BaseMessage]) -> object:
-        return {"ruta": "cypher"}
+        question = str(messages[-1].content).split("Pregunta:\n", 1)[-1].strip()
+        return {"ruta": "cypher", "pregunta_mejorada": question}
 
 
 class FakeAnalyst:
@@ -99,8 +100,6 @@ def test_active_graph_has_explicit_entity_resolution_security_order() -> None:
         "__end__",
         "obtiene_pregunta",
         "prompt_injection",
-        "contextualiza_pregunta",
-        "contextualized_prompt_injection",
         "orquestador",
         "obtiene_schema",
         "construye_cypher",
@@ -114,9 +113,7 @@ def test_active_graph_has_explicit_entity_resolution_security_order() -> None:
     assert {(edge.source, edge.target) for edge in view.edges} == {
         ("__start__", "obtiene_pregunta"),
         ("obtiene_pregunta", "prompt_injection"),
-        ("prompt_injection", "contextualiza_pregunta"),
-        ("contextualiza_pregunta", "contextualized_prompt_injection"),
-        ("contextualized_prompt_injection", "orquestador"),
+        ("prompt_injection", "orquestador"),
         ("orquestador", "guarda_memoria_corta"),
         ("orquestador", "obtiene_schema"),
         ("orquestador", "responder_directo"),
@@ -146,6 +143,25 @@ def test_empty_active_result_explains_the_agent_scope() -> None:
 
     assert "alcance académico y de empleabilidad" in result["respuesta"]
     assert "carreras, cursos, facultades" in result["respuesta"]
+
+
+def test_query_response_normalizes_temporal_aliases_for_the_analyst() -> None:
+    result = asyncio.run(
+        devuelve_respuesta(
+            {
+                "cypher": VALID_CYPHER,
+                "parameters": {"empresa_id": 7, "limite": 10},
+                "query_limit": 10,
+            },
+            query_gateway=FakeGateway(
+                [{"empresa": "Krowdy", "anio": "2,022", "total_ofertas": 38}]
+            ),
+        )
+    )
+
+    assert result["filas"] == [
+        {"empresa": "Krowdy", "anio": 2022, "total_ofertas": 38}
+    ]
 
 
 def test_analyst_uses_the_verified_aggregate_value() -> None:
@@ -590,6 +606,36 @@ def test_grounded_analyst_rejects_metrics_swapped_between_rows() -> None:
     assert "Novatronic" in result["respuesta"]
 
 
+def test_grounded_analyst_accepts_bounded_ranking_and_temporal_calculations() -> None:
+    rows = [
+        {"empresa": "Krowdy", "anio": 2022, "total_ofertas": 38},
+        {"empresa": "Krowdy", "anio": 2023, "total_ofertas": 43},
+        {"empresa": "Novatronic SAC", "anio": 2022, "total_ofertas": 54},
+        {"empresa": "Novatronic SAC", "anio": 2023, "total_ofertas": 23},
+    ]
+    answer = (
+        "Entre las filas mostradas, Krowdy lidera el acumulado con 81 ofertas: "
+        "38 en 2,022 y 43 en 2,023. Novatronic SAC acumuló 77 ofertas, al bajar "
+        "de 54 en 2,022 a 23 en 2,023."
+    )
+
+    result = asyncio.run(
+        redacta_respuesta(
+            {
+                "pregunta": (
+                    "¿Qué empresas generan más ofertas y cómo ha ido variando en el tiempo?"
+                ),
+                "filas": rows,
+                "error": None,
+            },
+            analyst_runnable=FakeAnalyst(answer, row_indices=[0, 1, 2, 3]),
+        )
+    )
+
+    assert result["respuesta"] == answer
+    assert result.get("warning") is None
+
+
 def test_grounded_analyst_does_not_treat_requested_limit_as_a_result() -> None:
     result = asyncio.run(
         redacta_respuesta(
@@ -742,7 +788,6 @@ def test_missing_generator_configuration_returns_safe_generation_error(
         module.construye_cypher(
             {
                 "pregunta": "List jobs",
-                "pregunta_contextualizada": "List jobs",
                 "schema": snapshot(),
                 "error": None,
             }
@@ -806,7 +851,7 @@ def test_parameterized_text_search_without_quoted_literals_is_accepted() -> None
     ]
 
 
-def test_public_projection_keeps_response_rows_and_error_only() -> None:
+def test_public_projection_keeps_response_and_error_but_hides_rows() -> None:
     public = sanitize_public_state(
         {
             "respuesta": "Encontré 1 resultado para tu consulta.",
@@ -820,7 +865,6 @@ def test_public_projection_keeps_response_rows_and_error_only() -> None:
 
     assert public == {
         "respuesta": "Encontré 1 resultado para tu consulta.",
-        "filas": [{"empresa": "Acme"}],
         "error": None,
     }
 
@@ -869,8 +913,6 @@ def test_active_flow_logs_correlated_nodes_llm_metadata_and_safe_query_shape(cap
     assert node_starts == {
         "obtiene_pregunta",
         "prompt_injection",
-        "contextualiza_pregunta",
-        "contextualized_prompt_injection",
         "orquestador",
         "obtiene_schema",
         "construye_cypher",

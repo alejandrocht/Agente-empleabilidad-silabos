@@ -21,7 +21,8 @@ _START: ContextVar[float | None] = ContextVar("ciar_verbose_start", default=None
 
 def verbose_enabled() -> bool:
     """Return whether the current request should emit verbose steps."""
-    return _VERBOSE.get()
+    configured_format = os.getenv("CIAR_LOG_FORMAT", "json").strip().lower()
+    return _VERBOSE.get() and configured_format not in {"human", "text", "texto"}
 
 
 @contextmanager
@@ -70,7 +71,7 @@ def verbose_step(
     duration_ms: float | None = None,
 ) -> None:
     """Print one labelled step to stderr when verbose mode is active."""
-    if not _VERBOSE.get():
+    if not verbose_enabled():
         return
 
     prefix = f"[{_timestamp()}] [{step}]"
@@ -92,7 +93,7 @@ def verbose_step(
 
 def verbose_label(step: str, label: str, value: Any) -> None:
     """Print a single labelled value on one line."""
-    if not _VERBOSE.get():
+    if not verbose_enabled():
         return
     prefix = f"[{_timestamp()}] [{step}]"
     text = value if isinstance(value, str) else _serialize(value)

@@ -7,7 +7,12 @@ from collections.abc import Mapping
 from typing import Any, Protocol, cast
 
 from agente.grafo.estado import Estado
-from agente.utils.db import normalize_neo4j_value, open_query_gateway, run_gateway_with_diagnostics
+from agente.utils.db import (
+    format_temporal_year,
+    normalize_neo4j_value,
+    open_query_gateway,
+    run_gateway_with_diagnostics,
+)
 from agente.utils.logger import log_error, log_event
 from agente.utils.verbose import verbose_label
 
@@ -23,6 +28,21 @@ NO_RESULTS_RESPONSE = (
 ANALYST_FALLBACK_RESPONSE = (
     "La consulta se completó, pero no pude redactar una respuesta segura en este momento."
 )
+
+
+def _normalize_temporal_aliases(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize common year aliases without changing original temporal fields."""
+    aliases = {"anio", "año", "year"}
+    normalized_rows: list[dict[str, Any]] = []
+    for row in rows:
+        normalized_row = dict(row)
+        for key, value in row.items():
+            if isinstance(key, str) and key.casefold() in aliases:
+                year = format_temporal_year(value)
+                if year is not None:
+                    normalized_row[key] = year
+        normalized_rows.append(normalized_row)
+    return normalized_rows
 
 
 class ReadQueryGateway(Protocol):
@@ -111,7 +131,9 @@ async def devuelve_respuesta(
         )
         return {"respuesta": SAFE_QUERY_ERROR, "filas": [], "error": "query_failed"}
 
-    bounded_rows = cast(list[dict[str, Any]], normalized[:limit])
+    bounded_rows = _normalize_temporal_aliases(
+        cast(list[dict[str, Any]], normalized[:limit])
+    )
     duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
     verbose_label("devuelve_respuesta", "Filas crudas devueltas por Neo4j", rows)
     verbose_label("devuelve_respuesta", "Filas normalizadas y acotadas", bounded_rows)

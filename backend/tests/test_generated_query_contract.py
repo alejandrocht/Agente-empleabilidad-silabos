@@ -4,7 +4,7 @@ import importlib
 
 import pytest
 
-from agente.nodos.generar_cypher import (
+from agente.nodos.contrato_cypher import (
     GeneratedQuery,
     build_generated_query_runnable,
     correct_relationship_direction,
@@ -52,7 +52,7 @@ def test_corrector_changes_only_a_schema_proven_inverse_direction() -> None:
 def test_build_generated_runnable_uses_role_specific_structured_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = importlib.import_module("agente.nodos.generar_cypher")
+    module = importlib.import_module("agente.nodos.contrato_cypher")
     model_calls: dict[str, object] = {}
     structured_calls: list[tuple[object, str]] = []
     expected = object()

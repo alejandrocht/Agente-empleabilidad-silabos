@@ -1042,6 +1042,24 @@ def test_rich_resolver_exposes_explicit_cardinality_states(
     ]
 
 
+def test_resolver_prefers_unique_exact_match_over_contains_variants() -> None:
+    result = asyncio.run(
+        resolve_entity_result(
+            "herramienta_id",
+            "SAP",
+            query_gateway=FakeGateway(
+                [
+                    {"entity_id": "HER_1", "entity_name": "SAP"},
+                    {"entity_id": "HER_2", "entity_name": "SAP HANA"},
+                ]
+            ),
+        )
+    )
+
+    assert result.status == "unique"
+    assert [match.identifier for match in result.matches] == ["HER_1"]
+
+
 def test_rich_resolver_ignores_invalid_rows_but_keeps_valid_match() -> None:
     result = asyncio.run(
         resolve_entity_result(
