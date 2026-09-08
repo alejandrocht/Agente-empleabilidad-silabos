@@ -9,8 +9,10 @@ from typing import Any, Protocol, cast
 from agente.grafo.estado import Estado
 from agente.utils.db import (
     format_temporal_year,
+    neo4j_diagnostic_context,
     normalize_neo4j_value,
     open_query_gateway,
+    query_fingerprint,
     run_gateway_with_diagnostics,
 )
 from agente.utils.logger import log_error, log_event
@@ -102,6 +104,7 @@ async def devuelve_respuesta(
         query_length=len(cypher),
         parameter_names=parameter_names,
         parameter_count=len(parameters),
+        query_fingerprint=query_fingerprint(cypher),
         read_only=True,
         query_limit=limit,
     )
@@ -125,6 +128,12 @@ async def devuelve_respuesta(
             "query_response",
             "execution_failed",
             exc,
+            context=neo4j_diagnostic_context(
+                stage="dynamic_explain",
+                duration_ms=(time.perf_counter() - started_at) * 1000,
+                cypher=cypher,
+                error=exc,
+            ),
             status="failed",
             duration_ms=round((time.perf_counter() - started_at) * 1000, 2),
             input_keys=["cypher", "parameters"],

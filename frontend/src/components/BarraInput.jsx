@@ -11,7 +11,7 @@ const ETIQUETAS_FASE = {
   redactando: "Escribiendo la respuesta…",
 };
 
-export default function BarraInput({ onEnviar, disabled, fase = "" }) {
+export default function BarraInput({ onEnviar, disabled, fase = "", progreso = "" }) {
   const [texto, setTexto] = useState("");
   const areaRef = useRef(null);
 
@@ -63,7 +63,7 @@ export default function BarraInput({ onEnviar, disabled, fase = "" }) {
           </button>
         </div>
         <div className="flex items-center justify-between px-1.5 pt-2 text-[11px] text-muted">
-          <span>{disabled ? ETIQUETAS_FASE[fase] || "Procesando tu consulta…" : "Enter para enviar · Shift + Enter para una nueva línea"}</span>
+          <span>{disabled ? progreso || ETIQUETAS_FASE[fase] || "Analizando tu consulta…" : "Enter para enviar · Shift + Enter para una nueva línea"}</span>
           <span className={`font-mono ${texto.length > 450 ? "font-semibold text-ulima" : ""}`}>
             {texto.length}/{MAX_CHARS}
           </span>

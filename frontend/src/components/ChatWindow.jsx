@@ -9,7 +9,15 @@ export default function ChatWindow({ conversacion, agregarMensaje }) {
 
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [conversacion?.mensajes.length, enviando, mensajeStreaming?.texto, mensajeStreaming?.cypher, mensajeStreaming?.fase]);
+  }, [
+    conversacion?.mensajes.length,
+    enviando,
+    mensajeStreaming?.texto,
+    mensajeStreaming?.cypher,
+    mensajeStreaming?.fase,
+    mensajeStreaming?.progreso,
+    mensajeStreaming?.entidades?.length,
+  ]);
 
   return (
     <div id="main-content" tabIndex={-1} className="canvas-dots flex min-h-0 flex-1 flex-col">
@@ -31,7 +39,12 @@ export default function ChatWindow({ conversacion, agregarMensaje }) {
         </div>
       </div>
 
-      <BarraInput onEnviar={enviar} disabled={enviando} fase={mensajeStreaming?.fase} />
+      <BarraInput
+        onEnviar={enviar}
+        disabled={enviando}
+        fase={mensajeStreaming?.fase}
+        progreso={mensajeStreaming?.progreso}
+      />
     </div>
   );
 }

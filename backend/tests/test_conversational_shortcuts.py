@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, BaseMessage
@@ -39,6 +40,20 @@ class CaptureDirectResponse:
 class FailingOrchestrator:
     async def ainvoke(self, _messages: list[BaseMessage]) -> object:
         raise RuntimeError("provider unavailable")
+
+
+class StreamingGraph:
+    async def astream_events(self, *_args, **_kwargs):
+        yield {
+            "event": "on_chat_model_stream",
+            "metadata": {"langgraph_node": "redacta_respuesta"},
+            "data": {"chunk": SimpleNamespace(content="Hola")},
+        }
+        yield {
+            "event": "on_chain_end",
+            "metadata": {"langgraph_node": "LangGraph"},
+            "data": {"output": {"respuesta": "Hola"}},
+        }
 
 
 def _patch_direct_flow(monkeypatch) -> None:
@@ -81,6 +96,41 @@ def test_chat_stream_saludo_emite_respuesta_incremental(monkeypatch) -> None:
         if line.startswith('data: {"respuesta":')
     ]
     assert payloads[-1]["respuesta"] == RESPUESTA_SALUDO
+
+    values = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: {")
+    ]
+    assert any(
+        value.get("type") == "progress"
+        and value.get("texto") == "Entendiendo tu solicitud…"
+        for value in values
+    )
+    assert all("pasos" not in value for value in values)
+    assert all("Ruta: consulta al grafo" not in json.dumps(value) for value in values)
+
+
+def test_chat_stream_emits_native_model_tokens(monkeypatch) -> None:
+    monkeypatch.setattr(servidor, "construir_grafo", lambda: StreamingGraph())
+
+    with TestClient(servidor.app) as client:
+        response = client.post(
+            "/chat/stream",
+            json={"input": {"pregunta": "hola"}, "config": {}},
+        )
+
+    assert response.status_code == 200
+    assert '"type": "progress"' in response.text
+    assert "event: messages\n" in response.text
+    message_payload = next(
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: [{")
+    )
+    assert message_payload[0]["type"] == "ai"
+    assert message_payload[0]["content"] == "Hola"
+    assert message_payload[1] == {"langgraph_node": "redacta_respuesta"}
 
 
 def test_orchestrator_routes_capability_question_without_answering() -> None:

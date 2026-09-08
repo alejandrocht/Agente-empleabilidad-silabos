@@ -98,8 +98,13 @@ _SAFE_CONTEXT_KEYS = frozenset(
         "neo4j_code",
         "parameter",
         "query_fingerprint",
+        "previous_query_fingerprint",
         "query_length",
         "query_limit",
+        "query_changed",
+        "neo4j_line",
+        "neo4j_column",
+        "neo4j_offset",
         "reason",
         "result_count",
         "route",
@@ -155,6 +160,7 @@ _SAFE_STRING_KEYS = frozenset(
         "neo4j_code",
         "parameter",
         "query_fingerprint",
+        "previous_query_fingerprint",
         "reason",
         "route",
         "stage",
@@ -597,6 +603,10 @@ def _human_event_line(
         "cache_ttl_seconds",
         "indexes_count",
         "query_limit",
+        "query_fingerprint",
+        "previous_query_fingerprint",
+        "query_length",
+        "query_changed",
         "index_name",
         "label",
         "property_name",
@@ -605,6 +615,9 @@ def _human_event_line(
         "neo4j_category",
         "neo4j_classification",
         "neo4j_code",
+        "neo4j_line",
+        "neo4j_column",
+        "neo4j_offset",
         "warning",
         "question_improved",
         "model_driven",
@@ -663,8 +676,10 @@ def _safe_value(key: str, value: object) -> object:
         "neo4j_code",
         "parameter",
         "query_fingerprint",
+        "previous_query_fingerprint",
         "query_length",
         "query_limit",
+        "query_changed",
         "query_structure",
         "stage",
         "validation_diagnostics",
@@ -721,7 +736,7 @@ def _safe_value(key: str, value: object) -> object:
             return value if value in _SAFE_EMISSIONS else None
         if key not in _SAFE_STRING_KEYS:
             return None
-        if key in {"candidate_hash", "query_fingerprint"}:
+        if key in {"candidate_hash", "query_fingerprint", "previous_query_fingerprint"}:
             return value if _SAFE_HASH.fullmatch(value) else None
         if key in _SAFE_DIAGNOSTIC_VALUES:
             return value if value in _SAFE_DIAGNOSTIC_VALUES[key] else None

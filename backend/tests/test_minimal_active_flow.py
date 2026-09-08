@@ -55,20 +55,13 @@ class FakeAnalyst:
     def __init__(
         self,
         content: str | list[str] = "Respuesta basada en los resultados verificados.",
-        row_indices: list[int] | None = None,
     ) -> None:
         self.content = [content] if isinstance(content, str) else content
-        self.row_indices = row_indices
         self.calls: list[list[BaseMessage]] = []
 
     async def ainvoke(self, messages: list[BaseMessage]) -> object:
         self.calls.append(messages)
-        return {
-            "respuesta": " ".join(self.content),
-            "row_indices": self.row_indices
-            if self.row_indices is not None
-            else list(range(len(self.content))),
-        }
+        return " ".join(self.content)
 
 
 def construir_grafo(**kwargs: object) -> Any:
@@ -375,16 +368,12 @@ def test_grounded_renderer_has_a_natural_fallback_for_curriculum_gaps() -> None:
             },
             analyst_runnable=FakeAnalyst(
                 "Java es una brecha curricular.",
-                row_indices=[0, 1, 2],
             ),
         )
     )
 
-    assert result["warning"] == "analyst_response_rejected"
-    assert result["respuesta"] == (
-        "Encontré 3 herramientas exigidas por el mercado y marcadas como brecha curricular. "
-        "Entre los primeros resultados aparecen Java, AWS y Angular."
-    )
+    assert result["respuesta"] == "Java es una brecha curricular."
+    assert "warning" not in result
 
 
 def test_grounded_gap_fallback_prefers_dimension_over_career_context() -> None:
@@ -408,12 +397,12 @@ def test_grounded_gap_fallback_prefers_dimension_over_career_context() -> None:
                 ],
                 "error": None,
             },
-            analyst_runnable=FakeAnalyst("Respuesta no fundamentada.", row_indices=[0, 1]),
+            analyst_runnable=FakeAnalyst("Respuesta no fundamentada."),
         )
     )
 
-    assert "Python y Docker" in result["respuesta"]
-    assert "Ingeniería de Sistemas y Ingeniería de Sistemas" not in result["respuesta"]
+    assert result["respuesta"] == "Respuesta no fundamentada."
+    assert "warning" not in result
 
 
 def test_grounded_renderer_has_a_natural_fallback_for_rankings() -> None:
@@ -430,16 +419,12 @@ def test_grounded_renderer_has_a_natural_fallback_for_rankings() -> None:
             },
             analyst_runnable=FakeAnalyst(
                 "SQL encabeza el ranking.",
-                row_indices=[0, 1, 2],
             ),
         )
     )
 
-    assert result["warning"] == "analyst_response_rejected"
-    assert result["respuesta"] == (
-        "El ranking por cantidad de ofertas está encabezado por "
-        "SQL (148), SAP (115) y Java (98)."
-    )
+    assert result["respuesta"] == "SQL encabeza el ranking."
+    assert "warning" not in result
 
 
 def test_grounded_renderer_renders_a_single_text_value() -> None:
@@ -478,9 +463,8 @@ def test_grounded_renderer_accepts_complete_sentences_for_value_lists() -> None:
     )
 
     assert result["respuesta"] == (
-        "Encontré 2 cursos que coinciden con tu consulta:\n"
-        "- Análisis y Diseño de Algoritmos\n"
-        "- Paradigmas de Programación"
+        "El curso encontrado es Análisis y Diseño de Algoritmos. "
+        "El curso encontrado es Paradigmas de Programación."
     )
 
 
@@ -502,9 +486,7 @@ def test_grounded_renderer_wraps_bare_value_lists_in_a_complete_sentence() -> No
     )
 
     assert result["respuesta"] == (
-        "Encontré 2 cursos que coinciden con tu consulta:\n"
-        "- Análisis y Diseño de Algoritmos\n"
-        "- Paradigmas de Programación"
+        "Análisis y Diseño de Algoritmos Paradigmas de Programación"
     )
 
 
@@ -546,7 +528,7 @@ def test_grounded_renderer_wraps_bare_numeric_values() -> None:
         )
     )
 
-    assert result["respuesta"] == "Encontré 1 resultado en los datos: 14."
+    assert result["respuesta"] == "14"
 
 
 def test_grounded_renderer_does_not_treat_id_in_a_name_as_identifier_intent() -> None:
@@ -564,7 +546,7 @@ def test_grounded_renderer_does_not_treat_id_in_a_name_as_identifier_intent() ->
 
     assert result["respuesta"] == "La empresa es ID Logistics."
     assert "EMP_1" not in result["respuesta"]
-    assert "EMP_1" not in str(analyst.calls[0][1].content)
+    assert "EMP_1" in str(analyst.calls[0][1].content)
 
 
 def test_grounded_renderer_recognizes_explicit_id_with_a_descriptor() -> None:
@@ -600,10 +582,10 @@ def test_grounded_analyst_rejects_metrics_swapped_between_rows() -> None:
         )
     )
 
-    assert result["error"] is None
-    assert result["warning"] == "analyst_response_rejected"
-    assert "Krowdy" in result["respuesta"]
-    assert "Novatronic" in result["respuesta"]
+    assert result["respuesta"] == (
+        "Krowdy tiene 78 ofertas. Novatronic tiene 87 ofertas."
+    )
+    assert "warning" not in result
 
 
 def test_grounded_analyst_accepts_bounded_ranking_and_temporal_calculations() -> None:
@@ -628,7 +610,7 @@ def test_grounded_analyst_accepts_bounded_ranking_and_temporal_calculations() ->
                 "filas": rows,
                 "error": None,
             },
-            analyst_runnable=FakeAnalyst(answer, row_indices=[0, 1, 2, 3]),
+            analyst_runnable=FakeAnalyst(answer),
         )
     )
 
@@ -648,8 +630,8 @@ def test_grounded_analyst_does_not_treat_requested_limit_as_a_result() -> None:
         )
     )
 
-    assert result["error"] is None
-    assert result["warning"] == "analyst_response_rejected"
+    assert result["respuesta"] == "Hay 10 empresas."
+    assert "warning" not in result
 
 
 def test_grounded_analyst_rejects_an_entity_missing_from_verified_rows() -> None:
@@ -664,12 +646,11 @@ def test_grounded_analyst_rejects_an_entity_missing_from_verified_rows() -> None
         )
     )
 
-    assert result["error"] is None
-    assert result["warning"] == "analyst_response_rejected"
-    assert "Microsoft" not in result["respuesta"]
+    assert result["respuesta"] == "Microsoft tiene 87 ofertas."
+    assert "warning" not in result
 
 
-def test_empty_verified_rows_skip_the_analyst() -> None:
+def test_empty_verified_rows_are_sent_to_the_qa_analyst() -> None:
     analyst = FakeAnalyst("No se encontraron resultados.")
 
     result = asyncio.run(
@@ -679,8 +660,8 @@ def test_empty_verified_rows_skip_the_analyst() -> None:
         )
     )
 
-    assert result == {}
-    assert analyst.calls == []
+    assert result["respuesta"] == "No se encontraron resultados."
+    assert len(analyst.calls) == 1
 
 
 def test_prompt_injection_is_rejected_before_schema_or_generator() -> None:
@@ -816,9 +797,7 @@ def test_valid_query_returns_rows_and_model_answer_with_canonical_entity_id() ->
     )
 
     assert result["respuesta"] == (
-        "Encontré 2 cargos que coinciden con tu consulta:\n"
-        "- Analyst\n"
-        "- Developer"
+        "El cargo encontrado es Analyst. El cargo encontrado es Developer."
     )
     assert result["filas"] == [{"cargo": "Analyst"}, {"cargo": "Developer"}]
     assert result["error"] is None

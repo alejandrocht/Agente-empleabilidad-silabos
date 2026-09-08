@@ -53,6 +53,8 @@ def test_conversational_roles_use_explicit_models_and_responses_api(
     }
     if reasoning_effort is not None:
         expected["reasoning_effort"] = reasoning_effort
+    if getattr(profile, "streaming", False):
+        expected["streaming"] = True
     assert calls == expected
 
 
@@ -69,6 +71,12 @@ def test_conversational_roles_keep_shared_model_fallback(
     )
 
     assert calls["model"] == "shared-model"
+
+
+def test_orchestrator_and_generator_profiles_stream_model_tokens() -> None:
+    assert ORCHESTRATOR_CHAT_PROFILE.streaming is True
+    assert GENERATED_QUERY_CHAT_PROFILE.streaming is True
+    assert ANALYST_CHAT_PROFILE.streaming is True
 
 
 def test_luna_profile_passes_max_reasoning_effort(

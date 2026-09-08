@@ -273,7 +273,7 @@ def construir_grafo(
 
     builder.add_node("devuelve_respuesta", RunnableLambda(response_node))
 
-    async def grounded_response_node(estado: Estado) -> Estado:
+    async def analyst_response_node(estado: Estado) -> Estado:
         return await run_async_node(
             "redacta_respuesta",
             lambda value: redacta_respuesta(
@@ -283,7 +283,7 @@ def construir_grafo(
             estado,
         )
 
-    builder.add_node("redacta_respuesta", RunnableLambda(grounded_response_node))
+    builder.add_node("redacta_respuesta", RunnableLambda(analyst_response_node))
 
     def memory_node(estado: Estado) -> Estado:
         return run_sync_node(

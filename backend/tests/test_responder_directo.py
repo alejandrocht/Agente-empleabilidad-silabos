@@ -224,6 +224,7 @@ def test_build_direct_response_runnable_uses_responses_api_by_default_and_fallba
         "model": expected_model,
         "temperature": 0,
         "use_responses_api": True,
+        "streaming": True,
     }
     if expected_effort is not None:
         expected_calls["reasoning_effort"] = expected_effort

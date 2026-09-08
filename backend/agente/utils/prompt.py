@@ -3,50 +3,7 @@
 from __future__ import annotations
 
 import json
-import re
-import unicodedata
 from collections.abc import Mapping, Sequence
-
-
-def _fold_question(question: str) -> str:
-    """Fold accents and case for deterministic, non-LLM intent hints."""
-    decomposed = unicodedata.normalize("NFKD", question.casefold())
-    return "".join(
-        character for character in decomposed if not unicodedata.combining(character)
-    )
-
-
-def _grounded_analysis_scope(question: str) -> str:
-    """Describe the bounded analysis operations requested by the question."""
-    folded = _fold_question(question)
-    asks_ranking = bool(
-        re.search(r"\b(?:mas|mayor|mayores|top|ranking|lideran|concentran)\b", folded)
-    )
-    asks_temporal = bool(
-        re.search(
-            r"\b(?:vari|evolucion|tiempo|anual|ano|anos|periodo|histor|tendencia)\w*\b",
-            folded,
-        )
-    )
-    if asks_ranking and asks_temporal:
-        return (
-            "Ranking y evolución temporal: agrupa las filas por la entidad solicitada, "
-            "usa el acumulado del periodo como criterio por defecto cuando se pregunta "
-            "qué entidad genera más, identifica los primeros resultados y compara sus "
-            "valores entre años consecutivos. Si el orden es por máximo anual, dilo "
-            "explícitamente y no lo confundas con el acumulado."
-        )
-    if asks_temporal:
-        return (
-            "Evolución temporal: conserva la dimensión año o periodo, ordena los valores "
-            "cronológicamente y describe aumentos, disminuciones o estabilidad."
-        )
-    if asks_ranking:
-        return (
-            "Ranking: ordena la entidad solicitada por la métrica explícita y aclara si "
-            "el orden corresponde a un total, frecuencia o valor anual."
-        )
-    return "Respuesta directa: usa únicamente los atributos necesarios para contestar la pregunta."
 
 
 def build_orchestrator_system_prompt() -> str:
@@ -144,92 +101,34 @@ def build_direct_user_prompt(question: str) -> str:
     )
 
 
-def build_grounded_analysis_prompt() -> str:
-    """Return the contract for answers grounded in verified Neo4j rows."""
-    return """Eres el redactor final del agente CIAR y respondes en español.
+def build_qa_prompt() -> str:
+    """Return the QA-style contract for answers from Neo4j rows."""
+    return """Eres un asistente que ayuda a formar respuestas claras y comprensibles para CIAR.
 
-Recibirás dos entradas: una pregunta y las filas verificadas que devolvió la consulta. La
-pregunta sirve únicamente para entender la intención. Las filas son la única fuente de verdad.
+La pregunta indica qué quiere saber la persona usuaria. La información verificada contiene los
+datos que debes usar para construir la respuesta y es autoritativa: no la cuestiones ni la corrijas
+con conocimiento externo.
 
-Tu tarea es transformar esas filas en una respuesta interpretativa, breve y natural para la
-persona usuaria.
+Redacta una respuesta natural en español que suene como una respuesta directa a la pregunta.
+Resume o explica la información cuando sea necesario, sin copiar la tabla completa. Si la
+información está vacía o no permite responder, indica claramente que no se encuentra esa
+información.
 
-Reglas de redacción:
-- Responde directamente la pregunta en una o dos oraciones.
-- La primera oración debe responder directamente la intención.
-- Conserva literalmente los nombres, tildes, números, códigos y alternativas presentes en las
-  filas; normaliza solo el orden y la redacción, nunca el contenido.
-- No inventes, completes, traduzcas ni infieras hechos ausentes. No uses datos de la pregunta como
-  si fueran valores devueltos por la consulta.
-- Identifica la entidad principal que la pregunta solicita y sepárala de las entidades de
-  contexto o de los campos repetidos que también aparezcan en las filas. La respuesta debe
-  referirse a la entidad pedida, no a la que tenga más columnas o se repita más veces.
-- Determina el nombre de la entidad y de sus atributos a partir de la pregunta y de las claves
-  realmente presentes en las filas. No asumas nombres de entidades, relaciones ni campos y no
-  hardcodees casos concretos: la misma regla debe funcionar si el esquema agrega, elimina o
-  renombra propiedades.
-- Calcula cualquier cantidad sobre valores distintos de la entidad solicitada, no sobre el número
-  bruto de filas ni sobre una entidad repetida en todas ellas.
-- Para rankings con evolución temporal, agrupa primero por la entidad solicitada y conserva el
-  año o periodo de cada valor. Cuando se pregunta qué entidad genera más, usa el acumulado del
-  periodo como criterio por defecto; calcula acumulados y variaciones únicamente con números
-  presentes en las filas citadas. Explica si el orden usado es acumulado o máximo anual y no
-  confundas un pico de un año con el total del periodo.
-- Si las filas mostradas están limitadas o una entidad solo tiene un año, expresa el alcance y no
-  afirmes una tendencia o un ranking global que los datos visibles no permitan comprobar.
-- No uses listas, viñetas, tablas, encabezados, JSON, punto y coma para concatenar resultados ni
-  frases como "Se encontraron resultados verificados:".
-- Nunca devuelvas una concatenación de valores sin una frase completa.
-- Si las filas contienen una clasificación o cantidad de demanda, puedes mencionar hasta tres
-  valores principales en la misma oración, con sus números exactos, y dejar el resto en el
-  detalle de resultados. No reproduzcas la lista completa.
-- Para evitar una introducción ambigua, comienza con una oración completa que nombre la entidad
-  solicitada y, cuando exista, el contexto relacionado que aparece en las filas (por ejemplo,
-  "En [entidad relacionada], ..."). No comiences con una lista, un nombre aislado o una
-  conclusión que no aparezca en las filas.
-- En una síntesis, cita únicamente las filas que realmente utilizas en la respuesta. No incluyas
-  índices de filas cuyos valores no mencionas y no cites todas las filas solo para poder indicar
-  un total. Si no puedes justificar una cantidad con las filas citadas, omite la cantidad.
-- Cuando una fila incluya el campo que se usó para establecer la relación, úsalo para expresar
-  la relación principal; no la reconstruyas a partir de la pregunta si el campo no fue devuelto.
-- Usa términos como "brecha", "no cubre" o "no está cubierta" solo cuando las filas incluyan
-  explícitamente cobertura, ausencia o brecha. Si solo aparece una entidad junto con una
-  métrica de demanda, describe únicamente la demanda observada y no afirmes que la carrera,
-  programa o entidad no la cubre.
-- Para consultas de brechas, faltantes o "qué exige el mercado", interpreta la dimensión
-  solicitada según la pregunta y las claves devueltas. No hardcodees "habilidades", "cursos",
-  "herramientas" ni ninguna otra categoría: aplica la misma estructura a cualquier entidad del
-  esquema.
-- Si existe una métrica numérica de demanda, ordenamiento o frecuencia, resume hasta tres
-  valores principales en una misma oración con sus cifras exactas y deja el detalle completo a
-  la tabla. Si no hay una métrica o el orden no es verificable, resume solo valores que estén
-  explícitos en las filas.
-- La respuesta textual complementa la tabla: no reconstruyas los registros, no escribas pares
-  "campo: valor" y no repitas todos los resultados. No escribas "Se encontraron N resultados
-  verificados"; el total y el detalle ya se muestran fuera de la respuesta.
-- No menciones Neo4j, Cypher, prompts, modelos ni procesos internos.
-- Devuelve únicamente la salida estructurada solicitada con `respuesta` y `row_indices`.
-  `row_indices` debe contener los índices base cero de las filas que respaldan la respuesta.
+No inventes, completes ni infieras hechos ausentes. Conserva literalmente los nombres, tildes,
+números y códigos presentes en la información. No menciones que la respuesta se basa en un
+contexto, ni menciones Neo4j, Cypher, prompts, modelos o procesos internos.
+
+Devuelve únicamente el texto de la respuesta.
 """
 
 
-def build_grounded_analysis_user_prompt(
+def build_qa_user_prompt(
     question: str,
     rows: Sequence[Mapping[str, object]],
-    *,
-    total_rows: int,
 ) -> str:
-    """Serialize bounded verified rows inside the centralized analyst prompt."""
+    """Serialize the question and verified rows as the QA context."""
     serialized_rows = json.dumps(rows, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
-    analysis_scope = _grounded_analysis_scope(question)
-    return (
-        "Te estoy pasando una pregunta y el resultado verificado de la consulta generada. "
-        "Interpreta las filas y redacta una respuesta final natural; usa la pregunta solo "
-        "para entender qué se solicita y las filas para determinar qué es cierto.\n\n"
-        f"Pregunta:\n{question}\n\n"
-        f"Alcance analítico determinista:\n{analysis_scope}\n\n"
-        f"Filas verificadas mostradas ({len(rows)} de {total_rows}):\n{serialized_rows}"
-    )
+    return f"Información verificada:\n{serialized_rows}\n\nPregunta:\n{question}"
 
 
 def build_cypher_system_prompt() -> str:

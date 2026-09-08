@@ -12,20 +12,103 @@ const ETIQUETAS_FASE = {
   completado: "Respuesta lista",
 };
 
+function textoEnLinea(texto) {
+  return texto.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((parte, indice) => {
+    if (parte.startsWith("**") && parte.endsWith("**")) {
+      return <strong key={`${indice}-${parte}`}>{parte.slice(2, -2)}</strong>;
+    }
+    if (parte.startsWith("`") && parte.endsWith("`")) {
+      return (
+        <code key={`${indice}-${parte}`} className="rounded bg-ash px-1 py-0.5 text-[0.9em]">
+          {parte.slice(1, -1)}
+        </code>
+      );
+    }
+    return parte;
+  });
+}
+
+export function renderRespuesta(texto) {
+  const bloques = [];
+  let parrafo = [];
+  let lista = [];
+
+  const cerrarParrafo = () => {
+    if (parrafo.length) {
+      bloques.push(
+        <p key={`p-${bloques.length}`}>
+          {textoEnLinea(parrafo.join(" "))}
+        </p>,
+      );
+      parrafo = [];
+    }
+  };
+
+  const cerrarLista = () => {
+    if (lista.length) {
+      bloques.push(
+        <ul key={`ul-${bloques.length}`} className="list-disc space-y-1 pl-5">
+          {lista.map((item, indice) => (
+            <li key={`${indice}-${item}`}>{textoEnLinea(item)}</li>
+          ))}
+        </ul>,
+      );
+      lista = [];
+    }
+  };
+
+  texto.split(/\r?\n/).forEach((linea) => {
+    const contenido = linea.trim();
+    if (!contenido) {
+      cerrarParrafo();
+      cerrarLista();
+      return;
+    }
+
+    const encabezado = contenido.match(/^#{1,3}\s+(.+)$/);
+    if (encabezado) {
+      cerrarParrafo();
+      cerrarLista();
+      bloques.push(
+        <h3 key={`h-${bloques.length}`} className="pt-2 text-base font-bold text-ink">
+          {textoEnLinea(encabezado[1])}
+        </h3>,
+      );
+      return;
+    }
+
+    const elementoLista = contenido.match(/^[-*]\s+(.+)$/);
+    if (elementoLista) {
+      cerrarParrafo();
+      lista.push(elementoLista[1]);
+      return;
+    }
+
+    cerrarLista();
+    parrafo.push(contenido);
+  });
+
+  cerrarParrafo();
+  cerrarLista();
+  return bloques;
+}
+
 export default function Burbuja({ mensaje }) {
   const esUsuario = mensaje.rol === "usuario";
   const [copiado, setCopiado] = useState(false);
-  const pasos = Array.isArray(mensaje.pasos) ? mensaje.pasos : [];
   const entidades = Array.isArray(mensaje.entidades) ? mensaje.entidades : [];
   const texto = typeof mensaje.texto === "string" ? mensaje.texto : "";
   const error = typeof mensaje.error === "string" ? mensaje.error : "";
   const errorRed = typeof mensaje.errorRed === "string" ? mensaje.errorRed : "";
   const cypher = typeof mensaje.cypher === "string" ? mensaje.cypher : "";
   const fase = typeof mensaje.fase === "string" ? mensaje.fase : "";
-  const etiquetaFase = ETIQUETAS_FASE[fase] || "Procesando tu consulta…";
+  const progreso = typeof mensaje.progreso === "string" ? mensaje.progreso : "";
+  const etiquetaFase = ETIQUETAS_FASE[fase] || "Analizando tu consulta…";
   const textoVisible = texto;
   const detalle = error ? detalleError(error) : null;
-  const tieneContenidoStreaming = Boolean(texto || cypher || error || errorRed);
+  const tieneContenidoStreaming = Boolean(
+    texto || cypher || error || errorRed || progreso || entidades.length,
+  );
 
   const copiar = async () => {
     if (!textoVisible) return;
@@ -62,18 +145,19 @@ export default function Burbuja({ mensaje }) {
     <div className="flex w-full animate-fade-in justify-start gap-3">
       <BotAvatar />
       <article className="min-w-0 flex-1">
-        {mensaje.streaming && fase ? (
-          <p className="mb-2 text-xs font-semibold text-muted" role="status">
-            {etiquetaFase}
-          </p>
+        {mensaje.streaming && (progreso || fase) ? (
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-muted" role="status">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-ulima" aria-hidden="true" />
+            {progreso || etiquetaFase}
+          </div>
         ) : null}
         {textoVisible || mensaje.streaming ? (
-          <p className="whitespace-pre-wrap text-[15.5px] leading-[1.65] text-ink">
-            {textoVisible}
+          <div className="space-y-3 text-[15.5px] leading-[1.65] text-ink">
+            {renderRespuesta(textoVisible)}
             {mensaje.streaming ? (
               <span className="ml-0.5 inline-block animate-pulse text-ulima">▋</span>
             ) : null}
-          </p>
+          </div>
         ) : null}
 
         {error ? (
@@ -89,7 +173,6 @@ export default function Burbuja({ mensaje }) {
         ) : null}
 
         <PanelRazonamiento
-          pasos={pasos}
           cypher={cypher}
           entidades={entidades}
           error={error}

@@ -38,10 +38,11 @@ class ChatOpenAIProfile:
     include_reasoning_effort: bool = False
     timeout: float | None = None
     max_retries: int | None = None
+    streaming: bool = False
 
 
-# Each conversational responsibility has one explicit model. Direct and
-# grounded answers intentionally share the analyst profile.
+# Each conversational responsibility has one explicit model. Direct and QA
+# answers intentionally share the analyst profile.
 ORCHESTRATOR_CHAT_PROFILE = ChatOpenAIProfile(
     model_env="OPENAI_MODEL_ORQUESTADOR",
     reasoning_env="OPENAI_REASONING_EFFORT_ORQUESTADOR",
@@ -49,6 +50,7 @@ ORCHESTRATOR_CHAT_PROFILE = ChatOpenAIProfile(
     global_model_fallback=True,
     use_responses_api=True,
     use_responses_api_env="OPENAI_USE_RESPONSES_API_ORQUESTADOR",
+    streaming=True,
 )
 GENERATED_QUERY_CHAT_PROFILE = ChatOpenAIProfile(
     model_env="OPENAI_MODEL_GENERADOR_CYPHER",
@@ -57,6 +59,7 @@ GENERATED_QUERY_CHAT_PROFILE = ChatOpenAIProfile(
     global_model_fallback=True,
     use_responses_api=True,
     use_responses_api_env="OPENAI_USE_RESPONSES_API_GENERADOR_CYPHER",
+    streaming=True,
 )
 ANALYST_CHAT_PROFILE = ChatOpenAIProfile(
     model_env="OPENAI_MODEL_ANALISTA",
@@ -65,6 +68,7 @@ ANALYST_CHAT_PROFILE = ChatOpenAIProfile(
     global_model_fallback=True,
     use_responses_api=True,
     use_responses_api_env="OPENAI_USE_RESPONSES_API_ANALISTA",
+    streaming=True,
 )
 
 
@@ -106,6 +110,8 @@ def build_chat_openai(
         "model": _model_for_profile(profile),
         "temperature": 0,
     }
+    if profile.streaming:
+        kwargs["streaming"] = True
     if profile.use_responses_api_env is not None:
         kwargs["use_responses_api"] = _env_bool(
             profile.use_responses_api_env, profile.use_responses_api or False

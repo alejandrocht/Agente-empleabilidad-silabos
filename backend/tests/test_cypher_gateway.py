@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 from neo4j import RoutingControl
-from neo4j.exceptions import AuthError, ServiceUnavailable
+from neo4j.exceptions import AuthError, CypherSyntaxError, ServiceUnavailable
 from neo4j.spatial import WGS84Point
 from neo4j.time import Date, DateTime, Duration
 
@@ -641,6 +641,25 @@ def test_query_fingerprint_is_stable_and_payload_free() -> None:
     assert len(query_fingerprint(query)) == 64
 
 
+def test_neo4j_diagnostics_keep_syntax_error_position() -> None:
+    error = CypherSyntaxError(
+        "Invalid input 'RETURN' (line 2, column 7 (offset: 42))"
+    )
+
+    context = neo4j_diagnostic_context(
+        stage="dynamic_explain",
+        duration_ms=12.5,
+        cypher=SAFE_QUERY,
+        error=error,
+    )
+
+    assert context["neo4j_line"] == 2
+    assert context["neo4j_column"] == 7
+    assert context["neo4j_offset"] == 42
+    assert len(context["query_fingerprint"]) == 64
+    assert "RETURN" not in json.dumps(context)
+
+
 def test_read_config_rejects_partially_configured_dedicated_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -672,6 +691,23 @@ def test_read_config_prefers_complete_dedicated_credentials(
         "domain",
     )
     assert config.uses_legacy_credentials is False
+
+
+def test_read_config_uses_fifteen_second_default_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("NEO4J_READ_URI", raising=False)
+    monkeypatch.delenv("NEO4J_READ_USER", raising=False)
+    monkeypatch.delenv("NEO4J_READ_PASSWORD", raising=False)
+    monkeypatch.delenv("NEO4J_READ_DATABASE", raising=False)
+    monkeypatch.delenv("NEO4J_READ_QUERY_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.setenv("NEO4J_URI", "neo4j://legacy")
+    monkeypatch.setenv("NEO4J_USER", "legacy")
+    monkeypatch.setenv("NEO4J_PASSWORD", "legacy-secret")
+
+    config = Neo4jReadConfig.from_env()
+
+    assert config.timeout_seconds == 15.0
 
 
 def test_owned_gateway_closes_fake_async_driver() -> None:

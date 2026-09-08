@@ -12,10 +12,10 @@ from agente.utils.prompt import (
     build_cypher_user_prompt,
     build_direct_response_prompt,
     build_direct_user_prompt,
-    build_grounded_analysis_prompt,
-    build_grounded_analysis_user_prompt,
     build_orchestrator_system_prompt,
     build_orchestrator_user_prompt,
+    build_qa_prompt,
+    build_qa_user_prompt,
 )
 
 
@@ -55,26 +55,21 @@ def test_conversational_prompt_builders_cover_all_llm_roles() -> None:
     assert "Proyectá la agregación" in build_cypher_correction_prompt(
         ValueError("ORDER BY aggregate")
     )
-    grounded_prompt = build_grounded_analysis_prompt()
-    assert "filas son la única fuente de verdad" in grounded_prompt
-    assert "Nunca devuelvas una concatenación de valores" in grounded_prompt
-    assert "La primera oración debe responder directamente la intención" in grounded_prompt
-    assert "campo que se usó para establecer la relación" in grounded_prompt
+    qa_prompt = build_qa_prompt()
+    assert "autoritativa" in qa_prompt
+    assert "respuesta natural" in qa_prompt
+    assert "texto de la respuesta" in qa_prompt
     assert "proyecta en" in build_cypher_system_prompt()
-    assert '"total_carreras":14' in build_grounded_analysis_user_prompt(
+    assert '"total_carreras":14' in build_qa_user_prompt(
         "¿Cuántas carreras hay?",
         [{"total_carreras": 14}],
-        total_rows=1,
     )
-    temporal_prompt = build_grounded_analysis_user_prompt(
-        "¿Qué empresas generan más ofertas y cómo ha ido variando en el tiempo?",
+    qa_prompt = build_qa_user_prompt(
+        "¿Qué empresas generan más ofertas?",
         [{"empresa": "Krowdy", "anio": 2022, "total_ofertas": 38}],
-        total_rows=1,
     )
-    assert "Ranking y evolución temporal" in temporal_prompt
-    assert "agrupa las filas por la entidad solicitada" in temporal_prompt
-
-
+    assert "Información verificada:" in qa_prompt
+    assert "Pregunta:" in qa_prompt
 def test_conversational_nodes_do_not_define_prompt_text() -> None:
     cypher_source = inspect.getsource(construye_cypher_module)
     direct_source = inspect.getsource(responder_directo_module)

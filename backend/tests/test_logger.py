@@ -118,6 +118,34 @@ def test_trace_context_correlates_bounded_query_shape_and_attempt(capsys) -> Non
     assert "payload_preview" not in entry["context"]
 
 
+def test_log_event_keeps_query_transition_diagnostics(capsys) -> None:
+    log_event(
+        "entity_resolution",
+        "query_reconciled",
+        status="success",
+        query_changed=True,
+        previous_query_fingerprint="a" * 64,
+        query_fingerprint="b" * 64,
+        query_length=128,
+        neo4j_line=2,
+        neo4j_column=7,
+        neo4j_offset=42,
+    )
+
+    entry = read_log(capsys)
+
+    assert entry["context"] == {
+        "status": "success",
+        "query_changed": True,
+        "previous_query_fingerprint": "a" * 64,
+        "query_fingerprint": "b" * 64,
+        "query_length": 128,
+        "neo4j_line": 2,
+        "neo4j_column": 7,
+        "neo4j_offset": 42,
+    }
+
+
 def test_node_logs_expose_state_shape_without_values_by_default(capsys, monkeypatch) -> None:
     monkeypatch.delenv("CIAR_NODE_LOG_VALUES", raising=False)
     question = "¿De qué cursos es coordinadora Angela Mayhua?"

@@ -1,12 +1,22 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import BarraInput from "./BarraInput";
-import Burbuja from "./Burbuja";
+import Burbuja, { renderRespuesta } from "./Burbuja";
 import PanelRazonamiento from "./PanelRazonamiento";
 import TablaFilas from "./TablaFilas";
-import { normalizeChatValues } from "../hooks/useChat";
+import { normalizeChatValues, textoUltimoMensajeAsistente } from "../hooks/useChat";
 
 describe("interfaz del chat", () => {
+  it("renderiza el formato Markdown básico de la respuesta como HTML", () => {
+    const { container } = render(
+      <div>{renderRespuesta("### ¿De qué trata?\n\nEs un curso **teórico-práctico**.\n\n- **Diseño**")}</div>,
+    );
+
+    expect(container.querySelector("h3")?.textContent).toBe("¿De qué trata?");
+    expect(container.querySelector("strong")?.textContent).toBe("teórico-práctico");
+    expect(container.querySelector("ul li strong")?.textContent).toBe("Diseño");
+  });
+
   it("envía una pregunta escrita y limpia el campo", () => {
     const enviar = vi.fn();
     render(<BarraInput onEnviar={enviar} disabled={false} />);
@@ -80,17 +90,43 @@ describe("interfaz del chat", () => {
         cypher: ["MATCH (n)"],
         entidades: { nombre: "privado" },
         filas: "privado",
-        pasos: null,
+        progreso: { etapa: "privado" },
         error: { message: "privado" },
       }),
     ).toEqual({
       texto: "",
       cypher: "",
       fase: "",
+      progreso: "",
       entidades: [],
-      pasos: [],
       error: "",
     });
+  });
+
+  it("lee la respuesta incremental del evento nativo messages", () => {
+    expect(
+      textoUltimoMensajeAsistente([
+        { type: "ai", id: "1", content: "Parte final" },
+        { type: "human", id: "2", content: "privado" },
+      ]),
+    ).toBe("Parte final");
+  });
+
+  it("muestra el progreso actual mientras llega la respuesta", () => {
+    render(
+      <Burbuja
+        mensaje={{
+          rol: "agente",
+          streaming: true,
+          fase: "preparando_consulta",
+          progreso: "Identificando los conceptos clave…",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Identificando los conceptos clave…")).toBeTruthy();
+    expect(screen.queryByText("Ruta ejecutada")).toBeNull();
+    expect(screen.getByRole("status")).toBeTruthy();
   });
 
   it("no entrega errores ni colecciones malformadas a React", () => {
@@ -169,7 +205,7 @@ describe("interfaz del chat", () => {
 
   it("conserva el aviso de solo lectura para bloqueos Cypher", () => {
     render(<PanelRazonamiento error="cypher_injection" />);
-    const toggles = screen.getAllByRole("button", { name: /Traza del grafo/ });
+    const toggles = screen.getAllByRole("button", { name: /Detalles de la consulta/ });
     fireEvent.click(toggles[toggles.length - 1]);
 
     expect(screen.getByText(/Consulta bloqueada por seguridad/)).toBeTruthy();

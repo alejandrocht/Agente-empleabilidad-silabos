@@ -6,13 +6,13 @@ import pytest
 
 from agente.grafo.constructor import construir_grafo, langgraph_entrypoint
 from api.servidor import (
-    STREAM_TEXT_CHUNK_SIZE,
     USER_FACING_STREAM_NODES,
     _stream_phase_from_event,
-    _stream_text_chunks,
     _stream_text_from_event,
     extract_public_text,
     sanitize_public_state,
+    stream_message_event,
+    stream_progress_event,
 )
 
 
@@ -32,7 +32,7 @@ def test_internal_model_blocks_are_not_exposed_as_answer() -> None:
     assert _stream_text_from_event(chat_model_event("construye_cypher", blocks)) == ""
 
 
-def test_no_model_node_is_allowed_to_stream_public_text() -> None:
+def test_only_answer_nodes_can_stream_public_text() -> None:
     blocks = [
         {"type": "text", "text": "Hola"},
         {"type": "output_text", "content": " mundo"},
@@ -40,7 +40,7 @@ def test_no_model_node_is_allowed_to_stream_public_text() -> None:
 
     assert extract_public_text("texto directo") == "texto directo"
     assert extract_public_text({"type": "text", "text": "private object"}) == ""
-    assert _stream_text_from_event(chat_model_event("devuelve_respuesta", blocks)) == ""
+    assert _stream_text_from_event(chat_model_event("redacta_respuesta", blocks)) == "Hola mundo"
 
 
 @pytest.mark.parametrize("node", ["obtiene_pregunta", "obtiene_schema", "construye_cypher"])
@@ -48,26 +48,34 @@ def test_internal_nodes_never_stream_model_chunks(node: str) -> None:
     assert _stream_text_from_event(chat_model_event(node, "private")) == ""
 
 
-def test_stream_allowlist_has_no_model_nodes() -> None:
+def test_stream_allowlist_contains_only_answer_nodes() -> None:
     graph_nodes = construir_grafo().get_graph().nodes
 
     assert USER_FACING_STREAM_NODES <= graph_nodes.keys()
-    assert USER_FACING_STREAM_NODES == set()
+    assert USER_FACING_STREAM_NODES == {"redacta_respuesta", "responder_directo"}
 
 
-def test_public_answer_is_emitted_as_ordered_cumulative_chunks() -> None:
-    answer = "Encontré datos académicos y de empleabilidad."
+def test_public_answer_uses_native_langgraph_message_events() -> None:
+    event = stream_message_event("message-1", "redacta_respuesta", "Hola")
+    payload = json.loads(event.split("data: ", 1)[1])
 
-    chunks = list(_stream_text_chunks(answer))
+    assert event.startswith("event: messages\n")
+    assert payload == [
+        {"type": "ai", "id": "message-1", "content": "Hola"},
+        {"langgraph_node": "redacta_respuesta"},
+    ]
 
-    assert len(chunks) > 1
-    assert "".join(chunks) == answer
-    assert all(0 < len(chunk) <= STREAM_TEXT_CHUNK_SIZE for chunk in chunks)
 
+def test_progress_uses_native_langgraph_custom_events() -> None:
+    event = stream_progress_event("Analizando la intención…", "analizando")
+    payload = json.loads(event.split("data: ", 1)[1])
 
-def test_stream_chunk_size_must_be_positive() -> None:
-    with pytest.raises(ValueError, match="chunk_size must be positive"):
-        list(_stream_text_chunks("respuesta", chunk_size=0))
+    assert event.startswith("event: custom\n")
+    assert payload == {
+        "type": "progress",
+        "fase": "analizando",
+        "texto": "Analizando la intención…",
+    }
 
 
 def test_langgraph_entrypoint_is_a_no_argument_factory() -> None:

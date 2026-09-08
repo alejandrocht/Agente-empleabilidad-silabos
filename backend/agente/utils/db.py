@@ -34,7 +34,7 @@ from agente.utils.logger import log_error, log_event
 
 load_dotenv()
 
-DEFAULT_QUERY_TIMEOUT_SECONDS = 10.0
+DEFAULT_QUERY_TIMEOUT_SECONDS = 15.0
 DEFAULT_NEO4J_DATABASE = "neo4j"
 MAX_FULLTEXT_INDEXES = 100
 MAX_FULLTEXT_QUERY_LENGTH = 512
@@ -77,6 +77,11 @@ Neo4jErrorClassification = Literal[
 _DIAGNOSTIC_STAGES = frozenset(
     {"entity_resolution", "dynamic_generation", "dynamic_explain", "dynamic_execution"}
 )
+_NEO4J_ERROR_POSITION = re.compile(
+    r"\bline\s+(?P<line>\d+),\s*column\s+(?P<column>\d+)"
+    r"\s*\(offset:\s*(?P<offset>\d+)\)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +105,7 @@ class Neo4jExplainError(Neo4jQueryError):
     ):
         self.category = category
         self.code = code or (_stable_neo4j_code(cause) if cause is not None else None)
+        self.cause = cause
         self.classification: Neo4jErrorClassification = (
             _classify_neo4j_exception(cause)[1]
             if cause is not None
@@ -200,6 +206,13 @@ def neo4j_diagnostic_context(
         context["neo4j_classification"] = diagnostic.classification
         if diagnostic.code is not None:
             context["neo4j_code"] = diagnostic.code
+        cause = getattr(error, "cause", None)
+        source_error = cause if isinstance(cause, BaseException) else error
+        position = _NEO4J_ERROR_POSITION.search(str(source_error))
+        if position is not None:
+            context["neo4j_line"] = int(position.group("line"))
+            context["neo4j_column"] = int(position.group("column"))
+            context["neo4j_offset"] = int(position.group("offset"))
     return context
 
 

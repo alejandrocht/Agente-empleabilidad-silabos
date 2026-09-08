@@ -22,6 +22,7 @@ from agente.nodos.contrato_cypher import (
     validate_generated_schema,
 )
 from agente.utils.cypher_guard import CypherGuardError, guard_cypher
+from agente.utils.db import query_fingerprint
 from agente.utils.logger import (
     attempt_context,
     log_error,
@@ -106,6 +107,7 @@ def _debug_cypher(
 def _query_log_context(cypher: str, parameters: Mapping[str, object]) -> dict[str, object]:
     """Expose query shape and parameter names without parameter values."""
     return {
+        "query_fingerprint": query_fingerprint(cypher),
         "query_structure": _redact_quoted_literals(cypher),
         "query_length": len(cypher),
         "parameter_names": sorted(parameters),
