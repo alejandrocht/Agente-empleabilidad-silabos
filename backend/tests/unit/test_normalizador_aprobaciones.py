@@ -21,6 +21,7 @@ from agente.normalizador.silabos import (
     analista_llm,
     aprobaciones,
     persistencia_aprobaciones,
+    post_hitl_aprobaciones,
     validacion_aprobaciones,
 )
 from agente.normalizador.silabos.analista_llm import ConceptoPropuesto, DecisionCurricular
@@ -273,6 +274,61 @@ def test_validacion_reexporta_misma_identidad_y_no_importa_la_fachada() -> None:
         isinstance(nodo, ast.ImportFrom)
         and nodo.module == "agente.normalizador.silabos.aprobaciones"
         for nodo in imports
+    )
+
+
+def test_post_hitl_no_importa_la_fachada_y_conserva_adaptadores() -> None:
+    imports = ast.walk(ast.parse(inspect.getsource(post_hitl_aprobaciones)))
+    assert not any(
+        (
+            isinstance(nodo, ast.ImportFrom)
+            and nodo.module == "agente.normalizador.silabos.aprobaciones"
+        )
+        or (
+            isinstance(nodo, ast.Import)
+            and any(
+                alias.name == "agente.normalizador.silabos.aprobaciones"
+                for alias in nodo.names
+            )
+        )
+        for nodo in imports
+    )
+    for nombre, parametros in (
+        (
+            "_recalcular_release_gate",
+            ("reportes", "archivos", "fuentes", "pendientes", "materialized"),
+        ),
+        (
+            "_materializar_perfil",
+            ("directorio", "manifest", "archivos", "reportes", "pendientes", "gate"),
+        ),
+        ("_leer_csv_opcional", ("ruta", "columnas")),
+    ):
+        fachada = getattr(aprobaciones, nombre)
+        owner = getattr(post_hitl_aprobaciones, nombre)
+        assert fachada is not owner
+        assert tuple(inspect.signature(fachada).parameters) == parametros
+    for nombre in (
+        "_ids_sin_fuente",
+        "_estado_estructural_materializable",
+        "_puede_materializar_perfil",
+        "_persistir_manifest_aprobacion",
+        "_actualizar_hash_manifest",
+        "_fusionar_csv",
+    ):
+        assert getattr(aprobaciones, nombre) is getattr(post_hitl_aprobaciones, nombre)
+    assert tuple(
+        inspect.signature(post_hitl_aprobaciones._materializar_perfil).parameters
+    ) == (
+        "directorio",
+        "manifest",
+        "archivos",
+        "reportes",
+        "pendientes",
+        "gate",
+        "catalog_root",
+        "approval_summary",
+        "invalid_error",
     )
 
 
