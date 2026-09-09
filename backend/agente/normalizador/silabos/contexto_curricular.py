@@ -21,12 +21,56 @@ from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
 CHH_OUTPUT_TYPES = ("competencia", "habilidad", "herramienta")
 
 _VERSION_CONTEXTO = "contexto-curricular/v2"
+# Compatibility defaults for direct context construction outside an execution.
+# The curricular analyzer passes the immutable snapshot's limits explicitly.
 _LIMITES_CANDIDATOS = {
     "competencia": 4,
     "habilidad": 6,
     "herramienta": 4,
 }
-_LIMITE_EJEMPLOS = 3
+_LIMITE_EJEMPLOS = 3  # Same standalone-context compatibility default.
+
+_CLAVES_PERFIL_NO_TRANSPORTABLES = frozenset(
+    {
+        "archivo",
+        "codigo",
+        "contexto_recuperado",
+        "fuente",
+        "fuentes",
+        "hash",
+        "id",
+        "id_curso",
+        "id_habilidad",
+        "id_habilidad_fuente",
+        "id_silabo",
+        "path",
+        "referencia",
+        "referencias",
+        "revision",
+        "ruta",
+        "texto_fuente",
+        "texto_relevante",
+    }
+)
+
+
+def _sanear_perfil_transportable(valor: object) -> object:
+    if isinstance(valor, Mapping):
+        resultado: dict[str, object] = {}
+        for clave, contenido in valor.items():
+            clave_texto = str(clave)
+            clave_normalizada = clave_texto.casefold()
+            if (
+                clave_normalizada in _CLAVES_PERFIL_NO_TRANSPORTABLES
+                or clave_normalizada.startswith("id_")
+                or clave_normalizada.startswith("codigo_")
+            ):
+                continue
+            resultado[clave_texto] = _sanear_perfil_transportable(contenido)
+        return resultado
+    if isinstance(valor, (list, tuple)):
+        return [_sanear_perfil_transportable(item) for item in valor]
+    return valor
 
 
 def construir_contexto_por_logro(
@@ -37,7 +81,9 @@ def construir_contexto_por_logro(
     retriever: EmbeddingRetriever | None = None,
     embedding_scope: EmbeddingScope | None = None,
     limites_candidatos: Mapping[str, int] | None = None,
+    limites_lexicales: Mapping[str, int] | None = None,
     pool_retrieval: int | None = None,
+    limite_ejemplos: int = _LIMITE_EJEMPLOS,
 ) -> dict[str, object]:
     """Construye el único contexto recuperado que ve el LLM para un logro.
 
@@ -47,7 +93,9 @@ def construir_contexto_por_logro(
     """
 
     consulta = _consulta(caso)
-    limites_lexicales = _limites_candidatos(limites_candidatos)
+    limites_lexicales_efectivos = _limites_candidatos(
+        limites_candidatos if limites_lexicales is None else limites_lexicales
+    )
     limites_embedding = normalizar_limites(
         limites_candidatos,
         defaults=DEFAULT_EMBEDDING_LIMITS,
@@ -101,9 +149,9 @@ def construir_contexto_por_logro(
                 perfil_estado=perfil_estado,
                 perfil_revision=perfil_revision,
             )
-            candidatos = _candidatos_lexical(consulta, catalogo, limites_lexicales)
+            candidatos = _candidatos_lexical(consulta, catalogo, limites_lexicales_efectivos)
     else:
-        candidatos = _candidatos_lexical(consulta, catalogo, limites_lexicales)
+        candidatos = _candidatos_lexical(consulta, catalogo, limites_lexicales_efectivos)
     contexto: dict[str, object] = {
         "version_contexto": _VERSION_CONTEXTO,
         "catalogo": {"version": catalogo.version},
@@ -117,7 +165,7 @@ def construir_contexto_por_logro(
         "candidatos": candidatos,
         "recuperacion": retrieval_info,
         "ejemplos": [
-            ejemplo.a_dict() for ejemplo in catalogo.ejemplos(consulta, limite=_LIMITE_EJEMPLOS)
+            ejemplo.a_dict() for ejemplo in catalogo.ejemplos(consulta, limite=limite_ejemplos)
         ],
         "proveniencia": _proveniencia(caso, perfil, catalogo),
     }

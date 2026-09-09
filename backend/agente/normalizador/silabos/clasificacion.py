@@ -14,11 +14,25 @@ import math
 import re
 import unicodedata
 from collections import defaultdict
+from collections.abc import Mapping
+from dataclasses import dataclass
 from difflib import SequenceMatcher
 
 FLAG_EXACT_DUPLICATE = "EXACT_DUPLICATE"
 FLAG_POSSIBLE_SEMANTIC_DUPLICATE = "POSSIBLE_SEMANTIC_DUPLICATE"
 FLAG_SUSPICIOUS_UNRELATED_TOOL = "SUSPICIOUS_UNRELATED_TOOL"
+
+_UNRESOLVED_RESOLUTION_STATES = {
+    "CANONIZADA_CON_PROPUESTA_PERFIL",
+    "PENDIENTE",
+    "PENDIENTE_CATALOGACION",
+    "PENDIENTE_AMPLIACION_PERFIL",
+    "REQUIERE_REVISION_HUMANA",
+    "MANTENIDA_PENDIENTE",
+    "PENDING",
+    "REVIEW",
+    "REQUIRES_HUMAN_REVIEW",
+}
 
 _STOPWORDS = {
     "a",
@@ -38,6 +52,200 @@ _STOPWORDS = {
     "una",
     "y",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class EstadoClasificacion:
+    """Estado único de revisión; los aliases existen solo al exportar el contrato v1."""
+
+    flags: tuple[str, ...] = ()
+    exact_duplicate_group: str | None = None
+    representative_id: str | None = None
+    auto_deduplicated: bool = False
+    semantic_duplicate_group: str | None = None
+    tool_relevance: str | None = "NOT_APPLICABLE"
+    requires_human_decision: bool = True
+
+    @property
+    def exact_duplicate(self) -> bool:
+        return FLAG_EXACT_DUPLICATE in self.flags
+
+    @property
+    def semantic_duplicate(self) -> bool:
+        return FLAG_POSSIBLE_SEMANTIC_DUPLICATE in self.flags
+
+    @property
+    def suspicious_tool(self) -> bool:
+        return self.tool_relevance == "SUSPICIOUS_UNRELATED"
+
+    @property
+    def resolution_state(self) -> str:
+        if self.auto_deduplicated:
+            return "AUTO_DEDUPLICATED"
+        return "REQUIRES_HUMAN_DECISION" if self.requires_human_decision else "NOT_ACTIONABLE"
+
+    def a_dict(self) -> dict[str, object]:
+        """Serializa todos los aliases públicos históricos sin almacenarlos internamente."""
+        return {
+            "flags": list(self.flags),
+            "duplicado_exacto": self.exact_duplicate,
+            "exact_duplicate": self.exact_duplicate,
+            "grupo_duplicado_exacto": self.exact_duplicate_group,
+            "exact_duplicate_group": self.exact_duplicate_group,
+            "exact_duplicate_representative_id": self.representative_id,
+            "representative_id": self.representative_id,
+            "auto_dedup_representative_id": self.representative_id,
+            "auto_dedup_group": self.exact_duplicate_group,
+            "representante_duplicado_exacto": bool(
+                self.exact_duplicate_group and not self.auto_deduplicated
+            ),
+            "auto_dedup_representative": bool(
+                self.exact_duplicate_group and not self.auto_deduplicated
+            ),
+            "exact_duplicate_role": (
+                "SUPPRESSED"
+                if self.auto_deduplicated
+                else "REPRESENTATIVE"
+                if self.exact_duplicate_group
+                else None
+            ),
+            "auto_deduplicated": self.auto_deduplicated,
+            "auto_deduplication_state": ("AUTO_DEDUPLICATED" if self.auto_deduplicated else None),
+            "posible_duplicado_semantico": self.semantic_duplicate,
+            "semantic_duplicate": self.semantic_duplicate,
+            "grupo_duplicado_semantico": self.semantic_duplicate_group,
+            "semantic_duplicate_group": self.semantic_duplicate_group,
+            "herramienta_no_relacionada": self.suspicious_tool,
+            "suspicious_tool": self.suspicious_tool,
+            "relevancia_herramienta": self.tool_relevance,
+            "tool_relevance": self.tool_relevance,
+            "requiere_decision": self.requires_human_decision,
+            "clasificacion": {
+                "version": "curricular-proposal-classification/v1",
+                "flags": list(self.flags),
+                "exact_duplicate_group": self.exact_duplicate_group,
+                "exact_duplicate_representative_id": self.representative_id,
+                "auto_dedup_group": self.exact_duplicate_group,
+                "exact_duplicate_role": (
+                    "SUPPRESSED"
+                    if self.auto_deduplicated
+                    else "REPRESENTATIVE"
+                    if self.exact_duplicate_group
+                    else None
+                ),
+                "auto_deduplicated": self.auto_deduplicated,
+                "resolution_state": self.resolution_state,
+                "semantic_duplicate_group": self.semantic_duplicate_group,
+                "tool_relevance": self.tool_relevance,
+                "auto_deleted": False,
+                "auto_merged": False,
+                "requires_human_decision": self.requires_human_decision,
+            },
+        }
+
+
+def estado_clasificacion(fila: Mapping[str, object]) -> EstadoClasificacion:
+    """Convierte filas actuales/legacy: campo canónico anidado > alias inglés > español.
+
+    La precedencia usa presencia, nunca ``or``: False y None explícitos no se
+    reemplazan por aliases verdaderos. Un campo ausente se completa desde legacy;
+    sin selección de revisión se conserva el default histórico pendiente. Las
+    decisiones humanas ADD/KEEP_PENDING/DISCARD no se infieren de estos flags.
+    """
+    nested = fila.get("clasificacion")
+    canonical = nested if isinstance(nested, Mapping) else {}
+
+    def value(key: str, *aliases: str, default: object = None) -> object:
+        if key in canonical:
+            return canonical[key]
+        for alias in aliases:
+            if alias in fila:
+                return fila[alias]
+        return default
+
+    def text(value: object) -> str | None:
+        return str(value) if value is not None else None
+
+    exact_group = text(
+        value(
+            "exact_duplicate_group",
+            "exact_duplicate_group",
+            "grupo_duplicado_exacto",
+            "auto_dedup_group",
+        )
+    )
+    semantic_group = text(
+        value("semantic_duplicate_group", "semantic_duplicate_group", "grupo_duplicado_semantico")
+    )
+    relevance = text(
+        value(
+            "tool_relevance",
+            "tool_relevance",
+            "relevancia_herramienta",
+            default=(
+                "SUSPICIOUS_UNRELATED"
+                if value(
+                    "suspicious_tool",
+                    "suspicious_tool",
+                    "herramienta_no_relacionada",
+                    default=False,
+                )
+                else "NOT_APPLICABLE"
+            ),
+        )
+    )
+    flags_value = value("flags", "flags")
+    if isinstance(flags_value, (list, tuple)):
+        flags = tuple(str(flag) for flag in flags_value)
+    else:
+        flags = tuple(
+            flag
+            for flag, enabled in (
+                (
+                    FLAG_EXACT_DUPLICATE,
+                    value(
+                        "exact_duplicate",
+                        "exact_duplicate",
+                        "duplicado_exacto",
+                        default=bool(exact_group),
+                    ),
+                ),
+                (
+                    FLAG_POSSIBLE_SEMANTIC_DUPLICATE,
+                    value(
+                        "semantic_duplicate",
+                        "semantic_duplicate",
+                        "posible_duplicado_semantico",
+                        default=bool(semantic_group),
+                    ),
+                ),
+                (FLAG_SUSPICIOUS_UNRELATED_TOOL, relevance == "SUSPICIOUS_UNRELATED"),
+            )
+            if enabled
+        )
+    return EstadoClasificacion(
+        flags=flags,
+        exact_duplicate_group=exact_group,
+        representative_id=text(
+            value(
+                "exact_duplicate_representative_id",
+                "exact_duplicate_representative_id",
+                "representative_id",
+                "auto_dedup_representative_id",
+            )
+        ),
+        auto_deduplicated=bool(value("auto_deduplicated", "auto_deduplicated", default=False)),
+        semantic_duplicate_group=semantic_group,
+        tool_relevance=relevance,
+        requires_human_decision=bool(
+            value(
+                "requires_human_decision",
+                "requires_human_decision",
+                "requiere_decision",
+                default=True,
+            )
+        ),
+    )
 
 
 def normalizar_texto(valor: object) -> str:
@@ -145,72 +353,16 @@ def clasificar_propuestas(
             if estado_original:
                 fila["estado_resolucion"] = estado_original
 
-        requiere_decision = propuesta_estructurada(fila) and not es_auto_deduplicada
-        estado_clasificacion = (
-            "AUTO_DEDUPLICATED"
-            if es_auto_deduplicada
-            else "REQUIRES_HUMAN_DECISION"
-            if requiere_decision
-            else "NOT_ACTIONABLE"
+        estado = EstadoClasificacion(
+            flags=tuple(flags),
+            exact_duplicate_group=grupo_exacto,
+            representative_id=exact_representatives.get(indice),
+            auto_deduplicated=es_auto_deduplicada,
+            semantic_duplicate_group=grupo_semantico,
+            tool_relevance=relevancia,
+            requires_human_decision=propuesta_estructurada(fila) and not es_auto_deduplicada,
         )
-
-        # Estos campos son redundantes deliberadamente: el frontend puede usar
-        # los nombres en español y los consumidores de auditoría los nombres
-        # estables en inglés sin recalcular las señales.
-        fila.update(
-            {
-                "flags": flags,
-                "duplicado_exacto": bool(grupo_exacto),
-                "exact_duplicate": bool(grupo_exacto),
-                "grupo_duplicado_exacto": grupo_exacto,
-                "exact_duplicate_group": grupo_exacto,
-                "exact_duplicate_representative_id": exact_representatives.get(indice),
-                "representative_id": exact_representatives.get(indice),
-                "auto_dedup_representative_id": exact_representatives.get(indice),
-                "auto_dedup_group": grupo_exacto,
-                "representante_duplicado_exacto": bool(grupo_exacto and not es_auto_deduplicada),
-                "auto_dedup_representative": bool(grupo_exacto and not es_auto_deduplicada),
-                "exact_duplicate_role": (
-                    "SUPPRESSED"
-                    if es_auto_deduplicada
-                    else "REPRESENTATIVE"
-                    if grupo_exacto
-                    else None
-                ),
-                "auto_deduplicated": es_auto_deduplicada,
-                "auto_deduplication_state": ("AUTO_DEDUPLICATED" if es_auto_deduplicada else None),
-                "posible_duplicado_semantico": bool(grupo_semantico),
-                "semantic_duplicate": bool(grupo_semantico),
-                "grupo_duplicado_semantico": grupo_semantico,
-                "semantic_duplicate_group": grupo_semantico,
-                "herramienta_no_relacionada": herramienta_no_relacionada,
-                "suspicious_tool": herramienta_no_relacionada,
-                "relevancia_herramienta": relevancia,
-                "tool_relevance": relevancia,
-                "requiere_decision": requiere_decision,
-                "clasificacion": {
-                    "version": "curricular-proposal-classification/v1",
-                    "flags": list(flags),
-                    "exact_duplicate_group": grupo_exacto,
-                    "exact_duplicate_representative_id": exact_representatives.get(indice),
-                    "auto_dedup_group": grupo_exacto,
-                    "exact_duplicate_role": (
-                        "SUPPRESSED"
-                        if es_auto_deduplicada
-                        else "REPRESENTATIVE"
-                        if grupo_exacto
-                        else None
-                    ),
-                    "auto_deduplicated": es_auto_deduplicada,
-                    "resolution_state": estado_clasificacion,
-                    "semantic_duplicate_group": grupo_semantico,
-                    "tool_relevance": relevancia,
-                    "auto_deleted": False,
-                    "auto_merged": False,
-                    "requires_human_decision": requiere_decision,
-                },
-            }
-        )
+        fila.update(estado.a_dict())
     return resultado
 
 
@@ -226,40 +378,58 @@ def propuesta_estructurada(fila: dict[str, object]) -> bool:
 def puede_recibir_decision(fila: dict[str, object]) -> bool:
     """Indica si una fila puede entrar en la cola ``ADD``/``KEEP_PENDING``."""
 
-    return propuesta_estructurada(fila) and not bool(fila.get("auto_deduplicated"))
+    return propuesta_estructurada(fila) and not estado_clasificacion(fila).auto_deduplicated
+
+
+def requiere_resolucion_curricular(fila: dict[str, object]) -> bool:
+    """Indica si una fila sigue bloqueando la publicación curricular.
+
+    La cola puede contener evidencia sin una propuesta estructurada, por
+    ejemplo cuando el análisis LLM no estuvo disponible. Esa fila no puede
+    recibir ``ADD`` todavía, pero tampoco puede tratarse como resuelta: si se
+    ignora aquí, los CSV canónicos se materializan antes del HITL.
+    """
+
+    if estado_clasificacion(fila).auto_deduplicated:
+        return False
+    decision = str(fila.get("decision") or "").strip().upper()
+    if decision in {"ADD", "DISCARD"}:
+        return False
+    if decision == "KEEP_PENDING":
+        # HITL explicitly reviewed the evidence and chose not to promote it.
+        # It remains visible as retained evidence, but it must not block the
+        # already-decided canonical rows from being materialized.
+        return False
+    estado = str(fila.get("estado_resolucion") or "").strip().upper()
+    return (
+        not decision or estado in _UNRESOLVED_RESOLUTION_STATES or estado.startswith("PENDIENTE_")
+    )
 
 
 def resumen_clasificacion(propuestas: list[dict[str, object]]) -> dict[str, int]:
     """Cuenta señales para el resumen público del checkpoint."""
 
+    estados = [estado_clasificacion(fila) for fila in propuestas]
     return {
-        "exact_duplicate_rows": sum(bool(fila.get("duplicado_exacto")) for fila in propuestas),
-        "semantic_duplicate_rows": sum(
-            bool(fila.get("posible_duplicado_semantico")) for fila in propuestas
-        ),
-        "suspicious_unrelated_tool_rows": sum(
-            bool(fila.get("herramienta_no_relacionada")) for fila in propuestas
-        ),
+        "exact_duplicate_rows": sum(estado.exact_duplicate for estado in estados),
+        "semantic_duplicate_rows": sum(estado.semantic_duplicate for estado in estados),
+        "suspicious_unrelated_tool_rows": sum(estado.suspicious_tool for estado in estados),
         "exact_duplicate_groups": len(
-            {
-                fila.get("grupo_duplicado_exacto")
-                for fila in propuestas
-                if fila.get("grupo_duplicado_exacto")
-            }
+            {estado.exact_duplicate_group for estado in estados if estado.exact_duplicate_group}
         ),
         "semantic_duplicate_groups": len(
             {
-                fila.get("grupo_duplicado_semantico")
-                for fila in propuestas
-                if fila.get("grupo_duplicado_semantico")
+                estado.semantic_duplicate_group
+                for estado in estados
+                if estado.semantic_duplicate_group
             }
         ),
-        "auto_deduplicated_rows": sum(bool(fila.get("auto_deduplicated")) for fila in propuestas),
+        "auto_deduplicated_rows": sum(estado.auto_deduplicated for estado in estados),
         "auto_deduplicated_groups": len(
             {
-                fila.get("grupo_duplicado_exacto")
-                for fila in propuestas
-                if fila.get("auto_deduplicated") and fila.get("grupo_duplicado_exacto")
+                estado.exact_duplicate_group
+                for estado in estados
+                if estado.auto_deduplicated and estado.exact_duplicate_group
             }
         ),
     }
@@ -410,7 +580,6 @@ def _relevancia_herramienta(fila: dict[str, object], nombre: str) -> str:
         str(valor or "")
         for valor in (
             fila.get("descripcion_fuente"),
-            fila.get("etiqueta_logro"),
             fila.get("seccion_fuente"),
             descripcion,
         )

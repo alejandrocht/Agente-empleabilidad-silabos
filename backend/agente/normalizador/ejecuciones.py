@@ -14,7 +14,13 @@ from threading import Event, Lock
 from typing import cast
 from uuid import uuid4
 
-from agente.config.settings import BASE_DIR, booleano, entero, texto
+from agente.config.settings import (
+    BASE_DIR,
+    booleano,
+    configuracion_normalizador_curricular,
+    entero,
+    texto,
+)
 from agente.normalizador.empleabilidad.catalogo import (
     cargar_catalogo,
     cargar_catalogo_carrera,
@@ -40,6 +46,13 @@ from agente.normalizador.silabos.fuente_cactus import (
     empaquetar_archivos_cactus,
 )
 from agente.normalizador.silabos.limpieza import limpiar_archivo as limpiar_silabos
+from agente.normalizador.silabos.salida import (
+    _ARCHIVOS_CURRICULARES_FINALES,  # noqa: F401
+    _REPORTES_CURRICULARES_PRE_HITL,
+    _filtrar_estado_publico,
+    _filtrar_outputs_curriculares,
+    _hitl_curricular_completado,
+)
 from agente.observabilidad.langsmith import contexto_ejecucion, ejecutar_flujo
 
 
@@ -190,6 +203,7 @@ class Ejecucion:
         self.archivo = archivo
         self.directorio = directorio
         self.parametros = parametros or {}
+        self.configuracion_curricular: dict[str, object] | None = None
         self.estado: EstadoEjecucion = "recibido"
         self.creada_en = _ahora()
         self.actualizada_en = self.creada_en
@@ -243,11 +257,28 @@ class Ejecucion:
             except (OSError, ValueError, TypeError):
                 aprobacion_curricular = None
 
+        limpieza_silabos = self.limpieza_silabos.a_dict() if self.limpieza_silabos else None
+        if self.tipo == "silabos":
+            hitl_completado = _hitl_curricular_completado(release_gate)
+            outputs = _filtrar_outputs_curriculares(
+                outputs,
+                hitl_completado=hitl_completado,
+            )
+            if isinstance(limpieza_silabos, dict):
+                outputs_limpieza = limpieza_silabos.get("outputs")
+                if isinstance(outputs_limpieza, list):
+                    limpieza_silabos = dict(limpieza_silabos)
+                    limpieza_silabos["outputs"] = _filtrar_outputs_curriculares(
+                        [dict(output) for output in outputs_limpieza if isinstance(output, dict)],
+                        hitl_completado=hitl_completado,
+                    )
+
         return {
             "id_ejecucion": self.id_ejecucion,
             "tipo": self.tipo,
             "archivo": self.archivo,
             "parametros": dict(self.parametros),
+            "configuracion_curricular": self.configuracion_curricular,
             "estado": self.estado,
             "creada_en": self.creada_en,
             "actualizada_en": self.actualizada_en,
@@ -258,7 +289,7 @@ class Ejecucion:
                 self.validacion_silabos.a_dict() if self.validacion_silabos else None
             ),
             "limpieza": self.limpieza.a_dict() if self.limpieza else None,
-            "limpieza_silabos": (self.limpieza_silabos.a_dict() if self.limpieza_silabos else None),
+            "limpieza_silabos": limpieza_silabos,
             "normalizacion": self.normalizacion.a_dict() if self.normalizacion else None,
             "release_gate": release_gate,
             "aprobacion_curricular": aprobacion_curricular,
@@ -417,9 +448,16 @@ class GestorEjecuciones:
         estado = self.obtener(id_ejecucion)
         reportes: dict[str, object] = {}
         directorio_reportes = self._directorio_seguro(id_ejecucion) / "salidas" / "reportes"
+        hitl_completado = _hitl_curricular_completado(estado.get("release_gate"))
         if directorio_reportes.is_dir():
             for ruta in sorted(directorio_reportes.iterdir()):
                 if not ruta.is_file() or ruta.suffix.lower() not in {".json", ".jsonl"}:
+                    continue
+                if (
+                    estado.get("tipo") == "silabos"
+                    and not hitl_completado
+                    and ruta.name not in _REPORTES_CURRICULARES_PRE_HITL
+                ):
                     continue
                 reportes[ruta.name] = self._leer_reporte(ruta)
         return {
@@ -462,7 +500,7 @@ class GestorEjecuciones:
             datos = json.loads(manifest.read_text(encoding="utf-8"))
             if not isinstance(datos, dict):
                 raise ValueError("El manifest de la ejecución no tiene un objeto raíz.")
-            return cast(dict[str, object], datos)
+            return _filtrar_estado_publico(cast(dict[str, object], datos))
 
     def _obtener_objeto(self, id_ejecucion: str) -> Ejecucion:
         with self._bloqueo:
@@ -621,7 +659,7 @@ class GestorEjecuciones:
                 datos = self._obtener_objeto(id_ejecucion).a_dict()
             except KeyError:
                 pass
-            resultados.append(cast(dict[str, object], datos))
+            resultados.append(_filtrar_estado_publico(cast(dict[str, object], datos)))
         return resultados
 
     def _resumen_historial(self, datos: dict[str, object]) -> dict[str, object]:
@@ -786,7 +824,7 @@ class GestorEjecuciones:
                     json.dumps(
                         {
                             "estado": "CANCELADO",
-                            "decisiones_aceptadas": 0,
+                            "propuestas_pendientes": 0,
                         },
                         ensure_ascii=False,
                         indent=2,
@@ -811,15 +849,13 @@ class GestorEjecuciones:
         self._aplicar_retencion()
 
     def _purgar_temporales(self, ejecucion: Ejecucion) -> None:
-        """Elimina fuentes binarias/staging, manteniendo CSV y reportes auditables."""
+        """Elimina staging y capturas temporales, conservando la fuente curricular."""
 
         raiz = ejecucion.directorio.resolve()
-        for relativo in (
-            "entrada",
-            "fuentes_curriculares",
-            "limpios",
-            "cactus_chrome_profile",
-        ):
+        temporales = ["fuentes_curriculares", "limpios", "cactus_chrome_profile"]
+        if ejecucion.tipo != "silabos":
+            temporales.append("entrada")
+        for relativo in temporales:
             ruta = (raiz / relativo).resolve()
             if raiz not in ruta.parents or not ruta.is_dir():
                 continue
@@ -983,7 +1019,9 @@ class GestorEjecuciones:
             self._verificar_cancelacion(ejecucion)
             ejecucion.estado = "limpiando"
             ejecucion.actualizada_en = _ahora()
-            usar_llm = booleano("NORMALIZADOR_CURRICULAR_LLM", True)
+            configuracion_curricular = configuracion_normalizador_curricular()
+            ejecucion.configuracion_curricular = configuracion_curricular.a_dict()
+            usar_llm = configuracion_curricular.usar_llm
             if usar_llm:
                 ejecucion.progreso_llm = ProgresoLimpiezaLLM(
                     fase="preparando",
@@ -1018,11 +1056,11 @@ class GestorEjecuciones:
                     ejecucion.directorio,
                     resultado,
                     usar_llm=usar_llm,
-                    inspeccionar_llm=booleano("NORMALIZADOR_CURRICULAR_INSPECTOR", True),
                     al_actualizar_progreso_llm=actualizar_progreso_llm if usar_llm else None,
                     progreso_inicial=ejecucion.progreso_llm if usar_llm else None,
                     id_ejecucion=ejecucion.id_ejecucion,
                     cancelada=ejecucion.cancelada.is_set,
+                    configuracion_curricular=configuracion_curricular,
                 ),
                 run_name="normalizador.curricular",
                 inputs={

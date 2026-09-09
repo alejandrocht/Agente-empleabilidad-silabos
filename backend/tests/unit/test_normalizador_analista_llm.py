@@ -9,6 +9,7 @@ from threading import Event
 
 import pytest
 
+from agente.config import settings
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
 from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import ProgresoLimpiezaLLM
@@ -27,39 +28,41 @@ class _LLMFalso:
 
     def invoke(self, _prompt: str):
         assert self._schema is not None
-        if self._schema is analista_llm.LoteDecisionesCurriculares:
-            return self._schema(
-                decisiones=[
-                    analista_llm.DecisionCurricular(
-                        id_habilidad_fuente=analista_llm._hash_id(
-                            "HAB_SRC", "SIL_1", "L1", "Diseñar campañas de marketing"
-                        ),
-                        competencia=analista_llm.ConceptoPropuesto(
-                            nombre="Gestión de campañas de marketing",
-                            descripcion="Planificación y gestión de campañas de marketing.",
-                            tipo="dura",
-                        ),
-                        habilidad=analista_llm.ConceptoPropuesto(
-                            nombre="Diseñar campañas de marketing",
-                            descripcion="Diseño de campañas de marketing.",
-                            tipo="habilidad",
-                        ),
-                        evidencia=["Diseñar campañas de marketing"],
-                        confianza=0.94,
-                    )
-                ]
-            )
         return self._schema(
-            inspecciones=[
-                analista_llm.InspeccionCurricular(
+            decisiones=[
+                analista_llm.DecisionCurricular(
                     id_habilidad_fuente=analista_llm._hash_id(
-                        "HAB_SRC", "SIL_1", "L1", "Diseñar campañas de marketing"
+                        "HAB_SRC", "SIL_1", "1", "Diseñar campañas de marketing"
                     ),
-                    estado="APROBAR",
-                    confianza=0.93,
+                    competencia=analista_llm.ConceptoPropuesto(
+                        nombre="Gestión de campañas de marketing",
+                        descripcion="Planificación y gestión de campañas de marketing.",
+                        tipo="dura",
+                    ),
+                    habilidad=analista_llm.ConceptoPropuesto(
+                        nombre="Diseñar campañas de marketing",
+                        descripcion="Diseño de campañas de marketing.",
+                        tipo="habilidad",
+                    ),
+                    evidencia=["Diseñar campañas de marketing"],
+                    confianza=0.94,
                 )
             ]
         )
+
+
+@pytest.fixture(autouse=True)
+def _inyectar_snapshot_curricular(monkeypatch: pytest.MonkeyPatch) -> None:
+    original = analista_llm.analizar_registros_curriculares
+
+    def analizar_con_snapshot(*args: object, **kwargs: object):
+        kwargs.setdefault(
+            "configuracion_curricular",
+            settings.configuracion_normalizador_curricular(),
+        )
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(analista_llm, "analizar_registros_curriculares", analizar_con_snapshot)
 
 
 def _catalogo_vacio() -> CatalogoCHH:
@@ -88,7 +91,7 @@ def _registros_para(
                 "sumilla": logro,
                 "logro_general": logro,
                 "texto_relevante": "Contexto de marketing.",
-                "logros_especificos": [{"etiqueta": "L1", "descripcion": logro}],
+                "logros_especificos": [{"orden": "1", "descripcion": logro}],
                 "competencias_declaradas": [],
                 "programa_analitico": programa_analitico or [],
                 "herramientas_evidencia": herramientas_evidencia or [],
@@ -108,7 +111,7 @@ class _LLMDecisionesFalso:
         return self
 
     def invoke(self, _prompt: str):
-        assert self._schema is analista_llm.LoteDecisionesCurriculares
+        assert self._schema is analista_llm.LoteDecisionesCurricularesLLM
         return self._schema(decisiones=[self._decision])
 
 
@@ -127,7 +130,7 @@ class _LLMLoteDecisionesFalso:
         return self
 
     def invoke(self, _prompt: str):
-        assert self._schema is analista_llm.LoteDecisionesCurriculares
+        assert self._schema is analista_llm.LoteDecisionesCurricularesLLM
         return self._schema(decisiones=self._decisiones)
 
 
@@ -140,32 +143,19 @@ class _LLMLoteSecuencialFalso:
         self.model_name = modelo
         self._respuestas = iter(respuestas)
         self._schema = None
-        self.ids_por_llamada: list[list[str]] = []
+        self.logros_por_llamada: list[list[str]] = []
 
     def with_structured_output(self, schema):
         self._schema = schema
         return self
 
     def invoke(self, prompt: str):
-        assert self._schema is analista_llm.LoteDecisionesCurriculares
-        casos = json.loads(prompt.split("CASOS:\n", maxsplit=1)[1])
-        self.ids_por_llamada.append([caso["id_habilidad_fuente"] for caso in casos])
+        assert self._schema is analista_llm.LoteDecisionesCurricularesLLM
+        contextos = json.loads(prompt.split("CASOS:\n", maxsplit=1)[1])
+        self.logros_por_llamada.append(
+            [logro for contexto in contextos for logro in contexto["logros_especificos"]]
+        )
         return self._schema(decisiones=next(self._respuestas))
-
-
-class _LLMInspeccionFalso:
-    def __init__(self, modelo: str, inspeccion: analista_llm.InspeccionCurricular) -> None:
-        self.model_name = modelo
-        self._inspeccion = inspeccion
-        self._schema = None
-
-    def with_structured_output(self, schema):
-        self._schema = schema
-        return self
-
-    def invoke(self, _prompt: str):
-        assert self._schema is analista_llm.LoteInspeccionesCurriculares
-        return self._schema(inspecciones=[self._inspeccion])
 
 
 def _decision_para(
@@ -173,7 +163,7 @@ def _decision_para(
     **cambios: object,
 ) -> analista_llm.DecisionCurricular:
     decision = analista_llm.DecisionCurricular(
-        id_habilidad_fuente=analista_llm._hash_id("HAB_SRC", "SIL_1", "L1", logro),
+        id_habilidad_fuente=analista_llm._hash_id("HAB_SRC", "SIL_1", "1", logro),
         competencia=analista_llm.ConceptoPropuesto(nombre="Gestión de campañas"),
         habilidad=analista_llm.ConceptoPropuesto(nombre=logro),
         evidencia=[logro],
@@ -182,13 +172,13 @@ def _decision_para(
     return decision.model_copy(update=cambios)
 
 
-def _decision_para_etiqueta(
+def _decision_para_orden(
     logro: str,
-    etiqueta: str,
+    orden: str,
     **cambios: object,
 ) -> analista_llm.DecisionCurricular:
     decision = _decision_para(logro).model_copy(
-        update={"id_habilidad_fuente": analista_llm._hash_id("HAB_SRC", "SIL_1", etiqueta, logro)}
+        update={"id_habilidad_fuente": analista_llm._hash_id("HAB_SRC", "SIL_1", orden, logro)}
     )
     return decision.model_copy(update=cambios)
 
@@ -207,14 +197,12 @@ def _catalogo_con_herramientas(*herramientas: str) -> CatalogoCHH:
     )
 
 
-def test_analista_e_inspector_aceptan_decision_con_evidencia(monkeypatch, tmp_path: Path) -> None:
+def test_analista_valido_genera_propuesta_pendiente_de_revision_humana(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
     analista = _LLMFalso()
-    inspector = _LLMFalso()
-
-    def obtener(rol: str):
-        return analista if rol == "analista_curricular" else inspector
-
-    monkeypatch.setattr(analista_llm, "obtener_llm", obtener)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda *_args, **_kwargs: analista)
     registros = [
         {
             "id_silabo": "SIL_1",
@@ -225,7 +213,7 @@ def test_analista_e_inspector_aceptan_decision_con_evidencia(monkeypatch, tmp_pa
                 "logro_general": "Diseñar campañas de marketing.",
                 "texto_relevante": "Segmentación y planificación.",
                 "logros_especificos": [
-                    {"etiqueta": "L1", "descripcion": "Diseñar campañas de marketing"}
+                    {"orden": "1", "descripcion": "Diseñar campañas de marketing"}
                 ],
                 "competencias_declaradas": [],
                 "herramientas_evidencia": [],
@@ -242,9 +230,11 @@ def test_analista_e_inspector_aceptan_decision_con_evidencia(monkeypatch, tmp_pa
     )
 
     assert resultado.modelo_analista == "gpt-5.6-sol-test"
-    assert resultado.modelo_inspector == "gpt-5.6-sol-test"
-    assert len(resultado.decisiones) == 1
-    assert any(fila["estado"] == "ACEPTADA" for fila in resultado.reportes)
+    assert len(resultado.propuestas) == 1
+    assert any(
+        fila["estado"] == "PENDIENTE_REVISION_HUMANA" and fila["confianza"] == 0.94
+        for fila in resultado.reportes
+    )
 
 
 def test_cancelacion_no_envia_un_segundo_lote_llm(monkeypatch, tmp_path: Path) -> None:
@@ -259,9 +249,7 @@ def test_cancelacion_no_envia_un_segundo_lote_llm(monkeypatch, tmp_path: Path) -
                 "sumilla": "Diseñar campañas de marketing.",
                 "logro_general": "Diseñar campañas de marketing.",
                 "texto_relevante": "Contexto de marketing.",
-                "logros_especificos": [
-                    {"etiqueta": "L1", "descripcion": f"Diseñar campaña {indice}"}
-                ],
+                "logros_especificos": [{"orden": "1", "descripcion": f"Diseñar campaña {indice}"}],
                 "competencias_declaradas": [],
                 "programa_analitico": [],
                 "herramientas_evidencia": [],
@@ -288,7 +276,7 @@ def test_cancelacion_no_envia_un_segundo_lote_llm(monkeypatch, tmp_path: Path) -
             return self.esquema(decisiones=[])
 
     llm = LLMContador()
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: llm)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: llm)
 
     with pytest.raises(CancelacionSolicitada):
         analista_llm.analizar_registros_curriculares(
@@ -297,7 +285,6 @@ def test_cancelacion_no_envia_un_segundo_lote_llm(monkeypatch, tmp_path: Path) -
             "Marketing",
             "2026-1",
             tmp_path,
-            inspeccionar=False,
             cancelada=cancelada.is_set,
         )
 
@@ -309,43 +296,32 @@ def test_normaliza_habilidad_nominalizada_antes_de_validarla(monkeypatch, tmp_pa
         def invoke(self, _prompt: str):
             assert self._schema is not None
             id_habilidad = analista_llm._hash_id(
-                "HAB_SRC", "SIL_1", "L1", "Evaluación de campañas de marketing"
+                "HAB_SRC", "SIL_1", "1", "Evaluación de campañas de marketing"
             )
-            if self._schema is analista_llm.LoteDecisionesCurriculares:
-                return self._schema(
-                    decisiones=[
-                        analista_llm.DecisionCurricular(
-                            id_habilidad_fuente=id_habilidad,
-                            competencia=analista_llm.ConceptoPropuesto(
-                                nombre="Gestión de campañas de marketing"
-                            ),
-                            habilidad=analista_llm.ConceptoPropuesto(
-                                nombre="Evaluación de campañas de marketing",
-                                descripcion="Descripción sin cambios.",
-                                tipo="habilidad",
-                            ),
-                            evidencia=["Evaluación de campañas de marketing"],
-                            justificacion="Justificación sin cambios.",
-                            confianza=0.94,
-                        )
-                    ]
-                )
             return self._schema(
-                inspecciones=[
-                    analista_llm.InspeccionCurricular(
+                decisiones=[
+                    analista_llm.DecisionCurricular(
                         id_habilidad_fuente=id_habilidad,
-                        estado="APROBAR",
+                        competencia=analista_llm.ConceptoPropuesto(
+                            nombre="Gestión de campañas de marketing"
+                        ),
+                        habilidad=analista_llm.ConceptoPropuesto(
+                            nombre="Evaluación de campañas de marketing",
+                            descripcion="Descripción sin cambios.",
+                            tipo="habilidad",
+                        ),
+                        evidencia=["Evaluación de campañas de marketing"],
+                        justificacion="Justificación sin cambios.",
                         confianza=0.93,
                     )
                 ]
             )
 
     analista = LLMNominalizado()
-    inspector = LLMNominalizado()
     monkeypatch.setattr(
         analista_llm,
         "obtener_llm",
-        lambda rol: analista if rol == "analista_curricular" else inspector,
+        lambda _rol, **_kwargs: analista,
     )
     registros = [
         {
@@ -357,7 +333,7 @@ def test_normaliza_habilidad_nominalizada_antes_de_validarla(monkeypatch, tmp_pa
                 "logro_general": "Evaluación de campañas de marketing.",
                 "texto_relevante": "Métricas de campaña.",
                 "logros_especificos": [
-                    {"etiqueta": "L1", "descripcion": "Evaluación de campañas de marketing"}
+                    {"orden": "1", "descripcion": "Evaluación de campañas de marketing"}
                 ],
                 "competencias_declaradas": [],
                 "herramientas_evidencia": [],
@@ -373,7 +349,7 @@ def test_normaliza_habilidad_nominalizada_antes_de_validarla(monkeypatch, tmp_pa
         tmp_path,
     )
 
-    decision = next(iter(resultado.decisiones.values()))
+    decision = next(iter(resultado.propuestas.values()))
     assert decision.habilidad.nombre == "Evaluar campañas de marketing"
     assert decision.habilidad.descripcion == "Descripción sin cambios."
     assert decision.habilidad.tipo == "habilidad"
@@ -440,7 +416,7 @@ def test_normaliza_residuales_deterministas_en_seam_publico(
             habilidad=analista_llm.ConceptoPropuesto(nombre=nombre),
         ),
     )
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: analista)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
 
     resultado = analista_llm.analizar_registros_curriculares(
         _registros_para(logro),
@@ -448,10 +424,9 @@ def test_normaliza_residuales_deterministas_en_seam_publico(
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
-    decision = next(iter(resultado.decisiones.values()))
+    decision = next(iter(resultado.propuestas.values()))
     assert decision.habilidad.nombre == esperado
     assert decision.habilidad.descripcion == ""
     assert decision.evidencia == [logro]
@@ -468,7 +443,7 @@ def test_no_normaliza_nominalizacion_de_frase_no_incluida(
             habilidad=analista_llm.ConceptoPropuesto(nombre=nombre),
         ),
     )
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: analista)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
 
     resultado = analista_llm.analizar_registros_curriculares(
         _registros_para(nombre),
@@ -476,10 +451,9 @@ def test_no_normaliza_nominalizacion_de_frase_no_incluida(
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
-    assert not resultado.decisiones
+    assert not resultado.propuestas
     reporte = next(
         fila for fila in resultado.reportes if fila.get("estado") == "REVISAR_VALIDACION"
     )
@@ -573,49 +547,36 @@ def test_competencia_debe_anclarse_en_fuente_o_declararse(declarada: bool) -> No
     assert ("COMPETENCIA_SIN_ANCLA_FUENTE" in errores) is not declarada
 
 
-def test_fuente_estructurada_debe_pertenecer_al_silabo_correspondiente() -> None:
-    logro = "Analizar datos de mercado para identificar segmentos"
+@pytest.mark.parametrize(
+    "competencia",
+    [
+        "Trabajo en equipo",
+        "Comunicación efectiva",
+        "Comunicación eficaz",
+        "Pensamiento crítico",
+        "Aprendizaje autónomo",
+        "Ética profesional",
+    ],
+)
+def test_competencias_genericas_se_rechazan_deterministicamente(competencia: str) -> None:
+    logro = f"Analizar evidencia con {competencia}"
     decision = _decision_para(
         logro,
-        competencia=analista_llm.ConceptoPropuesto(nombre="Analítica de mercado"),
-        evidencia=[],
-        fuentes=[
-            analista_llm.FuenteCurricular(
-                texto=logro,
-                seccion="Logro de aprendizaje",
-                id_silabo="SIL_1",
-            )
-        ],
+        competencia=analista_llm.ConceptoPropuesto(nombre=competencia),
+        habilidad=analista_llm.ConceptoPropuesto(nombre="Analizar evidencia curricular"),
+        evidencia=[logro],
     )
     caso = {
-        "id_silabo": "SIL_1",
-        "curso": "Investigación de mercados",
+        "curso": "Investigación aplicada",
         "sumilla": logro,
         "logro_general": logro,
         "logro": logro,
-        "competencias_declaradas": [],
+        "competencias_declaradas": [competencia],
         "herramientas_detectadas": [],
         "evidencia_herramientas": [],
     }
 
-    errores = analista_llm._validar_decision(decision, caso)
-
-    assert "SIN_EVIDENCIA_LLM" not in errores
-    assert "EVIDENCIA_NO_ENCONTRADA" not in errores
-    assert "FUENTE_SILABO_INCORRECTO" not in errores
-
-    errores_fuera_de_scope = analista_llm._validar_decision(
-        decision.model_copy(
-            update={
-                "fuentes": [
-                    analista_llm.FuenteCurricular(texto=logro, id_silabo="SIL_2")
-                ]
-            }
-        ),
-        caso,
-    )
-
-    assert "FUENTE_SILABO_INCORRECTO" in errores_fuera_de_scope
+    assert "COMPETENCIA_GENERICA" in analista_llm._validar_decision(decision, caso)
 
 
 def test_normalizacion_especifica_vive_en_el_perfil_de_la_carrera(
@@ -628,16 +589,14 @@ def test_normalizacion_especifica_vive_en_el_perfil_de_la_carrera(
         competencia=analista_llm.ConceptoPropuesto(nombre="Predicción multivariante"),
     )
     analista = _LLMDecisionesFalso("gpt-test", decision)
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: analista)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
     monkeypatch.setattr(
         analista_llm,
         "_cargar_perfil",
         lambda _carrera, _periodo: {
             "carrera": "FINANZAS",
             "periodo": "2026-1",
-            "normalizaciones_habilidad": {
-                logro: "Estimar y predecir multivariante financiero"
-            },
+            "normalizaciones_habilidad": {logro: "Estimar y predecir multivariante financiero"},
         },
     )
 
@@ -647,15 +606,14 @@ def test_normalizacion_especifica_vive_en_el_perfil_de_la_carrera(
         "FINANZAS",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
-    assert next(iter(resultado.decisiones.values())).habilidad.nombre == (
+    assert next(iter(resultado.propuestas.values())).habilidad.nombre == (
         "Estimar y predecir multivariante financiero"
     )
 
 
-def test_logro_respalda_balanced_scorecard_sin_autodetectarlo_como_herramienta() -> None:
+def test_logro_sin_programa_analitico_no_respalda_una_herramienta() -> None:
     logro = (
         "Desarrollar el Tablero de comando (Balanced Scorecard) para hacer seguimiento "
         "y control de la gestión."
@@ -677,7 +635,7 @@ def test_logro_respalda_balanced_scorecard_sin_autodetectarlo_como_herramienta()
     assert {item["seccion"] for item in candidatas if isinstance(item, dict)} >= {
         "Logro de aprendizaje"
     }
-    assert "HERRAMIENTA_NO_DETECTADA:Balanced Scorecard" not in analista_llm._validar_decision(
+    assert "HERRAMIENTA_NO_DETECTADA:Balanced Scorecard" in analista_llm._validar_decision(
         decision, caso
     )
 
@@ -714,7 +672,7 @@ def test_rechaza_evidencia_contextual_sin_nombre_de_herramienta(nombre: str) -> 
     )
 
 
-def test_crm_del_logro_llega_al_inspector_sin_autoclasificarse_como_herramienta(
+def test_confianza_del_analista_se_conserva_sin_rutear_otra_llamada(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     logro = "Aplicar investigación de mercados y CRM en cadenas retail."
@@ -723,38 +681,40 @@ def test_crm_del_logro_llega_al_inspector_sin_autoclasificarse_como_herramienta(
         _decision_para(
             logro,
             herramientas=[analista_llm.HerramientaPropuesta(nombre="CRM", evidencia="CRM")],
+            confianza=0.89,
         ),
     )
-    inspector = _LLMInspeccionFalso(
-        "gpt-5.6-luna-test",
-        analista_llm.InspeccionCurricular(
-            id_habilidad_fuente=analista_llm._hash_id("HAB_SRC", "SIL_1", "L1", logro),
-            estado="REVISAR",
-            confianza=0.8,
-            problemas=["CRM requiere revisión curricular."],
-        ),
-    )
+    roles: list[str] = []
+
+    def obtener(rol: str, **_kwargs: object):
+        roles.append(rol)
+        return analista
+
     monkeypatch.setattr(
         analista_llm,
         "obtener_llm",
-        lambda rol: analista if rol == "analista_curricular" else inspector,
+        obtener,
     )
 
     resultado = analista_llm.analizar_registros_curriculares(
-        _registros_para(logro),
+        _registros_para(logro, programa_analitico=["CRM"]),
         _catalogo_vacio(),
         "Marketing",
         "2026-1",
         tmp_path,
     )
 
-    assert not resultado.decisiones
-    assert any(fila["estado"] == "REVISAR_INSPECTOR" for fila in resultado.reportes)
+    assert resultado.propuestas
+    assert roles == ["analista_curricular"]
+    assert any(
+        fila["estado"] == "PENDIENTE_REVISION_HUMANA" and fila["confianza"] == 0.89
+        for fila in resultado.reportes
+    )
     caso = next(analista_llm._casos_curriculares(_registros_para(logro), _catalogo_vacio(), {}))
     assert caso["herramientas_detectadas"] == []
 
 
-def test_herramienta_nueva_requiere_evidencia_de_seccion_estructurada() -> None:
+def test_herramienta_nueva_requiere_evidencia_de_programa_analitico() -> None:
     decision = analista_llm.DecisionCurricular(
         id_habilidad_fuente="HAB_SRC_nueva",
         competencia=analista_llm.ConceptoPropuesto(nombre="Analítica de marketing"),
@@ -771,7 +731,7 @@ def test_herramienta_nueva_requiere_evidencia_de_seccion_estructurada() -> None:
 
     nuevas = salida._herramientas_llm_nuevas(
         decision,
-        {"herramientas_evidencia": [{"seccion": "Software", "texto": "Google Analytics"}]},
+        {"programa_analitico": ["Google Analytics"]},
         (),
     )
 
@@ -779,7 +739,7 @@ def test_herramienta_nueva_requiere_evidencia_de_seccion_estructurada() -> None:
     assert nuevas[0][0].nombre == "Google Analytics"
 
 
-def test_publica_herramienta_literal_en_el_logro_actual() -> None:
+def test_no_publica_herramienta_literal_fuera_del_programa_analitico() -> None:
     logro = "Aplicar Balanced Scorecard para el seguimiento de la gestión."
     decision = _decision_para(
         logro,
@@ -793,8 +753,7 @@ def test_publica_herramienta_literal_en_el_logro_actual() -> None:
 
     nuevas = salida._herramientas_llm_nuevas(decision, {"logro_actual": logro}, ())
 
-    assert [herramienta.nombre for herramienta, _ in nuevas] == ["Balanced Scorecard"]
-    assert nuevas[0][1] == {"seccion": "Logro de aprendizaje", "texto": logro}
+    assert nuevas == ()
 
 
 def test_no_publica_herramienta_solo_por_contexto_generico_del_logro() -> None:
@@ -849,8 +808,18 @@ def test_alias_ms_word_se_consolida_con_microsoft_word_detectado() -> None:
     assert nuevas == ()
 
 
-def test_los_cuatro_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None:
+def test_los_cinco_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None:
     esperados = {
+        "curso.csv": [
+            "id_curso",
+            "nombre_curso",
+            "coordinador",
+            "creditos",
+            "nivel",
+            "tipo_curso",
+            "codigo_curso",
+            "id_carrera",
+        ],
         "catalogo_competencias.csv": [
             "id_competencia",
             "nombre_competencia",
@@ -895,7 +864,7 @@ def test_acepta_nps_evidenciado_en_programa_analitico(
             herramientas=[analista_llm.HerramientaPropuesta(nombre="NPS", evidencia="NPS")],
         ),
     )
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: analista)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
 
     resultado = analista_llm.analizar_registros_curriculares(
         _registros_para(
@@ -908,10 +877,337 @@ def test_acepta_nps_evidenciado_en_programa_analitico(
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
-    assert len(resultado.decisiones) == 1
+    assert len(resultado.propuestas) == 1
+
+
+def test_caso_expone_v_y_vi_y_no_promueve_recursos_genericos(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    logro = "Construir procesos de extracción, transformación y carga"
+    analista = _LLMDecisionesFalso(
+        "gpt-5.6-luna-test",
+        _decision_para(logro),
+    )
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
+    registros = _registros_para(
+        logro,
+        programa_analitico=[
+            "Semana 4 | ETL | Lab SQL-SSIS",
+            "Semana 7 | Gobierno de datos | Laboratorio ETL - Analysis Services",
+        ],
+        herramientas_evidencia=[
+            {
+                "seccion": "Recursos de aprendizaje",
+                "texto": "Presentaciones, software, calculadoras y plataformas.",
+            }
+        ],
+    )
+    datos = registros[0]["datos"]
+    assert isinstance(datos, dict)
+    datos.update(
+        {
+            "metodologias_ensenanza": "Clase magistral y ejercicios prácticos.",
+            "recursos_aprendizaje": "Presentaciones, software, calculadoras y plataformas.",
+            "programa_analitico_detalle": [
+                {"semana": "4", "pagina": "2", "texto": "Semana 4 | ETL | Lab SQL-SSIS"},
+                {
+                    "semana": "7",
+                    "pagina": "2",
+                    "texto": "Semana 7 | Gobierno de datos | Laboratorio ETL - Analysis Services",
+                },
+            ],
+            "texto_relevante": (
+                "Construir procesos de extracción, transformación y carga. "
+                "Semana 4 ETL Lab SQL-SSIS."
+            ),
+            "texto_fuente": "Contenido VI. Referencias https://bibliografia.example",
+        }
+    )
+
+    caso = next(analista_llm._casos_curriculares(registros, _catalogo_vacio(), {}))
+
+    evidencias = caso["evidencia_herramientas"]
+    assert isinstance(evidencias, list)
+    assert any("SQL-SSIS" in str(item) for item in evidencias)
+    assert any("Analysis Services" in str(item) for item in evidencias)
+    assert not any("bibliografia.example" in str(item) for item in evidencias)
+    assert caso["herramientas_detectadas"] == []
+
+    prompt = analista_llm._prompt_analista((caso,), {}, "SISTEMAS", "2026-1")
+    assert "recursos_aprendizaje" not in prompt
+    assert "SQL-SSIS" in prompt
+    assert "bibliografia.example" not in prompt
+
+
+def test_programa_analitico_no_convierte_conceptos_curriculares_en_software() -> None:
+    logro = "Construir procesos de extracción, transformación y carga"
+    registros = _registros_para(
+        logro,
+        programa_analitico=[
+            "Semana 4 | ETL | Lab SQL-SSIS",
+            "Semana 10 | Procesos de Negocio | Laboratorio Power BI - Conexión a SQL",
+            "Semana 11 | Visualización | Laboratorio Power BI - Conexión a Cubo y BSC",
+            "Semana 12 | Cultura de medición | KPIs en Power BI",
+            "Semana 13 | Tendencias | Modelos predictivos en Excel, Orange y Python",
+        ],
+    )
+    catalogo = _catalogo_con_herramientas(
+        "ETL",
+        "SQL",
+        "Cubo",
+        "KPI",
+        "BSC",
+        "SQL-SSIS",
+        "Power BI",
+        "Excel",
+        "Orange",
+        "Python",
+    )
+
+    caso = next(analista_llm._casos_curriculares(registros, catalogo, {}))
+
+    assert caso["herramientas_detectadas"] == [
+        "Excel",
+        "Orange",
+        "Power BI",
+        "Python",
+        "SQL-SSIS",
+    ]
+
+
+def test_payload_semantico_agrupa_silabo_y_oculta_linaje_interno() -> None:
+    logro_1 = "Contrastar señales operativas para priorizar mejoras."
+    logro_2 = "Diseñar tableros trazables para comunicar hallazgos."
+    registros = _registros_para(logro_1)
+    datos = registros[0]["datos"]
+    assert isinstance(datos, dict)
+    datos.update(
+        {
+            "curso": "Laboratorio de decisiones",
+            "sumilla": "Integra evidencia operativa en decisiones reproducibles.",
+            "logro_general": "Sustenta decisiones con datos verificables.",
+            "logros_especificos": [
+                {"orden": "7", "descripcion": logro_1},
+                {"orden": "8", "descripcion": logro_2},
+            ],
+            "competencias_declaradas": [
+                {
+                    "codigo": "ZX9",
+                    "nombre": "Razonamiento aplicado",
+                    "descripcion": "Evalúa evidencia para decisiones justificadas.",
+                }
+            ],
+            "programa_analitico_detalle": [
+                {
+                    "semana": "2",
+                    "pagina": "5",
+                    "evaluacion": "3",
+                    "tema": "Matrices",
+                    "contenido": "Análisis con QGIS y registros",
+                    "texto": "Semana 2 | Matrices | Análisis con QGIS y registros 3",
+                },
+                {
+                    "semana": "3",
+                    "pagina": "5",
+                    "evaluacion": "4",
+                    "tema": "Tableros",
+                    "contenido": "Visualización con Metabase",
+                    "texto": "Semana 3 | Tableros | Visualización con Metabase 4",
+                },
+            ],
+        }
+    )
+    casos = tuple(analista_llm._casos_curriculares(registros, _catalogo_vacio(), {}))
+
+    prompt = analista_llm._prompt_analista(casos, {"hash": "no-viaja"}, "PRUEBA", "2031-2")
+    payload = json.loads(prompt.split("CASOS:\n", maxsplit=1)[1])
+    serializado = json.dumps(payload, ensure_ascii=False)
+
+    assert len(payload) == 1
+    assert payload[0]["logros_especificos"] == [logro_1, logro_2]
+    assert payload[0]["temas_programa"] == [
+        "Matrices | Análisis con QGIS y registros",
+        "Tableros | Visualización con Metabase",
+    ]
+    assert serializado.count("Laboratorio de decisiones") == 1
+    assert all(referencia not in serializado for referencia in ("ZX9", "L7", "L8"))
+    for clave_prohibida in (
+        "referencia",
+        "id_habilidad_fuente",
+        "id_silabo",
+        "id_curso",
+        "codigo_curso",
+        "archivo",
+        "texto_fuente",
+        "texto_relevante",
+        "contexto_recuperado",
+        "fuentes",
+        "codigo",
+        "semana",
+        "evaluacion",
+        "hash",
+    ):
+        assert f'"{clave_prohibida}"' not in serializado
+
+    respuesta = analista_llm.LoteDecisionesCurricularesLLM(
+        decisiones=[
+            analista_llm.DecisionCurricularLLM(
+                logro=logro_1,
+                competencia=analista_llm.ConceptoPropuesto(nombre="Razonamiento aplicado"),
+                habilidad=analista_llm.ConceptoPropuesto(nombre=logro_1),
+                evidencia=[logro_1],
+                confianza=0.9,
+            ),
+            analista_llm.DecisionCurricularLLM(
+                logro=logro_2,
+                competencia=analista_llm.ConceptoPropuesto(nombre="Comunicación analítica"),
+                habilidad=analista_llm.ConceptoPropuesto(nombre=logro_2),
+                evidencia=[logro_2],
+                confianza=0.9,
+            ),
+        ]
+    )
+    decisiones = analista_llm._asignar_decisiones_por_orden(casos, respuesta)
+    assert [decision.id_habilidad_fuente for decision in decisiones.decisiones] == [
+        caso["id_habilidad_fuente"] for caso in casos
+    ]
+
+
+def test_payload_semantico_preserves_every_program_week() -> None:
+    weeks = [
+        {
+            "semana": str(number),
+            "tema": f"Topic {number}",
+            "contenido": f"Content {number}",
+        }
+        for number in range(1, 17)
+    ]
+    payload = analista_llm._payload_semantico_lote(
+        (
+            {
+                "id_silabo": "SIL_1",
+                "curso": "Complete program",
+                "competencias_declaradas": [],
+                "programa_analitico_detalle": weeks,
+            },
+        )
+    )
+
+    assert payload[0]["temas_programa"] == [
+        f"Topic {number} | Content {number}" for number in range(1, 17)
+    ]
+
+
+def test_payload_semantico_falls_back_to_program_when_detail_is_empty() -> None:
+    payload = analista_llm._payload_semantico_lote(
+        (
+            {
+                "id_silabo": "SIL_1",
+                "curso": "DOCX program",
+                "competencias_declaradas": [],
+                "programa_analitico_detalle": [],
+                "programa_analitico": [
+                    "Topic 1 | Content 1",
+                    "Topic 2 | Content 2",
+                ],
+            },
+        )
+    )
+
+    assert payload[0]["temas_programa"] == [
+        "Topic 1 | Content 1",
+        "Topic 2 | Content 2",
+    ]
+
+
+def test_mapeo_posicional_rechaza_omision_del_primer_logro() -> None:
+    """Una respuesta corta no puede asociar el segundo logro al primer ID interno."""
+
+    primer_logro = "Diagnosticar una situación con evidencia verificable."
+    segundo_logro = "Diseñar una respuesta profesional trazable."
+    registros = _registros_para(primer_logro)
+    datos = registros[0]["datos"]
+    assert isinstance(datos, dict)
+    datos["logros_especificos"].append({"orden": "2", "descripcion": segundo_logro})
+    casos = tuple(analista_llm._casos_curriculares(registros, _catalogo_vacio(), {}))
+    respuesta = analista_llm.LoteDecisionesCurricularesLLM.model_validate(
+        {
+            "decisiones": [
+                {
+                    "logro_fuente": segundo_logro,
+                    "competencia": {"nombre": "Diseño profesional"},
+                    "habilidad": {"nombre": segundo_logro},
+                    "evidencia": [segundo_logro],
+                    "confianza": 0.9,
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError, match="cardinalidad"):
+        analista_llm._asignar_decisiones_por_orden(casos, respuesta)
+
+
+def test_mapeo_posicional_rechaza_respuesta_reordenada() -> None:
+    primer_logro = "Diagnosticar una situación con evidencia verificable."
+    segundo_logro = "Diseñar una respuesta profesional trazable."
+    registros = _registros_para(primer_logro)
+    datos = registros[0]["datos"]
+    assert isinstance(datos, dict)
+    datos["logros_especificos"].append({"orden": "2", "descripcion": segundo_logro})
+    casos = tuple(analista_llm._casos_curriculares(registros, _catalogo_vacio(), {}))
+    respuesta = analista_llm.LoteDecisionesCurricularesLLM.model_validate(
+        {
+            "decisiones": [
+                {
+                    "logro_fuente": segundo_logro,
+                    "competencia": {"nombre": "Diseño profesional"},
+                    "habilidad": {"nombre": segundo_logro},
+                    "confianza": 0.9,
+                },
+                {
+                    "logro_fuente": primer_logro,
+                    "competencia": {"nombre": "Diagnóstico profesional"},
+                    "habilidad": {"nombre": primer_logro},
+                    "confianza": 0.9,
+                },
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError, match="orden"):
+        analista_llm._asignar_decisiones_por_orden(casos, respuesta)
+
+
+def test_un_silabo_con_mas_de_veinte_logros_permanece_en_un_solo_lote() -> None:
+    casos = tuple(
+        {
+            "id_silabo": "SIL_UNICO",
+            "id_habilidad_fuente": f"HAB_SRC_{indice}",
+            "logro": f"Analizar evidencia curricular {indice}.",
+        }
+        for indice in range(21)
+    )
+
+    lotes = tuple(analista_llm._trocear_por_silabo(casos, tamanio=8))
+    respuesta = analista_llm.LoteDecisionesCurricularesLLM.model_validate(
+        {
+            "decisiones": [
+                {
+                    "logro_fuente": caso["logro"],
+                    "competencia": {"nombre": "Análisis curricular"},
+                    "habilidad": {"nombre": caso["logro"]},
+                    "confianza": 0.9,
+                }
+                for caso in casos
+            ]
+        }
+    )
+
+    assert lotes == (casos,)
+    assert len(respuesta.decisiones) == len(casos)
 
 
 @pytest.mark.parametrize("alias", ["MS Word", "MS-word"])
@@ -926,7 +1222,7 @@ def test_acepta_alias_grafico_de_microsoft_word(
             herramientas=[analista_llm.HerramientaPropuesta(nombre=alias, evidencia=alias)],
         ),
     )
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: analista)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
 
     resultado = analista_llm.analizar_registros_curriculares(
         _registros_para(
@@ -937,10 +1233,9 @@ def test_acepta_alias_grafico_de_microsoft_word(
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
-    assert len(resultado.decisiones) == 1
+    assert len(resultado.propuestas) == 1
 
 
 def test_rechaza_herramienta_sin_evidencia_estructurada(
@@ -954,7 +1249,7 @@ def test_rechaza_herramienta_sin_evidencia_estructurada(
             herramientas=[analista_llm.HerramientaPropuesta(nombre="NPS", evidencia="NPS")],
         ),
     )
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: analista)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
     registros = _registros_para(logro)
     datos = registros[0].get("datos")
     assert isinstance(datos, dict)
@@ -966,10 +1261,9 @@ def test_rechaza_herramienta_sin_evidencia_estructurada(
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
-    assert not resultado.decisiones
+    assert not resultado.propuestas
     assert any(
         "HERRAMIENTA_NO_DETECTADA:NPS" in problemas
         for fila in resultado.reportes
@@ -977,7 +1271,7 @@ def test_rechaza_herramienta_sin_evidencia_estructurada(
     )
 
 
-def test_escalamiento_apagado_no_instancia_modelo_residual(monkeypatch, tmp_path: Path) -> None:
+def test_analista_unico_no_instancia_modelo_residual(monkeypatch, tmp_path: Path) -> None:
     logro = "Evaluar campañas de marketing"
     luna = _LLMDecisionesFalso(
         "gpt-5.6-luna-test",
@@ -985,7 +1279,7 @@ def test_escalamiento_apagado_no_instancia_modelo_residual(monkeypatch, tmp_path
     )
     roles: list[str] = []
 
-    def obtener(rol: str):
+    def obtener(rol: str, **_kwargs: object):
         roles.append(rol)
         return luna
 
@@ -1000,39 +1294,25 @@ def test_escalamiento_apagado_no_instancia_modelo_residual(monkeypatch, tmp_path
         tmp_path,
     )
 
-    assert not resultado.decisiones
+    assert len(resultado.propuestas) == 1
     assert resultado.decisiones_escaladas == 0
     assert "analista_curricular_residual" not in roles
-    assert "inspector_curricular_residual" not in roles
 
 
-def test_escalamiento_activo_acepta_residual_de_terra(monkeypatch, tmp_path: Path) -> None:
+def test_revision_solicitada_por_analista_queda_pendiente_sin_segunda_llamada(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
     logro = "Evaluar campañas de marketing"
     luna_analista = _LLMDecisionesFalso(
         "gpt-5.6-luna-test",
         _decision_para(logro, requiere_revision=True),
     )
-    terra_analista = _LLMDecisionesFalso(
-        "gpt-5.6-terra-test",
-        _decision_para(logro),
-    )
-    luna_inspector = _LLMInspeccionFalso(
-        "gpt-5.6-luna-test",
-        analista_llm.InspeccionCurricular(
-            id_habilidad_fuente=analista_llm._hash_id("HAB_SRC", "SIL_1", "L1", logro),
-            estado="APROBAR",
-            confianza=0.93,
-        ),
-    )
     roles: list[str] = []
 
-    def obtener(rol: str):
+    def obtener(rol: str, **_kwargs: object):
         roles.append(rol)
-        if rol == "analista_curricular":
-            return luna_analista
-        if rol == "analista_curricular_residual":
-            return terra_analista
-        return luna_inspector
+        return luna_analista
 
     monkeypatch.setenv("NORMALIZADOR_CURRICULAR_ESCALAR_RESIDUALES", "true")
     monkeypatch.setattr(analista_llm, "obtener_llm", obtener)
@@ -1045,13 +1325,13 @@ def test_escalamiento_activo_acepta_residual_de_terra(monkeypatch, tmp_path: Pat
         tmp_path,
     )
 
-    assert len(resultado.decisiones) == 1
-    assert resultado.modelo_analista_residual == "gpt-5.6-terra-test"
-    assert resultado.decisiones_escaladas == 1
-    assert "analista_curricular_residual" in roles
+    assert len(resultado.propuestas) == 1
+    assert resultado.modelo_analista_residual == "no_ejecutado"
+    assert resultado.decisiones_escaladas == 0
+    assert roles == ["analista_curricular"]
 
 
-def test_escalamiento_no_reintenta_error_de_herramienta(monkeypatch, tmp_path: Path) -> None:
+def test_analista_no_reintenta_error_de_herramienta(monkeypatch, tmp_path: Path) -> None:
     logro = "Evaluar campañas de marketing"
     luna = _LLMDecisionesFalso(
         "gpt-5.6-luna-test",
@@ -1067,7 +1347,7 @@ def test_escalamiento_no_reintenta_error_de_herramienta(monkeypatch, tmp_path: P
     )
     roles: list[str] = []
 
-    def obtener(rol: str):
+    def obtener(rol: str, **_kwargs: object):
         roles.append(rol)
         return luna
 
@@ -1082,58 +1362,9 @@ def test_escalamiento_no_reintenta_error_de_herramienta(monkeypatch, tmp_path: P
         tmp_path,
     )
 
-    assert not resultado.decisiones
+    assert not resultado.propuestas
     assert resultado.decisiones_escaladas == 0
     assert "analista_curricular_residual" not in roles
-
-
-def test_escalamiento_reinspecciona_con_terra_solo_veredicto_revisar(
-    monkeypatch, tmp_path: Path
-) -> None:
-    logro = "Evaluar campañas de marketing"
-    luna_analista = _LLMDecisionesFalso("gpt-5.6-luna-test", _decision_para(logro))
-    luna_inspector = _LLMInspeccionFalso(
-        "gpt-5.6-luna-test",
-        analista_llm.InspeccionCurricular(
-            id_habilidad_fuente=analista_llm._hash_id("HAB_SRC", "SIL_1", "L1", logro),
-            estado="REVISAR",
-            confianza=0.8,
-            problemas=["Requiere juicio semántico adicional."],
-        ),
-    )
-    terra_inspector = _LLMInspeccionFalso(
-        "gpt-5.6-terra-test",
-        analista_llm.InspeccionCurricular(
-            id_habilidad_fuente=analista_llm._hash_id("HAB_SRC", "SIL_1", "L1", logro),
-            estado="APROBAR",
-            confianza=0.93,
-        ),
-    )
-    roles: list[str] = []
-
-    def obtener(rol: str):
-        roles.append(rol)
-        if rol == "analista_curricular":
-            return luna_analista
-        if rol == "inspector_curricular":
-            return luna_inspector
-        return terra_inspector
-
-    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_ESCALAR_RESIDUALES", "true")
-    monkeypatch.setattr(analista_llm, "obtener_llm", obtener)
-
-    resultado = analista_llm.analizar_registros_curriculares(
-        _registros_para(logro),
-        _catalogo_vacio(),
-        "Marketing",
-        "2026-1",
-        tmp_path,
-    )
-
-    assert len(resultado.decisiones) == 1
-    assert resultado.modelo_inspector_residual == "gpt-5.6-terra-test"
-    assert resultado.decisiones_escaladas == 1
-    assert "inspector_curricular_residual" in roles
 
 
 def test_reintento_restituye_decision_omitida_por_luna(
@@ -1146,7 +1377,7 @@ def test_reintento_restituye_decision_omitida_por_luna(
     )
     roles: list[str] = []
 
-    def obtener(rol: str):
+    def obtener(rol: str, **_kwargs: object):
         roles.append(rol)
         return luna
 
@@ -1159,13 +1390,12 @@ def test_reintento_restituye_decision_omitida_por_luna(
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
-    id_habilidad = analista_llm._hash_id("HAB_SRC", "SIL_1", "L1", logro)
-    assert id_habilidad in resultado.decisiones
+    id_habilidad = analista_llm._hash_id("HAB_SRC", "SIL_1", "1", logro)
+    assert id_habilidad in resultado.propuestas
     assert resultado.decisiones_escaladas == 0
-    assert luna.ids_por_llamada == [[id_habilidad], [id_habilidad]]
+    assert luna.logros_por_llamada == [[logro], [logro]]
     assert "analista_curricular_residual" not in roles
     assert {
         fila["id_habilidad_fuente"] for fila in resultado.reportes if "id_habilidad_fuente" in fila
@@ -1177,8 +1407,8 @@ def test_reintenta_una_vez_solo_los_ids_omitidos_y_deja_traza(
 ) -> None:
     logro_1 = "Evaluar campañas de marketing"
     logro_2 = "Analizar resultados de campañas"
-    decision_1 = _decision_para_etiqueta(logro_1, "L1")
-    decision_2 = _decision_para_etiqueta(logro_2, "L2")
+    decision_1 = _decision_para_orden(logro_1, "1")
+    decision_2 = _decision_para_orden(logro_2, "2")
     analista = _LLMLoteSecuencialFalso(
         "gpt-5.6-luna-test",
         [[decision_1], [decision_2]],
@@ -1187,10 +1417,10 @@ def test_reintenta_una_vez_solo_los_ids_omitidos_y_deja_traza(
     datos = registros[0]["datos"]
     assert isinstance(datos, dict)
     datos["logros_especificos"] = [
-        {"etiqueta": "L1", "descripcion": logro_1},
-        {"etiqueta": "L2", "descripcion": logro_2},
+        {"orden": "1", "descripcion": logro_1},
+        {"orden": "2", "descripcion": logro_2},
     ]
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: analista)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
 
     resultado = analista_llm.analizar_registros_curriculares(
         registros,
@@ -1198,13 +1428,12 @@ def test_reintenta_una_vez_solo_los_ids_omitidos_y_deja_traza(
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
     id_1 = decision_1.id_habilidad_fuente
     id_2 = decision_2.id_habilidad_fuente
-    assert set(resultado.decisiones) == {id_1, id_2}
-    assert analista.ids_por_llamada == [[id_1, id_2], [id_2]]
+    assert set(resultado.propuestas) == {id_1, id_2}
+    assert analista.logros_por_llamada == [[logro_1, logro_2], [logro_2]]
     traza = next(fila for fila in resultado.reportes if fila["tipo"] == "analista_reintento")
     assert traza["ids_habilidad_fuente"] == [id_2]
     assert traza["ids_recuperados"] == [id_2]
@@ -1216,7 +1445,7 @@ def test_reintento_omitido_no_duplica_decisiones_y_conserva_sin_decision_llm(
 ) -> None:
     logro_1 = "Evaluar campañas de marketing"
     logro_2 = "Analizar resultados de campañas"
-    decision_1 = _decision_para_etiqueta(logro_1, "L1")
+    decision_1 = _decision_para_orden(logro_1, "1")
     analista = _LLMLoteSecuencialFalso(
         "gpt-5.6-luna-test",
         [[decision_1], []],
@@ -1225,10 +1454,10 @@ def test_reintento_omitido_no_duplica_decisiones_y_conserva_sin_decision_llm(
     datos = registros[0]["datos"]
     assert isinstance(datos, dict)
     datos["logros_especificos"] = [
-        {"etiqueta": "L1", "descripcion": logro_1},
-        {"etiqueta": "L2", "descripcion": logro_2},
+        {"orden": "1", "descripcion": logro_1},
+        {"orden": "2", "descripcion": logro_2},
     ]
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: analista)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
 
     resultado = analista_llm.analizar_registros_curriculares(
         registros,
@@ -1236,17 +1465,16 @@ def test_reintento_omitido_no_duplica_decisiones_y_conserva_sin_decision_llm(
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
     id_1 = decision_1.id_habilidad_fuente
-    id_2 = analista_llm._hash_id("HAB_SRC", "SIL_1", "L2", logro_2)
-    assert set(resultado.decisiones) == {id_1}
-    assert analista.ids_por_llamada == [[id_1, id_2], [id_2]]
+    id_2 = analista_llm._hash_id("HAB_SRC", "SIL_1", "2", logro_2)
+    assert set(resultado.propuestas) == {id_1}
+    assert analista.logros_por_llamada == [[logro_1, logro_2], [logro_2]]
     assert [
         fila
         for fila in resultado.reportes
-        if fila.get("id_habilidad_fuente") == id_1 and fila["estado"] == "ACEPTADA"
+        if fila.get("id_habilidad_fuente") == id_1 and fila["estado"] == "PENDIENTE_REVISION_HUMANA"
     ]
     reporte_omitido = next(
         fila for fila in resultado.reportes if fila.get("id_habilidad_fuente") == id_2
@@ -1261,7 +1489,7 @@ def test_decision_omitida_por_luna_queda_reportada_sin_escalamiento(
     luna = _LLMLoteDecisionesFalso("gpt-5.6-luna-test", [])
     roles: list[str] = []
 
-    def obtener(rol: str):
+    def obtener(rol: str, **_kwargs: object):
         roles.append(rol)
         return luna
 
@@ -1274,11 +1502,10 @@ def test_decision_omitida_por_luna_queda_reportada_sin_escalamiento(
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
-    id_habilidad = analista_llm._hash_id("HAB_SRC", "SIL_1", "L1", logro)
-    assert not resultado.decisiones
+    id_habilidad = analista_llm._hash_id("HAB_SRC", "SIL_1", "1", logro)
+    assert not resultado.propuestas
     assert resultado.decisiones_escaladas == 0
     reporte = next(
         fila for fila in resultado.reportes if fila.get("id_habilidad_fuente") == id_habilidad
@@ -1312,7 +1539,7 @@ def test_prompts_reciben_contexto_recuperado_y_auditoria(monkeypatch, tmp_path: 
         return original_invoke(prompt)
 
     monkeypatch.setattr(analista, "invoke", capturar)
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: analista)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
     monkeypatch.setattr(
         analista_llm,
         "_cargar_perfil",
@@ -1336,12 +1563,11 @@ def test_prompts_reciben_contexto_recuperado_y_auditoria(monkeypatch, tmp_path: 
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
     assert len(prompts) == 1
-    assert "contexto_recuperado" in prompts[0]
-    assert "Gestión de campañas" in prompts[0]
+    assert "contexto_recuperado" not in prompts[0]
+    assert "Gestión de campañas" not in prompts[0]
     assert "Alias no aprobado" not in prompts[0]
     assert "Competencia no aprobada" not in prompts[0]
     assert "Dominio defensivo" in prompts[0]
@@ -1355,12 +1581,6 @@ def test_prompts_reciben_contexto_recuperado_y_auditoria(monkeypatch, tmp_path: 
     assert isinstance(contexto, dict)
     perfil_referencia = contexto["perfil_referencia"]
     assert perfil_referencia.keys() == {"estado", "revision", "hash"}
-    perfil_prompt = {"estado": "BORRADOR", "revision": "prueba-r1", "hash": "prueba"}
-    prompt_inspector = analista_llm._prompt_inspector(
-        (caso,), [_decision_para(logro)], perfil_prompt
-    )
-    assert "contexto_recuperado" in prompt_inspector
-    assert "Gestión de campañas" in prompt_inspector
     assert resultado.auditoria_contexto is not None
     assert resultado.auditoria_contexto["version_catalogo"] == "catalogo-prueba"
     assert all("contexto_auditoria" in fila for fila in resultado.reportes)
@@ -1371,8 +1591,8 @@ def test_progreso_llm_cuenta_cache_y_silabos_unicos_sin_duplicar_reintentos(
 ) -> None:
     logro_1 = "Evaluar campañas de marketing"
     logro_2 = "Analizar resultados de campañas"
-    decision_1 = _decision_para_etiqueta(logro_1, "L1")
-    decision_2 = _decision_para_etiqueta(logro_2, "L2")
+    decision_1 = _decision_para_orden(logro_1, "1")
+    decision_2 = _decision_para_orden(logro_2, "2")
     analista = _LLMLoteSecuencialFalso(
         "gpt-5.6-luna-test",
         [[decision_1, decision_2]],
@@ -1381,10 +1601,10 @@ def test_progreso_llm_cuenta_cache_y_silabos_unicos_sin_duplicar_reintentos(
     datos = registros[0]["datos"]
     assert isinstance(datos, dict)
     datos["logros_especificos"] = [
-        {"etiqueta": "L1", "descripcion": logro_1},
-        {"etiqueta": "L2", "descripcion": logro_2},
+        {"orden": "1", "descripcion": logro_1},
+        {"orden": "2", "descripcion": logro_2},
     ]
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: analista)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
 
     progresos_primera = []
     analista_llm.analizar_registros_curriculares(
@@ -1393,7 +1613,6 @@ def test_progreso_llm_cuenta_cache_y_silabos_unicos_sin_duplicar_reintentos(
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
         al_actualizar_progreso=progresos_primera.append,
     )
     assert progresos_primera[-1].decisiones_cacheadas == 2
@@ -1405,13 +1624,10 @@ def test_progreso_llm_cuenta_cache_y_silabos_unicos_sin_duplicar_reintentos(
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
         al_actualizar_progreso=progresos.append,
     )
 
-    assert analista.ids_por_llamada == [
-        [decision_1.id_habilidad_fuente, decision_2.id_habilidad_fuente]
-    ]
+    assert analista.logros_por_llamada == [[logro_1, logro_2]]
     progreso_chunk = next(
         progreso
         for progreso in progresos
@@ -1438,21 +1654,21 @@ def test_progreso_llm_conserva_historial_y_separa_silabos_detectados(
 ) -> None:
     descripciones = [f"Evaluar campaña de marketing {indice}" for indice in range(1, 10)]
     decisiones = [
-        _decision_para_etiqueta(descripcion, f"L{indice}")
+        _decision_para_orden(descripcion, str(indice))
         for indice, descripcion in enumerate(descripciones, start=1)
     ]
     analista = _LLMLoteSecuencialFalso(
         "gpt-5.6-luna-test",
-        [decisiones[:8], decisiones[8:]],
+        [decisiones],
     )
     registros = _registros_para(descripciones[0])
     datos = registros[0]["datos"]
     assert isinstance(datos, dict)
     datos["logros_especificos"] = [
-        {"etiqueta": f"L{indice}", "descripcion": descripcion}
+        {"orden": str(indice), "descripcion": descripcion}
         for indice, descripcion in enumerate(descripciones, start=1)
     ]
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: analista)
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
     progreso_inicial = ProgresoLimpiezaLLM(
         fase="extrayendo",
         chunks_completados=0,
@@ -1473,7 +1689,6 @@ def test_progreso_llm_conserva_historial_y_separa_silabos_detectados(
         "Marketing",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
         al_actualizar_progreso=progresos.append,
         progreso_inicial=progreso_inicial,
     )
@@ -1483,21 +1698,16 @@ def test_progreso_llm_conserva_historial_y_separa_silabos_detectados(
         for progreso in progresos
         if progreso.fase == "analista" and progreso.chunks_completados == 1
     )
-    progreso_chunk_2 = next(
-        progreso
-        for progreso in progresos
-        if progreso.fase == "analista" and progreso.chunks_completados == 2
-    )
-    mensajes_chunk_2 = [evento.mensaje for evento in progreso_chunk_2.eventos]
     assert progreso_chunk_1.silabos_detectados == 76
     assert progreso_chunk_1.silabos_procesados == 1
-    assert len(progreso_chunk_2.eventos) > len(progreso_chunk_1.eventos)
-    assert any("Chunk 1/2" in mensaje for mensaje in mensajes_chunk_2)
-    assert any("Chunk 2/2" in mensaje for mensaje in mensajes_chunk_2)
-    assert mensajes_chunk_2[0] == "Logros detectados: 9. Sílabos detectados: 76/76."
+    assert progreso_chunk_1.chunks_totales == 1
+    assert progreso_chunk_1.logros_procesados == 9
+    mensajes_chunk_1 = [evento.mensaje for evento in progreso_chunk_1.eventos]
+    assert any("Chunk 1/1" in mensaje for mensaje in mensajes_chunk_1)
+    assert mensajes_chunk_1[0] == "Logros detectados: 9. Sílabos detectados: 76/76."
     assert resultado.progreso is not None
-    assert len(resultado.progreso.eventos) >= len(progreso_chunk_2.eventos)
-    assert resultado.progreso.eventos[-1].secuencia > progreso_chunk_2.eventos[-1].secuencia
+    assert len(resultado.progreso.eventos) >= len(progreso_chunk_1.eventos)
+    assert resultado.progreso.eventos[-1].secuencia > progreso_chunk_1.eventos[-1].secuencia
 
 
 def test_historial_de_progreso_se_limita_a_los_ultimos_cien_eventos() -> None:

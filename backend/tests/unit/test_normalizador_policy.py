@@ -78,7 +78,7 @@ def test_concepto_llm_fuera_del_catalogo_queda_pendiente_de_ampliacion(
         _validacion(),
         tmp_path / "NOR_TEST",
         CatalogoCHH((), (), (), {}, ("test",), "catalogo-v1"),
-        decisiones_llm={id_habilidad: decision},
+        propuestas_llm={id_habilidad: decision},
     )
 
     salida = tmp_path / "NOR_TEST" / "salidas"
@@ -88,7 +88,9 @@ def test_concepto_llm_fuera_del_catalogo_queda_pendiente_de_ampliacion(
         json.loads(line)
         for line in (
             tmp_path / "NOR_TEST" / "salidas" / "reportes" / "pendientes_curriculares.jsonl"
-        ).read_text(encoding="utf-8").splitlines()
+        )
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     pendientes_por_tipo = {fila["tipo"]: fila for fila in pendientes}
     assert pendientes_por_tipo["competencia"]["carrera"] == "MARKETING"
@@ -96,13 +98,53 @@ def test_concepto_llm_fuera_del_catalogo_queda_pendiente_de_ampliacion(
     assert pendientes_por_tipo["competencia"]["estado_resolucion"] == (
         "PENDIENTE_AMPLIACION_PERFIL"
     )
-    assert pendientes_por_tipo["habilidad"]["estado_resolucion"] == (
-        "PENDIENTE_AMPLIACION_PERFIL"
-    )
+    assert pendientes_por_tipo["habilidad"]["estado_resolucion"] == ("PENDIENTE_AMPLIACION_PERFIL")
     assert pendientes_por_tipo["habilidad"]["propuesta"]["nombre"] == (
         "Optimizar campañas omnicanal"
     )
     assert resultado.relaciones == 0
+
+
+def test_competencia_generica_conserva_fuente_sin_proyeccion_canonica(
+    tmp_path: Path,
+) -> None:
+    registro = _registro()
+    datos = registro["datos"]
+    assert isinstance(datos, dict)
+    datos["competencias_declaradas"] = [
+        {
+            "codigo": "G1",
+            "nombre": "Pensamiento crítico",
+            "descripcion": "Analizar información de forma reflexiva.",
+        }
+    ]
+    directorio = tmp_path / "NOR_GENERIC"
+
+    resultado = construir_salidas_curriculares(
+        [registro],
+        _validacion(),
+        directorio,
+        CatalogoCHH((), (), (), {}, ("test",), "catalogo-v1"),
+    )
+
+    fuentes = [
+        json.loads(line)
+        for line in (directorio / "salidas" / "reportes" / "competencias_fuente.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert len(fuentes) == 1
+    assert fuentes[0]["nombre_competencia_fuente"] == "Pensamiento crítico"
+    assert fuentes[0]["id_competencia_canonica"] == ""
+    assert fuentes[0]["estado_resolucion"] == "EXCLUIDA_POLITICA"
+    assert fuentes[0]["motivo"] == "COMPETENCIA_GENERICA"
+    candidatos = json.loads(
+        (directorio / "salidas" / "reportes" / "candidatos_curriculares.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert candidatos["archivos"]["catalogo_competencias.csv"] == []
+    assert any(hallazgo.codigo == "COMPETENCIA_GENERICA" for hallazgo in resultado.hallazgos)
 
 
 def test_release_gate_bloquea_provenance_incompleto() -> None:

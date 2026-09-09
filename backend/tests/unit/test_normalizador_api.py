@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import time
 from dataclasses import replace
 from io import BytesIO
@@ -241,7 +242,7 @@ def test_inicia_y_consulta_ejecucion(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_inicia_y_consulta_ejecucion_de_silabos(monkeypatch, tmp_path: Path) -> None:
-    """La fuente curricular produce los cuatro CSV del contrato."""
+    """La fuente curricular produce los cinco CSV del contrato."""
 
     gestor = GestorEjecuciones(tmp_path)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
@@ -279,14 +280,13 @@ def test_inicia_y_consulta_ejecucion_de_silabos(monkeypatch, tmp_path: Path) -> 
     assert ejecucion["validacion_silabos"]["valida"] is True
     assert ejecucion["limpieza_silabos"]["registros"] == 1
     assert ejecucion["release_gate"]["decision"] == "ALLOW_IMPORT"
-    assert {
+    outputs = {output["archivo"] for output in ejecucion["outputs"]}
+    assert outputs == {
+        "salidas/curso.csv",
         "salidas/catalogo_competencias.csv",
         "salidas/catalogo_habilidades.csv",
         "salidas/catalogo_herramientas.csv",
         "salidas/cobertura_curricular.csv",
-    } <= {output["archivo"] for output in ejecucion["outputs"]}
-    assert "salidas/reportes/habilidades_fuente.jsonl" in {
-        output["archivo"] for output in ejecucion["outputs"]
     }
     descarga = cliente.get(
         f"/normalizador/ejecuciones/{id_ejecucion}/outputs/salidas/cobertura_curricular.csv"
@@ -295,14 +295,154 @@ def test_inicia_y_consulta_ejecucion_de_silabos(monkeypatch, tmp_path: Path) -> 
     assert "attachment" in descarga.headers["content-disposition"]
     assert descarga.content
     provenance = cliente.get(
-        f"/normalizador/ejecuciones/{id_ejecucion}/outputs/salidas/reportes/habilidades_fuente.jsonl"
+        f"/normalizador/ejecuciones/{id_ejecucion}/outputs/"
+        "salidas/reportes/habilidades_fuente.jsonl"
     )
-    assert provenance.status_code == 200
-    assert provenance.content
+    assert provenance.status_code == 404
     cuarentena = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/cuarentena")
     assert cuarentena.status_code == 200
     assert cuarentena.json()["total"] == 0
     assert not any(hallazgo["severidad"] == "error" for hallazgo in ejecucion["hallazgos"])
+
+
+def test_silabos_bloqueado_no_expone_outputs_curriculares_y_conserva_revision(
+    monkeypatch, tmp_path: Path
+) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app)
+    id_ejecucion, directorio = gestor.crear("silabos", "entrada.zip")
+    reportes = directorio / "salidas" / "reportes"
+    reportes.mkdir(parents=True)
+    for nombre in (
+        "catalogo_competencias.csv",
+        "catalogo_habilidades.csv",
+        "catalogo_herramientas.csv",
+        "cobertura_curricular.csv",
+    ):
+        (directorio / "salidas" / nombre).write_text("id\nuno\n", encoding="utf-8")
+    (reportes / "candidatos_curriculares.json").write_text("{}", encoding="utf-8")
+    (reportes / "decisiones_curriculares.jsonl").write_text("{}\n", encoding="utf-8")
+    (reportes / "cuarentena.jsonl").write_text('{"motivo":"revisar"}\n', encoding="utf-8")
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    ejecucion.limpieza_silabos = ResultadoLimpiezaSilabos(
+        registros=1,
+        outputs=(
+            {
+                "tipo": "csv_curricular",
+                "archivo": "salidas/cobertura_curricular.csv",
+                "registros": 1,
+            },
+            {
+                "tipo": "candidatos_curriculares",
+                "archivo": "salidas/reportes/candidatos_curriculares.json",
+                "registros": 1,
+            },
+            {
+                "tipo": "decisiones_curriculares",
+                "archivo": "salidas/reportes/decisiones_curriculares.jsonl",
+                "registros": 1,
+            },
+        ),
+        hallazgos=(),
+        release_gate={
+            "decision": "BLOCK_IMPORT",
+            "checks": {
+                "approval": {
+                    "canonical_materialized": False,
+                    "pending_decision": 1,
+                }
+            },
+        },
+    )
+    gestor._persistir(ejecucion)
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+
+    estado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}")
+    cobertura = cliente.get(
+        f"/normalizador/ejecuciones/{id_ejecucion}/outputs/salidas/cobertura_curricular.csv"
+    )
+    candidatos = cliente.get(
+        f"/normalizador/ejecuciones/{id_ejecucion}/outputs/"
+        "salidas/reportes/candidatos_curriculares.json"
+    )
+    cuarentena = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/cuarentena")
+    no_permitida = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/outputs/manifest.json")
+
+    assert estado.status_code == 200
+    assert estado.json()["outputs"] == []
+    assert cobertura.status_code == 404
+    assert candidatos.status_code == 404
+    assert cuarentena.status_code == 200
+    assert cuarentena.json()["filas"] == [{"motivo": "revisar"}]
+    assert no_permitida.status_code == 404
+
+
+def test_silabos_aprobado_expone_outputs_curriculares(monkeypatch, tmp_path: Path) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app)
+    id_ejecucion, directorio = gestor.crear("silabos", "entrada.zip")
+    salida = directorio / "salidas" / "cobertura_curricular.csv"
+    salida.parent.mkdir(parents=True)
+    salida.write_text("id\nuno\n", encoding="utf-8")
+    reportes = directorio / "salidas" / "reportes"
+    reportes.mkdir()
+    (reportes / "candidatos_curriculares.json").write_text("{}", encoding="utf-8")
+    (reportes / "decisiones_curriculares.jsonl").write_text("{}\n", encoding="utf-8")
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    ejecucion.limpieza_silabos = ResultadoLimpiezaSilabos(
+        registros=1,
+        outputs=(
+            {
+                "tipo": "csv_curricular",
+                "archivo": "salidas/cobertura_curricular.csv",
+                "registros": 1,
+            },
+            {
+                "tipo": "candidatos_curriculares",
+                "archivo": "salidas/reportes/candidatos_curriculares.json",
+                "registros": 1,
+            },
+        ),
+        hallazgos=(),
+        release_gate={
+            "decision": "ALLOW_IMPORT",
+            "checks": {
+                "approval": {
+                    "canonical_materialized": True,
+                    "pending_decision": 0,
+                }
+            },
+        },
+    )
+    gestor._persistir(ejecucion)
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+
+    estado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}")
+    descarga = cliente.get(
+        f"/normalizador/ejecuciones/{id_ejecucion}/outputs/salidas/cobertura_curricular.csv"
+    )
+    candidatos = cliente.get(
+        f"/normalizador/ejecuciones/{id_ejecucion}/outputs/"
+        "salidas/reportes/candidatos_curriculares.json"
+    )
+
+    assert estado.status_code == 200
+    assert estado.json()["outputs"] == [
+        {
+            "tipo": "csv_curricular",
+            "archivo": "salidas/cobertura_curricular.csv",
+            "registros": 1,
+            "bytes": len("id\nuno\n"),
+            "sha256": hashlib.sha256(b"id\nuno\n").hexdigest(),
+        }
+    ]
+    assert descarga.status_code == 200
+    assert descarga.content == b"id\nuno\n"
+    assert candidatos.status_code == 404
 
 
 def test_inicia_extraccion_cactus_sin_persistir_credenciales(monkeypatch, tmp_path: Path) -> None:
@@ -498,7 +638,7 @@ def test_persiste_progreso_llm_en_el_manifest_durante_limpieza(monkeypatch, tmp_
                 silabos_totales=3,
                 decisiones_cacheadas=4,
                 reintentos=1,
-                ultimo_chunk=UltimoChunkLimpiezaLLM("inspector", 4, 1),
+                ultimo_chunk=UltimoChunkLimpiezaLLM("analista", 4, 1),
                 reporte_final="disponible",
             )
         )
@@ -517,7 +657,7 @@ def test_persiste_progreso_llm_en_el_manifest_durante_limpieza(monkeypatch, tmp_
             "reintentos": 1,
             "logros_detectados": 0,
             "mensaje": "",
-            "ultimo_chunk": {"fase": "inspector", "logros": 4, "silabos": 1},
+            "ultimo_chunk": {"fase": "analista", "logros": 4, "silabos": 1},
             "reporte_final": "disponible",
             "eventos": [],
         }
@@ -583,11 +723,7 @@ def test_publica_evento_de_error_sin_perder_historial(monkeypatch, tmp_path: Pat
     progreso_final = gestor.obtener(id_ejecucion)["progreso_llm"]
     assert isinstance(progreso_final, dict)
     assert progreso_final["fase"] == "error"
-    assert any(
-        evento["mensaje"].startswith("Chunk 1/2") for evento in progreso_final["eventos"]
-    )
-    assert progreso_final["eventos"][-1]["mensaje"].startswith(
-        "La ejecución terminó con error"
-    )
+    assert any(evento["mensaje"].startswith("Chunk 1/2") for evento in progreso_final["eventos"])
+    assert progreso_final["eventos"][-1]["mensaje"].startswith("La ejecución terminó con error")
     assert progreso_final["silabos_detectados"] == 76
     assert progreso_final["silabos_procesados"] == 1

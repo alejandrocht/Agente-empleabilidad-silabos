@@ -9,15 +9,18 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import os
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, cast
 
+from agente.config.settings import ConfiguracionNormalizadorCurricular, texto
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
 
 SourceKind = Literal["career_curriculum", "labor"]
 CHH_OUTPUT_TYPES = ("competencia", "habilidad", "herramienta")
+# Compatibility defaults for the standalone, reusable retriever API only.
+# The curricular execution always injects its immutable snapshot, so these never
+# decide production curricular retrieval and remain to keep direct unit seams stable.
 DEFAULT_EMBEDDING_LIMITS = {tipo: 12 for tipo in CHH_OUTPUT_TYPES}
 DEFAULT_MINIMUM_SIMILARITY = 0.0
 
@@ -234,10 +237,15 @@ class EmbeddingRetriever:
         *,
         config_identifier: str | None = None,
         minimum_similarity: float | None = None,
+        default_limits: Mapping[str, int] | None = None,
     ) -> None:
         self.provider = provider
         self.index = index
         self.minimum_similarity = normalizar_similitud_minima(minimum_similarity)
+        self.default_limits = normalizar_limites(
+            default_limits,
+            defaults=DEFAULT_EMBEDDING_LIMITS,
+        )
         self._provider_fingerprint = _provider_fingerprint(provider, config_identifier)
         self.config_identifier = f"provider:{self._provider_fingerprint}" if provider else None
 
@@ -270,7 +278,7 @@ class EmbeddingRetriever:
                 "explicit scope is required for embedding retrieval",
                 reason_code=FALLBACK_REASON_PROVIDER_OR_VECTOR_INVALID,
             )
-        active_limits = normalizar_limites(limits, defaults=DEFAULT_EMBEDDING_LIMITS)
+        active_limits = normalizar_limites(limits, defaults=self.default_limits)
         pool = _validar_pool(pool_size)
         eligible = tuple(document for document in self.index.documents if scope.allows(document))
         if not eligible:
@@ -326,10 +334,8 @@ class EmbeddingRetriever:
 class OpenAIEmbeddingProvider:
     """Lazy adapter: importing or constructing it never initializes a client."""
 
-    def __init__(self, model_name: str | None = None) -> None:
-        self.model_name: str = model_name or os.getenv("NORMALIZADOR_EMBEDDING_MODEL") or (
-            "text-embedding-3-small"
-        )
+    def __init__(self, model_name: str) -> None:
+        self.model_name = model_name
         self._client: Any | None = None
 
     def _get_client(self) -> Any:
@@ -353,21 +359,32 @@ def crear_retriever_curricular_opt_in(
     period: str,
     enabled: bool,
     provider: EmbeddingProvider | None = None,
+    configuracion_curricular: ConfiguracionNormalizadorCurricular | None = None,
 ) -> EmbeddingRetriever | None:
     """Build the production retriever only after the explicit runtime opt-in."""
 
     if not enabled or not career or not period:
         return None
     if provider is None:
-        if not os.getenv("OPENAI_API_KEY"):
+        if not texto("OPENAI_API_KEY"):
             return None
-        provider = OpenAIEmbeddingProvider()
+        if configuracion_curricular is None:
+            raise ValueError(
+                "El retriever curricular requiere configuracion_curricular de la ejecución"
+            )
+        provider = OpenAIEmbeddingProvider(configuracion_curricular.modelo_embedding)
+    if configuracion_curricular is None:
+        raise ValueError(
+            "El retriever curricular requiere configuracion_curricular de la ejecución"
+        )
     try:
         return EmbeddingRetriever(
             provider,
             InMemoryEmbeddingIndex(
                 documentos_desde_catalogo(catalogo, career=career, period=period)
             ),
+            minimum_similarity=configuracion_curricular.umbral_similitud_embedding,
+            default_limits=configuracion_curricular.limites_embedding(),
         )
     except (TypeError, ValueError):
         return None
@@ -400,14 +417,7 @@ def documentos_desde_catalogo(
 def normalizar_similitud_minima(value: float | None = None) -> float:
     """Return a safe semantic threshold; zero and negative scores never pass."""
 
-    configured = (
-        os.getenv(
-            "NORMALIZADOR_CURRICULAR_EMBEDDING_MIN_SIMILARITY",
-            str(DEFAULT_MINIMUM_SIMILARITY),
-        )
-        if value is None
-        else value
-    )
+    configured = DEFAULT_MINIMUM_SIMILARITY if value is None else value
     if isinstance(configured, bool):
         raise ValueError("minimum embedding similarity must be a number")
     try:

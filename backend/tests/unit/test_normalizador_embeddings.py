@@ -7,6 +7,7 @@ import json
 import pytest
 from docx import Document
 
+from agente.config import settings
 from agente.normalizador.embeddings import (
     FALLBACK_REASON_CANDIDATES_BELOW_THRESHOLD,
     FALLBACK_REASON_CATALOG_EMPTY,
@@ -40,10 +41,7 @@ class _FakeEmbeddingProvider:
         return [0.0, 1.0] if "analizar" in text.lower() else [1.0, 0.0]
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [
-            [0.0, 1.0] if "analizar" in text.lower() else [1.0, 0.0]
-            for text in texts
-        ]
+        return [[0.0, 1.0] if "analizar" in text.lower() else [1.0, 0.0] for text in texts]
 
 
 class _FailingEmbeddingProvider(_FakeEmbeddingProvider):
@@ -58,6 +56,20 @@ class _VectorsProvider(_FakeEmbeddingProvider):
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return self.vectors[: len(texts)]
+
+
+@pytest.fixture(autouse=True)
+def _inyectar_snapshot_curricular(monkeypatch: pytest.MonkeyPatch) -> None:
+    original = analista_llm.analizar_registros_curriculares
+
+    def analizar_con_snapshot(*args: object, **kwargs: object):
+        kwargs.setdefault(
+            "configuracion_curricular",
+            settings.configuracion_normalizador_curricular(),
+        )
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(analista_llm, "analizar_registros_curriculares", analizar_con_snapshot)
 
 
 def _documents() -> tuple[CatalogDocument, ...]:
@@ -122,9 +134,9 @@ def test_scope_curricular_excluye_labor_y_otras_carreras_salvo_solicitud_explici
         limits={"habilidad": 10},
     )
     assert curricular["habilidad"][0].document.id == "HAB_ANALIZAR"
-    assert {
-        item.document.id for item in curricular["habilidad"]
-    }.isdisjoint({"LAB_ANALIZAR", "OTHER_CAREER"})
+    assert {item.document.id for item in curricular["habilidad"]}.isdisjoint(
+        {"LAB_ANALIZAR", "OTHER_CAREER"}
+    )
 
     laboral = retriever.retrieve(
         "Analizar indicadores",
@@ -299,7 +311,7 @@ def test_decision_con_cita_real_pero_ajena_queda_en_revision_aunque_el_catalogo_
         def invoke(self, _prompt: str):
             return self.schema(decisiones=[decision])
 
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: _LLM())
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: _LLM())
     monkeypatch.setattr(
         analista_llm,
         "_cargar_perfil",
@@ -328,10 +340,9 @@ def test_decision_con_cita_real_pero_ajena_queda_en_revision_aunque_el_catalogo_
         "MARKETING",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
-    assert not resultado.decisiones
+    assert not resultado.propuestas
     reporte = next(
         fila for fila in resultado.reportes if fila.get("estado") == "REVISAR_VALIDACION"
     )
@@ -361,7 +372,7 @@ def test_decision_con_competencia_y_habilidad_de_raiz_compartida_requiere_cita_r
         def invoke(self, _prompt: str):
             return self.schema(decisiones=[decision])
 
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: _LLM())
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: _LLM())
     monkeypatch.setattr(
         analista_llm,
         "_cargar_perfil",
@@ -390,10 +401,9 @@ def test_decision_con_competencia_y_habilidad_de_raiz_compartida_requiere_cita_r
         "MARKETING",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
     )
 
-    assert not resultado.decisiones
+    assert not resultado.propuestas
     reporte = next(
         fila for fila in resultado.reportes if fila.get("estado") == "REVISAR_VALIDACION"
     )
@@ -445,9 +455,12 @@ def test_umbral_positivo_configurable_excluye_similitud_insuficiente() -> None:
         rechazado.retrieve("Analizar datos", scope=scope, limits={"habilidad": 1})
 
     assert error.value.reason_code == FALLBACK_REASON_CANDIDATES_BELOW_THRESHOLD
-    assert aceptado.retrieve("Analizar datos", scope=scope, limits={"habilidad": 1})[
-        "habilidad"
-    ][0].document.id == "HAB_ANALIZAR"
+    assert (
+        aceptado.retrieve("Analizar datos", scope=scope, limits={"habilidad": 1})["habilidad"][
+            0
+        ].document.id
+        == "HAB_ANALIZAR"
+    )
 
 
 def test_auditoria_persistible_conserva_reason_code_por_logro_sin_secretos(
@@ -467,7 +480,7 @@ def test_auditoria_persistible_conserva_reason_code_por_logro_sin_secretos(
         def invoke(self, _prompt: str):
             return self.schema(decisiones=[])
 
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: _LLM())
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: _LLM())
     monkeypatch.setattr(
         analista_llm,
         "_cargar_perfil",
@@ -481,9 +494,7 @@ def test_auditoria_persistible_conserva_reason_code_por_logro_sin_secretos(
                     "curso": "Analítica",
                     "sumilla": "Analizar datos",
                     "logro_general": "Analizar datos",
-                    "logros_especificos": [
-                        {"etiqueta": "L1", "descripcion": "Analizar datos"}
-                    ],
+                    "logros_especificos": [{"etiqueta": "L1", "descripcion": "Analizar datos"}],
                 },
             }
         ],
@@ -498,7 +509,6 @@ def test_auditoria_persistible_conserva_reason_code_por_logro_sin_secretos(
         "MARKETING",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
         embedding_retriever=retriever,
     )
 
@@ -563,7 +573,7 @@ def test_analista_consulta_un_embedding_por_logro_y_envia_su_contexto(
             prompts.append(prompt)
             return self.schema(decisiones=[])
 
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: _LLM())
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: _LLM())
     monkeypatch.setattr(
         analista_llm,
         "_cargar_perfil",
@@ -594,7 +604,6 @@ def test_analista_consulta_un_embedding_por_logro_y_envia_su_contexto(
         "MARKETING",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
         embedding_retriever=retriever,
     )
 
@@ -605,8 +614,10 @@ def test_analista_consulta_un_embedding_por_logro_y_envia_su_contexto(
     assert all("Curso" in query for query in provider.queries)
     assert prompts
     serializados = "\n".join(prompts)
-    assert "Contexto recuperado para analizar" in serializados
-    assert "Contexto recuperado para diseñar" in serializados
+    assert "Contexto recuperado para analizar" not in serializados
+    assert "Contexto recuperado para diseñar" not in serializados
+    assert "Analizar datos" in serializados
+    assert "Diseñar campañas" in serializados
 
 
 def test_retriever_exige_scope_explicito_y_modela_labor_como_global() -> None:
@@ -704,8 +715,7 @@ def test_retriever_falla_cuando_el_catalogo_embedding_elegible_esta_vacio() -> N
         )
 
 
-def test_indice_no_colisiona_ids_repetidos_de_scopes_o_versiones_y_rechaza_identidades_iguales(
-) -> None:
+def test_indice_aisla_ids_repetidos_por_scope_y_version() -> None:
     marketing = CatalogDocument(
         id="HAB_1",
         text="Analizar marketing",
@@ -727,12 +737,22 @@ def test_indice_no_colisiona_ids_repetidos_de_scopes_o_versiones_y_rechaza_ident
     indice = InMemoryEmbeddingIndex((marketing, ingenieria))
     retriever = EmbeddingRetriever(_FakeEmbeddingProvider(), indice)
 
-    assert retriever.retrieve(
-        "Analizar", scope=EmbeddingScope.curriculum("MARKETING", "2026-1"), limits={"habilidad": 1}
-    )["habilidad"][0].document.text == "Analizar marketing"
-    assert retriever.retrieve(
-        "Analizar", scope=EmbeddingScope.curriculum("INGENIERIA", "2026-1"), limits={"habilidad": 1}
-    )["habilidad"][0].document.text == "Analizar ingeniería"
+    assert (
+        retriever.retrieve(
+            "Analizar",
+            scope=EmbeddingScope.curriculum("MARKETING", "2026-1"),
+            limits={"habilidad": 1},
+        )["habilidad"][0].document.text
+        == "Analizar marketing"
+    )
+    assert (
+        retriever.retrieve(
+            "Analizar",
+            scope=EmbeddingScope.curriculum("INGENIERIA", "2026-1"),
+            limits={"habilidad": 1},
+        )["habilidad"][0].document.text
+        == "Analizar ingeniería"
+    )
 
     with pytest.raises(ValueError, match="duplicate embedding document identity"):
         InMemoryEmbeddingIndex((marketing, marketing))
@@ -788,7 +808,7 @@ def test_pool_es_por_tipo_antes_del_limite_y_el_audit_no_filtra_secretos() -> No
         )
 
 
-def test_nueve_logros_mantienen_retrieval_independiente_y_lotes_llm_de_ocho(
+def test_nueve_logros_mantienen_retrieval_independiente_y_viajan_en_un_contexto_de_silabo(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     provider = _FakeEmbeddingProvider()
@@ -806,15 +826,14 @@ def test_nueve_logros_mantienen_retrieval_independiente_y_lotes_llm_de_ocho(
             prompts.append(prompt)
             return self.schema(decisiones=[])
 
-    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol: _LLM())
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: _LLM())
     monkeypatch.setattr(
         analista_llm,
         "_cargar_perfil",
         lambda _carrera, _periodo: {"carrera": "MARKETING", "periodo": "2026-1"},
     )
     logros = [
-        {"etiqueta": f"L{indice}", "descripcion": f"Analizar datos {indice}"}
-        for indice in range(9)
+        {"etiqueta": f"L{indice}", "descripcion": f"Analizar datos {indice}"} for indice in range(9)
     ]
     analista_llm.analizar_registros_curriculares(
         [{"id_silabo": "SIL_1", "datos": {"curso": "Curso", "logros_especificos": logros}}],
@@ -822,14 +841,17 @@ def test_nueve_logros_mantienen_retrieval_independiente_y_lotes_llm_de_ocho(
         "MARKETING",
         "2026-1",
         tmp_path,
-        inspeccionar=False,
         embedding_retriever=retriever,
     )
 
     assert len(provider.queries) == 9
     assert len(set(provider.queries)) == 9
-    tamanos_lote = sorted(prompt.count('"id_habilidad_fuente"') for prompt in prompts)
-    assert tamanos_lote == [1, 1, 8, 8]
+    assert len(prompts) == 2
+    for prompt in prompts:
+        payload = json.loads(prompt.split("CASOS:\n", maxsplit=1)[1])
+        assert len(payload) == 1
+        assert len(payload[0]["logros_especificos"]) == 9
+        assert '"id_habilidad_fuente"' not in prompt
 
 
 def test_limpieza_no_activa_embeddings_para_carrera_sin_allowlist(
@@ -855,7 +877,7 @@ def test_limpieza_no_activa_embeddings_para_carrera_sin_allowlist(
         "analizar_registros_curriculares",
         lambda *_args, **kwargs: (
             capturados.append(kwargs["embedding_retriever"])
-            or ResultadoAnalisisCurricular({}, (), "fake", "no_ejecutado", 0)
+            or ResultadoAnalisisCurricular((), "fake", 0)
         ),
     )
 
@@ -865,6 +887,7 @@ def test_limpieza_no_activa_embeddings_para_carrera_sin_allowlist(
         validacion,
         catalogo,
         usar_llm=True,
+        configuracion_curricular=settings.configuracion_normalizador_curricular(),
         embedding_provider=_FakeEmbeddingProvider(),
     )
 
@@ -896,6 +919,7 @@ def test_limpieza_indexa_solo_el_catalogo_curricular_de_carrera(
         "career-v1",
     )
     capturados: list[object] = []
+    snapshots_embeddings: list[object] = []
     monkeypatch.setenv("NORMALIZADOR_CURRICULAR_EMBEDDINGS", "true")
     monkeypatch.setenv("NORMALIZADOR_CURRICULAR_EMBEDDING_CARRERAS", "INGENIERIA@2026-1")
     monkeypatch.setattr(limpieza_silabos, "cargar_catalogo", lambda: catalogo_global)
@@ -908,21 +932,36 @@ def test_limpieza_indexa_solo_el_catalogo_curricular_de_carrera(
         limpieza_silabos,
         "analizar_registros_curriculares",
         lambda *_args, **kwargs: (
-            capturados.append(kwargs["embedding_retriever"])
-            or ResultadoAnalisisCurricular({}, (), "fake", "no_ejecutado", 0)
+            capturados.extend((kwargs["embedding_retriever"], kwargs["configuracion_curricular"]))
+            or ResultadoAnalisisCurricular((), "fake", 0)
         ),
     )
+    crear_retriever = limpieza_silabos.crear_retriever_curricular_opt_in
+    monkeypatch.setattr(
+        limpieza_silabos,
+        "crear_retriever_curricular_opt_in",
+        lambda *_args, **kwargs: (
+            snapshots_embeddings.append(kwargs["configuracion_curricular"])
+            or crear_retriever(*_args, **kwargs)
+        ),
+    )
+    configuracion = settings.configuracion_normalizador_curricular()
 
     limpiar_archivo(
         fuente,
         tmp_path / "ejecucion",
         validacion,
         usar_llm=True,
+        configuracion_curricular=configuracion,
         embedding_provider=_FakeEmbeddingProvider(),
     )
 
     retriever = capturados[0]
     assert isinstance(retriever, EmbeddingRetriever)
+    assert capturados[1] is configuracion
+    assert snapshots_embeddings == [configuracion]
+    assert retriever.minimum_similarity == configuracion.umbral_similitud_embedding
+    assert retriever.default_limits == configuracion.limites_embedding()
     assert [document.id for document in retriever.index.documents] == ["CURR_ONLY"]
 
 
@@ -944,14 +983,17 @@ def test_allowlist_curricular_exige_pareja_carrera_periodo(
 
     assert (
         limpieza_silabos._embeddings_curriculares_habilitados(
-            "Ingeniería de Sistemas", periodo, True
+            "Ingeniería de Sistemas",
+            periodo,
+            True,
+            settings.configuracion_normalizador_curricular(),
         )
         is esperado
     )
 
 
 def test_factory_opt_in_sin_credenciales_deja_el_fallback_lexical(
-    monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     catalogo = CatalogoCHH((), (), (), {}, ("test",), "v1")

@@ -182,8 +182,6 @@ FaseProgresoLLM = Literal[
     "extrayendo",
     "analista",
     "analista_residual",
-    "inspector",
-    "inspector_residual",
     "finalizando",
     "completado",
     "error",

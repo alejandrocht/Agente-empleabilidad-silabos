@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from agente.api import normalizador, servidor
 from agente.normalizador.ejecuciones import GestorEjecuciones
-from agente.normalizador.modelos import Hallazgo
+from agente.normalizador.modelos import (
+    Hallazgo,
+    ResultadoLimpiezaSilabos,
+    ResultadoNormalizacion,
+)
 
 
 def _gestor_con_ejecucion(tmp_path: Path) -> tuple[GestorEjecuciones, str, Path]:
@@ -20,6 +25,100 @@ def _gestor_con_ejecucion(tmp_path: Path) -> tuple[GestorEjecuciones, str, Path]
         {"carrera": "Marketing", "periodo": "2026-1"},
     )
     return gestor, id_ejecucion, directorio
+
+
+def _salidas_curriculares() -> tuple[dict[str, object], ...]:
+    return (
+        {
+            "tipo": "csv_curricular",
+            "archivo": "salidas/catalogo_competencias.csv",
+            "registros": 1,
+        },
+        {
+            "tipo": "csv_curricular",
+            "archivo": "salidas/catalogo_habilidades.csv",
+            "registros": 1,
+        },
+        {
+            "tipo": "csv_curricular",
+            "archivo": "salidas/catalogo_herramientas.csv",
+            "registros": 1,
+        },
+        {
+            "tipo": "csv_curricular",
+            "archivo": "salidas/cobertura_curricular.csv",
+            "registros": 1,
+        },
+        {
+            "tipo": "candidatos_curriculares",
+            "archivo": "salidas/reportes/candidatos_curriculares.json",
+            "registros": 4,
+        },
+        {
+            "tipo": "decisiones_curriculares",
+            "archivo": "salidas/reportes/decisiones_curriculares.jsonl",
+            "registros": 1,
+        },
+    )
+
+
+def test_a_dict_oculta_salidas_curriculares_hasta_cerrar_hitl(tmp_path: Path) -> None:
+    gestor, id_ejecucion, directorio = _gestor_con_ejecucion(tmp_path)
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    for salida in _salidas_curriculares():
+        ruta = directorio / str(salida["archivo"])
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        ruta.write_text("contenido", encoding="utf-8")
+    ejecucion.limpieza_silabos = ResultadoLimpiezaSilabos(
+        registros=1,
+        outputs=_salidas_curriculares(),
+        hallazgos=(),
+        release_gate={
+            "decision": "BLOCK_IMPORT",
+            "checks": {
+                "approval": {
+                    "canonical_materialized": False,
+                    "pending_decision": 1,
+                }
+            },
+        },
+    )
+
+    estado = ejecucion.a_dict()
+
+    assert estado["release_gate"]["decision"] == "BLOCK_IMPORT"
+    assert estado["outputs"] == []
+    assert estado["limpieza_silabos"]["outputs"] == []
+    assert id_ejecucion.startswith("NOR_")
+
+
+def test_a_dict_de_empleabilidad_conserva_sus_outputs(tmp_path: Path) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    _id_ejecucion, directorio = gestor.crear("empleabilidad", "fuente.xlsx")
+    ejecucion = gestor._obtener_objeto(_id_ejecucion)
+    ruta = directorio / "salidas" / "requerimiento_laboral.csv"
+    ruta.parent.mkdir(parents=True)
+    ruta.write_text("id\nuno\n", encoding="utf-8")
+    ejecucion.normalizacion = ResultadoNormalizacion(
+        publicable=True,
+        registros_procesados={"publicaciones": 1},
+        relaciones=1,
+        cuarentena=0,
+        outputs=(
+            {
+                "tipo": "requerimiento_laboral",
+                "archivo": "salidas/requerimiento_laboral.csv",
+                "registros": 1,
+            },
+        ),
+        hallazgos=(),
+    )
+
+    estado = ejecucion.a_dict()
+
+    assert [output["archivo"] for output in estado["outputs"]] == [
+        "salidas/requerimiento_laboral.csv"
+    ]
 
 
 def test_cancelar_persiste_la_solicitud_y_el_worker_cierra_como_cancelado(
@@ -65,7 +164,7 @@ def test_cancelar_estado_terminal_devuelve_conflicto(monkeypatch, tmp_path: Path
     assert "no admite cancelación" in respuesta.json()["detail"]
 
 
-def test_historial_consolida_reportes_purga_binarios_y_permite_eliminar(
+def test_historial_consolida_reportes_purga_temporales_y_conserva_fuente_curricular(
     tmp_path: Path,
 ) -> None:
     gestor, id_ejecucion, directorio = _gestor_con_ejecucion(tmp_path)
@@ -97,14 +196,17 @@ def test_historial_consolida_reportes_purga_binarios_y_permite_eliminar(
     item = next(item for item in listado["ejecuciones"] if item["id_ejecucion"] == id_ejecucion)
     assert item["estado"] == "cancelado"
     assert item["resumen"] == {"advertencias": 1, "errores": 1, "outputs": 0}
-    assert not (directorio / "entrada").exists()
+    assert (directorio / "entrada" / "paquete.zip").is_file()
     assert not (directorio / "fuentes_curriculares").exists()
     assert not (directorio / "limpios").exists()
     assert salida.exists()
 
     reporte = gestor.obtener_reporte(id_ejecucion)
     assert reporte["manifest"]["estado"] == "cancelado"
-    assert reporte["reportes"]["decisiones_llm.jsonl"][0]["sugerencia"] == "Revisar herramienta"
+    assert reporte["reportes"] == {}
+    assert (reportes / "decisiones_llm.jsonl").read_text(encoding="utf-8") == (
+        '{"estado":"REVISAR","sugerencia":"Revisar herramienta"}\n'
+    )
 
     eliminado = gestor.eliminar_historial(id_ejecucion)
     assert eliminado == {"id_ejecucion": id_ejecucion, "eliminado": True}
@@ -117,6 +219,7 @@ def test_migra_warning_macos_en_manifests_y_reportes_sin_perder_historial_ni_csv
     """La migración histórica solo quita el warning obsoleto de cada artefacto."""
 
     id_ejecucion = "NOR_0123456789abcdef"
+    timestamp_fixture = datetime.now(UTC).isoformat()
     directorio = tmp_path / id_ejecucion
     reportes = directorio / "salidas" / "reportes"
     reportes.mkdir(parents=True)
@@ -144,8 +247,8 @@ def test_migra_warning_macos_en_manifests_y_reportes_sin_perder_historial_ni_csv
         "archivo": "paquete.zip",
         "parametros": {"carrera": "Marketing", "periodo": "2026-1"},
         "estado": "limpiado_con_advertencias",
-        "creada_en": "2026-08-17T12:00:00+00:00",
-        "actualizada_en": "2026-08-17T12:01:00+00:00",
+            "creada_en": timestamp_fixture,
+            "actualizada_en": timestamp_fixture,
         "hallazgos": [warning_macos, warning_valido, error_valido],
         "validacion_silabos": {
             "hallazgos": [warning_macos, warning_valido, error_valido],
@@ -200,14 +303,14 @@ def test_migra_warning_macos_en_manifests_y_reportes_sin_perder_historial_ni_csv
     assert estado["estado"] == "limpiado_con_advertencias"
 
     resumen = gestor.listar_historial()["ejecuciones"][0]
-    assert resumen["resumen"] == {"advertencias": 1, "errores": 1, "outputs": 1}
+    assert resumen["resumen"] == {"advertencias": 1, "errores": 1, "outputs": 0}
     assert salida.exists()
     assert json.loads((reportes / "resumen.json").read_text(encoding="utf-8")) == {
         "advertencias": 1,
         "hallazgos": [warning_valido],
     }
     reporte = gestor.obtener_reporte(id_ejecucion)
-    assert reporte["reportes"]["legado_malformado.json"]["no_disponible"] is True
+    assert reporte["reportes"] == {}
     decisiones = (reportes / "decisiones_llm.jsonl").read_text(encoding="utf-8")
     assert "METADATO_MACOS_IGNORADO" not in decisiones
     assert "Decisión válida preservada." in decisiones
@@ -255,13 +358,16 @@ def test_endpoints_de_historial_listan_y_descargan_reporte(monkeypatch, tmp_path
 
     listado = cliente.get("/normalizador/ejecuciones")
     reporte = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/reporte")
-    eliminado = cliente.delete(f"/normalizador/ejecuciones/{id_ejecucion}/historial")
 
     assert listado.status_code == 200
     assert any(item["id_ejecucion"] == id_ejecucion for item in listado.json()["ejecuciones"])
     assert reporte.status_code == 200
     assert "attachment" in reporte.headers["content-disposition"]
-    assert reporte.json()["reportes"]["analisis_llm.json"]["estado"] == "COMPLETADO"
+    assert reporte.json()["reportes"] == {}
+    assert (reportes / "analisis_llm.json").read_text(encoding="utf-8") == (
+        '{"estado":"COMPLETADO"}'
+    )
+    eliminado = cliente.delete(f"/normalizador/ejecuciones/{id_ejecucion}/historial")
     assert eliminado.status_code == 200
 
 

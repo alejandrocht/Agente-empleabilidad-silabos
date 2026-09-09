@@ -55,6 +55,11 @@ def crear_perfil_bootstrap(
     conteos: dict[str, int] = {}
     for nombre, columnas in ARCHIVOS_SALIDA:
         origen = salida / nombre
+        # El bootstrap CHH consume solo los cuatro catálogos/relaciones
+        # históricos. curso.csv es el contrato de importación Neo4j y no
+        # participa en el perfil de competencias de carrera.
+        if nombre == "curso.csv":
+            continue
         if nombre == "cobertura_curricular.csv" and not origen.is_file():
             continue
         filas = _leer_y_validar_csv(origen, columnas)

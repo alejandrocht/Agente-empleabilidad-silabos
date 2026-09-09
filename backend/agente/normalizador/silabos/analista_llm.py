@@ -10,14 +10,17 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from agente.config.settings import booleano, decimal
+from agente.config.settings import (
+    ConfiguracionNormalizadorCurricular,
+)
 from agente.llm.fabrica import obtener_llm
 from agente.normalizador.embeddings import (
     FALLBACK_REASON_CANDIDATES_BELOW_THRESHOLD,
@@ -39,11 +42,22 @@ from agente.normalizador.modelos import (
     UltimoChunkLimpiezaLLM,
 )
 from agente.normalizador.silabos.contexto_curricular import (
+    _CLAVES_PERFIL_NO_TRANSPORTABLES,  # noqa: F401
+    _sanear_perfil_transportable,
     construir_contexto_por_logro,
     construir_perfil_para_prompt,
 )
 from agente.normalizador.silabos.entrada import PATRON_PERIODO
+from agente.normalizador.silabos.herramientas import (
+    es_herramienta_concreta,
+    herramienta_nueva_evidenciada,
+    nombre_herramienta_coincide,
+)
 from agente.normalizador.silabos.perfil_carrera import cargar_perfil_carrera
+from agente.normalizador.silabos.politica_curricular import (
+    MOTIVO_COMPETENCIA_GENERICA,
+    es_competencia_generica,
+)
 from agente.observabilidad.langsmith import invocar_llm
 
 
@@ -62,14 +76,6 @@ class HerramientaPropuesta(BaseModel):
     evidencia: str = Field(default="", max_length=500)
 
 
-class FuenteCurricular(BaseModel):
-    """Cita estructurada que el LLM debe asociar a un sílabo concreto."""
-
-    texto: str = Field(min_length=2, max_length=1000)
-    seccion: str = Field(default="", max_length=160)
-    id_silabo: str = Field(default="", max_length=120)
-
-
 class DecisionCurricular(BaseModel):
     """Decisión semántica para un logro específico."""
 
@@ -78,7 +84,6 @@ class DecisionCurricular(BaseModel):
     habilidad: ConceptoPropuesto
     herramientas: list[HerramientaPropuesta] = Field(default_factory=list, max_length=8)
     evidencia: list[str] = Field(default_factory=list, max_length=6)
-    fuentes: list[FuenteCurricular] = Field(default_factory=list, max_length=6)
     justificacion: str = Field(default="", max_length=1200)
     confianza: float = Field(ge=0, le=1)
     requiere_revision: bool = False
@@ -87,36 +92,62 @@ class DecisionCurricular(BaseModel):
 class LoteDecisionesCurriculares(BaseModel):
     """Respuesta estructurada del analista para un lote de logros."""
 
-    decisiones: list[DecisionCurricular] = Field(default_factory=list, max_length=20)
+    decisiones: list[DecisionCurricular] = Field(default_factory=list)
 
 
-class InspeccionCurricular(BaseModel):
-    """Veredicto del inspector sobre una decisión del analista."""
+class DecisionCurricularLLM(BaseModel):
+    """Respuesta de transporte del analista, correlacionada por orden en Python."""
 
-    id_habilidad_fuente: str = Field(min_length=4, max_length=100)
-    estado: Literal["APROBAR", "REVISAR", "RECHAZAR"]
+    logro: str = Field(min_length=2, max_length=2000)
+    competencia: ConceptoPropuesto
+    habilidad: ConceptoPropuesto
+    herramientas: list[HerramientaPropuesta] = Field(default_factory=list, max_length=8)
+    evidencia: list[str] = Field(default_factory=list, max_length=6)
+    justificacion: str = Field(default="", max_length=1200)
     confianza: float = Field(ge=0, le=1)
-    problemas: list[str] = Field(default_factory=list, max_length=8)
+    requiere_revision: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _aceptar_decision_interna_en_pruebas(cls, valor: object) -> object:
+        """Permite adaptar fixtures/cache internos sin ampliar el esquema LLM."""
+
+        if isinstance(valor, DecisionCurricular):
+            data = valor.model_dump(exclude={"id_habilidad_fuente"})
+            evidencia = data.get("evidencia") or []
+            data["logro"] = (
+                str(evidencia[0])
+                if isinstance(evidencia, list) and evidencia and evidencia[0]
+                else str(data.get("habilidad", {}).get("nombre") or "")
+            )
+            return data
+        if isinstance(valor, Mapping):
+            data = dict(valor)
+            if not data.get("logro") and data.get("logro_fuente"):
+                data["logro"] = data["logro_fuente"]
+            return data
+        return valor
 
 
-class LoteInspeccionesCurriculares(BaseModel):
-    inspecciones: list[InspeccionCurricular] = Field(default_factory=list, max_length=20)
+class LoteDecisionesCurricularesLLM(BaseModel):
+    """Contrato de salida externo: una decisión por logro, en el mismo orden."""
+
+    decisiones: list[DecisionCurricularLLM] = Field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
 class ResultadoAnalisisCurricular:
-    """Decisiones aprobadas y evidencia de cada llamada del analista."""
+    """Propuestas pendientes y evidencia auditable del analista."""
 
-    decisiones: dict[str, DecisionCurricular]
     reportes: tuple[dict[str, object], ...]
     modelo_analista: str
-    modelo_inspector: str
     lotes: int
+    # Compatibility-only fields for historical report/API readers; no residual execution.
     modelo_analista_residual: str = "no_ejecutado"
-    modelo_inspector_residual: str = "no_ejecutado"
     decisiones_escaladas: int = 0
     auditoria_contexto: dict[str, object] | None = None
     progreso: ProgresoLimpiezaLLM | None = None
+    propuestas: dict[str, DecisionCurricular] = field(default_factory=dict)
 
 
 # A decision is grounded only when the cited syllabus fragment supports the
@@ -296,33 +327,6 @@ _HABILIDADES_GENERICAS = {
     "usar herramientas",
     "analizar información",
 }
-_HERRAMIENTAS_GENERICAS = {
-    "herramientas",
-    "herramientas digitales",
-    "herramientas disruptivas",
-    "recursos",
-    "recursos de aprendizaje",
-}
-_ALIASES_CERRADOS_HERRAMIENTAS: dict[str, frozenset[str]] = {
-    "excel": frozenset(("excel", "microsoft excel", "ms excel")),
-    "microsoft excel": frozenset(("excel", "microsoft excel", "ms excel")),
-    "ms excel": frozenset(("excel", "microsoft excel", "ms excel")),
-    "word": frozenset(("word", "microsoft word", "ms word")),
-    "microsoft word": frozenset(("word", "microsoft word", "ms word")),
-    "ms word": frozenset(("word", "microsoft word", "ms word")),
-    "google analytics": frozenset(("google analytics", "google analytics 4")),
-    "google analytics 4": frozenset(("google analytics", "google analytics 4")),
-}
-_NOMBRES_CANONICOS_HERRAMIENTAS = {
-    "excel": "Microsoft Excel",
-    "microsoft excel": "Microsoft Excel",
-    "ms excel": "Microsoft Excel",
-    "word": "Microsoft Word",
-    "microsoft word": "Microsoft Word",
-    "ms word": "Microsoft Word",
-    "google analytics": "Google Analytics",
-    "google analytics 4": "Google Analytics",
-}
 _RECURSOS_ENSENANZA_GENERICOS = {
     "aula virtual",
     "diapositivas",
@@ -342,7 +346,6 @@ def analizar_registros_curriculares(
     periodo: str,
     directorio_ejecucion: Path,
     *,
-    inspeccionar: bool = True,
     al_actualizar_progreso: Callable[[ProgresoLimpiezaLLM], None] | None = None,
     progreso_inicial: ProgresoLimpiezaLLM | None = None,
     id_ejecucion: str = "",
@@ -351,6 +354,7 @@ def analizar_registros_curriculares(
     embedding_scope: EmbeddingScope | None = None,
     limites_candidatos: Mapping[str, int] | None = None,
     pool_retrieval: int | None = None,
+    configuracion_curricular: ConfiguracionNormalizadorCurricular | None = None,
 ) -> ResultadoAnalisisCurricular:
     """Analiza todos los logros fuente y conserva fallos sin abortar el lote."""
 
@@ -361,9 +365,25 @@ def analizar_registros_curriculares(
             raise CancelacionSolicitada()
 
     verificar_cancelacion()
+    if configuracion_curricular is None:
+        raise ValueError("El analista curricular requiere configuracion_curricular de la ejecución")
+    configuracion = configuracion_curricular
+    limites_contexto = (
+        configuracion.limites_embedding() if limites_candidatos is None else limites_candidatos
+    )
+    limites_lexicales = (
+        configuracion.limites_lexicales() if limites_candidatos is None else limites_candidatos
+    )
 
     perfil = _cargar_perfil(carrera, periodo)
-    contexto_perfil = construir_contexto_por_logro({}, catalogo, perfil)
+    contexto_perfil = construir_contexto_por_logro(
+        {},
+        catalogo,
+        perfil,
+        limites_candidatos=limites_contexto,
+        limites_lexicales=limites_lexicales,
+        limite_ejemplos=configuracion.limite_ejemplos_contexto,
+    )
     perfil_prompt = construir_perfil_para_prompt(perfil)
     casos = tuple(
         _casos_curriculares(
@@ -372,25 +392,20 @@ def analizar_registros_curriculares(
             perfil,
             retriever=embedding_retriever,
             embedding_scope=embedding_scope,
-            limites_candidatos=limites_candidatos,
+            limites_candidatos=limites_contexto,
+            limites_lexicales=limites_lexicales,
             pool_retrieval=pool_retrieval,
+            limite_ejemplos=configuracion.limite_ejemplos_contexto,
         )
     )
     auditoria_contexto = _auditoria_contexto(casos, contexto_perfil)
-    lotes = tuple(_trocear(casos, 8))
+    lotes = tuple(_trocear_por_silabo(casos, configuracion.tamano_lote_llm))
     cache_path = directorio_ejecucion / "salidas" / "reportes" / "decisiones_llm_cache.jsonl"
     cache = _leer_cache(cache_path)
-    analista = obtener_llm("analista_curricular")
+    analista = obtener_llm("analista_curricular", configuracion_curricular=configuracion)
     modelo_analista = _nombre_modelo(analista)
-    decisiones_crudas: dict[str, DecisionCurricular] = {}
+    propuestas: dict[str, DecisionCurricular] = {}
     reportes: list[dict[str, object]] = []
-    candidatos_residuales: dict[
-        str, tuple[dict[str, object], DecisionCurricular | None, list[str]]
-    ] = {}
-    modelos_escalados: dict[str, list[str]] = {}
-    usar_escalamiento = booleano("NORMALIZADOR_CURRICULAR_ESCALAR_RESIDUALES")
-    modelo_analista_residual = "no_ejecutado"
-    modelo_inspector_residual = "no_ejecutado"
     total_silabos = len(
         {str(caso.get("id_silabo") or "") for caso in casos if caso.get("id_silabo")}
     )
@@ -443,9 +458,6 @@ def analizar_registros_curriculares(
             silabos_chunk = ultimo_chunk.silabos
         etiqueta_fase = {
             "analista": "Analista LLM",
-            "analista_residual": "Analista residual",
-            "inspector": "Inspector LLM",
-            "inspector_residual": "Inspector residual",
         }.get(fase, fase.capitalize())
         mensaje_evento = mensaje or (
             (
@@ -659,16 +671,9 @@ def analizar_registros_curriculares(
                 decision = _normalizar_habilidad(decision, perfil)
                 errores = _validar_decision(decision, caso)
                 if errores:
-                    if usar_escalamiento and _errores_residuales_escalables(errores):
-                        candidatos_residuales[decision.id_habilidad_fuente] = (
-                            caso,
-                            decision,
-                            errores,
-                        )
-                        continue
                     reportes.append(_reporte_decision(decision, "REVISAR_VALIDACION", errores))
                     continue
-                decisiones_crudas[decision.id_habilidad_fuente] = decision
+                propuestas[decision.id_habilidad_fuente] = decision
         for id_habilidad, caso in por_id.items():
             if id_habilidad not in ids_respondidos:
                 reportes.append(_reporte_sin_decision_llm(caso))
@@ -688,277 +693,12 @@ def analizar_registros_curriculares(
             ),
         )
 
-    if candidatos_residuales:
-        analista_residual = obtener_llm("analista_curricular_residual")
-        modelo_analista_residual = _nombre_modelo(analista_residual)
-        lotes_residuales = tuple(
-            _trocear(tuple(caso for caso, _, _ in candidatos_residuales.values()), 8)
-        )
-        chunks_residual_completados = 0
-        publicar_progreso(
-            "analista_residual",
-            chunks_residual_completados,
-            len(lotes_residuales),
-            mensaje=(
-                "Analista residual listo: revisando candidatos que requieren una segunda pasada."
-            ),
-        )
-        for indice_lote, lote in enumerate(lotes_residuales, start=1):
-            verificar_cancelacion()
-            por_id = {str(caso["id_habilidad_fuente"]): caso for caso in lote}
-            for id_habilidad in por_id:
-                modelos_escalados.setdefault(id_habilidad, []).append(modelo_analista_residual)
-            try:
-                verificar_cancelacion()
-                respuesta_residual = _invocar_analista(
-                    analista_residual,
-                    lote,
-                    perfil_prompt,
-                    carrera,
-                    periodo,
-                    id_ejecucion=id_ejecucion,
-                    chunk=indice_lote,
-                    rol="analista_curricular_residual",
-                )
-            except CancelacionSolicitada:
-                raise
-            except Exception as exc:
-                reportes.append(
-                    {
-                        "tipo": "analista_residual",
-                        "estado": "ERROR",
-                        "detalle": f"{type(exc).__name__}: {str(exc)[:300]}",
-                    }
-                )
-                respuesta_residual = LoteDecisionesCurriculares()
-            procesados: set[str] = set()
-            for decision in respuesta_residual.decisiones:
-                caso = por_id.get(decision.id_habilidad_fuente)
-                if caso is None:
-                    reportes.append(_reporte_decision(decision, "RECHAZADA_ID_NO_DECLARADO"))
-                    continue
-                procesados.add(decision.id_habilidad_fuente)
-                decision = _completar_evidencia(decision, caso)
-                decision = _normalizar_habilidad(decision, perfil)
-                errores = _validar_decision(decision, caso)
-                if errores:
-                    reportes.append(
-                        _reporte_decision(
-                            decision,
-                            "REVISAR_VALIDACION",
-                            errores,
-                            modelos_escalados=modelos_escalados[decision.id_habilidad_fuente],
-                        )
-                    )
-                    continue
-                decisiones_crudas[decision.id_habilidad_fuente] = decision
-            for id_habilidad in por_id:
-                if id_habilidad in procesados:
-                    continue
-                caso, _, errores = candidatos_residuales[id_habilidad]
-                reportes.append(
-                    _reporte_sin_decision_llm(
-                        caso,
-                        errores,
-                        modelos_escalados[id_habilidad],
-                    )
-                )
-            chunks_residual_completados += 1
-            publicar_progreso(
-                "analista_residual",
-                chunks_residual_completados,
-                len(lotes_residuales),
-                UltimoChunkLimpiezaLLM(
-                    "analista",
-                    len(lote),
-                    len(
-                        {str(caso.get("id_silabo") or "") for caso in lote if caso.get("id_silabo")}
-                    ),
-                ),
-            )
-
-    inspecciones: dict[str, InspeccionCurricular] = {}
-    modelo_inspector = "no_ejecutado"
-    if inspeccionar and decisiones_crudas:
-        inspector = obtener_llm("inspector_curricular")
-        modelo_inspector = _nombre_modelo(inspector)
-        lotes_inspector = tuple(
-            _trocear(
-                tuple(caso for caso in casos if caso["id_habilidad_fuente"] in decisiones_crudas),
-                8,
-            )
-        )
-        chunks_inspector_completados = 0
-        publicar_progreso(
-            "inspector",
-            0,
-            len(lotes_inspector),
-            mensaje="Inspector LLM listo: validando las decisiones del analista.",
-        )
-        for indice_lote, lote in enumerate(lotes_inspector, start=1):
-            verificar_cancelacion()
-            decisiones = [decisiones_crudas[str(caso["id_habilidad_fuente"])] for caso in lote]
-            try:
-                verificar_cancelacion()
-                respuesta_inspector = _invocar_inspector(
-                    inspector,
-                    lote,
-                    decisiones,
-                    perfil_prompt,
-                    carrera=carrera,
-                    periodo=periodo,
-                    id_ejecucion=id_ejecucion,
-                    chunk=indice_lote,
-                )
-            except CancelacionSolicitada:
-                raise
-            except Exception as exc:
-                reportes.append(
-                    {
-                        "tipo": "inspector",
-                        "estado": "ERROR",
-                        "detalle": f"{type(exc).__name__}: {str(exc)[:300]}",
-                    }
-                )
-                logros_procesados.update(str(caso["id_habilidad_fuente"]) for caso in lote)
-                silabos_procesados.update(
-                    str(caso.get("id_silabo") or "") for caso in lote if caso.get("id_silabo")
-                )
-                chunks_inspector_completados += 1
-                publicar_progreso(
-                    "inspector",
-                    chunks_inspector_completados,
-                    len(lotes_inspector),
-                    UltimoChunkLimpiezaLLM(
-                        "inspector",
-                        len(lote),
-                        len(
-                            {
-                                str(caso.get("id_silabo") or "")
-                                for caso in lote
-                                if caso.get("id_silabo")
-                            }
-                        ),
-                    ),
-                )
-                continue
-            for inspeccion_item in respuesta_inspector.inspecciones:
-                inspecciones[inspeccion_item.id_habilidad_fuente] = inspeccion_item
-            logros_procesados.update(str(caso["id_habilidad_fuente"]) for caso in lote)
-            silabos_procesados.update(
-                str(caso.get("id_silabo") or "") for caso in lote if caso.get("id_silabo")
-            )
-            chunks_inspector_completados += 1
-            publicar_progreso(
-                "inspector",
-                chunks_inspector_completados,
-                len(lotes_inspector),
-                UltimoChunkLimpiezaLLM(
-                    "inspector",
-                    len(lote),
-                    len(
-                        {str(caso.get("id_silabo") or "") for caso in lote if caso.get("id_silabo")}
-                    ),
-                ),
-            )
-
-    casos_para_reinspeccion = tuple(
-        caso
-        for caso in casos
-        if (
-            str(caso["id_habilidad_fuente"]) in decisiones_crudas
-            and inspecciones.get(str(caso["id_habilidad_fuente"])) is not None
-            and inspecciones[str(caso["id_habilidad_fuente"])].estado == "REVISAR"
-        )
-    )
-    if usar_escalamiento and casos_para_reinspeccion:
-        inspector_residual = obtener_llm("inspector_curricular_residual")
-        modelo_inspector_residual = _nombre_modelo(inspector_residual)
-        lotes_inspector_residual = tuple(_trocear(casos_para_reinspeccion, 8))
-        chunks_inspector_residual_completados = 0
-        publicar_progreso(
-            "inspector_residual",
-            0,
-            len(lotes_inspector_residual),
-            mensaje="Inspector residual listo: revisando decisiones con observaciones.",
-        )
-        for indice_lote, lote in enumerate(lotes_inspector_residual, start=1):
-            verificar_cancelacion()
-            decisiones = [decisiones_crudas[str(caso["id_habilidad_fuente"])] for caso in lote]
-            ids_lote: set[str] = {decision.id_habilidad_fuente for decision in decisiones}
-            for id_habilidad in ids_lote:
-                modelos_escalados.setdefault(id_habilidad, []).append(modelo_inspector_residual)
-            try:
-                verificar_cancelacion()
-                respuesta_inspeccion_residual = _invocar_inspector(
-                    inspector_residual,
-                    lote,
-                    decisiones,
-                    perfil_prompt,
-                    carrera=carrera,
-                    periodo=periodo,
-                    id_ejecucion=id_ejecucion,
-                    chunk=indice_lote,
-                    rol="inspector_curricular_residual",
-                    reintento=True,
-                )
-            except CancelacionSolicitada:
-                raise
-            except Exception as exc:
-                reportes.append(
-                    {
-                        "tipo": "inspector_residual",
-                        "estado": "ERROR",
-                        "detalle": f"{type(exc).__name__}: {str(exc)[:300]}",
-                    }
-                )
-            else:
-                for inspeccion_item in respuesta_inspeccion_residual.inspecciones:
-                    if inspeccion_item.id_habilidad_fuente in ids_lote:
-                        inspecciones[inspeccion_item.id_habilidad_fuente] = inspeccion_item
-            chunks_inspector_residual_completados += 1
-            publicar_progreso(
-                "inspector_residual",
-                chunks_inspector_residual_completados,
-                len(lotes_inspector_residual),
-                UltimoChunkLimpiezaLLM(
-                    "inspector_residual",
-                    len(ids_lote),
-                    len(
-                        {
-                            str(caso.get("id_silabo") or "")
-                            for caso in lote
-                            if caso.get("id_silabo")
-                        }
-                    ),
-                ),
-            )
-
-    aprobadas: dict[str, DecisionCurricular] = {}
-    for id_habilidad, decision in decisiones_crudas.items():
-        inspeccion = inspecciones.get(id_habilidad)
-        if inspeccionar and (
-            inspeccion is None
-            or inspeccion.estado != "APROBAR"
-            or inspeccion.confianza < _confianza_minima()
-        ):
-            reportes.append(
-                _reporte_decision(
-                    decision,
-                    "REVISAR_INSPECTOR",
-                    inspeccion.problemas if inspeccion else ["Sin veredicto del inspector"],
-                    inspeccion,
-                    modelos_escalados=modelos_escalados.get(id_habilidad, []),
-                )
-            )
-            continue
-        aprobadas[id_habilidad] = decision
+    for decision in propuestas.values():
         reportes.append(
             _reporte_decision(
                 decision,
-                "ACEPTADA",
-                inspeccion=inspeccion,
-                modelos_escalados=modelos_escalados.get(id_habilidad, []),
+                "PENDIENTE_REVISION_HUMANA",
+                ["PROPUESTA_LLM_REQUIERE_DECISION_HUMANA"],
             )
         )
 
@@ -973,14 +713,10 @@ def analizar_registros_curriculares(
         progreso_actual.ultimo_chunk,
     )
     return ResultadoAnalisisCurricular(
-        decisiones=aprobadas,
+        propuestas=propuestas,
         reportes=tuple(reportes),
         modelo_analista=modelo_analista,
-        modelo_inspector=modelo_inspector,
         lotes=len(lotes),
-        modelo_analista_residual=modelo_analista_residual,
-        modelo_inspector_residual=modelo_inspector_residual,
-        decisiones_escaladas=len(modelos_escalados),
         auditoria_contexto=auditoria_contexto,
         progreso=progreso_actual,
     )
@@ -993,52 +729,28 @@ def _invocar_analista(
     carrera: str,
     periodo: str,
     *,
-    rol: str = "analista_curricular",
     id_ejecucion: str = "",
     chunk: int | None = None,
     reintento: bool = False,
 ) -> LoteDecisionesCurriculares:
     prompt = _prompt_analista(lote, perfil_prompt, carrera, periodo)
-    estructurado = llm.with_structured_output(LoteDecisionesCurriculares)  # type: ignore[attr-defined]
+    estructurado = llm.with_structured_output(LoteDecisionesCurricularesLLM)  # type: ignore[attr-defined]
     respuesta = invocar_llm(
         estructurado,
         prompt,
-        rol=rol,
+        rol="analista_curricular",
         id_ejecucion=id_ejecucion,
         carrera=carrera,
         periodo=periodo,
         chunk=chunk,
         reintento=reintento,
     )
-    return LoteDecisionesCurriculares.model_validate(respuesta)
-
-
-def _invocar_inspector(
-    llm: object,
-    lote: tuple[dict[str, object], ...],
-    decisiones: list[DecisionCurricular],
-    perfil_prompt: dict[str, object],
-    *,
-    rol: str = "inspector_curricular",
-    carrera: str = "",
-    periodo: str = "",
-    id_ejecucion: str = "",
-    chunk: int | None = None,
-    reintento: bool = False,
-) -> LoteInspeccionesCurriculares:
-    prompt = _prompt_inspector(lote, decisiones, perfil_prompt)
-    estructurado = llm.with_structured_output(LoteInspeccionesCurriculares)  # type: ignore[attr-defined]
-    respuesta = invocar_llm(
-        estructurado,
-        prompt,
-        rol=rol,
-        id_ejecucion=id_ejecucion,
-        carrera=carrera,
-        periodo=periodo,
-        chunk=chunk,
-        reintento=reintento,
-    )
-    return LoteInspeccionesCurriculares.model_validate(respuesta)
+    if isinstance(respuesta, LoteDecisionesCurriculares):
+        return respuesta
+    respuesta_llm = LoteDecisionesCurricularesLLM.model_validate(respuesta)
+    if len(respuesta_llm.decisiones) != len(lote):
+        return _asignar_decisiones_parciales_por_logro(lote, respuesta_llm)
+    return _asignar_decisiones_por_orden(lote, respuesta_llm)
 
 
 def _prompt_analista(
@@ -1053,36 +765,206 @@ def _prompt_analista(
         "Tu tarea es representar TODOS los logros específicos, no reducirlos a los matches "
         "del catálogo. Propón una habilidad observable por logro, una competencia profesional "
         "que agrupe la habilidad y herramientas solo cuando aparezcan en la evidencia. Puedes "
-        "crear conceptos nuevos si el sílabo los respalda. No inventes IDs ni evidencia. No uses "
+        "crear conceptos nuevos si el sílabo los respalda. No inventes identificadores ni "
+        "evidencia. No uses "
         "taxonomías de otra carrera: usa el perfil entregado como contexto específico.\n\n"
         "Perfil curado y defensivo:\n"
-        f"{json.dumps(perfil_prompt, ensure_ascii=False, indent=2)}\n\n"
-        "Devuelve una decisión por cada id_habilidad_fuente, incluso si requiere_revision=true. "
+        f"{json.dumps(_perfil_semantico(perfil_prompt), ensure_ascii=False, indent=2)}\n\n"
+        "Devuelve una decisión por cada logro, en el mismo orden en que aparecen los logros "
+        "del contexto, incluso si requiere_revision=true. No devuelvas identificadores ni códigos "
+        "de control. Incluye el texto literal del logro en el campo logro para que Python valide "
+        "la correspondencia; ese texto no es un identificador. "
         "La habilidad debe comenzar con una acción profesional y tener verbo + objeto. La "
-        "evidencia debe copiar fragmentos exactos del caso. Cuando declares fuentes, devuelve "
-        "objetos con texto exacto, seccion e id_silabo del caso correspondiente.\n\n"
-        f"CASOS:\n{json.dumps(list(lote), ensure_ascii=False, indent=2)}"
+        "evidencia debe copiar fragmentos exactos del caso.\n\n"
+        f"CASOS:\n{json.dumps(_payload_semantico_lote(lote), ensure_ascii=False, indent=2)}"
     )
 
 
-def _prompt_inspector(
+def _asignar_decisiones_por_orden(
     lote: tuple[dict[str, object], ...],
-    decisiones: list[DecisionCurricular],
-    perfil_prompt: dict[str, object],
-) -> str:
-    propuestas = [decision.model_dump(mode="json") for decision in decisiones]
-    return (
-        "Eres inspector adversarial de decisiones curriculares. Verifica cada propuesta contra "
-        "el texto fuente y el perfil de carrera. Aprueba si la habilidad es observable y la "
-        "competencia es disciplinar. La herramienta es opcional: si no existe una herramienta "
-        "concreta en el sílabo, aprueba la cadena sin herramienta. Si se propone una herramienta, "
-        "exige evidencia explícita y rechaza herramientas genéricas o inventadas. Rechaza el uso "
-        "de conceptos del catálogo general que no estén respaldados por el perfil o el sílabo, "
-        "las habilidades genéricas y cualquier evidencia inventada. Si hay duda, usa REVISAR.\n\n"
-        f"PERFIL CURADO:\n{json.dumps(perfil_prompt, ensure_ascii=False, indent=2)}\n\n"
-        f"CASOS:\n{json.dumps(list(lote), ensure_ascii=False, indent=2)}\n\n"
-        f"PROPUESTAS:\n{json.dumps(propuestas, ensure_ascii=False, indent=2)}"
+    respuesta: LoteDecisionesCurricularesLLM,
+) -> LoteDecisionesCurriculares:
+    """Restaura el linaje interno usando el orden estable de entrada/salida."""
+
+    _validar_respuesta_por_orden(
+        lote,
+        respuesta.decisiones,
+        exigir_logro=True,
+        nombre="decisiones",
     )
+    decisiones: list[DecisionCurricular] = []
+    for caso, decision in zip(lote, respuesta.decisiones, strict=True):
+        materializada = _materializar_decision(caso, decision)
+        if materializada is not None:
+            decisiones.append(materializada)
+    return LoteDecisionesCurriculares(decisiones=decisiones)
+
+
+def _materializar_decision(
+    caso: Mapping[str, object],
+    decision: DecisionCurricularLLM,
+) -> DecisionCurricular | None:
+    id_habilidad = str(caso.get("id_habilidad_fuente") or "")
+    if not id_habilidad:
+        return None
+    return DecisionCurricular(
+        id_habilidad_fuente=id_habilidad,
+        competencia=decision.competencia,
+        habilidad=decision.habilidad,
+        herramientas=decision.herramientas,
+        evidencia=decision.evidencia,
+        justificacion=decision.justificacion,
+        confianza=decision.confianza,
+        requiere_revision=decision.requiere_revision,
+    )
+
+
+def _asignar_decisiones_parciales_por_logro(
+    lote: tuple[dict[str, object], ...],
+    respuesta: LoteDecisionesCurricularesLLM,
+) -> LoteDecisionesCurriculares:
+    """Mapea una respuesta parcial solo si cada logro literal identifica su caso."""
+
+    casos_por_logro: dict[str, dict[str, object]] = {}
+    for caso in lote:
+        clave = _clave_logro_literal(caso.get("logro"))
+        if not clave or clave in casos_por_logro:
+            raise ValueError("No se puede identificar de forma única un logro del lote.")
+        casos_por_logro[clave] = caso
+
+    decisiones: list[DecisionCurricular] = []
+    claves_usadas: set[str] = set()
+    for decision in respuesta.decisiones:
+        clave = _clave_logro_literal(decision.logro)
+        caso = casos_por_logro.get(clave)
+        if caso is None or clave in claves_usadas:
+            raise ValueError("La respuesta parcial contiene un logro ausente o duplicado del lote.")
+        claves_usadas.add(clave)
+        materializada = _materializar_decision(caso, decision)
+        if materializada is not None:
+            decisiones.append(materializada)
+    return LoteDecisionesCurriculares(decisiones=decisiones)
+
+
+def _validar_respuesta_por_orden(
+    lote: tuple[dict[str, object], ...],
+    respuesta: Iterable[object],
+    *,
+    exigir_logro: bool,
+    nombre: str,
+) -> None:
+    """Evita asignar una respuesta LLM a un ID distinto por omisión o reordenamiento."""
+
+    respuestas = tuple(respuesta)
+    if len(respuestas) != len(lote):
+        raise ValueError(
+            f"La cardinalidad de la respuesta de {nombre} es {len(respuestas)} "
+            f"elementos para {len(lote)} casos."
+        )
+
+    logros_respuesta = [str(getattr(item, "logro", "") or "").strip() for item in respuestas]
+    for indice, (caso, logro_respuesta) in enumerate(zip(lote, logros_respuesta, strict=True), 1):
+        logro_esperado = str(caso.get("logro") or "").strip()
+        if not logro_respuesta:
+            raise ValueError(
+                f"La respuesta de {nombre} no devolvió el logro literal del caso {indice}."
+            )
+        if _clave_logro_literal(logro_respuesta) != _clave_logro_literal(logro_esperado):
+            raise ValueError(f"La respuesta de {nombre} no conserva el orden del caso {indice}.")
+
+
+def _clave_logro_literal(valor: object) -> str:
+    """Normaliza únicamente Unicode y espacios; conserva puntuación y palabras."""
+
+    texto = unicodedata.normalize("NFKC", str(valor or "")).replace(" ", " ")
+    return re.sub(r"\s+", " ", texto).strip().casefold()
+
+
+def _perfil_semantico(perfil_prompt: Mapping[str, object]) -> dict[str, object]:
+    """El perfil aporta reglas de negocio, no revisiones ni huellas internas."""
+
+    resultado = _sanear_perfil_transportable(perfil_prompt)
+    return cast(dict[str, object], resultado)
+
+
+def _propuesta_semantica(decision: DecisionCurricular) -> dict[str, object]:
+    """Proyecta una propuesta inspeccionable sin exponer linaje interno."""
+
+    return {
+        "competencia": decision.competencia.model_dump(mode="json"),
+        "habilidad": decision.habilidad.model_dump(mode="json"),
+        "herramientas": [
+            herramienta.model_dump(mode="json") for herramienta in decision.herramientas
+        ],
+        "evidencia": decision.evidencia,
+        "justificacion": decision.justificacion,
+        "confianza": decision.confianza,
+        "requiere_revision": decision.requiere_revision,
+    }
+
+
+def _payload_semantico_lote(lote: tuple[dict[str, object], ...]) -> list[dict[str, object]]:
+    """Agrupa el contexto de cada sílabo y deja los IDs exclusivamente en Python."""
+
+    contextos: dict[str, dict[str, object]] = {}
+    for indice, caso in enumerate(lote):
+        clave = str(caso.get("id_silabo") or f"orden-{indice}")
+        contexto = contextos.get(clave)
+        if contexto is None:
+            contexto = {
+                "curso": str(caso.get("curso") or ""),
+                "sumilla": str(caso.get("sumilla") or ""),
+                "logro_general": str(caso.get("logro_general") or ""),
+                "competencias_declaradas": _competencias_semanticas(
+                    caso.get("competencias_declaradas")
+                ),
+                "temas_programa": _temas_programa_semanticos(caso),
+                "logros_especificos": [],
+            }
+            contextos[clave] = contexto
+        logros = cast(list[str], contexto["logros_especificos"])
+        logro = str(caso.get("logro") or "").strip()
+        if logro:
+            logros.append(logro)
+    return list(contextos.values())
+
+
+def _competencias_semanticas(valor: object) -> list[dict[str, str]]:
+    if not isinstance(valor, list):
+        return []
+    competencias: list[dict[str, str]] = []
+    for item in valor:
+        if not isinstance(item, Mapping):
+            continue
+        nombre = str(item.get("nombre") or "").strip()
+        descripcion = str(item.get("descripcion") or "").strip()
+        if nombre or descripcion:
+            competencias.append({"nombre": nombre, "descripcion": descripcion})
+    return competencias
+
+
+def _temas_programa_semanticos(caso: Mapping[str, object]) -> list[str]:
+    detalle = caso.get("programa_analitico_detalle")
+    filas = detalle if isinstance(detalle, list) and detalle else caso.get("programa_analitico")
+    if not isinstance(filas, list):
+        return []
+    temas: list[str] = []
+    for fila in filas:
+        if isinstance(fila, Mapping):
+            tema = re.sub(r"\s+", " ", str(fila.get("tema") or "")).strip()
+            contenido = re.sub(r"\s+", " ", str(fila.get("contenido") or "")).strip()
+            if tema or contenido:
+                texto = " | ".join(parte for parte in (tema, contenido) if parte)
+            else:
+                texto = str(fila.get("texto") or "")
+        else:
+            texto = str(fila or "")
+        texto = re.sub(r"^\s*Semana\s+\d+\s*\|\s*", "", texto, flags=re.IGNORECASE)
+        if isinstance(fila, Mapping) and not (fila.get("tema") or fila.get("contenido")):
+            texto = re.sub(r"\s+\d+(?:[.,]\d+)?\s*$", "", texto).strip()
+        if texto:
+            temas.append(texto)
+    return temas
 
 
 def _casos_curriculares(
@@ -1093,17 +975,15 @@ def _casos_curriculares(
     retriever: EmbeddingRetriever | None = None,
     embedding_scope: EmbeddingScope | None = None,
     limites_candidatos: Mapping[str, int] | None = None,
+    limites_lexicales: Mapping[str, int] | None = None,
     pool_retrieval: int | None = None,
+    limite_ejemplos: int = 3,
 ) -> Iterable[dict[str, object]]:
     for registro in registros:
         datos = registro.get("datos")
         if not isinstance(datos, dict):
             continue
         id_silabo = str(registro.get("id_silabo") or "")
-        archivo = ""
-        origen = registro.get("origen")
-        if isinstance(origen, dict):
-            archivo = str(origen.get("archivo") or "")
         declaraciones = datos.get("competencias_declaradas")
         outcomes = datos.get("logros_especificos")
         if not isinstance(outcomes, list):
@@ -1112,19 +992,20 @@ def _casos_curriculares(
             str(datos.get(campo) or "")
             for campo in ("curso", "sumilla", "logro_general", "texto_relevante")
         )
-        for logro in outcomes:
+        for indice_logro, logro in enumerate(outcomes, start=1):
             if not isinstance(logro, dict):
                 continue
             descripcion = str(logro.get("descripcion") or "").strip()
-            etiqueta = str(logro.get("etiqueta") or "").strip().upper()
             if not descripcion:
                 continue
-            id_habilidad = _hash_id("HAB_SRC", id_silabo, etiqueta, descripcion)
+            orden_logro = str(logro.get("orden") or indice_logro)
+            id_habilidad = _hash_id("HAB_SRC", id_silabo, orden_logro, descripcion)
             evidencia_herramientas = datos.get("herramientas_evidencia")
             evidencias_estructuradas = (
                 list(evidencia_herramientas) if isinstance(evidencia_herramientas, list) else []
             )
             evidencias_estructuradas.extend(_evidencias_programa_analitico(datos))
+            evidencias_estructuradas = _deduplicar_evidencias_herramientas(evidencias_estructuradas)
             evidencias_candidatas = [
                 *evidencias_estructuradas,
                 {"seccion": "Logro de aprendizaje", "texto": descripcion},
@@ -1135,18 +1016,24 @@ def _casos_curriculares(
                     continue
                 texto = str(item.get("texto") or "")
                 herramientas.extend(
-                    concepto.nombre for concepto in catalogo.buscar(texto).get("herramienta", ())
+                    concepto.nombre
+                    for concepto in catalogo.buscar(texto).get("herramienta", ())
+                    if es_herramienta_concreta(concepto.nombre)
                 )
             caso: dict[str, object] = {
                 "id_habilidad_fuente": id_habilidad,
                 "id_silabo": id_silabo,
-                "archivo": archivo,
                 "curso": str(datos.get("curso") or ""),
                 "sumilla": str(datos.get("sumilla") or ""),
                 "logro_general": str(datos.get("logro_general") or ""),
-                "etiqueta_logro": etiqueta,
                 "logro": descripcion,
                 "competencias_declaradas": declaraciones if isinstance(declaraciones, list) else [],
+                "programa_analitico": datos.get("programa_analitico")
+                if isinstance(datos.get("programa_analitico"), list)
+                else [],
+                "programa_analitico_detalle": datos.get("programa_analitico_detalle")
+                if isinstance(datos.get("programa_analitico_detalle"), list)
+                else [],
                 "contenido_relacionado": contexto[:5000],
                 "herramientas_detectadas": sorted(set(herramientas)),
                 "evidencia_herramientas": evidencias_estructuradas,
@@ -1159,7 +1046,9 @@ def _casos_curriculares(
                 retriever=retriever,
                 embedding_scope=embedding_scope,
                 limites_candidatos=limites_candidatos,
+                limites_lexicales=limites_lexicales,
                 pool_retrieval=pool_retrieval,
+                limite_ejemplos=limite_ejemplos,
             )
             yield caso
 
@@ -1211,16 +1100,12 @@ def _recuperacion_auditable_por_logro(
         "fingerprint": fingerprint,
         "method": method if method in _METODOS_RECUPERACION_AUDITABLES else None,
         "reason_code": (
-            reason_code
-            if reason_code in _REASON_CODES_RECUPERACION_AUDITABLES
-            else None
+            reason_code if reason_code in _REASON_CODES_RECUPERACION_AUDITABLES else None
         ),
         "scope": _scope_recuperacion_auditable(recuperacion.get("scope")),
         "model": _modelo_auditable(recuperacion.get("model")),
         "config": _configuracion_auditable(recuperacion.get("config")),
-        "minimum_similarity": _minimum_similarity_auditable(
-            recuperacion.get("minimum_similarity")
-        ),
+        "minimum_similarity": _minimum_similarity_auditable(recuperacion.get("minimum_similarity")),
     }
 
 
@@ -1231,9 +1116,7 @@ def _texto_auditable(valor: object) -> str | None:
 
 def _modelo_auditable(valor: object) -> str | None:
     texto = _texto_auditable(valor)
-    if texto is None or any(
-        marcador in texto.casefold() for marcador in _MARCADORES_SECRETOS
-    ):
+    if texto is None or any(marcador in texto.casefold() for marcador in _MARCADORES_SECRETOS):
         return None
     return texto
 
@@ -1247,11 +1130,7 @@ def _configuracion_auditable(valor: object) -> str | None:
     texto = str(valor or "")
     if not texto.startswith("provider:"):
         return None
-    return (
-        texto
-        if _FINGERPRINT_AUDITABLE.fullmatch(texto.removeprefix("provider:"))
-        else None
-    )
+    return texto if _FINGERPRINT_AUDITABLE.fullmatch(texto.removeprefix("provider:")) else None
 
 
 def _etiqueta_scope_auditable(valor: object) -> str | None:
@@ -1305,6 +1184,26 @@ def _scope_recuperacion_auditable(valor: object) -> dict[str, object] | None:
 def _evidencias_programa_analitico(datos: dict[str, object]) -> list[dict[str, str]]:
     """Expone solo contenido curricular útil como evidencia estructurada de herramientas."""
 
+    detalle = datos.get("programa_analitico_detalle")
+    if isinstance(detalle, list):
+        evidencias_detalle: list[dict[str, str]] = []
+        for fila in detalle:
+            if not isinstance(fila, dict):
+                continue
+            texto = str(fila.get("texto") or "").strip()
+            clave = clave_concepto(texto)
+            if not texto or _programa_es_recurso_no_evidenciable(texto, clave):
+                continue
+            evidencias_detalle.append(
+                {
+                    "origen": "programa_analitico",
+                    "seccion": "programa_analitico",
+                    "texto": texto,
+                }
+            )
+        if evidencias_detalle:
+            return evidencias_detalle
+
     programa = datos.get("programa_analitico")
     if not isinstance(programa, list):
         return []
@@ -1314,8 +1213,37 @@ def _evidencias_programa_analitico(datos: dict[str, object]) -> list[dict[str, s
         clave = clave_concepto(texto)
         if not texto or _programa_es_recurso_no_evidenciable(texto, clave):
             continue
-        evidencias.append({"seccion": "Programa analítico", "texto": texto})
+        evidencias.append(
+            {
+                "origen": "programa_analitico",
+                "seccion": "programa_analitico",
+                "texto": texto,
+            }
+        )
     return evidencias
+
+
+def _deduplicar_evidencias_herramientas(
+    evidencias: list[object],
+) -> list[dict[str, str]]:
+    """Preserva la primera evidencia trazable de cada fila curricular."""
+
+    resultado: list[dict[str, str]] = []
+    vistos: set[str] = set()
+    for item in evidencias:
+        if not isinstance(item, dict):
+            continue
+        seccion = str(item.get("seccion") or "").strip()
+        origen = str(item.get("origen") or "").strip()
+        texto = str(item.get("texto") or "").strip()
+        clave = clave_concepto(texto)
+        if seccion and texto and clave and clave not in vistos:
+            vistos.add(clave)
+            evidencia = {"seccion": seccion, "texto": texto}
+            if origen:
+                evidencia["origen"] = origen
+            resultado.append(evidencia)
+    return resultado
 
 
 def _programa_es_recurso_no_evidenciable(texto: str, clave: str) -> bool:
@@ -1343,6 +1271,8 @@ def _validar_decision(
         errores.append("HABILIDAD_SIN_VERBO_OBSERVABLE")
     if not clave_concepto(decision.competencia.nombre):
         errores.append("COMPETENCIA_VACIA")
+    elif es_competencia_generica(decision.competencia.nombre):
+        errores.append(MOTIVO_COMPETENCIA_GENERICA)
     fuente_completa = " ".join(
         str(caso.get(campo) or "")
         for campo in ("curso", "sumilla", "logro_general", "logro", "contenido_relacionado")
@@ -1354,17 +1284,9 @@ def _validar_decision(
         caso,
     ):
         errores.append("COMPETENCIA_SIN_ANCLA_FUENTE")
-    id_silabo_caso = str(caso.get("id_silabo") or "").strip()
-    for fuente in decision.fuentes:
-        if not fuente.id_silabo:
-            errores.append("FUENTE_SILABO_AUSENTE")
-        elif fuente.id_silabo != id_silabo_caso:
-            errores.append("FUENTE_SILABO_INCORRECTO")
     evidencias = evidencia_decision(decision)
     evidencias_en_fuente = [
-        evidencia
-        for evidencia in evidencias
-        if _evidencia_en_texto(evidencia, fuente_clave)
+        evidencia for evidencia in evidencias if _evidencia_en_texto(evidencia, fuente_clave)
     ]
     if not evidencias:
         errores.append("SIN_EVIDENCIA_LLM")
@@ -1377,16 +1299,12 @@ def _validar_decision(
         herramientas_detectadas = []
     disponibles = {clave_concepto(str(nombre)) for nombre in herramientas_detectadas}
     for herramienta in decision.herramientas:
-        herramienta_existente = _nombre_herramienta_coincide(herramienta.nombre, disponibles)
-        herramienta_nueva = _herramienta_nueva_evidenciada(
+        herramienta_existente = nombre_herramienta_coincide(herramienta.nombre, disponibles)
+        herramienta_nueva = herramienta_nueva_evidenciada(
             herramienta.nombre, herramienta.evidencia, caso
         )
         if not herramienta_existente and not herramienta_nueva:
             errores.append(f"HERRAMIENTA_NO_DETECTADA:{herramienta.nombre}")
-    if decision.confianza < _confianza_minima():
-        errores.append("CONFIANZA_BAJA")
-    if decision.requiere_revision:
-        errores.append("LLM_SOLICITA_REVISION")
     return errores
 
 
@@ -1454,16 +1372,8 @@ def _competencia_anclada_en_fuente_o_declarada(
     return False
 
 
-def _errores_residuales_escalables(errores: list[str]) -> bool:
-    """Escala solo incertidumbre semántica declarada por el modelo."""
-
-    return bool(errores) and set(errores).issubset({"CONFIANZA_BAJA", "LLM_SOLICITA_REVISION"})
-
-
 def _reporte_sin_decision_llm(
     caso: dict[str, object],
-    problemas: list[str] | None = None,
-    modelos_escalados: list[str] | None = None,
 ) -> dict[str, object]:
     """Registra un logro que el analista no representó, sin fabricar una decisión."""
 
@@ -1471,10 +1381,8 @@ def _reporte_sin_decision_llm(
         "tipo": "decision_curricular",
         "estado": "REVISAR_SIN_DECISION_LLM",
         "id_habilidad_fuente": str(caso["id_habilidad_fuente"]),
-        "problemas": problemas or ["SIN_DECISION_LLM"],
+        "problemas": ["SIN_DECISION_LLM"],
     }
-    if modelos_escalados:
-        reporte["modelos_escalados"] = modelos_escalados
     return reporte
 
 
@@ -1537,10 +1445,10 @@ def _completar_evidencia(
 
 
 def evidencia_decision(decision: DecisionCurricular) -> list[str]:
-    """Devuelve citas legacy y fuentes estructuradas sin duplicarlas."""
+    """Devuelve las citas declaradas por el analista sin duplicarlas."""
 
     citas: list[str] = []
-    for valor in [*decision.evidencia, *(fuente.texto for fuente in decision.fuentes)]:
+    for valor in decision.evidencia:
         texto = str(valor or "").strip()
         if texto and texto not in citas:
             citas.append(texto)
@@ -1628,74 +1536,10 @@ def _evidencia_en_texto(fragmento: str, fuente_normalizada: str) -> bool:
     return len(tokens & set(fuente_normalizada.split())) / len(tokens) >= 0.75
 
 
-def _nombre_herramienta_coincide(nombre: str, disponibles: set[str]) -> bool:
-    """Acepta solo el nombre detectado o aliases gráficos inocuos."""
-
-    clave = clave_concepto(nombre)
-    return bool(_claves_herramienta_cerradas(clave) & disponibles)
-
-
-def _claves_herramienta_cerradas(nombre: str) -> frozenset[str]:
-    """Devuelve el nombre normalizado y solo sus aliases explícitamente aprobados."""
-
-    clave = clave_concepto(nombre)
-    if not clave:
-        return frozenset()
-    return _ALIASES_CERRADOS_HERRAMIENTAS.get(clave, frozenset((clave,)))
-
-
-def _nombre_herramienta_canonico(nombre: str) -> str:
-    """Resuelve únicamente aliases cerrados al nombre canónico de publicación."""
-
-    clave = clave_concepto(nombre)
-    return _NOMBRES_CANONICOS_HERRAMIENTAS.get(clave, nombre.strip())
-
-
-def _clave_herramienta_canonica(nombre: str) -> str:
-    """Produce una clave de deduplicación común para nombre canónico y aliases cerrados."""
-
-    return clave_concepto(_nombre_herramienta_canonico(nombre))
-
-
-def _coincide_nombre_herramienta_en_texto(nombre: str, texto: str) -> bool:
-    """Exige el nombre canónico o un alias cerrado como frase normalizada completa."""
-
-    texto_normalizado = clave_concepto(texto)
-    return any(
-        f" {clave} " in f" {texto_normalizado} " for clave in _claves_herramienta_cerradas(nombre)
-    )
-
-
-def _herramienta_nueva_evidenciada(
-    nombre: str,
-    _evidencia_llm: str,
-    caso: dict[str, object],
-) -> bool:
-    """Permite una herramienta nueva solo con nombre literal en evidencia estructurada."""
-
-    clave_nombre = clave_concepto(nombre)
-    if not clave_nombre or clave_nombre in _HERRAMIENTAS_GENERICAS:
-        return False
-    evidencias = caso.get("evidencia_herramientas_candidata")
-    if evidencias is None:
-        evidencias = caso.get("evidencia_herramientas")
-    if not isinstance(evidencias, list):
-        return False
-    for item in evidencias:
-        if not isinstance(item, dict):
-            continue
-        texto = str(item.get("texto") or "")
-        if _coincide_nombre_herramienta_en_texto(nombre, texto):
-            return True
-    return False
-
-
 def _reporte_decision(
     decision: DecisionCurricular,
     estado: str,
     problemas: list[str] | None = None,
-    inspeccion: InspeccionCurricular | None = None,
-    modelos_escalados: list[str] | None = None,
 ) -> dict[str, object]:
     fila = decision.model_dump(mode="json")
     fila.update(
@@ -1703,11 +1547,8 @@ def _reporte_decision(
             "tipo": "decision_curricular",
             "estado": estado,
             "problemas": problemas or [],
-            "inspeccion": inspeccion.model_dump(mode="json") if inspeccion else None,
         }
     )
-    if modelos_escalados:
-        fila["modelos_escalados"] = modelos_escalados
     return fila
 
 
@@ -1733,12 +1574,29 @@ def _clave_lote(
     return hashlib.sha256(payload).hexdigest()
 
 
-def _trocear(
+def _trocear_por_silabo(
     valores: tuple[dict[str, object], ...],
     tamanio: int,
 ) -> Iterable[tuple[dict[str, object], ...]]:
-    for indice in range(0, len(valores), tamanio):
-        yield valores[indice : indice + tamanio]
+    """No parte un sílabo: su contexto semántico debe viajar una sola vez."""
+
+    lote: list[dict[str, object]] = []
+    grupos: dict[str, list[dict[str, object]]] = {}
+    orden: list[str] = []
+    for indice, valor in enumerate(valores):
+        clave = str(valor.get("id_silabo") or f"orden-{indice}")
+        if clave not in grupos:
+            grupos[clave] = []
+            orden.append(clave)
+        grupos[clave].append(valor)
+    for clave in orden:
+        grupo = grupos[clave]
+        if lote and len(lote) + len(grupo) > tamanio:
+            yield tuple(lote)
+            lote = []
+        lote.extend(grupo)
+    if lote:
+        yield tuple(lote)
 
 
 def _leer_cache(ruta: Path) -> dict[str, dict[str, object]]:
@@ -1777,7 +1635,3 @@ def _nombre_modelo(llm: object) -> str:
         if valor:
             return str(valor)
     return "desconocido"
-
-
-def _confianza_minima() -> float:
-    return decimal("NORMALIZADOR_CURRICULAR_MIN_CONFIDENCE", 0.72)
