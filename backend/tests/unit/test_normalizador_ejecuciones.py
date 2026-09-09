@@ -62,6 +62,37 @@ def _salidas_curriculares() -> tuple[dict[str, object], ...]:
     )
 
 
+def test_iniciar_validacion_silabos_entrega_wrapper_y_argumentos_al_executor(
+    tmp_path: Path,
+) -> None:
+    gestor, id_ejecucion, directorio = _gestor_con_ejecucion(tmp_path)
+    llamadas: list[tuple[object, tuple[object, ...]]] = []
+
+    class ExecutorFalso:
+        def submit(self, funcion: object, *argumentos: object) -> None:
+            llamadas.append((funcion, argumentos))
+
+    gestor._executor = ExecutorFalso()  # type: ignore[assignment]
+
+    gestor.iniciar_validacion_silabos(
+        id_ejecucion,
+        directorio / "entrada" / "paquete.zip",
+        "Marketing",
+        "2026-1",
+    )
+
+    assert len(llamadas) == 1
+    funcion, argumentos = llamadas[0]
+    assert getattr(funcion, "__self__", None) is gestor
+    assert getattr(funcion, "__func__", None) is GestorEjecuciones._validar_silabos
+    assert argumentos == (
+        gestor._obtener_objeto(id_ejecucion),
+        directorio / "entrada" / "paquete.zip",
+        "Marketing",
+        "2026-1",
+    )
+
+
 def test_a_dict_oculta_salidas_curriculares_hasta_cerrar_hitl(tmp_path: Path) -> None:
     gestor, id_ejecucion, directorio = _gestor_con_ejecucion(tmp_path)
     ejecucion = gestor._obtener_objeto(id_ejecucion)
