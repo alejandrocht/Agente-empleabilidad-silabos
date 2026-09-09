@@ -16,6 +16,7 @@ from agente.normalizador.silabos import (
     release_gate,
     resolucion_curricular,
     salida,
+    trazabilidad_curricular,
     validacion_salida,
 )
 from agente.normalizador.silabos.analista_llm import (
@@ -604,6 +605,27 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
         "_warning",
     )
     assert len(historicos) == 49
+    trazabilidad = (
+        "_ALIASES_CARRERA",
+        "_CARRERAS_POR_NOMBRE",
+        "ESTADO_PENDIENTE_CATALOGACION",
+        "ESTADO_PENDIENTE_PERFIL",
+        "ESTADO_REVISION_HUMANA",
+        "_archivo_origen",
+        "_error",
+        "_estado_resolucion_determinista",
+        "_fila_cobertura",
+        "_filas_curso",
+        "_hash_id",
+        "_id_carrera",
+        "_modalidad_curso",
+        "_pendientes_por_relacion_fuente",
+        "_propuesta_dict",
+        "_registrar_pendiente",
+        "_source_ref",
+        "_texto",
+        "_warning",
+    )
     for nombre in historicos:
         origen = (
             normalizacion_curricular
@@ -611,6 +633,13 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
             else resolucion_curricular
         )
         assert getattr(salida, nombre) is getattr(origen, nombre)
+    for nombre in trazabilidad:
+        reexportado = getattr(resolucion_curricular, nombre)
+        extraido = getattr(trazabilidad_curricular, nombre)
+        assert reexportado is extraido
+        assert getattr(salida, nombre) is extraido
+        if callable(extraido):
+            assert inspect.signature(reexportado) == inspect.signature(extraido)
 
     validaciones = (
         "COMPETENCIAS_SCHEMA",
@@ -646,4 +675,6 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
 
     source = inspect.getsource(release_gate)
     assert "validacion_salida" not in source
+    source = inspect.getsource(trazabilidad_curricular)
+    assert "resolucion_curricular" not in source
     assert "silabos.salida" not in source
