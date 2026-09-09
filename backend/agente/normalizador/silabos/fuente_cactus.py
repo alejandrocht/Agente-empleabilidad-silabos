@@ -135,7 +135,7 @@ class ResultadoExtraccionCactus:
         }
 
 
-class CactusExtractor:
+class CactusExtractor(NavegadorCactus):
     """Módulo profundo para navegar Cactus y descargar una carrera/periodo."""
 
     def __init__(
@@ -150,6 +150,7 @@ class CactusExtractor:
         self.view_url = f"{self.base_url}/{VIEW_CURSOS}"
         self.login_probe = f"{self.view_url}?OpenView"
         self.headless = headless
+        self.max_attachment_bytes = MAX_ATTACHMENT_BYTES
         self.download_workers = max(1, min(int(download_workers), 3))
         self.max_session_rounds = max(1, int(max_session_rounds))
 
@@ -288,163 +289,6 @@ class CactusExtractor:
             errores=len(resultado.errores),
         )
         return resultado
-
-    def _abrir_contexto(self, playwright: Any, directorio_perfil: Path) -> Any:
-        try:
-            return playwright.chromium.launch_persistent_context(
-                str(directorio_perfil),
-                headless=self.headless,
-                channel="chrome",
-                user_agent=USER_AGENT,
-                accept_downloads=True,
-            )
-        except Exception as primer_error:
-            try:
-                return playwright.chromium.launch_persistent_context(
-                    str(directorio_perfil),
-                    headless=self.headless,
-                    user_agent=USER_AGENT,
-                    accept_downloads=True,
-                )
-            except Exception as segundo_error:
-                raise CactusExtractorError(
-                    "CACTUS_NAVEGADOR_NO_DISPONIBLE",
-                    (
-                        "No se pudo abrir Chromium/Chrome para Cactus: "
-                        f"{type(segundo_error).__name__}: {str(segundo_error)[:200]}"
-                    ),
-                ) from primer_error
-
-    def _esperar_login(
-        self,
-        pagina: Any,
-        usuario: str,
-        contrasena: str,
-        cancelada: CancelCallback | None,
-    ) -> None:
-        NavegadorCactus(
-            base_url=self.base_url,
-            view_url=self.view_url,
-            login_probe=self.login_probe,
-            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
-        ).esperar_login(pagina, usuario, contrasena, cancelada, self._verificar_cancelacion)
-
-    def _procesar_carrera(
-        self,
-        pagina: Any,
-        carrera: str,
-        periodo: str,
-        usuario: str,
-        contrasena: str,
-        cancelada: CancelCallback | None,
-    ) -> list[dict[str, str]] | None:
-        return NavegadorCactus(
-            base_url=self.base_url,
-            view_url=self.view_url,
-            login_probe=self.login_probe,
-            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
-        ).procesar_carrera(
-            pagina,
-            carrera,
-            periodo,
-            usuario,
-            contrasena,
-            cancelada,
-            verificar_cancelacion=self._verificar_cancelacion,
-            esperar_login=self._esperar_login,
-            esperar_vista=self._esperar_vista,
-            comprobar_login=self._comprobar_login,
-            clic_siguiente=self._clic_siguiente,
-        )
-
-    def _abrir_periodo(
-        self,
-        pagina: Any,
-        periodo_norm: str,
-        cancelada: CancelCallback | None,
-    ) -> str | None:
-        return NavegadorCactus(
-            base_url=self.base_url,
-            view_url=self.view_url,
-            login_probe=self.login_probe,
-            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
-        ).abrir_periodo(
-            pagina,
-            periodo_norm,
-            cancelada,
-            verificar_cancelacion=self._verificar_cancelacion,
-            esperar_vista=self._esperar_vista,
-            comprobar_login=self._comprobar_login,
-            clic_siguiente=self._clic_siguiente,
-        )
-
-    def _buscar_carrera(
-        self,
-        pagina: Any,
-        pos_periodo: str,
-        carrera_norm: str,
-        cancelada: CancelCallback | None,
-    ) -> str | None:
-        return NavegadorCactus(
-            base_url=self.base_url,
-            view_url=self.view_url,
-            login_probe=self.login_probe,
-            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
-        ).buscar_carrera(
-            pagina,
-            pos_periodo,
-            carrera_norm,
-            cancelada,
-            verificar_cancelacion=self._verificar_cancelacion,
-            esperar_vista=self._esperar_vista,
-            comprobar_login=self._comprobar_login,
-            clic_siguiente=self._clic_siguiente,
-        )
-
-    def _cursos_de_carrera(
-        self,
-        pagina: Any,
-        pos_carrera: str,
-        carrera: str,
-        periodo: str,
-        cancelada: CancelCallback | None,
-    ) -> list[dict[str, str]]:
-        return NavegadorCactus(
-            base_url=self.base_url,
-            view_url=self.view_url,
-            login_probe=self.login_probe,
-            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
-        ).cursos_de_carrera(
-            pagina,
-            pos_carrera,
-            carrera,
-            periodo,
-            cancelada,
-            verificar_cancelacion=self._verificar_cancelacion,
-            esperar_vista=self._esperar_vista,
-            comprobar_login=self._comprobar_login,
-            clic_siguiente=self._clic_siguiente,
-        )
-
-    def _leer_ciclos(
-        self,
-        pagina: Any,
-        pos_carrera: str,
-        cancelada: CancelCallback | None,
-    ) -> list[tuple[str, str]]:
-        return NavegadorCactus(
-            base_url=self.base_url,
-            view_url=self.view_url,
-            login_probe=self.login_probe,
-            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
-        ).leer_ciclos(
-            pagina,
-            pos_carrera,
-            cancelada,
-            verificar_cancelacion=self._verificar_cancelacion,
-            comprobar_login=self._comprobar_login,
-            clic_siguiente=self._clic_siguiente,
-        )
 
     def _descargar_cursos(
         self,
@@ -697,25 +541,6 @@ class CactusExtractor:
             return {"info": info, "status": "doc_error", "detalle": ultimo_detalle}
         return {"info": info, "status": "sesion", "detalle": ultimo_detalle}
 
-    def _descargar_por_navegador(
-        self,
-        pagina: Any,
-        info: dict[str, str],
-        directorio_salida: Path,
-    ) -> str | None:
-        return NavegadorCactus(
-            base_url=self.base_url,
-            view_url=self.view_url,
-            login_probe=self.login_probe,
-            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
-        ).descargar_por_navegador(
-            pagina,
-            info,
-            directorio_salida,
-            url_adjunto=self._url_adjunto,
-            url_adjunto_segura=self._url_adjunto_segura,
-        )
-
     def _aplicar_resultado(
         self,
         resultado: dict[str, Any],
@@ -858,7 +683,3 @@ class CactusExtractor:
     _iter_posiciones = staticmethod(NavegadorCactus.iter_posiciones)
     _cursos_visibles = staticmethod(NavegadorCactus.cursos_visibles)
     _posicion_mayor = staticmethod(NavegadorCactus.posicion_mayor)
-
-    @staticmethod
-    def _clic_siguiente(pagina: Any) -> bool:
-        return NavegadorCactus.clic_siguiente(pagina, CactusExtractor._esperar_vista)

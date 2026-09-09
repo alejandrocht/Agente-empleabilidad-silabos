@@ -37,6 +37,12 @@ class _SesionCaida(RuntimeError):
     """La sesión Domino volvió al formulario de login."""
 
 
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+)
+
+
 class NavegadorCactus:
     """Encapsula autenticación, DOM y fallback de descarga de Playwright."""
 
@@ -409,3 +415,155 @@ class NavegadorCactus:
         siguiente.first.click()
         esperar_vista(pagina)
         return True
+
+    def _abrir_contexto(self: Any, playwright: Any, directorio_perfil: Path) -> Any:
+        try:
+            return playwright.chromium.launch_persistent_context(
+                str(directorio_perfil),
+                headless=self.headless,
+                channel="chrome",
+                user_agent=USER_AGENT,
+                accept_downloads=True,
+            )
+        except Exception as primer_error:
+            try:
+                return playwright.chromium.launch_persistent_context(
+                    str(directorio_perfil),
+                    headless=self.headless,
+                    user_agent=USER_AGENT,
+                    accept_downloads=True,
+                )
+            except Exception as segundo_error:
+                raise CactusExtractorError(
+                    "CACTUS_NAVEGADOR_NO_DISPONIBLE",
+                    (
+                        "No se pudo abrir Chromium/Chrome para Cactus: "
+                        f"{type(segundo_error).__name__}: {str(segundo_error)[:200]}"
+                    ),
+                ) from primer_error
+
+    def _esperar_login(
+        self: Any,
+        pagina: Any,
+        usuario: str,
+        contrasena: str,
+        cancelada: CancelCallback | None,
+    ) -> None:
+        NavegadorCactus.esperar_login(
+            self, pagina, usuario, contrasena, cancelada, self._verificar_cancelacion
+        )
+
+    def _procesar_carrera(
+        self: Any,
+        pagina: Any,
+        carrera: str,
+        periodo: str,
+        usuario: str,
+        contrasena: str,
+        cancelada: CancelCallback | None,
+    ) -> list[dict[str, str]] | None:
+        return NavegadorCactus.procesar_carrera(
+            self,
+            pagina,
+            carrera,
+            periodo,
+            usuario,
+            contrasena,
+            cancelada,
+            verificar_cancelacion=self._verificar_cancelacion,
+            esperar_login=self._esperar_login,
+            esperar_vista=self._esperar_vista,
+            comprobar_login=self._comprobar_login,
+            clic_siguiente=self._clic_siguiente,
+        )
+
+    def _abrir_periodo(
+        self: Any,
+        pagina: Any,
+        periodo_norm: str,
+        cancelada: CancelCallback | None,
+    ) -> str | None:
+        return NavegadorCactus.abrir_periodo(
+            self,
+            pagina,
+            periodo_norm,
+            cancelada,
+            verificar_cancelacion=self._verificar_cancelacion,
+            esperar_vista=self._esperar_vista,
+            comprobar_login=self._comprobar_login,
+            clic_siguiente=self._clic_siguiente,
+        )
+
+    def _buscar_carrera(
+        self: Any,
+        pagina: Any,
+        pos_periodo: str,
+        carrera_norm: str,
+        cancelada: CancelCallback | None,
+    ) -> str | None:
+        return NavegadorCactus.buscar_carrera(
+            self,
+            pagina,
+            pos_periodo,
+            carrera_norm,
+            cancelada,
+            verificar_cancelacion=self._verificar_cancelacion,
+            esperar_vista=self._esperar_vista,
+            comprobar_login=self._comprobar_login,
+            clic_siguiente=self._clic_siguiente,
+        )
+
+    def _cursos_de_carrera(
+        self: Any,
+        pagina: Any,
+        pos_carrera: str,
+        carrera: str,
+        periodo: str,
+        cancelada: CancelCallback | None,
+    ) -> list[dict[str, str]]:
+        return NavegadorCactus.cursos_de_carrera(
+            self,
+            pagina,
+            pos_carrera,
+            carrera,
+            periodo,
+            cancelada,
+            verificar_cancelacion=self._verificar_cancelacion,
+            esperar_vista=self._esperar_vista,
+            comprobar_login=self._comprobar_login,
+            clic_siguiente=self._clic_siguiente,
+        )
+
+    def _leer_ciclos(
+        self: Any,
+        pagina: Any,
+        pos_carrera: str,
+        cancelada: CancelCallback | None,
+    ) -> list[tuple[str, str]]:
+        return NavegadorCactus.leer_ciclos(
+            self,
+            pagina,
+            pos_carrera,
+            cancelada,
+            verificar_cancelacion=self._verificar_cancelacion,
+            comprobar_login=self._comprobar_login,
+            clic_siguiente=self._clic_siguiente,
+        )
+
+    def _descargar_por_navegador(
+        self: Any,
+        pagina: Any,
+        info: dict[str, str],
+        directorio_salida: Path,
+    ) -> str | None:
+        return NavegadorCactus.descargar_por_navegador(
+            self,
+            pagina,
+            info,
+            directorio_salida,
+            url_adjunto=self._url_adjunto,
+            url_adjunto_segura=self._url_adjunto_segura,
+        )
+
+    def _clic_siguiente(self: Any, pagina: Any) -> bool:
+        return NavegadorCactus.clic_siguiente(pagina, self._esperar_vista)
