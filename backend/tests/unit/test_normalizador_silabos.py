@@ -547,6 +547,19 @@ def test_rechaza_ruta_insegura_en_zip(tmp_path: Path) -> None:
     assert any(hallazgo.codigo == "RUTA_ZIP_INSEGURA" for hallazgo in validacion.hallazgos)
 
 
+def test_zip_inseguro_no_materializa_archivos(tmp_path: Path) -> None:
+    fuente = tmp_path / "curriculo.zip"
+    with zipfile.ZipFile(fuente, "w") as paquete:
+        paquete.writestr("../fuera.docx", b"no es un docx")
+
+    validacion = validar_archivo(fuente, "Marketing", "2030-1")
+    destino = tmp_path / "fuentes_curriculares"
+
+    assert validacion.valida is False
+    assert limpieza._materializar(fuente, destino, validacion.archivos) == {}
+    assert not destino.exists()
+
+
 def test_ignora_silenciosamente_metadatos_de_macos_en_zip(tmp_path: Path) -> None:
     docx = tmp_path / "curso.docx"
     _crear_docx(docx)
