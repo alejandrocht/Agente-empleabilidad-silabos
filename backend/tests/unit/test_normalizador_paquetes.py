@@ -4,7 +4,7 @@ import json
 import pytest
 
 from agente.normalizador.silabos import paquetes as paquetes_modulo
-from agente.normalizador.silabos import paquetes_componentes
+from agente.normalizador.silabos import paquetes_componentes, paquetes_relaciones
 from agente.normalizador.silabos.paquetes import (
     IdentidadFuenteIncompleta,
     ensamblar_paquetes_chh,
@@ -46,6 +46,29 @@ def test_component_projection_reexports_preserve_canonical_bytes_and_review_hash
     assert paquetes_modulo._component_from_row is paquetes_componentes._component_from_row
     assert paquetes_modulo._unique_components is paquetes_componentes._unique_components
     assert "paquetes" not in paquetes_componentes.__dict__
+    assert paquetes_modulo.PACKAGE_ID_FIELD is paquetes_relaciones.PACKAGE_ID_FIELD
+    assert paquetes_modulo._PackageAssemblyIndex is paquetes_relaciones._PackageAssemblyIndex
+    assert paquetes_modulo._identity_key is paquetes_relaciones._identity_key
+    assert paquetes_modulo._source_relation_matches is paquetes_relaciones._source_relation_matches
+    assert (
+        paquetes_modulo.relaciones_para_paquete_chh
+        is not paquetes_relaciones.relaciones_para_paquete_chh
+    )
+    assert paquetes_relaciones._paquetes_componentes is paquetes_componentes
+    assert "paquetes" not in paquetes_relaciones.__dict__
+
+
+def test_relation_wrappers_inject_facade_package_hash(monkeypatch: pytest.MonkeyPatch):
+    identity = identidad_fuente_chh(
+        _row(), id_ejecucion="NOR_1", carrera="MARKETING", periodo="2026-1"
+    )
+    monkeypatch.setattr(paquetes_modulo, "id_paquete_chh", lambda _: "PKG_MONKEYPATCHED")
+
+    selected = paquetes_modulo.relaciones_fuente_para_paquete_chh(
+        [{**identity, "id_competencia": "COMP_1", "id_habilidad": "HAB_1"}], identity
+    )
+
+    assert selected[0]["id_paquete_chh"] == "PKG_MONKEYPATCHED"
 
 
 def test_package_identity_includes_execution_and_course_context():
