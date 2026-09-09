@@ -414,6 +414,35 @@ def _leer_jsonl(ruta: Path, *, invalid_error: ExceptionFactory) -> list[dict[str
     return filas
 
 
+def _leer_descartes(
+    ruta: Path, *, invalid_error: ExceptionFactory
+) -> dict[str, dict[str, object]]:
+    return {
+        _texto(fila.get("package_id")): fila
+        for fila in _leer_jsonl(ruta, invalid_error=invalid_error)
+        if _texto(fila.get("package_id"))
+    }
+
+
+def _leer_decisiones(
+    ruta: Path, *, invalid_error: ExceptionFactory
+) -> dict[str, dict[str, object]]:
+    return {
+        _texto(fila.get("id_pendiente")): fila
+        for fila in _leer_jsonl(ruta, invalid_error=invalid_error)
+        if _texto(fila.get("id_pendiente"))
+    }
+
+
+def _append_decisiones(ruta: Path, filas: list[dict[str, object]]) -> None:
+    if not filas:
+        return
+    with ruta.open("a", encoding="utf-8", newline="\n") as archivo:
+        for fila in filas:
+            archivo.write(json.dumps(fila, ensure_ascii=False, separators=(",", ":")) + "\n")
+        archivo.flush()
+
+
 def _leer_json_dict(ruta: Path) -> dict[str, object]:
     if not ruta.is_file():
         return {}

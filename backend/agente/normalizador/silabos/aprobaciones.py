@@ -161,6 +161,22 @@ def _leer_jsonl(ruta: Path) -> list[dict[str, object]]:
     )
 
 
+def _leer_descartes(ruta: Path) -> dict[str, dict[str, object]]:
+    return _persistencia_aprobaciones._leer_descartes(
+        ruta, invalid_error=DecisionCurricularInvalida
+    )
+
+
+def _leer_decisiones(ruta: Path) -> dict[str, dict[str, object]]:
+    return _persistencia_aprobaciones._leer_decisiones(
+        ruta, invalid_error=DecisionCurricularInvalida
+    )
+
+
+def _append_decisiones(ruta: Path, filas: list[dict[str, object]]) -> None:
+    _persistencia_aprobaciones._append_decisiones(ruta, filas)
+
+
 def resumen_aprobacion_curricular(
     directorio_ejecucion: Path,
     *,
@@ -1544,31 +1560,6 @@ def _retirar_relaciones_descartadas(
         in activas
         or not fuente_relaciones
     ]
-
-
-def _leer_descartes(ruta: Path) -> dict[str, dict[str, object]]:
-    return {
-        _texto(fila.get("package_id")): fila
-        for fila in _leer_jsonl(ruta)
-        if _texto(fila.get("package_id"))
-    }
-
-
-def _leer_decisiones(ruta: Path) -> dict[str, dict[str, object]]:
-    return {
-        _texto(fila.get("id_pendiente")): fila
-        for fila in _leer_jsonl(ruta)
-        if _texto(fila.get("id_pendiente"))
-    }
-
-
-def _append_decisiones(ruta: Path, filas: list[dict[str, object]]) -> None:
-    if not filas:
-        return
-    with ruta.open("a", encoding="utf-8", newline="\n") as archivo:
-        for fila in filas:
-            archivo.write(json.dumps(fila, ensure_ascii=False, separators=(",", ":")) + "\n")
-        archivo.flush()
 
 
 def _evidencia(fila: dict[str, object]) -> list[object]:

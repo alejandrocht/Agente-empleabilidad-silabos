@@ -298,6 +298,9 @@ def test_persistencia_transaccional_no_importa_ni_reexporta_la_fachada_y_conserv
         ("_rutas_transaccionales", ("directorio",)),
         ("_capturar_arboles", ("roots",)),
         ("_restaurar_arboles", ("roots", "snapshot")),
+        ("_leer_descartes", ("ruta",)),
+        ("_leer_decisiones", ("ruta",)),
+        ("_append_decisiones", ("ruta", "filas")),
     ):
         fachada = getattr(aprobaciones, nombre)
         persistencia = getattr(persistencia_aprobaciones, nombre)
@@ -315,6 +318,43 @@ def test_persistencia_transaccional_no_importa_ni_reexporta_la_fachada_y_conserv
         "roots",
         "not_permitted_error",
     )
+    for nombre in ("_leer_descartes", "_leer_decisiones"):
+        assert tuple(inspect.signature(getattr(persistencia_aprobaciones, nombre)).parameters) == (
+            "ruta",
+            "invalid_error",
+        )
+
+
+def test_diario_jsonl_conserva_bytes_orden_error_e_idempotencia(tmp_path: Path) -> None:
+    decisiones = tmp_path / "decisiones_curriculares.jsonl"
+    descartes = tmp_path / "descartes_paquetes_curriculares.jsonl"
+    filas_decisiones = [
+        {"id_pendiente": "PEN_1", "decision": "ADD", "actor": "Revisión"},
+        {"id_pendiente": "PEN_1", "decision": "KEEP_PENDING", "actor": "Revisión"},
+        {"id_pendiente": "PEN_2", "decision": "DISCARD", "actor": "Revisión"},
+    ]
+    filas_descartes = [
+        {"package_id": "PACK_2", "reason": "Fuera de alcance"},
+        {"package_id": "PACK_1", "reason": "Duplicado"},
+    ]
+
+    aprobaciones._append_decisiones(decisiones, filas_decisiones)
+    aprobaciones._append_decisiones(descartes, filas_descartes)
+
+    assert decisiones.read_bytes() == (
+        b'{"id_pendiente":"PEN_1","decision":"ADD","actor":"Revisi\xc3\xb3n"}\n'
+        b'{"id_pendiente":"PEN_1","decision":"KEEP_PENDING","actor":"Revisi\xc3\xb3n"}\n'
+        b'{"id_pendiente":"PEN_2","decision":"DISCARD","actor":"Revisi\xc3\xb3n"}\n'
+    )
+    assert list(aprobaciones._leer_descartes(descartes)) == ["PACK_2", "PACK_1"]
+    primera_lectura = aprobaciones._leer_decisiones(decisiones)
+    assert primera_lectura == aprobaciones._leer_decisiones(decisiones)
+    assert primera_lectura["PEN_1"] == filas_decisiones[1]
+    assert list(primera_lectura) == ["PEN_1", "PEN_2"]
+
+    decisiones.write_text('{"id_pendiente":"PEN_1"}\n{\n', encoding="utf-8")
+    with pytest.raises(aprobaciones.DecisionCurricularInvalida, match="Reporte JSONL inválido"):
+        aprobaciones._leer_decisiones(decisiones)
 
 
 @pytest.mark.parametrize(
