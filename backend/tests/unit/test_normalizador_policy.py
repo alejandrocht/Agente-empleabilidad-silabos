@@ -72,13 +72,30 @@ def test_concepto_llm_fuera_del_catalogo_queda_pendiente_de_ampliacion(
         evidencia=[descripcion],
         confianza=0.98,
     )
+    id_habilidad_posicional = analista_llm._hash_id("HAB_SRC", "SIL_1", "1", descripcion)
+    decision_posicional = analista_llm.DecisionCurricular(
+        id_habilidad_fuente=id_habilidad_posicional,
+        competencia=analista_llm.ConceptoPropuesto(
+            nombre="Competencia posicional ignorada",
+            descripcion="No debe prevalecer sobre el orden declarado L1.",
+        ),
+        habilidad=analista_llm.ConceptoPropuesto(
+            nombre="Habilidad posicional ignorada",
+            descripcion="No debe prevalecer sobre el orden declarado L1.",
+        ),
+        evidencia=[descripcion],
+        confianza=0.5,
+    )
 
     resultado = construir_salidas_curriculares(
         [registro],
         _validacion(),
         tmp_path / "NOR_TEST",
         CatalogoCHH((), (), (), {}, ("test",), "catalogo-v1"),
-        propuestas_llm={id_habilidad: decision},
+        propuestas_llm={
+            id_habilidad: decision,
+            id_habilidad_posicional: decision_posicional,
+        },
     )
 
     salida = tmp_path / "NOR_TEST" / "salidas"
@@ -93,6 +110,7 @@ def test_concepto_llm_fuera_del_catalogo_queda_pendiente_de_ampliacion(
         .splitlines()
     ]
     pendientes_por_tipo = {fila["tipo"]: fila for fila in pendientes}
+    assert len(pendientes) == 2
     assert pendientes_por_tipo["competencia"]["carrera"] == "MARKETING"
     assert pendientes_por_tipo["competencia"]["periodo"] == "2026-1"
     assert pendientes_por_tipo["competencia"]["estado_resolucion"] == (
@@ -101,6 +119,9 @@ def test_concepto_llm_fuera_del_catalogo_queda_pendiente_de_ampliacion(
     assert pendientes_por_tipo["habilidad"]["estado_resolucion"] == ("PENDIENTE_AMPLIACION_PERFIL")
     assert pendientes_por_tipo["habilidad"]["propuesta"]["nombre"] == (
         "Optimizar campañas omnicanal"
+    )
+    assert pendientes_por_tipo["competencia"]["propuesta"]["nombre"] == (
+        "Diseño de campañas omnicanal"
     )
     assert resultado.relaciones == 0
 

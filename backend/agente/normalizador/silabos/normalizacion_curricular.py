@@ -268,7 +268,21 @@ def normalizar_registros_curriculares(
                 orden_logro,
                 descripcion,
             )
-            propuesta_llm = propuestas_llm.get(id_habilidad_fuente)
+            propuesta_llm = None
+            for orden_propuesta in dict.fromkeys(
+                (
+                    _texto(logro.get("id_logro")),
+                    _texto(logro.get("etiqueta")),
+                    orden_logro,
+                )
+            ):
+                if not orden_propuesta:
+                    continue
+                propuesta_llm = propuestas_llm.get(
+                    _hash_id("HAB_SRC", id_silabo, orden_propuesta, descripcion)
+                )
+                if propuesta_llm is not None:
+                    break
             resolucion_habilidad = _resolver_habilidad_canonica(
                 catalogo_curricular,
                 descripcion,
