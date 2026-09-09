@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from pathlib import Path
 from threading import Event
@@ -13,7 +14,7 @@ from agente.config import settings
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
 from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import ProgresoLimpiezaLLM
-from agente.normalizador.silabos import analista_llm, salida
+from agente.normalizador.silabos import analista_llm, contexto_analista, salida
 
 
 class _LLMFalso:
@@ -194,6 +195,47 @@ def _catalogo_con_herramientas(*herramientas: str) -> CatalogoCHH:
         ejemplos_por_habilidad={},
         origen=("test",),
         version="test",
+    )
+
+
+def test_contexto_analista_reexporta_helpers_y_preserva_modelos_y_prompt() -> None:
+    for nombre in (
+        "_prompt_analista",
+        "_perfil_semantico",
+        "_propuesta_semantica",
+        "_payload_semantico_lote",
+        "_casos_curriculares",
+        "_auditoria_contexto",
+        "_scope_recuperacion_auditable",
+        "_evidencias_programa_analitico",
+        "_deduplicar_evidencias_herramientas",
+    ):
+        assert getattr(analista_llm, nombre) is getattr(contexto_analista, nombre)
+
+    assert analista_llm.DecisionCurricular.__module__ == analista_llm.__name__
+    assert analista_llm.LoteDecisionesCurricularesLLM.__module__ == analista_llm.__name__
+    lote = (
+        {
+            "id_silabo": "SIL_GOLD",
+            "curso": "Analítica",
+            "sumilla": "Decisiones con evidencia.",
+            "logro_general": "Sustentar decisiones.",
+            "logro": "Analizar datos para sustentar decisiones.",
+            "competencias_declaradas": [
+                {"nombre": "Razonamiento analítico", "descripcion": "Evalúa evidencia."}
+            ],
+            "programa_analitico": ["Semana 1 | Datos | Power BI"],
+            "programa_analitico_detalle": [],
+        },
+    )
+    prompt = analista_llm._prompt_analista(
+        lote,
+        {"reglas": ["Usar evidencia."], "hash": "no-viaja"},
+        "ANALITICA",
+        "2026-1",
+    )
+    assert hashlib.sha256(prompt.encode()).hexdigest() == (
+        "79b75c2df02aad1bf7a5cc31b3751b691de015fb0b8eae5b94c31b6051f8ce26"
     )
 
 
@@ -1729,3 +1771,27 @@ def test_historial_de_progreso_se_limita_a_los_ultimos_cien_eventos() -> None:
     assert len(progreso.eventos) == 100
     assert progreso.eventos[0].secuencia == 6
     assert len(progreso.a_dict()["eventos"]) == 100
+
+
+def test_cache_jsonl_hit_preserva_lineage_del_caso(monkeypatch, tmp_path: Path) -> None:
+    logro = "Analizar campañas de marketing"
+    analista = _LLMLoteSecuencialFalso(
+        "gpt-5.6-luna-test", [[_decision_para(logro)]]
+    )
+    monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
+
+    primero = analista_llm.analizar_registros_curriculares(
+        _registros_para(logro), _catalogo_vacio(), "Marketing", "2026-1", tmp_path
+    )
+    cache = tmp_path / "salidas" / "reportes" / "decisiones_llm_cache.jsonl"
+    filas = [json.loads(linea) for linea in cache.read_text(encoding="utf-8").splitlines()]
+    segundo = analista_llm.analizar_registros_curriculares(
+        _registros_para(logro), _catalogo_vacio(), "Marketing", "2026-1", tmp_path
+    )
+
+    esperado = analista_llm._hash_id("HAB_SRC", "SIL_1", "1", logro)
+    assert len(filas) == 1
+    assert filas[0]["clave_lote"]
+    assert list(primero.propuestas) == [esperado]
+    assert list(segundo.propuestas) == [esperado]
+    assert analista.logros_por_llamada == [[logro]]

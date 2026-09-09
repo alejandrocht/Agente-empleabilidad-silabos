@@ -14,7 +14,6 @@ import unicodedata
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import cast
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -22,14 +21,7 @@ from agente.config.settings import (
     ConfiguracionNormalizadorCurricular,
 )
 from agente.llm.fabrica import obtener_llm
-from agente.normalizador.embeddings import (
-    FALLBACK_REASON_CANDIDATES_BELOW_THRESHOLD,
-    FALLBACK_REASON_CATALOG_EMPTY,
-    FALLBACK_REASON_PROVIDER_OR_VECTOR_INVALID,
-    FALLBACK_REASON_RETRIEVER_ABSENT,
-    EmbeddingRetriever,
-    EmbeddingScope,
-)
+from agente.normalizador.embeddings import EmbeddingRetriever, EmbeddingScope
 from agente.normalizador.empleabilidad.catalogo import (
     CatalogoCHH,
     clave_concepto,
@@ -41,15 +33,13 @@ from agente.normalizador.modelos import (
     ProgresoLimpiezaLLM,
     UltimoChunkLimpiezaLLM,
 )
+from agente.normalizador.silabos import contexto_analista as _contexto_analista
 from agente.normalizador.silabos.contexto_curricular import (
     _CLAVES_PERFIL_NO_TRANSPORTABLES,  # noqa: F401
-    _sanear_perfil_transportable,
     construir_contexto_por_logro,
     construir_perfil_para_prompt,
 )
-from agente.normalizador.silabos.entrada import PATRON_PERIODO
 from agente.normalizador.silabos.herramientas import (
-    es_herramienta_concreta,
     herramienta_nueva_evidenciada,
     nombre_herramienta_coincide,
 )
@@ -59,6 +49,35 @@ from agente.normalizador.silabos.politica_curricular import (
     es_competencia_generica,
 )
 from agente.observabilidad.langsmith import invocar_llm
+
+_METODOS_RECUPERACION_AUDITABLES = _contexto_analista._METODOS_RECUPERACION_AUDITABLES
+_REASON_CODES_RECUPERACION_AUDITABLES = _contexto_analista._REASON_CODES_RECUPERACION_AUDITABLES
+_IDENTIFICADOR_AUDITABLE = _contexto_analista._IDENTIFICADOR_AUDITABLE
+_ETIQUETA_SCOPE_AUDITABLE = _contexto_analista._ETIQUETA_SCOPE_AUDITABLE
+_PERIODO_SCOPE_AUDITABLE = _contexto_analista._PERIODO_SCOPE_AUDITABLE
+_FINGERPRINT_AUDITABLE = _contexto_analista._FINGERPRINT_AUDITABLE
+_MARCADORES_SECRETOS = _contexto_analista._MARCADORES_SECRETOS
+_RECURSOS_ENSENANZA_GENERICOS = _contexto_analista._RECURSOS_ENSENANZA_GENERICOS
+_prompt_analista = _contexto_analista._prompt_analista
+_perfil_semantico = _contexto_analista._perfil_semantico
+_propuesta_semantica = _contexto_analista._propuesta_semantica
+_payload_semantico_lote = _contexto_analista._payload_semantico_lote
+_competencias_semanticas = _contexto_analista._competencias_semanticas
+_temas_programa_semanticos = _contexto_analista._temas_programa_semanticos
+_casos_curriculares = _contexto_analista._casos_curriculares
+_auditoria_contexto = _contexto_analista._auditoria_contexto
+_recuperacion_auditable_por_logro = _contexto_analista._recuperacion_auditable_por_logro
+_texto_auditable = _contexto_analista._texto_auditable
+_modelo_auditable = _contexto_analista._modelo_auditable
+_fingerprint_auditable = _contexto_analista._fingerprint_auditable
+_configuracion_auditable = _contexto_analista._configuracion_auditable
+_etiqueta_scope_auditable = _contexto_analista._etiqueta_scope_auditable
+_periodo_scope_auditable = _contexto_analista._periodo_scope_auditable
+_minimum_similarity_auditable = _contexto_analista._minimum_similarity_auditable
+_scope_recuperacion_auditable = _contexto_analista._scope_recuperacion_auditable
+_evidencias_programa_analitico = _contexto_analista._evidencias_programa_analitico
+_deduplicar_evidencias_herramientas = _contexto_analista._deduplicar_evidencias_herramientas
+_programa_es_recurso_no_evidenciable = _contexto_analista._programa_es_recurso_no_evidenciable
 
 
 class ConceptoPropuesto(BaseModel):
@@ -148,25 +167,6 @@ class ResultadoAnalisisCurricular:
     auditoria_contexto: dict[str, object] | None = None
     progreso: ProgresoLimpiezaLLM | None = None
     propuestas: dict[str, DecisionCurricular] = field(default_factory=dict)
-
-
-# A decision is grounded only when the cited syllabus fragment supports the
-# proposed skill. Catalog retrieval deliberately does not participate in this
-# check: a competence can remain a broader abstraction of that skill.
-_METODOS_RECUPERACION_AUDITABLES = frozenset(("embedding", "lexical"))
-_REASON_CODES_RECUPERACION_AUDITABLES = frozenset(
-    (
-        FALLBACK_REASON_RETRIEVER_ABSENT,
-        FALLBACK_REASON_CATALOG_EMPTY,
-        FALLBACK_REASON_PROVIDER_OR_VECTOR_INVALID,
-        FALLBACK_REASON_CANDIDATES_BELOW_THRESHOLD,
-    )
-)
-_IDENTIFICADOR_AUDITABLE = re.compile(r"[A-Za-z0-9_.:-]{1,120}")
-_ETIQUETA_SCOPE_AUDITABLE = re.compile(r"[A-Z0-9_-]{1,80}")
-_PERIODO_SCOPE_AUDITABLE = PATRON_PERIODO
-_FINGERPRINT_AUDITABLE = re.compile(r"[0-9a-f]{16}")
-_MARCADORES_SECRETOS = ("api", "key", "token", "secret", "password", "sk-")
 
 
 _ANCLAS_NO_SEMANTICAS = frozenset(
@@ -327,18 +327,6 @@ _HABILIDADES_GENERICAS = {
     "usar herramientas",
     "analizar información",
 }
-_RECURSOS_ENSENANZA_GENERICOS = {
-    "aula virtual",
-    "diapositivas",
-    "lecturas",
-    "material didactico",
-    "recursos de aprendizaje",
-    "recursos educativos",
-    "video tutorial",
-    "videos tutoriales",
-}
-
-
 def analizar_registros_curriculares(
     registros: list[dict[str, object]],
     catalogo: CatalogoCHH,
@@ -396,6 +384,7 @@ def analizar_registros_curriculares(
             limites_lexicales=limites_lexicales,
             pool_retrieval=pool_retrieval,
             limite_ejemplos=configuracion.limite_ejemplos_contexto,
+            crear_id_habilidad=_hash_id,
         )
     )
     auditoria_contexto = _auditoria_contexto(casos, contexto_perfil)
@@ -753,33 +742,6 @@ def _invocar_analista(
     return _asignar_decisiones_por_orden(lote, respuesta_llm)
 
 
-def _prompt_analista(
-    lote: tuple[dict[str, object], ...],
-    perfil_prompt: dict[str, object],
-    carrera: str,
-    periodo: str,
-) -> str:
-    return (
-        "Eres el analista curricular senior de una universidad. Trabajas con el perfil "
-        f"de {carrera} del periodo {periodo}. El sílabo es la única fuente de verdad.\n\n"
-        "Tu tarea es representar TODOS los logros específicos, no reducirlos a los matches "
-        "del catálogo. Propón una habilidad observable por logro, una competencia profesional "
-        "que agrupe la habilidad y herramientas solo cuando aparezcan en la evidencia. Puedes "
-        "crear conceptos nuevos si el sílabo los respalda. No inventes identificadores ni "
-        "evidencia. No uses "
-        "taxonomías de otra carrera: usa el perfil entregado como contexto específico.\n\n"
-        "Perfil curado y defensivo:\n"
-        f"{json.dumps(_perfil_semantico(perfil_prompt), ensure_ascii=False, indent=2)}\n\n"
-        "Devuelve una decisión por cada logro, en el mismo orden en que aparecen los logros "
-        "del contexto, incluso si requiere_revision=true. No devuelvas identificadores ni códigos "
-        "de control. Incluye el texto literal del logro en el campo logro para que Python valide "
-        "la correspondencia; ese texto no es un identificador. "
-        "La habilidad debe comenzar con una acción profesional y tener verbo + objeto. La "
-        "evidencia debe copiar fragmentos exactos del caso.\n\n"
-        f"CASOS:\n{json.dumps(_payload_semantico_lote(lote), ensure_ascii=False, indent=2)}"
-    )
-
-
 def _asignar_decisiones_por_orden(
     lote: tuple[dict[str, object], ...],
     respuesta: LoteDecisionesCurricularesLLM,
@@ -878,384 +840,6 @@ def _clave_logro_literal(valor: object) -> str:
 
     texto = unicodedata.normalize("NFKC", str(valor or "")).replace(" ", " ")
     return re.sub(r"\s+", " ", texto).strip().casefold()
-
-
-def _perfil_semantico(perfil_prompt: Mapping[str, object]) -> dict[str, object]:
-    """El perfil aporta reglas de negocio, no revisiones ni huellas internas."""
-
-    resultado = _sanear_perfil_transportable(perfil_prompt)
-    return cast(dict[str, object], resultado)
-
-
-def _propuesta_semantica(decision: DecisionCurricular) -> dict[str, object]:
-    """Proyecta una propuesta inspeccionable sin exponer linaje interno."""
-
-    return {
-        "competencia": decision.competencia.model_dump(mode="json"),
-        "habilidad": decision.habilidad.model_dump(mode="json"),
-        "herramientas": [
-            herramienta.model_dump(mode="json") for herramienta in decision.herramientas
-        ],
-        "evidencia": decision.evidencia,
-        "justificacion": decision.justificacion,
-        "confianza": decision.confianza,
-        "requiere_revision": decision.requiere_revision,
-    }
-
-
-def _payload_semantico_lote(lote: tuple[dict[str, object], ...]) -> list[dict[str, object]]:
-    """Agrupa el contexto de cada sílabo y deja los IDs exclusivamente en Python."""
-
-    contextos: dict[str, dict[str, object]] = {}
-    for indice, caso in enumerate(lote):
-        clave = str(caso.get("id_silabo") or f"orden-{indice}")
-        contexto = contextos.get(clave)
-        if contexto is None:
-            contexto = {
-                "curso": str(caso.get("curso") or ""),
-                "sumilla": str(caso.get("sumilla") or ""),
-                "logro_general": str(caso.get("logro_general") or ""),
-                "competencias_declaradas": _competencias_semanticas(
-                    caso.get("competencias_declaradas")
-                ),
-                "temas_programa": _temas_programa_semanticos(caso),
-                "logros_especificos": [],
-            }
-            contextos[clave] = contexto
-        logros = cast(list[str], contexto["logros_especificos"])
-        logro = str(caso.get("logro") or "").strip()
-        if logro:
-            logros.append(logro)
-    return list(contextos.values())
-
-
-def _competencias_semanticas(valor: object) -> list[dict[str, str]]:
-    if not isinstance(valor, list):
-        return []
-    competencias: list[dict[str, str]] = []
-    for item in valor:
-        if not isinstance(item, Mapping):
-            continue
-        nombre = str(item.get("nombre") or "").strip()
-        descripcion = str(item.get("descripcion") or "").strip()
-        if nombre or descripcion:
-            competencias.append({"nombre": nombre, "descripcion": descripcion})
-    return competencias
-
-
-def _temas_programa_semanticos(caso: Mapping[str, object]) -> list[str]:
-    detalle = caso.get("programa_analitico_detalle")
-    filas = detalle if isinstance(detalle, list) and detalle else caso.get("programa_analitico")
-    if not isinstance(filas, list):
-        return []
-    temas: list[str] = []
-    for fila in filas:
-        if isinstance(fila, Mapping):
-            tema = re.sub(r"\s+", " ", str(fila.get("tema") or "")).strip()
-            contenido = re.sub(r"\s+", " ", str(fila.get("contenido") or "")).strip()
-            if tema or contenido:
-                texto = " | ".join(parte for parte in (tema, contenido) if parte)
-            else:
-                texto = str(fila.get("texto") or "")
-        else:
-            texto = str(fila or "")
-        texto = re.sub(r"^\s*Semana\s+\d+\s*\|\s*", "", texto, flags=re.IGNORECASE)
-        if isinstance(fila, Mapping) and not (fila.get("tema") or fila.get("contenido")):
-            texto = re.sub(r"\s+\d+(?:[.,]\d+)?\s*$", "", texto).strip()
-        if texto:
-            temas.append(texto)
-    return temas
-
-
-def _casos_curriculares(
-    registros: list[dict[str, object]],
-    catalogo: CatalogoCHH,
-    perfil: dict[str, object],
-    *,
-    retriever: EmbeddingRetriever | None = None,
-    embedding_scope: EmbeddingScope | None = None,
-    limites_candidatos: Mapping[str, int] | None = None,
-    limites_lexicales: Mapping[str, int] | None = None,
-    pool_retrieval: int | None = None,
-    limite_ejemplos: int = 3,
-) -> Iterable[dict[str, object]]:
-    for registro in registros:
-        datos = registro.get("datos")
-        if not isinstance(datos, dict):
-            continue
-        id_silabo = str(registro.get("id_silabo") or "")
-        declaraciones = datos.get("competencias_declaradas")
-        outcomes = datos.get("logros_especificos")
-        if not isinstance(outcomes, list):
-            continue
-        contexto = " ".join(
-            str(datos.get(campo) or "")
-            for campo in ("curso", "sumilla", "logro_general", "texto_relevante")
-        )
-        for indice_logro, logro in enumerate(outcomes, start=1):
-            if not isinstance(logro, dict):
-                continue
-            descripcion = str(logro.get("descripcion") or "").strip()
-            if not descripcion:
-                continue
-            orden_logro = str(logro.get("orden") or indice_logro)
-            id_habilidad = _hash_id("HAB_SRC", id_silabo, orden_logro, descripcion)
-            evidencia_herramientas = datos.get("herramientas_evidencia")
-            evidencias_estructuradas = (
-                list(evidencia_herramientas) if isinstance(evidencia_herramientas, list) else []
-            )
-            evidencias_estructuradas.extend(_evidencias_programa_analitico(datos))
-            evidencias_estructuradas = _deduplicar_evidencias_herramientas(evidencias_estructuradas)
-            evidencias_candidatas = [
-                *evidencias_estructuradas,
-                {"seccion": "Logro de aprendizaje", "texto": descripcion},
-            ]
-            herramientas: list[str] = []
-            for item in evidencias_estructuradas:
-                if not isinstance(item, dict):
-                    continue
-                texto = str(item.get("texto") or "")
-                herramientas.extend(
-                    concepto.nombre
-                    for concepto in catalogo.buscar(texto).get("herramienta", ())
-                    if es_herramienta_concreta(concepto.nombre)
-                )
-            caso: dict[str, object] = {
-                "id_habilidad_fuente": id_habilidad,
-                "id_silabo": id_silabo,
-                "curso": str(datos.get("curso") or ""),
-                "sumilla": str(datos.get("sumilla") or ""),
-                "logro_general": str(datos.get("logro_general") or ""),
-                "logro": descripcion,
-                "competencias_declaradas": declaraciones if isinstance(declaraciones, list) else [],
-                "programa_analitico": datos.get("programa_analitico")
-                if isinstance(datos.get("programa_analitico"), list)
-                else [],
-                "programa_analitico_detalle": datos.get("programa_analitico_detalle")
-                if isinstance(datos.get("programa_analitico_detalle"), list)
-                else [],
-                "contenido_relacionado": contexto[:5000],
-                "herramientas_detectadas": sorted(set(herramientas)),
-                "evidencia_herramientas": evidencias_estructuradas,
-                "evidencia_herramientas_candidata": evidencias_candidatas,
-            }
-            caso["contexto_recuperado"] = construir_contexto_por_logro(
-                caso,
-                catalogo,
-                perfil,
-                retriever=retriever,
-                embedding_scope=embedding_scope,
-                limites_candidatos=limites_candidatos,
-                limites_lexicales=limites_lexicales,
-                pool_retrieval=pool_retrieval,
-                limite_ejemplos=limite_ejemplos,
-            )
-            yield caso
-
-
-def _auditoria_contexto(
-    casos: tuple[dict[str, object], ...],
-    contexto_perfil: dict[str, object],
-) -> dict[str, object]:
-    """Persist only the retrieval metadata needed to audit each logro safely."""
-
-    perfil = cast(dict[str, str], contexto_perfil["perfil_referencia"])
-    recuperacion_por_logro = tuple(
-        recuperacion
-        for caso in casos
-        if (recuperacion := _recuperacion_auditable_por_logro(caso)) is not None
-    )
-    fingerprints = [item["fingerprint"] for item in recuperacion_por_logro]
-    payload = json.dumps(fingerprints, ensure_ascii=False, separators=(",", ":"))
-    return {
-        "version_contexto": contexto_perfil["version_contexto"],
-        "version_catalogo": cast(dict[str, object], contexto_perfil["catalogo"])["version"],
-        "estado_perfil": perfil["estado"],
-        "revision_perfil": perfil["revision"],
-        "hash_perfil": perfil["hash"],
-        "hash_contextos": hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16],
-        "recuperacion_por_logro": list(recuperacion_por_logro),
-    }
-
-
-def _recuperacion_auditable_por_logro(
-    caso: dict[str, object],
-) -> dict[str, object] | None:
-    """Project a per-logro context into a deliberately narrow audit record."""
-
-    contexto = caso.get("contexto_recuperado")
-    if not isinstance(contexto, dict):
-        return None
-    recuperacion = contexto.get("recuperacion")
-    if not isinstance(recuperacion, dict):
-        return None
-    id_habilidad = _texto_auditable(caso.get("id_habilidad_fuente"))
-    fingerprint = _fingerprint_auditable(contexto.get("fingerprint"))
-    if id_habilidad is None or fingerprint is None:
-        return None
-    method = recuperacion.get("method")
-    reason_code = recuperacion.get("reason_code")
-    return {
-        "id_habilidad_fuente": id_habilidad,
-        "fingerprint": fingerprint,
-        "method": method if method in _METODOS_RECUPERACION_AUDITABLES else None,
-        "reason_code": (
-            reason_code if reason_code in _REASON_CODES_RECUPERACION_AUDITABLES else None
-        ),
-        "scope": _scope_recuperacion_auditable(recuperacion.get("scope")),
-        "model": _modelo_auditable(recuperacion.get("model")),
-        "config": _configuracion_auditable(recuperacion.get("config")),
-        "minimum_similarity": _minimum_similarity_auditable(recuperacion.get("minimum_similarity")),
-    }
-
-
-def _texto_auditable(valor: object) -> str | None:
-    texto = str(valor or "")
-    return texto if _IDENTIFICADOR_AUDITABLE.fullmatch(texto) else None
-
-
-def _modelo_auditable(valor: object) -> str | None:
-    texto = _texto_auditable(valor)
-    if texto is None or any(marcador in texto.casefold() for marcador in _MARCADORES_SECRETOS):
-        return None
-    return texto
-
-
-def _fingerprint_auditable(valor: object) -> str | None:
-    texto = str(valor or "")
-    return texto if _FINGERPRINT_AUDITABLE.fullmatch(texto) else None
-
-
-def _configuracion_auditable(valor: object) -> str | None:
-    texto = str(valor or "")
-    if not texto.startswith("provider:"):
-        return None
-    return texto if _FINGERPRINT_AUDITABLE.fullmatch(texto.removeprefix("provider:")) else None
-
-
-def _etiqueta_scope_auditable(valor: object) -> str | None:
-    texto = str(valor or "")
-    return texto if _ETIQUETA_SCOPE_AUDITABLE.fullmatch(texto) else None
-
-
-def _periodo_scope_auditable(valor: object) -> str | None:
-    texto = str(valor or "")
-    return texto if _PERIODO_SCOPE_AUDITABLE.fullmatch(texto) else None
-
-
-def _minimum_similarity_auditable(valor: object) -> float | None:
-    """Keep only the safe threshold actually applied by the retriever."""
-
-    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
-        return None
-    minimo = float(valor)
-    return minimo if 0.0 <= minimo < 1.0 else None
-
-
-def _scope_recuperacion_auditable(valor: object) -> dict[str, object] | None:
-    if not isinstance(valor, dict):
-        return None
-    scope_kind = valor.get("scope_kind")
-    source_kinds = valor.get("source_kinds")
-    career = _etiqueta_scope_auditable(valor.get("career"))
-    period = _periodo_scope_auditable(valor.get("period"))
-    if (
-        scope_kind == "career_curriculum"
-        and source_kinds == ["career_curriculum"]
-        and career is not None
-        and period is not None
-    ):
-        return {
-            "scope_kind": scope_kind,
-            "career": career,
-            "period": period,
-            "source_kinds": source_kinds,
-        }
-    if scope_kind == "labor_global" and source_kinds == ["labor"]:
-        return {
-            "scope_kind": scope_kind,
-            "career": None,
-            "period": None,
-            "source_kinds": source_kinds,
-        }
-    return None
-
-
-def _evidencias_programa_analitico(datos: dict[str, object]) -> list[dict[str, str]]:
-    """Expone solo contenido curricular útil como evidencia estructurada de herramientas."""
-
-    detalle = datos.get("programa_analitico_detalle")
-    if isinstance(detalle, list):
-        evidencias_detalle: list[dict[str, str]] = []
-        for fila in detalle:
-            if not isinstance(fila, dict):
-                continue
-            texto = str(fila.get("texto") or "").strip()
-            clave = clave_concepto(texto)
-            if not texto or _programa_es_recurso_no_evidenciable(texto, clave):
-                continue
-            evidencias_detalle.append(
-                {
-                    "origen": "programa_analitico",
-                    "seccion": "programa_analitico",
-                    "texto": texto,
-                }
-            )
-        if evidencias_detalle:
-            return evidencias_detalle
-
-    programa = datos.get("programa_analitico")
-    if not isinstance(programa, list):
-        return []
-    evidencias: list[dict[str, str]] = []
-    for item in programa:
-        texto = str(item).strip()
-        clave = clave_concepto(texto)
-        if not texto or _programa_es_recurso_no_evidenciable(texto, clave):
-            continue
-        evidencias.append(
-            {
-                "origen": "programa_analitico",
-                "seccion": "programa_analitico",
-                "texto": texto,
-            }
-        )
-    return evidencias
-
-
-def _deduplicar_evidencias_herramientas(
-    evidencias: list[object],
-) -> list[dict[str, str]]:
-    """Preserva la primera evidencia trazable de cada fila curricular."""
-
-    resultado: list[dict[str, str]] = []
-    vistos: set[str] = set()
-    for item in evidencias:
-        if not isinstance(item, dict):
-            continue
-        seccion = str(item.get("seccion") or "").strip()
-        origen = str(item.get("origen") or "").strip()
-        texto = str(item.get("texto") or "").strip()
-        clave = clave_concepto(texto)
-        if seccion and texto and clave and clave not in vistos:
-            vistos.add(clave)
-            evidencia = {"seccion": seccion, "texto": texto}
-            if origen:
-                evidencia["origen"] = origen
-            resultado.append(evidencia)
-    return resultado
-
-
-def _programa_es_recurso_no_evidenciable(texto: str, clave: str) -> bool:
-    texto_minusculas = texto.lower()
-    return (
-        "bibliografia" in clave
-        or "referencia bibliografica" in clave
-        or "http://" in texto_minusculas
-        or "https://" in texto_minusculas
-        or "www." in texto_minusculas
-        or any(recurso in clave for recurso in _RECURSOS_ENSENANZA_GENERICOS)
-    )
 
 
 def _validar_decision(
