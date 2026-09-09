@@ -20,6 +20,7 @@ from agente.normalizador.modelos import ArchivoSilabo, ResultadoValidacionSilabo
 from agente.normalizador.silabos import (
     analista_llm,
     aprobaciones,
+    mutaciones_aprobaciones,
     persistencia_aprobaciones,
     post_hitl_aprobaciones,
     transaccion_aprobaciones,
@@ -432,6 +433,72 @@ def test_transaccion_no_importa_ni_reexporta_la_fachada_y_recibe_adaptadores() -
         "_retirar_relaciones_descartadas",
     ):
         assert getattr(aprobaciones, nombre) is not getattr(transaccion_aprobaciones, nombre)
+
+
+def test_mutaciones_no_importa_la_fachada_y_transaccion_reexporta_sus_adaptadores() -> None:
+    imports = ast.walk(ast.parse(inspect.getsource(mutaciones_aprobaciones)))
+    modulos_prohibidos = {
+        "agente.normalizador.silabos.aprobaciones",
+        "agente.normalizador.silabos.transaccion_aprobaciones",
+    }
+    assert not any(
+        (
+            isinstance(nodo, ast.ImportFrom)
+            and nodo.module in modulos_prohibidos
+        )
+        or (
+            isinstance(nodo, ast.Import)
+            and any(alias.name in modulos_prohibidos for alias in nodo.names)
+        )
+        for nodo in imports
+    )
+    for nombre in (
+        "_promover",
+        "_añadir_relaciones_de_evidencia",
+        "_upsert",
+        "_upsert_fuente",
+        "_upsert_relacion",
+        "_auditoria_descarte_paquete",
+        "_retirar_relaciones_descartadas",
+        "_evidencia",
+    ):
+        assert getattr(transaccion_aprobaciones, nombre) is getattr(mutaciones_aprobaciones, nombre)
+        assert getattr(aprobaciones, nombre) is not getattr(mutaciones_aprobaciones, nombre)
+    for nombre, parametros in (
+        (
+            "_promover",
+            ("fila", "propuesta", "manifest", "archivos", "fuentes", "relaciones"),
+        ),
+        (
+            "_añadir_relaciones_de_evidencia",
+            ("fila", "tipo", "id_canonico", "archivos", "fuentes", "relaciones"),
+        ),
+        ("_upsert", ("filas", "columna_nombre", "fila")),
+        ("_upsert_fuente", ("filas", "columna_id", "fila")),
+        (
+            "_upsert_relacion",
+            (
+                "relaciones",
+                "id_curso",
+                "id_silabo",
+                "id_competencia",
+                "id_habilidad",
+                "id_herramienta",
+                "lineage",
+            ),
+        ),
+        (
+            "_auditoria_descarte_paquete",
+            ("package_id", "filas", "manifest", "actor", "decidido_en", "reason"),
+        ),
+        ("_retirar_relaciones_descartadas", ("relaciones", "fuentes", "descartes")),
+        ("_evidencia", ("fila",)),
+    ):
+        assert tuple(inspect.signature(getattr(aprobaciones, nombre)).parameters) == parametros
+        assert (
+            tuple(inspect.signature(getattr(mutaciones_aprobaciones, nombre)).parameters)
+            == parametros
+        )
 
 
 def test_diario_jsonl_conserva_bytes_orden_error_e_idempotencia(tmp_path: Path) -> None:
