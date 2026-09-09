@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ast
 import csv
+import inspect
 import json
 import re
 from collections.abc import Mapping, Sequence
@@ -15,7 +17,7 @@ from agente.api import normalizador, servidor
 from agente.normalizador.ejecuciones import GestorEjecuciones
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
 from agente.normalizador.modelos import ArchivoSilabo, ResultadoValidacionSilabos
-from agente.normalizador.silabos import analista_llm, aprobaciones
+from agente.normalizador.silabos import analista_llm, aprobaciones, validacion_aprobaciones
 from agente.normalizador.silabos.analista_llm import ConceptoPropuesto, DecisionCurricular
 from agente.normalizador.silabos.salida import construir_salidas_curriculares
 
@@ -110,6 +112,64 @@ def _preparar(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, st
     )
     monkeypatch.setattr(aprobaciones, "ruta_catalogos", lambda: tmp_path / "catalogos")
     return directorio, id_ejecucion
+
+
+def _arbol_de_bytes(*roots: Path) -> dict[Path, bytes]:
+    return {
+        ruta: ruta.read_bytes()
+        for root in roots
+        if root.is_dir()
+        for ruta in root.rglob("*")
+        if ruta.is_file() and not ruta.is_symlink()
+    }
+
+
+def test_validacion_reexporta_misma_identidad_y_no_importa_la_fachada() -> None:
+    for nombre in (
+        "DECISIONES_VALIDAS",
+        "DecisionCurricularInvalida",
+        "AprobacionNoPermitida",
+        "RevisionCurricularInvalida",
+        "_expandir_decisiones_de_paquete",
+        "_validar_solicitudes",
+        "_validar_precondiciones_promocion",
+    ):
+        fachada = getattr(aprobaciones, nombre)
+        validacion = getattr(validacion_aprobaciones, nombre)
+        assert fachada is validacion
+        if inspect.isfunction(fachada):
+            assert inspect.signature(fachada) == inspect.signature(validacion)
+    imports = ast.walk(ast.parse(inspect.getsource(validacion_aprobaciones)))
+    assert not any(
+        isinstance(nodo, ast.ImportFrom)
+        and nodo.module == "agente.normalizador.silabos.aprobaciones"
+        for nodo in imports
+    )
+
+
+def test_error_tardio_restaura_el_arbol_de_bytes_de_aprobacion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directorio, _ = _preparar(tmp_path, monkeypatch)
+    perfil = tmp_path / "catalogos" / "carreras" / "MARKETING" / "2026-1"
+    perfil.mkdir(parents=True)
+    antes = _arbol_de_bytes(directorio, perfil)
+
+    def fallar_manifest(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("fallo de manifest simulado")
+
+    monkeypatch.setattr(aprobaciones, "_persistir_manifest_aprobacion", fallar_manifest)
+
+    with pytest.raises(RuntimeError, match="fallo de manifest simulado"):
+        aprobaciones.aplicar_decisiones_curriculares(
+            directorio,
+            [
+                {"id_pendiente": "PEN_COMP", "decision": "ADD"},
+                {"id_pendiente": "PEN_TOOL", "decision": "KEEP_PENDING"},
+            ],
+        )
+
+    assert _arbol_de_bytes(directorio, perfil) == antes
 
 
 def test_aprobar_y_mantener_pendiente_promueve_solo_al_perfil_y_conserva_evidencia(
