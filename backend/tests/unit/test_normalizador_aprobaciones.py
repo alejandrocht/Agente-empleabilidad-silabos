@@ -22,6 +22,7 @@ from agente.normalizador.silabos import (
     aprobaciones,
     persistencia_aprobaciones,
     post_hitl_aprobaciones,
+    transaccion_aprobaciones,
     validacion_aprobaciones,
 )
 from agente.normalizador.silabos.analista_llm import ConceptoPropuesto, DecisionCurricular
@@ -379,6 +380,58 @@ def test_persistencia_transaccional_no_importa_ni_reexporta_la_fachada_y_conserv
             "ruta",
             "invalid_error",
         )
+
+
+def test_transaccion_no_importa_ni_reexporta_la_fachada_y_recibe_adaptadores() -> None:
+    imports = ast.walk(ast.parse(inspect.getsource(transaccion_aprobaciones)))
+    assert not any(
+        (
+            isinstance(nodo, ast.ImportFrom)
+            and nodo.module == "agente.normalizador.silabos.aprobaciones"
+        )
+        or (
+            isinstance(nodo, ast.Import)
+            and any(
+                alias.name == "agente.normalizador.silabos.aprobaciones"
+                for alias in nodo.names
+            )
+        )
+        for nodo in imports
+    )
+    for nombre in (
+        "AprobacionNoPermitida",
+        "DecisionCurricularInvalida",
+        "RevisionCurricularInvalida",
+        "ARCHIVOS_SALIDA",
+        "DECISIONES_VALIDAS",
+    ):
+        assert not hasattr(transaccion_aprobaciones, nombre)
+    assert tuple(inspect.signature(aprobaciones.aplicar_decisiones_curriculares).parameters) == (
+        "directorio_ejecucion",
+        "decisiones",
+        "actor",
+        "revision",
+    )
+    assert tuple(
+        inspect.signature(transaccion_aprobaciones.aplicar_decisiones_curriculares).parameters
+    ) == (
+        "directorio_ejecucion",
+        "decisiones",
+        "actor",
+        "revision",
+        "catalog_root",
+        "approval_summary",
+        "hooks",
+    )
+    for nombre in (
+        "_filas_clasificadas",
+        "_paquetes",
+        "_promover",
+        "_añadir_relaciones_de_evidencia",
+        "_auditoria_descarte_paquete",
+        "_retirar_relaciones_descartadas",
+    ):
+        assert getattr(aprobaciones, nombre) is not getattr(transaccion_aprobaciones, nombre)
 
 
 def test_diario_jsonl_conserva_bytes_orden_error_e_idempotencia(tmp_path: Path) -> None:

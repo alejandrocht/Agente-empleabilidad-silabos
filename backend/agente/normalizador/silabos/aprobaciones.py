@@ -8,38 +8,20 @@ la proveniencia y los artefactos derivados se actualicen juntos.
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
 
-from agente.normalizador.empleabilidad.catalogo import clave_concepto, ruta_catalogos
+from agente.normalizador.empleabilidad.catalogo import ruta_catalogos
+from agente.normalizador.silabos import clasificacion as _clasificacion
+from agente.normalizador.silabos import paquetes as _paquetes_chh
 from agente.normalizador.silabos import persistencia_aprobaciones as _persistencia_aprobaciones
 from agente.normalizador.silabos import post_hitl_aprobaciones as _post_hitl_aprobaciones
 from agente.normalizador.silabos import presentacion_aprobaciones as _presentacion_aprobaciones
 from agente.normalizador.silabos import salida as _salida
+from agente.normalizador.silabos import transaccion_aprobaciones as _transaccion
 from agente.normalizador.silabos import validacion_aprobaciones as _validacion_aprobaciones
-from agente.normalizador.silabos.clasificacion import (
-    clasificar_propuestas,
-    estado_clasificacion,
-    puede_recibir_decision,
-    requiere_resolucion_curricular,
-    resumen_clasificacion,
-)
-from agente.normalizador.silabos.paquetes import (
-    PACKAGE_ID_FIELD,
-    IdentidadFuenteIncompleta,
-    ensamblar_paquetes_chh,
-    identidad_fuente_chh,
-    preparar_fila_paquete,
-    revision_paquetes_chh,
-)
-from agente.normalizador.silabos.politica_curricular import (
-    MOTIVO_COMPETENCIA_GENERICA,
-    es_competencia_generica,
-)
 
 ARCHIVOS_SALIDA = _salida.ARCHIVOS_SALIDA
 COBERTURA_SCHEMA = _salida.COBERTURA_SCHEMA
@@ -54,6 +36,19 @@ RevisionCurricularInvalida = _validacion_aprobaciones.RevisionCurricularInvalida
 _expandir_decisiones_de_paquete = _validacion_aprobaciones._expandir_decisiones_de_paquete
 _validar_precondiciones_promocion = _validacion_aprobaciones._validar_precondiciones_promocion
 _validar_solicitudes = _validacion_aprobaciones._validar_solicitudes
+
+clasificar_propuestas = _clasificacion.clasificar_propuestas
+estado_clasificacion = _clasificacion.estado_clasificacion
+puede_recibir_decision = _clasificacion.puede_recibir_decision
+requiere_resolucion_curricular = _clasificacion.requiere_resolucion_curricular
+resumen_clasificacion = _clasificacion.resumen_clasificacion
+
+PACKAGE_ID_FIELD = _paquetes_chh.PACKAGE_ID_FIELD
+IdentidadFuenteIncompleta = _paquetes_chh.IdentidadFuenteIncompleta
+ensamblar_paquetes_chh = _paquetes_chh.ensamblar_paquetes_chh
+identidad_fuente_chh = _paquetes_chh.identidad_fuente_chh
+preparar_fila_paquete = _paquetes_chh.preparar_fila_paquete
+revision_paquetes_chh = _paquetes_chh.revision_paquetes_chh
 
 _alias_para_presentacion_api = _presentacion_aprobaciones._alias_para_presentacion_api
 _campos_para_presentacion_api = _presentacion_aprobaciones._campos_para_presentacion_api
@@ -140,9 +135,7 @@ def _eliminar_archivos_curriculares(salida: Path) -> None:
     )
 
 
-def _escribir_relaciones(
-    salida: Path, reportes: Path, relaciones: list[dict[str, object]]
-) -> None:
+def _escribir_relaciones(salida: Path, reportes: Path, relaciones: list[dict[str, object]]) -> None:
     _persistencia_aprobaciones._escribir_relaciones(
         salida,
         reportes,
@@ -152,9 +145,7 @@ def _escribir_relaciones(
 
 
 def _leer_jsonl(ruta: Path) -> list[dict[str, object]]:
-    return _persistencia_aprobaciones._leer_jsonl(
-        ruta, invalid_error=DecisionCurricularInvalida
-    )
+    return _persistencia_aprobaciones._leer_jsonl(ruta, invalid_error=DecisionCurricularInvalida)
 
 
 def _leer_descartes(ruta: Path) -> dict[str, dict[str, object]]:
@@ -298,6 +289,44 @@ def paquetes_para_revision(directorio_ejecucion: Path) -> list[dict[str, object]
     ]
 
 
+def _hooks() -> dict[str, object]:
+    """Expose facade seams to the transaction without creating an import cycle."""
+
+    return {
+        "_LOCK": _LOCK,
+        "_validar_directorio": _validar_directorio,
+        "_rutas_transaccionales": _rutas_transaccionales,
+        "_capturar_arboles": _capturar_arboles,
+        "_restaurar_arboles": _restaurar_arboles,
+        "_leer_manifest": _leer_manifest,
+        "_filas_clasificadas": _filas_clasificadas,
+        "_paquetes": _paquetes,
+        "_leer_decisiones": _leer_decisiones,
+        "_leer_descartes": _leer_descartes,
+        "_validar_alcance_pendiente": _validar_alcance_pendiente,
+        "_cargar_candidatos": _cargar_candidatos,
+        "_cargar_archivos_curriculares": _cargar_archivos_curriculares,
+        "_cargar_fuentes": _cargar_fuentes,
+        "_cargar_relaciones": _cargar_relaciones,
+        "_promover": _promover,
+        "_auditoria_descarte_paquete": _auditoria_descarte_paquete,
+        "_retirar_relaciones_descartadas": _retirar_relaciones_descartadas,
+        "_escribir_fuentes": _escribir_fuentes,
+        "_escribir_relaciones": _escribir_relaciones,
+        "_escribir_jsonl_atomico": _escribir_jsonl_atomico,
+        "_escribir_candidatos": _escribir_candidatos,
+        "_recalcular_release_gate": _recalcular_release_gate,
+        "_estado_estructural_materializable": _estado_estructural_materializable,
+        "_escribir_archivos_curriculares": _escribir_archivos_curriculares,
+        "_eliminar_archivos_curriculares": _eliminar_archivos_curriculares,
+        "_escribir_json_atomico": _escribir_json_atomico,
+        "_append_decisiones": _append_decisiones,
+        "_puede_materializar_perfil": _puede_materializar_perfil,
+        "_materializar_perfil": _materializar_perfil,
+        "_persistir_manifest_aprobacion": _persistir_manifest_aprobacion,
+    }
+
+
 def _aplicar_decisiones_curriculares(
     directorio_ejecucion: Path,
     decisiones: list[dict[str, object]],
@@ -305,253 +334,15 @@ def _aplicar_decisiones_curriculares(
     actor: str = "ejecutor",
     revision: str | None = None,
 ) -> dict[str, object]:
-    """Aplica decisiones idempotentes y materializa el perfil curricular.
-
-    ``ADD`` promueve únicamente al perfil de carrera/periodo. ``KEEP_PENDING``
-    deja la propuesta y su evidencia fuera de los CSV canónicos. Ambas ramas
-    quedan registradas en un JSONL de decisiones para que una repetición de la
-    misma petición no duplique filas ni decisiones. ``DISCARD`` is package-only
-    and preserves a separate audit record while removing that package from the
-    active approval projection.
-    """
-
-    directorio = _validar_directorio(directorio_ejecucion)
-    actor_normalizado = _texto(actor)[:200] or "ejecutor"
-    solicitudes = _validar_solicitudes(decisiones)
-    with _LOCK:
-        manifest = _leer_manifest(directorio)
-        estado = _texto(manifest.get("estado"))
-        if estado not in ESTADOS_APROBACION:
-            raise AprobacionNoPermitida(
-                "La aprobación solo está disponible cuando la ejecución ha terminado "
-                f"correctamente; estado actual: {estado or 'desconocido'}."
-            )
-
-        reportes = directorio / "salidas" / "reportes"
-        reportes.mkdir(parents=True, exist_ok=True)
-        pendientes = _filas_clasificadas(directorio)
-        paquetes_actuales = _paquetes(directorio, pendientes)
-        revision_actual = revision_paquetes_chh(paquetes_actuales)
-        if revision and revision != revision_actual:
-            raise RevisionCurricularInvalida(
-                "La cola de paquetes cambió; recarga la revisión curricular antes de decidir."
-            )
-        solicitudes = _expandir_decisiones_de_paquete(solicitudes, pendientes)
-        por_id = {str(fila.get("id_pendiente")): fila for fila in pendientes}
-        decisiones_previas = _leer_decisiones(reportes / DECISIONES_ARCHIVO)
-        descartes_previos = _leer_descartes(reportes / DESCARTES_ARCHIVO)
-
-        for solicitud in solicitudes:
-            id_pendiente = solicitud["id_pendiente"]
-            decision = solicitud["decision"]
-            if id_pendiente not in por_id:
-                raise DecisionCurricularInvalida(
-                    f"No existe el pendiente {id_pendiente!r} en esta ejecución."
-                )
-            if por_id[id_pendiente].get("package_identity_error"):
-                raise DecisionCurricularInvalida(
-                    _texto(por_id[id_pendiente].get("package_identity_error"))
-                    or "El pendiente no tiene una identidad de relación fuente segura."
-                )
-            _validar_alcance_pendiente(por_id[id_pendiente], manifest)
-            if (
-                estado_clasificacion(por_id[id_pendiente]).auto_deduplicated
-                and decision != "DISCARD"
-            ):
-                representante = _texto(estado_clasificacion(por_id[id_pendiente]).representative_id)
-                raise DecisionCurricularInvalida(
-                    f"El pendiente {id_pendiente!r} fue deduplicado automáticamente; "
-                    f"decida únicamente su representante {representante or 'determinista'}."
-                )
-            previa = decisiones_previas.get(id_pendiente)
-            actual = _texto(por_id[id_pendiente].get("decision"))
-            if previa is not None or actual:
-                decision_previa = _texto((previa or por_id[id_pendiente]).get("decision"))
-                if decision_previa != decision:
-                    raise DecisionCurricularInvalida(
-                        f"El pendiente {id_pendiente!r} ya tiene una decisión distinta."
-                    )
-
-        ahora = datetime.now(UTC).isoformat()
-        filas_aceptadas = 0
-        filas_mantenidas = 0
-        filas_descartadas = 0
-        nuevas_decisiones: list[dict[str, object]] = []
-        nuevos_descartes: list[dict[str, object]] = []
-        candidatos = _cargar_candidatos(reportes)
-        archivos = candidatos or _cargar_archivos_curriculares(directorio / "salidas")
-        fuentes = _cargar_fuentes(reportes)
-        relaciones = _fusionar_relaciones(
-            _cargar_relaciones(directorio / "salidas", reportes),
-            archivos["cobertura_curricular.csv"],
-        )
-        _validar_precondiciones_promocion(solicitudes, por_id, archivos, fuentes)
-
-        for solicitud in solicitudes:
-            id_pendiente = solicitud["id_pendiente"]
-            decision = solicitud["decision"]
-            fila = por_id[id_pendiente]
-            # Una repetición exacta es un no-op. Sigue participando en el
-            # resumen para que el cliente reciba exactamente el mismo estado.
-            if id_pendiente in decisiones_previas or _texto(fila.get("decision")):
-                if decision == "ADD":
-                    filas_aceptadas += 1
-                elif decision == "KEEP_PENDING":
-                    filas_mantenidas += 1
-                else:
-                    filas_descartadas += 1
-                continue
-
-            if decision == "DISCARD":
-                fila["decision"] = decision
-                fila["decidido_en"] = ahora
-                fila["decidido_por"] = actor_normalizado
-                fila["estado_resolucion"] = "DESCARTADO_POR_USUARIO"
-                filas_descartadas += 1
-                nuevas_decisiones.append(
-                    {
-                        "id_pendiente": id_pendiente,
-                        PACKAGE_ID_FIELD: _texto(fila.get(PACKAGE_ID_FIELD)),
-                        "package_id": _texto(fila.get(PACKAGE_ID_FIELD)),
-                        "source_identity": fila.get("source_identity", {}),
-                        "package_decision": decision,
-                        "decision": decision,
-                        "actor": actor_normalizado,
-                        "decidido_en": ahora,
-                        "tipo": _texto(fila.get("tipo")),
-                        "evidencia": _evidencia(fila),
-                    }
-                )
-                continue
-
-            propuesta = fila.get("propuesta")
-            if not isinstance(propuesta, dict):
-                raise DecisionCurricularInvalida(
-                    f"El pendiente {id_pendiente!r} no tiene una propuesta estructurada."
-                )
-            nombre = _texto(propuesta.get("nombre") or propuesta.get("id"))
-            if not nombre:
-                raise DecisionCurricularInvalida(
-                    f"El pendiente {id_pendiente!r} no tiene nombre canónico."
-                )
-
-            id_canonico = ""
-            if decision == "ADD":
-                id_canonico = _promover(
-                    fila,
-                    propuesta,
-                    manifest,
-                    archivos,
-                    fuentes,
-                    relaciones,
-                )
-                filas_aceptadas += 1
-            else:
-                filas_mantenidas += 1
-
-            fila["decision"] = decision
-            fila["decidido_en"] = ahora
-            fila["decidido_por"] = actor_normalizado
-            fila["estado_resolucion"] = (
-                "ACEPTADA_POR_USUARIO" if decision == "ADD" else "MANTENIDA_PENDIENTE"
-            )
-            if id_canonico:
-                fila["id_canonico"] = id_canonico
-            nueva: dict[str, object] = {
-                "id_pendiente": id_pendiente,
-                PACKAGE_ID_FIELD: _texto(fila.get(PACKAGE_ID_FIELD)),
-                "package_id": _texto(fila.get(PACKAGE_ID_FIELD)),
-                "source_identity": fila.get("source_identity", {}),
-                "package_decision": decision,
-                "decision": decision,
-                "actor": actor_normalizado,
-                "decidido_en": ahora,
-                "id_canonico": id_canonico or None,
-                "tipo": _texto(fila.get("tipo")),
-                "evidencia": _evidencia(fila),
-            }
-            nuevas_decisiones.append(nueva)
-
-        paquetes_descartados_en_solicitud: set[str] = set()
-        for solicitud in solicitudes:
-            if solicitud["decision"] != "DISCARD":
-                continue
-            package_id = _texto(solicitud.get(PACKAGE_ID_FIELD))
-            if (
-                package_id
-                and package_id not in descartes_previos
-                and package_id not in paquetes_descartados_en_solicitud
-            ):
-                paquetes_descartados_en_solicitud.add(package_id)
-                filas_paquete = [
-                    fila for fila in pendientes if _texto(fila.get(PACKAGE_ID_FIELD)) == package_id
-                ]
-                nuevos_descartes.append(
-                    _auditoria_descarte_paquete(
-                        package_id,
-                        filas_paquete,
-                        manifest,
-                        actor_normalizado,
-                        ahora,
-                        _texto(solicitud.get("reason")),
-                    )
-                )
-        _retirar_relaciones_descartadas(relaciones, fuentes, nuevos_descartes)
-
-        # ``relaciones`` is intentionally a mutable working copy so an ADD can
-        # append edges in any request order. Publish that final copy back into
-        # the candidate package before writing CSVs; otherwise the provenance
-        # JSONL would contain edges that the canonical coverage CSV omitted.
-        archivos["cobertura_curricular.csv"] = relaciones
-        todas_decididas = not any(requiere_resolucion_curricular(fila) for fila in pendientes)
-        _escribir_fuentes(reportes, fuentes)
-        _escribir_relaciones(directorio / "salidas", reportes, relaciones)
-        _escribir_jsonl_atomico(reportes / PENDIENTES_ARCHIVO, pendientes)
-        _escribir_candidatos(
-            reportes,
-            archivos,
-            materialized=False,
-            paquetes=_paquetes(directorio, pendientes),
-        )
-        gate = _recalcular_release_gate(
-            reportes,
-            archivos,
-            fuentes,
-            pendientes,
-            materialized=False,
-        )
-        if todas_decididas and _estado_estructural_materializable(gate):
-            _escribir_archivos_curriculares(directorio / "salidas", archivos)
-            _escribir_candidatos(
-                reportes,
-                archivos,
-                materialized=True,
-                paquetes=_paquetes(directorio, pendientes),
-            )
-            gate = _recalcular_release_gate(
-                reportes,
-                archivos,
-                fuentes,
-                pendientes,
-                materialized=True,
-            )
-        else:
-            # Persist candidate evidence and the blocking gate, never a
-            # canonical projection, when the final structure is unsafe.
-            _eliminar_archivos_curriculares(directorio / "salidas")
-        _escribir_json_atomico(reportes / "release_gate.json", gate)
-        _append_decisiones(reportes / DECISIONES_ARCHIVO, nuevas_decisiones)
-        _append_decisiones(reportes / DESCARTES_ARCHIVO, nuevos_descartes)
-        if _puede_materializar_perfil(gate):
-            _materializar_perfil(directorio, manifest, archivos, reportes, pendientes, gate)
-
-        resumen = resumen_aprobacion_curricular(directorio)
-        resumen["accepted_in_request"] = filas_aceptadas
-        resumen["kept_pending_in_request"] = filas_mantenidas
-        resumen["discarded_in_request"] = filas_descartadas
-        resumen["release_gate"] = gate
-        _persistir_manifest_aprobacion(directorio, manifest, archivos, gate, resumen)
-        return {"aprobacion": resumen}
+    return _transaccion._aplicar_decisiones_curriculares(
+        directorio_ejecucion,
+        decisiones,
+        actor=actor,
+        revision=revision,
+        catalog_root=ruta_catalogos,
+        approval_summary=resumen_aprobacion_curricular,
+        hooks=_hooks(),
+    )
 
 
 def aplicar_decisiones_curriculares(
@@ -563,137 +354,47 @@ def aplicar_decisiones_curriculares(
 ) -> dict[str, object]:
     """Apply a legacy-row or complete-package decision transactionally."""
 
-    directorio = _validar_directorio(directorio_ejecucion)
-    roots = _rutas_transaccionales(directorio)
-    snapshot = _capturar_arboles(roots)
-    try:
-        return _aplicar_decisiones_curriculares(
-            directorio, decisiones, actor=actor, revision=revision
-        )
-    except Exception:
-        _restaurar_arboles(roots, snapshot)
-        raise
+    return _transaccion.aplicar_decisiones_curriculares(
+        directorio_ejecucion,
+        decisiones,
+        actor=actor,
+        revision=revision,
+        catalog_root=ruta_catalogos,
+        approval_summary=resumen_aprobacion_curricular,
+        hooks=_hooks(),
+    )
 
 
 def _filas_clasificadas(directorio: Path) -> list[dict[str, object]]:
-    ruta = directorio / "salidas" / "reportes" / PENDIENTES_ARCHIVO
-    try:
-        manifest = _leer_manifest(directorio)
-    except AprobacionNoPermitida:
-        manifest = {}
-    parametros = manifest.get("parametros")
-    parametros = parametros if isinstance(parametros, dict) else {}
-    filas: list[dict[str, object]] = []
-    for fila in _leer_jsonl(ruta):
-        if fila.get("package_identity_error"):
-            filas.append(dict(fila))
-            continue
-        try:
-            filas.append(
-                preparar_fila_paquete(
-                    fila,
-                    id_ejecucion=directorio.name,
-                    carrera=_clave_ruta(_texto(parametros.get("carrera"))),
-                    periodo=_texto(parametros.get("periodo")),
-                )
-            )
-        except IdentidadFuenteIncompleta as exc:
-            # Keep the legacy row adapter visible, but never turn an
-            # incomplete row into a source package or a package decision.
-            legacy = dict(fila)
-            legacy["package_identity_error"] = str(exc)
-            filas.append(legacy)
-    return clasificar_propuestas(filas)
+    return _transaccion._filas_clasificadas(directorio)
 
 
 def _paquetes(directorio: Path, filas: list[dict[str, object]]) -> list[dict[str, object]]:
-    reportes = directorio / "salidas" / "reportes"
-    candidatos = _cargar_candidatos(reportes) or _cargar_archivos_curriculares(
-        directorio / "salidas"
-    )
-    fuentes = _cargar_fuentes(reportes)
-    relaciones = _cargar_relaciones(directorio / "salidas", reportes)
-    package_rows = [fila for fila in filas if not fila.get("package_identity_error")]
-    return ensamblar_paquetes_chh(
-        package_rows,
-        id_ejecucion=directorio.name,
-        fuentes=fuentes,
-        relaciones=relaciones,
-        archivos=candidatos,
-    )
+    return _transaccion._paquetes(directorio, filas)
 
 
 def _rutas_transaccionales(directorio: Path) -> tuple[Path, ...]:
-    return _persistencia_aprobaciones._rutas_transaccionales(
-        directorio,
-        catalog_root=ruta_catalogos(),
-        not_permitted_error=AprobacionNoPermitida,
-    )
+    return _transaccion._rutas_transaccionales(directorio, catalog_root=ruta_catalogos)
 
 
 def _capturar_arboles(roots: tuple[Path, ...]) -> dict[Path, bytes]:
-    return _persistencia_aprobaciones._capturar_arboles(
-        roots, not_permitted_error=AprobacionNoPermitida
-    )
+    return _transaccion._capturar_arboles(roots)
 
 
 def _restaurar_arboles(roots: tuple[Path, ...], snapshot: dict[Path, bytes]) -> None:
-    _persistencia_aprobaciones._restaurar_arboles(roots, snapshot)
+    _transaccion._restaurar_arboles(roots, snapshot)
 
 
 def _validar_directorio(directorio: Path) -> Path:
-    ruta = Path(directorio)
-    if ruta.is_symlink() or not _ID_EJECUCION.fullmatch(ruta.name):
-        raise AprobacionNoPermitida("Directorio de ejecución no válido.")
-    try:
-        resuelta = ruta.resolve(strict=True)
-    except OSError as exc:
-        raise AprobacionNoPermitida("No se encontró la ejecución.") from exc
-    if resuelta.is_symlink() or not (resuelta / "manifest.json").is_file():
-        raise AprobacionNoPermitida("No se encontró el manifest de la ejecución.")
-    return resuelta
+    return _transaccion._validar_directorio(directorio)
 
 
 def _leer_manifest(directorio: Path) -> dict[str, object]:
-    try:
-        valor = json.loads((directorio / "manifest.json").read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise AprobacionNoPermitida("No se pudo leer el manifest de la ejecución.") from exc
-    if not isinstance(valor, dict):
-        raise AprobacionNoPermitida("El manifest de la ejecución no es válido.")
-    return valor
+    return _transaccion._leer_manifest(directorio)
 
 
-def _validar_alcance_pendiente(
-    fila: dict[str, object],
-    manifest: dict[str, object],
-) -> None:
-    """Prevents an approval row from crossing its career/period boundary."""
-
-    parametros = manifest.get("parametros")
-    parametros = parametros if isinstance(parametros, dict) else {}
-    carrera_esperada = _clave_ruta(_texto(parametros.get("carrera")))
-    periodo_esperado = re.sub(r"[^0-9-]", "", _texto(parametros.get("periodo")))
-    if not carrera_esperada or not periodo_esperado:
-        raise AprobacionNoPermitida(
-            "La ejecución no tiene carrera y periodo para validar el alcance."
-        )
-
-    carrera_fila = _texto(fila.get("carrera"))
-    periodo_fila = _texto(fila.get("periodo"))
-    if (carrera_fila or periodo_fila) and (
-        _clave_ruta(carrera_fila) != carrera_esperada
-        or re.sub(r"[^0-9-]", "", periodo_fila) != periodo_esperado
-    ):
-        raise DecisionCurricularInvalida(
-            "El pendiente está fuera del alcance carrera/periodo de esta ejecución."
-        )
-
-    # Old executions did not persist these fields. Backfill them from the
-    # manifest before writing the decision so their audit trail becomes scoped
-    # without changing the public CSV schema.
-    fila["carrera"] = carrera_esperada
-    fila["periodo"] = periodo_esperado
+def _validar_alcance_pendiente(fila: dict[str, object], manifest: dict[str, object]) -> None:
+    _transaccion._validar_alcance_pendiente(fila, manifest)
 
 
 def _promover(
@@ -704,121 +405,7 @@ def _promover(
     fuentes: dict[str, list[dict[str, object]]],
     relaciones: list[dict[str, object]],
 ) -> str:
-    try:
-        identidad = identidad_fuente_chh(fila)
-    except ValueError as exc:
-        raise DecisionCurricularInvalida(str(exc)) from exc
-    tipo = _texto(fila.get("tipo")).lower()
-    nombre = _texto(propuesta.get("nombre") or propuesta.get("id"))
-    if tipo == "competencia" and es_competencia_generica(nombre):
-        raise DecisionCurricularInvalida(
-            f"{MOTIVO_COMPETENCIA_GENERICA}: la competencia transversal no puede promoverse."
-        )
-    descripcion = _texto(propuesta.get("descripcion")) or f"Concepto curricular: {nombre}."
-    parametros = manifest.get("parametros")
-    parametros = parametros if isinstance(parametros, dict) else {}
-    carrera = _texto(parametros.get("carrera"))
-    periodo = _texto(parametros.get("periodo"))
-    id_canonico = _id_canonico(tipo, carrera, periodo, nombre)
-    if tipo == "competencia":
-        id_canonico = _upsert(
-            archivos["catalogo_competencias.csv"],
-            "nombre_competencia",
-            {
-                "id_competencia": id_canonico,
-                "nombre_competencia": nombre,
-                "descripcion_breve_competencia": descripcion,
-                "tipo_competencia": _texto(propuesta.get("tipo")) or "dura",
-            },
-        )
-        _upsert_fuente(
-            fuentes["competencias_fuente.jsonl"],
-            "id_competencia_fuente",
-            {
-                **identidad,
-                "id_competencia_fuente": _id_canonico(
-                    "COMP_SRC", carrera, periodo, str(fila.get("id_pendiente"))
-                ),
-                "archivo": _texto(fila.get("archivo")),
-                "nombre_competencia_fuente": nombre,
-                "descripcion_fuente": _texto(fila.get("descripcion_fuente")) or descripcion,
-                "id_competencia_canonica": id_canonico,
-                "estado_resolucion": "ACEPTADA_POR_USUARIO",
-                "metodo_resolucion": "APROBACION_EJECUTOR",
-                "evidencia_fuente": _evidencia(fila),
-            },
-        )
-    elif tipo == "habilidad":
-        id_canonico = _upsert(
-            archivos["catalogo_habilidades.csv"],
-            "nombre_habilidad",
-            {
-                "id_habilidad": id_canonico,
-                "nombre_habilidad": nombre,
-                "descripcion_breve": descripcion,
-            },
-        )
-        id_fuente = identidad["id_habilidad_fuente"]
-        _upsert_fuente(
-            fuentes["habilidades_fuente.jsonl"],
-            "id_habilidad_fuente",
-            {
-                **identidad,
-                "id_habilidad_fuente": id_fuente,
-                "archivo": _texto(fila.get("archivo")),
-                "descripcion_fuente": _texto(fila.get("descripcion_fuente")) or descripcion,
-                "id_habilidad_canonica": id_canonico,
-                "estado_resolucion": "ACEPTADA_POR_USUARIO",
-                "metodo_resolucion": "APROBACION_EJECUTOR",
-                "evidencia_fuente": _evidencia(fila),
-            },
-        )
-    elif tipo == "herramienta":
-        provenance = fila.get("evidencia_provenance")
-        provenance = provenance if isinstance(provenance, Mapping) else {}
-        origen = _texto(provenance.get("origen"))
-        seccion = _texto(provenance.get("seccion"))
-        texto_evidencia = _texto(provenance.get("texto"))
-        fuente_id = _id_canonico(
-            "HERR_SRC",
-            carrera,
-            periodo,
-            str(fila.get("id_pendiente")),
-            origen,
-            texto_evidencia,
-        )
-        fuente_id = _texto(fila.get("id_herramienta_fuente")) or fuente_id
-        id_canonico = _upsert(
-            archivos["catalogo_herramientas.csv"],
-            "nombre_herramienta",
-            {
-                "id_herramienta": id_canonico,
-                "nombre_herramienta": nombre,
-                "descripcion_breve_herramienta": descripcion,
-            },
-        )
-        _upsert_fuente(
-            fuentes["herramientas_fuente.jsonl"],
-            "id_herramienta_fuente",
-            {
-                **identidad,
-                "id_herramienta_fuente": fuente_id,
-                "id_herramienta_canonica": id_canonico,
-                "nombre_herramienta": nombre,
-                "origen_fuente": origen or "APROBACION_EJECUTOR",
-                "seccion_fuente": seccion or "APROBACION_EJECUTOR",
-                "texto_evidencia": texto_evidencia
-                or "; ".join(str(x) for x in _evidencia(fila)),
-                "coincidencia": "LITERAL_PROGRAMA_ANALITICO"
-                if origen == "programa_analitico"
-                else "APROBACION_EJECUTOR",
-                "estado_resolucion": "ACEPTADA_POR_USUARIO",
-            },
-        )
-    else:
-        raise DecisionCurricularInvalida(f"Tipo curricular no soportado: {tipo!r}.")
-    _añadir_relaciones_de_evidencia(fila, tipo, id_canonico, archivos, fuentes, relaciones)
-    return id_canonico
+    return _transaccion._promover(fila, propuesta, manifest, archivos, fuentes, relaciones)
 
 
 def _añadir_relaciones_de_evidencia(
@@ -829,136 +416,19 @@ def _añadir_relaciones_de_evidencia(
     fuentes: dict[str, list[dict[str, object]]],
     relaciones: list[dict[str, object]],
 ) -> None:
-    """Añade relaciones solo cuando los tres extremos son verificables."""
-
-    try:
-        identidad = identidad_fuente_chh(fila)
-    except ValueError:
-        return
-    id_curso = identidad["id_curso"]
-    id_silabo = identidad["id_silabo"]
-    id_habilidad_fuente = identidad["id_habilidad_fuente"]
-    id_relacion_fuente = _texto(identidad.get("id_cob_curricular"))
-
-    def pertenece_al_paquete(item: Mapping[str, object]) -> bool:
-        return all(
-            _texto(item.get(key)) == identidad[key]
-            for key in (
-                "id_ejecucion",
-                "carrera",
-                "periodo",
-                "id_curso",
-                "id_silabo",
-                "id_habilidad_fuente",
-            )
-        )
-
-    relaciones_fuente = [
-        relacion
-        for relacion in fuentes.get("cobertura_curricular_fuente.jsonl", [])
-        if _texto(relacion.get("id_cob_curricular")) == id_relacion_fuente
-    ]
-    if id_relacion_fuente and len(relaciones_fuente) != 1:
-        return
-
-    if relaciones_fuente:
-        relacion_fuente = relaciones_fuente[0]
-        skill_id = (
-            id_canonico
-            if tipo == "habilidad"
-            else _texto(relacion_fuente.get("id_habilidad_canonica"))
-        )
-        comp_ids = [
-            id_canonico
-            if tipo == "competencia"
-            else _texto(relacion_fuente.get("id_competencia_canonica"))
-        ]
-        tool_ids = [
-            id_canonico
-            if tipo == "herramienta"
-            else _texto(relacion_fuente.get("id_herramienta_canonica"))
-        ]
-    else:
-        habilidades = {
-            _texto(item.get("id_habilidad_fuente")): _texto(item.get("id_habilidad_canonica"))
-            for item in fuentes["habilidades_fuente.jsonl"]
-            if pertenece_al_paquete(item)
-        }
-        skill_id = id_canonico if tipo == "habilidad" else habilidades.get(id_habilidad_fuente, "")
-        comp_ids = [
-            _texto(item.get("id_competencia_canonica"))
-            for item in fuentes["competencias_fuente.jsonl"]
-            if pertenece_al_paquete(item) and _texto(item.get("id_competencia_canonica"))
-        ]
-        if tipo == "competencia":
-            comp_ids = [id_canonico]
-        tool_ids = [
-            _texto(item.get("id_herramienta_canonica"))
-            for item in fuentes["herramientas_fuente.jsonl"]
-            if pertenece_al_paquete(item) and _texto(item.get("id_herramienta_canonica"))
-        ]
-        if tipo == "herramienta":
-            tool_ids = [id_canonico]
-
-    if not skill_id:
-        return
-    valid_comp = {
-        _texto(row.get("id_competencia")) for row in archivos["catalogo_competencias.csv"]
-    }
-    valid_skill = {_texto(row.get("id_habilidad")) for row in archivos["catalogo_habilidades.csv"]}
-    valid_tool = {
-        _texto(row.get("id_herramienta")) for row in archivos["catalogo_herramientas.csv"]
-    }
-    for comp_id in dict.fromkeys(comp_ids):
-        if comp_id not in valid_comp or skill_id not in valid_skill:
-            continue
-        herramientas_finales = [tool for tool in dict.fromkeys(tool_ids) if tool in valid_tool]
-        if not herramientas_finales and relaciones_fuente and _texto(
-            relaciones_fuente[0].get("id_herramienta_fuente")
-        ):
-            continue
-        if not herramientas_finales:
-            herramientas_finales = [""]
-        for tool_id in herramientas_finales:
-            _upsert_relacion(
-                relaciones,
-                id_curso,
-                id_silabo,
-                comp_id,
-                skill_id,
-                tool_id,
-                lineage=_lineage_relacion(fila, fuentes, identidad, comp_id, skill_id, tool_id),
-            )
+    _transaccion._añadir_relaciones_de_evidencia(
+        fila, tipo, id_canonico, archivos, fuentes, relaciones
+    )
 
 
-def _upsert(
-    filas: list[dict[str, str]],
-    columna_nombre: str,
-    fila: dict[str, str],
-) -> str:
-    clave = clave_concepto(fila.get(columna_nombre, ""))
-    for actual in filas:
-        if clave_concepto(actual.get(columna_nombre, "")) == clave:
-            return _texto(
-                actual.get(next(columna for columna in fila if columna.startswith("id_")))
-            )
-    filas.append(fila)
-    return _texto(next((valor for clave, valor in fila.items() if clave.startswith("id_")), ""))
+def _upsert(filas: list[dict[str, str]], columna_nombre: str, fila: dict[str, str]) -> str:
+    return _transaccion._upsert(filas, columna_nombre, fila)
 
 
 def _upsert_fuente(
     filas: list[dict[str, object]], columna_id: str, fila: dict[str, object]
 ) -> None:
-    identificador = _texto(fila.get(columna_id))
-    for indice, actual in enumerate(filas):
-        if _texto(actual.get(columna_id)) == identificador:
-            fusionada = dict(actual)
-            fusionada.update(
-                {clave: valor for clave, valor in fila.items() if valor not in ("", None, [])}
-            )
-            filas[indice] = fusionada
-            return
-    filas.append(fila)
+    _transaccion._upsert_fuente(filas, columna_id, fila)
 
 
 def _upsert_relacion(
@@ -971,12 +441,15 @@ def _upsert_relacion(
     *,
     lineage: Mapping[str, object] | None = None,
 ) -> None:
-    clave = (id_curso, id_silabo, id_competencia, id_habilidad, id_herramienta)
-    if clave in {_clave_relacion(row) for row in relaciones}:
-        return
-    nueva = _fila_relacion(*clave)
-    nueva.update({clave: valor for clave, valor in (lineage or {}).items() if _texto(valor)})
-    relaciones.append(nueva)
+    _transaccion._upsert_relacion(
+        relaciones,
+        id_curso,
+        id_silabo,
+        id_competencia,
+        id_habilidad,
+        id_herramienta,
+        lineage=lineage,
+    )
 
 
 def _recalcular_release_gate(
@@ -987,13 +460,8 @@ def _recalcular_release_gate(
     *,
     materialized: bool = True,
 ) -> dict[str, object]:
-    return _post_hitl_aprobaciones._recalcular_release_gate(
-        reportes,
-        archivos,
-        fuentes,
-        pendientes,
-        materialized=materialized,
-        invalid_error=DecisionCurricularInvalida,
+    return _transaccion._recalcular_release_gate(
+        reportes, archivos, fuentes, pendientes, materialized=materialized
     )
 
 
@@ -1010,7 +478,7 @@ def _materializar_perfil(
     pendientes: list[dict[str, object]],
     gate: dict[str, object],
 ) -> None:
-    _post_hitl_aprobaciones._materializar_perfil(
+    _transaccion._materializar_perfil(
         directorio,
         manifest,
         archivos,
@@ -1019,7 +487,6 @@ def _materializar_perfil(
         gate,
         catalog_root=ruta_catalogos,
         approval_summary=resumen_aprobacion_curricular,
-        invalid_error=DecisionCurricularInvalida,
     )
 
 
@@ -1042,36 +509,9 @@ def _auditoria_descarte_paquete(
     decidido_en: str,
     reason: str,
 ) -> dict[str, object]:
-    parametros = manifest.get("parametros")
-    parametros = parametros if isinstance(parametros, Mapping) else {}
-    identidad = next(
-        (
-            dict(_mapping(fila.get("source_identity")))
-            for fila in filas
-            if _mapping(fila.get("source_identity"))
-        ),
-        {},
+    return _transaccion._auditoria_descarte_paquete(
+        package_id, filas, manifest, actor, decidido_en, reason
     )
-    evidencia = sorted({item for fila in filas for item in _evidencia(fila) if item})
-    propuestas = [
-        {
-            "tipo": _texto(fila.get("tipo")),
-            "nombre": _texto(_mapping(fila.get("propuesta")).get("nombre")),
-        }
-        for fila in filas
-    ]
-    return {
-        "version": "package-discard-audit/v1",
-        "package_id": package_id,
-        "source_identity": identidad,
-        "carrera": _clave_ruta(_texto(parametros.get("carrera"))),
-        "periodo": re.sub(r"[^0-9-]", "", _texto(parametros.get("periodo"))),
-        "decidido_en": decidido_en,
-        "actor": actor,
-        "reason": reason,
-        "evidence": evidencia,
-        "propuestas": propuestas,
-    }
 
 
 def _retirar_relaciones_descartadas(
@@ -1079,46 +519,8 @@ def _retirar_relaciones_descartadas(
     fuentes: dict[str, list[dict[str, object]]],
     descartes: Sequence[Mapping[str, object]],
 ) -> None:
-    """Remove only triples no longer backed by another source package.
-
-    Catalog rows are shared at career scope, so deleting them for one discarded
-    package would corrupt another package.  Coverage is removed only when no
-    non-discarded source relation still asserts the same triple.
-    """
-
-    if not descartes:
-        return
-    descartadas = {
-        _texto(_mapping(descarte.get("source_identity")).get("id_cob_curricular"))
-        for descarte in descartes
-    }
-    descartadas.discard("")
-    fuente_relaciones = fuentes.get("cobertura_curricular_fuente.jsonl", [])
-    for fuente in fuente_relaciones:
-        if _texto(fuente.get("id_cob_curricular")) in descartadas:
-            fuente["estado_resolucion"] = "DESCARTADO_POR_USUARIO"
-    activas = {
-        (
-            _texto(fuente.get("id_competencia_canonica")),
-            _texto(fuente.get("id_habilidad_canonica")),
-            _texto(fuente.get("id_herramienta_canonica")),
-        )
-        for fuente in fuente_relaciones
-        if _texto(fuente.get("estado_resolucion")) != "DESCARTADO_POR_USUARIO"
-    }
-    relaciones[:] = [
-        relacion
-        for relacion in relaciones
-        if (
-            _texto(relacion.get("id_competencia")),
-            _texto(relacion.get("id_habilidad")),
-            _texto(relacion.get("id_herramienta")),
-        )
-        in activas
-        or not fuente_relaciones
-    ]
+    _transaccion._retirar_relaciones_descartadas(relaciones, fuentes, descartes)
 
 
-def _evidencia(fila: dict[str, object]) -> list[object]:
-    evidencia = fila.get("evidencia")
-    return list(evidencia) if isinstance(evidencia, list) else []
+def _evidencia(fila: Mapping[str, object]) -> list[object]:
+    return _transaccion._evidencia(fila)
