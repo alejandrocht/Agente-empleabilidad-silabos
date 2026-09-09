@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import inspect
 import json
 import re
 from pathlib import Path
 
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
-from agente.normalizador.modelos import ArchivoSilabo, ResultadoValidacionSilabos
+from agente.normalizador.modelos import ArchivoSilabo, Hallazgo, ResultadoValidacionSilabos
+from agente.normalizador.silabos import (
+    normalizacion_curricular,
+    resolucion_curricular,
+    salida,
+    validacion_salida,
+)
 from agente.normalizador.silabos.analista_llm import (
     ConceptoPropuesto,
     DecisionCurricular,
@@ -313,3 +321,318 @@ def test_public_seam_preserves_revised_skill_proposal_without_accepting_it(
     ]
     assert canonical_rows == []
     assert all(row["id_habilidad_canonica"] == "" for row in source_rows)
+
+
+def _hashes_de_artefactos(salida: Path) -> dict[str, str]:
+    return {
+        ruta.relative_to(salida).as_posix(): hashlib.sha256(ruta.read_bytes()).hexdigest()
+        for ruta in sorted(salida.rglob("*"))
+        if ruta.is_file()
+    }
+
+
+def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) -> None:
+    canonico = construir_salidas_curriculares(
+        [_registro()],
+        _validacion(),
+        tmp_path / "canonical" / "NOR_TEST",
+        _catalogo(),
+    )
+    pendiente = construir_salidas_curriculares(
+        [_registro()],
+        _validacion(),
+        tmp_path / "pending" / "NOR_TEST",
+        _catalogo_sin_habilidad(),
+    )
+
+    assert _hashes_de_artefactos(tmp_path / "canonical" / "NOR_TEST" / "salidas") == {
+        "catalogo_competencias.csv": (
+            "f3e32c125374666980b1d2afe3d06d8179647918b5591d70e113dad36d4ae89a"
+        ),
+        "catalogo_habilidades.csv": (
+            "0e4d58da1c6385d5d7decbc82b918a24be42b1bf7a614bfc78b8bc08ae77dc3b"
+        ),
+        "catalogo_herramientas.csv": (
+            "b7e8db9bb823a80d174720b9b5c606d03bb71a35fe281835c306956cf67e405a"
+        ),
+        "cobertura_curricular.csv": (
+            "c5c4f6ef01ab1bbf81d33ec4234c6d52a2d5d90c60cfb0413d8e0f0bb080e0ff"
+        ),
+        "curso.csv": "b9735fa0466a8504a53083a6815b03db2a1c60eac1abfe93033e9561293817dd",
+        "reportes/candidatos_curriculares.json": (
+            "eb33bb535b1ffe0fc8b4acd93e291027ffb0cbf3ca2a03f0f705741df11d82eb"
+        ),
+        "reportes/cobertura_curricular_canonica.jsonl": (
+            "52025738b253d279fa73528a724898b11e981375ab5db36c4647aa440592d449"
+        ),
+        "reportes/cobertura_curricular_fuente.jsonl": (
+            "f72ae3ed1ddef5ae04dca5288a027d25e8e652212b155ab3b2c4ab3b606ca449"
+        ),
+        "reportes/competencias_fuente.jsonl": (
+            "5d6896b52cbe40efb9303ae6ee9fd1df0afc1b63d9dedeb21c58c686c64d553d"
+        ),
+        "reportes/habilidades_fuente.jsonl": (
+            "f0c503d5ce3eee6aae73891b4d8e95b1a6a1486ad05a9c3866f1798aefe04995"
+        ),
+        "reportes/herramientas_fuente.jsonl": (
+            "b694b01617ea61ea2e3e49fd44ca6ea14763666a5f2097530a2e49b5a60cbb85"
+        ),
+        "reportes/pendientes_curriculares.jsonl": (
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        ),
+        "reportes/release_gate.json": (
+            "8614efde2b6c89ec92823aefe9b87bf86d6a81aaca62243fe8bf80dfb1d954d2"
+        ),
+    }
+    assert _hashes_de_artefactos(tmp_path / "pending" / "NOR_TEST" / "salidas") == {
+        "reportes/candidatos_curriculares.json": (
+            "04d99b769bddeff50af1c13b353fbee4277fad95cbb24a45939d1f9069d3fae0"
+        ),
+        "reportes/cobertura_curricular_canonica.jsonl": (
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        ),
+        "reportes/cobertura_curricular_fuente.jsonl": (
+            "698c42dc9ed7c256591ca61fd7fcaae6f3673865f32ede321fd35f0594c7115e"
+        ),
+        "reportes/competencias_fuente.jsonl": (
+            "5d6896b52cbe40efb9303ae6ee9fd1df0afc1b63d9dedeb21c58c686c64d553d"
+        ),
+        "reportes/habilidades_fuente.jsonl": (
+            "7cf0811e43c4fb68957aed2ba7691ae5192791993b72a4dd49ae70b2a997e1ad"
+        ),
+        "reportes/herramientas_fuente.jsonl": (
+            "b694b01617ea61ea2e3e49fd44ca6ea14763666a5f2097530a2e49b5a60cbb85"
+        ),
+        "reportes/pendientes_curriculares.jsonl": (
+            "18531528b183c152aa4c6c9437a093761b995e7cb9e906f0c127819b985a428a"
+        ),
+        "reportes/release_gate.json": (
+            "a472113334beb01ffad496ca6be5901d0c0ae31e07121b4ea1fdd3d3ad3b47c0"
+        ),
+    }
+    assert canonico.release_gate == {
+        "version": "curricular-release-gate/v1",
+        "decision": "ALLOW_IMPORT",
+        "carrera": "MARKETING",
+        "periodo": "2026-1",
+        "blockers": [],
+        "checks": {
+            "source_coverage": {
+                "ok": True,
+                "records": 1,
+                "logros_fuente": 1,
+                "habilidades_fuente": 1,
+            },
+            "provenance": {
+                "ok": True,
+                "missing_competencies": [],
+                "missing_skills": [],
+                "missing_tools": [],
+            },
+            "canonical_relations": {"ok": True, "rows": 2, "verified": 2, "missing": []},
+            "canonical_references": {"ok": True, "missing": []},
+            "chh_graph": {"ok": True, "errors": []},
+            "chh_packages": {"ok": True, "errors": []},
+            "structural_errors": {"ok": True, "count": 0},
+            "pending_preserved": {
+                "ok": True,
+                "total": 0,
+                "by_state": {},
+                "expected_unresolved": 0,
+                "unresolved_without_pending": 0,
+            },
+            "approval": {
+                "ok": True,
+                "pending_decision": 0,
+                "unresolved_records": 0,
+                "canonical_materialized": True,
+            },
+        },
+        "observability": {
+            "source_records": 1,
+            "source_logros": 1,
+            "canonical_competencies": 1,
+            "canonical_skills": 1,
+            "canonical_tools": 2,
+            "canonical_relations": 2,
+            "pending_records": 0,
+        },
+    }
+    assert pendiente.release_gate == {
+        "version": "curricular-release-gate/v1",
+        "decision": "BLOCK_IMPORT",
+        "carrera": "MARKETING",
+        "periodo": "2026-1",
+        "blockers": [
+            "UNRESOLVED_CURRICULAR_RECORDS",
+            "CANONICAL_MATERIALIZATION_PENDING",
+        ],
+        "checks": {
+            "source_coverage": {
+                "ok": True,
+                "records": 1,
+                "logros_fuente": 1,
+                "habilidades_fuente": 1,
+            },
+            "provenance": {
+                "ok": True,
+                "missing_competencies": [],
+                "missing_skills": [],
+                "missing_tools": [],
+            },
+            "canonical_relations": {"ok": True, "rows": 0, "verified": 0, "missing": []},
+            "canonical_references": {"ok": True, "missing": []},
+            "chh_graph": {"ok": True, "errors": []},
+            "chh_packages": {"ok": True, "errors": []},
+            "structural_errors": {"ok": True, "count": 0},
+            "pending_preserved": {
+                "ok": True,
+                "total": 2,
+                "by_state": {"PENDIENTE_CATALOGACION": 2},
+                "expected_unresolved": 1,
+                "unresolved_without_pending": 0,
+            },
+            "approval": {
+                "ok": False,
+                "pending_decision": 0,
+                "unresolved_records": 2,
+                "canonical_materialized": False,
+            },
+        },
+        "observability": {
+            "source_records": 1,
+            "source_logros": 1,
+            "canonical_competencies": 1,
+            "canonical_skills": 0,
+            "canonical_tools": 0,
+            "canonical_relations": 0,
+            "pending_records": 2,
+        },
+    }
+    assert pendiente.hallazgos == (
+        Hallazgo(
+            codigo="HABILIDAD_PENDIENTE_CANONICALIZACION",
+            severidad="warning",
+            mensaje=(
+                "El logro se conserva como habilidad fuente, pero no se encontró una "
+                "habilidad canónica con evidencia suficiente."
+            ),
+            hoja="curso.docx",
+            detalle="logro 1: Analizar campañas",
+        ),
+    )
+
+    corrupta = tmp_path / "corrupta"
+    corrupta.mkdir()
+    for nombre, columnas in salida.ARCHIVOS_SALIDA:
+        (corrupta / nombre).write_text(",".join(columnas) + "\n", encoding="utf-8")
+    (corrupta / "curso.csv").write_text("incorrecto\n", encoding="utf-8")
+    assert validacion_salida.validar_salidas_curriculares(
+        corrupta, [], {}, {}, {}, {}, set()
+    ) == (
+        Hallazgo(
+            codigo="CSV_ESQUEMA_INVALIDO",
+            severidad="error",
+            mensaje="El CSV no conserva exactamente el esquema del catálogo.",
+            hoja="curso.csv",
+            detalle=f"esperado={salida.CURSOS_SCHEMA}; recibido=('incorrecto',)",
+        ),
+        Hallazgo(
+            codigo="COMPETENCIA_FUENTE_NO_AUDITADA",
+            severidad="error",
+            mensaje="No se generó el reporte de competencias fuente.",
+            hoja="reportes/competencias_fuente.jsonl",
+        ),
+        Hallazgo(
+            codigo="HABILIDAD_FUENTE_NO_AUDITADA",
+            severidad="error",
+            mensaje="No se generó el reporte de habilidades fuente.",
+            hoja="reportes/habilidades_fuente.jsonl",
+        ),
+    )
+
+    historicos = (
+        "normalizar_registros_curriculares",
+        "_ALIASES_CARRERA",
+        "_CARRERAS_POR_NOMBRE",
+        "_PALABRAS_NO_EVIDENCIA",
+        "ESTADO_PENDIENTE_CATALOGACION",
+        "ESTADO_PENDIENTE_PERFIL",
+        "ESTADO_REVISION_HUMANA",
+        "HerramientaDetectada",
+        "NormalizacionCurricular",
+        "ResolucionConcepto",
+        "TCompetencia",
+        "_archivo_origen",
+        "_catalogo_curricular",
+        "_coincidencias",
+        "_competencias_declaradas_por_texto",
+        "_competencias_para_logro",
+        "_competencias_por_texto",
+        "_concepto_decidido",
+        "_concepto_declarado",
+        "_contexto_curricular",
+        "_declaracion_desde_catalogo",
+        "_declaraciones",
+        "_declaraciones_de_registros",
+        "_error",
+        "_estado_resolucion_determinista",
+        "_evidencia_programa_analitico",
+        "_evidencias_herramientas",
+        "_evidencias_herramientas_candidatas",
+        "_fila_cobertura",
+        "_filas_curso",
+        "_hash_id",
+        "_herramientas_explicitas",
+        "_herramientas_llm_nuevas",
+        "_id_carrera",
+        "_id_competencia_fuente",
+        "_logros",
+        "_modalidad_curso",
+        "_nombre_habilidad",
+        "_pendientes_por_relacion_fuente",
+        "_propuesta_dict",
+        "_registrar_pendiente",
+        "_resolver_competencia",
+        "_resolver_habilidad_canonica",
+        "_seleccionar_competencia_por_puntaje",
+        "_source_ref",
+        "_texto",
+        "_tipo_competencia",
+        "_tokens_evidencia",
+        "_warning",
+    )
+    assert len(historicos) == 49
+    for nombre in historicos:
+        origen = (
+            normalizacion_curricular
+            if nombre == "normalizar_registros_curriculares"
+            else resolucion_curricular
+        )
+        assert getattr(salida, nombre) is getattr(origen, nombre)
+
+    validaciones = (
+        "COMPETENCIAS_SCHEMA",
+        "CURSOS_SCHEMA",
+        "HABILIDADES_SCHEMA",
+        "HERRAMIENTAS_SCHEMA",
+        "COBERTURA_SCHEMA",
+        "ARCHIVOS_SALIDA",
+        "_ARCHIVOS_CURRICULARES_FINALES",
+        "_REPORTES_CURRICULARES_PRE_HITL",
+        "_hitl_curricular_completado",
+        "_filtrar_outputs_curriculares",
+        "_filtrar_estado_publico",
+        "validar_salidas_curriculares",
+        "evaluar_release_gate",
+        "_validar_pendientes_fuente",
+        "_conteo_logros_con_descripcion",
+        "_ids_unicos",
+        "_datos_registros",
+    )
+    for nombre in validaciones:
+        facade = getattr(salida, nombre)
+        extraido = getattr(validacion_salida, nombre)
+        assert facade is extraido
+        if callable(facade):
+            assert inspect.signature(facade) == inspect.signature(extraido)
