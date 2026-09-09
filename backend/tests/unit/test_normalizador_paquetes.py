@@ -4,7 +4,11 @@ import json
 import pytest
 
 from agente.normalizador.silabos import paquetes as paquetes_modulo
-from agente.normalizador.silabos import paquetes_componentes, paquetes_relaciones
+from agente.normalizador.silabos import (
+    paquetes_componentes,
+    paquetes_componentes_nombres,
+    paquetes_relaciones,
+)
 from agente.normalizador.silabos.paquetes import (
     IdentidadFuenteIncompleta,
     ensamblar_paquetes_chh,
@@ -45,7 +49,36 @@ def test_component_projection_reexports_preserve_canonical_bytes_and_review_hash
     )
     assert paquetes_modulo._component_from_row is paquetes_componentes._component_from_row
     assert paquetes_modulo._unique_components is paquetes_componentes._unique_components
+    for name in (
+        "_unique_components",
+        "_component_identifier",
+        "_component_name",
+        "_component_key",
+        "_component_source_key",
+        "_has_structured_proposal",
+        "_is_provisional_component",
+        "_with_component_provenance",
+        "_component_provenance",
+        "_merge_components",
+        "_normalized_name",
+        "_usable_display_name",
+    ):
+        assert getattr(paquetes_componentes, name) is getattr(paquetes_componentes_nombres, name)
+        assert getattr(paquetes_relaciones, name) is getattr(paquetes_componentes_nombres, name)
+        assert getattr(paquetes_modulo, name) is getattr(paquetes_componentes_nombres, name)
+    for name in (
+        "PACKAGE_SOURCE_IDENTITY_FIELD",
+        "_TYPE_ORDER",
+        "_UNRESOLVED_RESOLUTION_STATES",
+        "_TECHNICAL_NAME",
+        "_HASH_NAME",
+    ):
+        assert getattr(paquetes_componentes, name) is getattr(paquetes_componentes_nombres, name)
+        assert getattr(paquetes_relaciones, name) is getattr(paquetes_componentes_nombres, name)
+        assert getattr(paquetes_modulo, name) is getattr(paquetes_componentes_nombres, name)
     assert "paquetes" not in paquetes_componentes.__dict__
+    assert "paquetes_componentes" not in paquetes_componentes_nombres.__dict__
+    assert "paquetes_relaciones" not in paquetes_componentes_nombres.__dict__
     assert paquetes_modulo.PACKAGE_ID_FIELD is paquetes_relaciones.PACKAGE_ID_FIELD
     assert paquetes_modulo._PackageAssemblyIndex is paquetes_relaciones._PackageAssemblyIndex
     assert paquetes_modulo._identity_key is paquetes_relaciones._identity_key
