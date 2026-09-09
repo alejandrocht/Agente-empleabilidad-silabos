@@ -419,6 +419,17 @@ def _assemble_one(
             }
         )
     competency_blockers: list[dict[str, str]] = []
+    for source_relation in source_package_relations:
+        source_competency_id = _text(source_relation.get("id_competencia_fuente"))
+        if not source_competency_id or _text(source_relation.get("id_competencia_canonica")):
+            continue
+        blocker = {
+            "code": "COMPETENCY_SOURCE_MAPPING_REQUIRED",
+            "id_competencia_fuente": source_competency_id,
+            "id_cob_curricular": _text(source_relation.get("id_cob_curricular")),
+        }
+        if blocker not in competency_blockers:
+            competency_blockers.append(blocker)
     open_rows = [row for row in ordered if _requires_human_decision(row)]
     unresolved_rows = [row for row in ordered if _is_unresolved_row(row)]
     decisions = {
