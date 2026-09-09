@@ -8,20 +8,52 @@ explícitamente y ningún secreto se persiste en el reporte.
 
 from __future__ import annotations
 
-import json
 import re
 import time
-import unicodedata
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 import requests
 
 from agente.normalizador.excepciones import CancelacionSolicitada
+from agente.normalizador.silabos.cactus_archivos import (
+    FORMATS_PROCESABLES,
+    CactusExtractorError,
+    _cargar_checkpoint,
+    _clave_checkpoint,
+    _es_html,
+    _existe_checkpoint,
+    _guardar_checkpoint,
+    _leer_respuesta_limitada,
+    _RespuestaDemasiadoGrande,
+    _silabo_url,
+    _url_adjunto,
+    _url_adjunto_segura,
+    empaquetar_archivos_cactus,
+    is_login_page,
+    normalize_text,
+    ruta_curso,
+    sanitize_filename,
+    strip_accents,
+)
+
+__all__ = (
+    "CactusAuthenticationError",
+    "CactusExtractor",
+    "CactusExtractorError",
+    "FORMATS_PROCESABLES",
+    "ResultadoExtraccionCactus",
+    "empaquetar_archivos_cactus",
+    "is_login_page",
+    "normalize_text",
+    "ruta_curso",
+    "sanitize_filename",
+    "strip_accents",
+)
 
 BASE_URL = "https://cactus.ulima.edu.pe/ac/ac_bd001.nsf"
 VIEW_CURSOS = "VCursosXCiclAcdXEspc"
@@ -36,19 +68,9 @@ MAX_RONDAS_SESION = 8
 BACKOFF_BASE = 0.8
 MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
 MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
-FORMATS_PROCESABLES = {".pdf", ".docx"}
 
 ProgressCallback = Callable[[dict[str, object]], None]
 CancelCallback = Callable[[], bool]
-
-
-class CactusExtractorError(RuntimeError):
-    """Error accionable de la fuente externa Cactus."""
-
-    def __init__(self, codigo: str, mensaje: str) -> None:
-        super().__init__(mensaje)
-        self.codigo = codigo
-        self.mensaje = mensaje
 
 
 class CactusAuthenticationError(CactusExtractorError):
@@ -60,10 +82,6 @@ class CactusAuthenticationError(CactusExtractorError):
 
 class _SesionCaida(RuntimeError):
     """La sesión Domino volvió al formulario de login."""
-
-
-class _RespuestaDemasiadoGrande(RuntimeError):
-    """La fuente externa superó el límite de memoria de una respuesta."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,111 +140,6 @@ class ResultadoExtraccionCactus:
             "archivos": archivos,
             "errores": list(self.errores),
         }
-
-
-def strip_accents(value: str) -> str:
-    if not value:
-        return ""
-    normalized = unicodedata.normalize("NFD", value)
-    return "".join(char for char in normalized if unicodedata.category(char) != "Mn")
-
-
-def normalize_text(value: object) -> str:
-    """Normaliza texto para comparar nodos de la vista Domino."""
-
-    return re.sub(r"\s+", " ", strip_accents(str(value or ""))).upper().strip()
-
-
-def sanitize_filename(value: object, max_len: int = 120) -> str:
-    """Convierte una etiqueta externa en una ruta de archivo segura."""
-
-    text = strip_accents(str(value or "SIN_NOMBRE")).upper().strip()
-    text = re.sub(r"[^\w\s\-]", "", text)
-    text = re.sub(r"\s+", "_", text).strip("_")
-    if not text:
-        return "SIN_NOMBRE"
-    return text[:max_len] if len(text) > max_len else text
-
-
-def is_login_page(text: str) -> bool:
-    return (
-        "_CustomLoginform" in text
-        or "names.nsf?Login" in text
-        or "Acceso a los sistemas de informaci" in text
-    )
-
-
-def _silabo_url(html: str) -> tuple[str, str] | None:
-    match = re.search(
-        r'href="([^"]*\$FILE/[^" ]*\.(pdf|docx?)[^" ]*)"',
-        html,
-        re.IGNORECASE,
-    )
-    if not match:
-        return None
-    return match.group(1), match.group(2).lower()
-
-
-def _leer_respuesta_limitada(respuesta: requests.Response, limite: int) -> bytes:
-    """Lee una respuesta por chunks y evita materializar cuerpos ilimitados."""
-
-    try:
-        content_length = respuesta.headers.get("Content-Length")
-        if content_length:
-            try:
-                if int(content_length) > limite:
-                    raise _RespuestaDemasiadoGrande(
-                        f"respuesta superior al límite de {limite} bytes"
-                    )
-            except ValueError:
-                pass
-
-        partes: list[bytes] = []
-        total = 0
-        for parte in respuesta.iter_content(chunk_size=64 * 1024):
-            if not parte:
-                continue
-            total += len(parte)
-            if total > limite:
-                raise _RespuestaDemasiadoGrande(
-                    f"respuesta superior al límite de {limite} bytes"
-                )
-            partes.append(parte)
-        return b"".join(partes)
-    finally:
-        respuesta.close()
-
-
-def empaquetar_archivos_cactus(raiz: Path, destino: Path) -> tuple[str, ...]:
-    """Crea el ZIP interno que consume el validador curricular existente."""
-
-    import zipfile
-
-    raiz_resuelta = raiz.resolve()
-    archivos = sorted(
-        ruta
-        for ruta in raiz.rglob("*")
-        if ruta.is_file() and ruta.suffix.lower() in FORMATS_PROCESABLES
-    )
-    nombres: list[str] = []
-    destino.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(destino, "w", compression=zipfile.ZIP_DEFLATED) as paquete:
-        for ruta in archivos:
-            try:
-                nombre = ruta.resolve().relative_to(raiz_resuelta).as_posix()
-            except ValueError as exc:
-                raise CactusExtractorError(
-                    "CACTUS_RUTA_INVALIDA",
-                    "La extracción produjo un archivo fuera de su directorio aislado.",
-                ) from exc
-            if not nombre or ".." in Path(nombre).parts:
-                raise CactusExtractorError(
-                    "CACTUS_RUTA_INVALIDA",
-                    "La extracción produjo una ruta curricular no segura.",
-                )
-            paquete.write(ruta, nombre)
-            nombres.append(nombre)
-    return tuple(nombres)
 
 
 class CactusExtractor:
@@ -882,9 +795,7 @@ class CactusExtractor:
                 break
         if objetivo is None or extension_objetivo is None:
             return None
-        directorio = directorio_salida / f"Ciclo_{sanitize_filename(info['nivel'])}"
-        directorio.mkdir(parents=True, exist_ok=True)
-        ruta = directorio / f"{info['nombre_curso']}.{extension_objetivo}"
+        ruta = ruta_curso(directorio_salida, info, extension_objetivo)
         try:
             with pagina.expect_download(timeout=12000) as descarga_info:
                 objetivo.click()
@@ -914,9 +825,7 @@ class CactusExtractor:
         status = resultado.get("status")
         if status == "ok":
             extension = str(resultado.get("extension") or "").lower()
-            directorio = directorio_salida / f"Ciclo_{sanitize_filename(info['nivel'])}"
-            directorio.mkdir(parents=True, exist_ok=True)
-            ruta = directorio / f"{info['nombre_curso']}.{extension}"
+            ruta = ruta_curso(directorio_salida, info, extension)
             ruta.write_bytes(resultado["body"])
             done.add(self._clave_checkpoint(info))
             estado["archivos_descargados"] += 1
@@ -1000,64 +909,30 @@ class CactusExtractor:
         return sesion
 
     def _url_adjunto_segura(self, valor: str) -> bool:
-        """Restrict attachments to the authenticated Cactus HTTPS origin."""
-
-        base = urlparse(self.base_url)
-        adjunto = urlparse(valor)
-        return (
-            base.scheme == "https"
-            and adjunto.scheme == base.scheme
-            and adjunto.hostname == base.hostname
-            and adjunto.port == base.port
-            and adjunto.username is None
-            and adjunto.password is None
-        )
+        return _url_adjunto_segura(self.base_url, valor)
 
     def _url_adjunto(self, valor: str, unid: str) -> str:
-        if valor.startswith("/"):
-            return urljoin(self.base_url, valor)
-        if valor.startswith("http"):
-            return valor
-        if "$FILE/" in valor:
-            return f"{self.base_url}/0/{unid}/$FILE/{valor.split('$FILE/')[-1]}"
-        return f"{self.base_url}/{valor}"
+        return _url_adjunto(self.base_url, valor, unid)
 
     @staticmethod
     def _es_html(body: bytes) -> bool:
-        return body[:20].lower().lstrip().startswith((b"<!doctype", b"<html"))
+        return _es_html(body)
 
     @staticmethod
     def _clave_checkpoint(info: dict[str, str]) -> str:
-        return f"Ciclo_{sanitize_filename(info['nivel'])}/{info['nombre_curso']}"
+        return _clave_checkpoint(info)
 
     @staticmethod
     def _existe_checkpoint(raiz: Path, clave: str) -> bool:
-        ruta = raiz / clave
-        return any(ruta.with_suffix(extension).is_file() for extension in (".pdf", ".docx"))
+        return _existe_checkpoint(raiz, clave)
 
     @staticmethod
     def _cargar_checkpoint(raiz: Path) -> set[str]:
-        ruta = raiz / ".checkpoint.json"
-        if not ruta.is_file():
-            return set()
-        try:
-            valor = json.loads(ruta.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            return set()
-        if not isinstance(valor, list):
-            return set()
-        return {
-            str(item)
-            for item in valor
-            if isinstance(item, str) and CactusExtractor._existe_checkpoint(raiz, item)
-        }
+        return _cargar_checkpoint(raiz)
 
     @staticmethod
     def _guardar_checkpoint(raiz: Path, done: set[str]) -> None:
-        (raiz / ".checkpoint.json").write_text(
-            json.dumps(sorted(done), ensure_ascii=False),
-            encoding="utf-8",
-        )
+        _guardar_checkpoint(raiz, done)
 
     @staticmethod
     def _progreso(callback: ProgressCallback | None, **datos: object) -> None:

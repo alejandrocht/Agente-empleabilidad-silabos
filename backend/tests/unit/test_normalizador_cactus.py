@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -58,6 +59,62 @@ def test_restringe_adjuntos_al_origen_https_autenticado() -> None:
     assert not extractor._url_adjunto_segura(
         "https://user:pass@cactus.example.test/ac/base.nsf/0/ABC/$FILE/a.pdf"
     )
+
+
+def test_checkpoint_corrupto_se_descarta_y_recupera_solo_archivos_existentes(
+    tmp_path: Path,
+) -> None:
+    info = {"nivel": "1", "nombre_curso": "BASES"}
+    clave = CactusExtractor._clave_checkpoint(info)
+    (tmp_path / ".checkpoint.json").write_text("{corrupto", encoding="utf-8")
+
+    assert CactusExtractor._cargar_checkpoint(tmp_path) == set()
+
+    ruta = tmp_path / "Ciclo_1" / "BASES.pdf"
+    ruta.parent.mkdir()
+    ruta.write_bytes(b"pdf")
+    CactusExtractor._guardar_checkpoint(tmp_path, {"Ciclo_1/FALTANTE", clave})
+
+    assert json.loads((tmp_path / ".checkpoint.json").read_text(encoding="utf-8")) == [
+        "Ciclo_1/BASES",
+        "Ciclo_1/FALTANTE",
+    ]
+    assert CactusExtractor._cargar_checkpoint(tmp_path) == {clave}
+
+
+def test_fallback_navegador_registra_exito_y_fallo_http(monkeypatch, tmp_path: Path) -> None:
+    extractor = CactusExtractor(base_url="https://cactus.example.test/ac/base.nsf")
+    info = {"nivel": "1", "nombre_curso": "BASES", "unid": "ABC"}
+    resultado_http = {"info": info, "status": "doc_error", "detalle": "HTML-no-login"}
+
+    monkeypatch.setattr(extractor, "_ronda_descarga", lambda *_args, **_kwargs: [resultado_http])
+    monkeypatch.setattr(extractor, "_capturar_cookies", lambda _contexto: {})
+    monkeypatch.setattr(extractor, "_descargar_por_navegador", lambda *_args: "pdf")
+
+    exito = extractor._descargar_cursos(
+        object(), object(), [info], tmp_path, set(), "usuario", "secreto", None, None
+    )
+
+    assert exito["archivos_descargados"] == 1
+    assert exito["fetch_fallidos"] == 0
+    assert json.loads((tmp_path / ".checkpoint.json").read_text(encoding="utf-8")) == [
+        "Ciclo_1/BASES"
+    ]
+
+    monkeypatch.setattr(extractor, "_descargar_por_navegador", lambda *_args: None)
+    fallo = extractor._descargar_cursos(
+        object(), object(), [info], tmp_path, set(), "usuario", "secreto", None, None
+    )
+
+    assert fallo["archivos_descargados"] == 0
+    assert fallo["fetch_fallidos"] == 1
+    assert fallo["errores"] == [
+        {
+            "codigo": "CACTUS_ADJUNTO_NO_DESCARGABLE",
+            "curso": "BASES",
+            "mensaje": "El curso figura en Cactus, pero el adjunto no pudo descargarse.",
+        }
+    ]
 
 
 def test_prefiere_texto_del_enlace_para_no_confundir_columnas_de_la_fila() -> None:
