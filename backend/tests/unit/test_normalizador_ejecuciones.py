@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -119,6 +119,121 @@ def test_a_dict_de_empleabilidad_conserva_sus_outputs(tmp_path: Path) -> None:
     assert [output["archivo"] for output in estado["outputs"]] == [
         "salidas/requerimiento_laboral.csv"
     ]
+
+
+def test_manifest_conserva_bytes_ordenados_y_timestamps_en_un_reinicio(tmp_path: Path) -> None:
+    gestor, id_ejecucion, directorio = _gestor_con_ejecucion(tmp_path)
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    ejecucion.creada_en = "2026-09-08T11:00:00+00:00"
+    ejecucion.actualizada_en = "2026-09-08T12:00:00+00:00"
+    gestor._persistir(ejecucion)
+
+    bytes_manifest = (directorio / "manifest.json").read_bytes()
+    reiniciado = GestorEjecuciones(tmp_path)
+    estado = reiniciado.obtener(id_ejecucion)
+
+    assert bytes_manifest.startswith(b'{\n  "id_ejecucion": "NOR_')
+    assert b'  "creada_en": "2026-09-08T11:00:00+00:00",' in bytes_manifest
+    assert b'  "actualizada_en": "2026-09-08T12:00:00+00:00",' in bytes_manifest
+    assert not bytes_manifest.endswith(b"\n")
+    assert not (directorio / "manifest.json.tmp").exists()
+    assert list(json.loads(bytes_manifest)) == [
+        "id_ejecucion",
+        "tipo",
+        "archivo",
+        "parametros",
+        "configuracion_curricular",
+        "estado",
+        "creada_en",
+        "actualizada_en",
+        "cancelacion_solicitada",
+        "cancelada_en",
+        "validacion",
+        "validacion_silabos",
+        "limpieza",
+        "limpieza_silabos",
+        "normalizacion",
+        "release_gate",
+        "aprobacion_curricular",
+        "catalogo_chh",
+        "fuente",
+        "progreso_fuente",
+        "progreso_llm",
+        "hallazgos",
+        "outputs",
+    ]
+    assert estado["creada_en"] == "2026-09-08T11:00:00+00:00"
+    assert estado["actualizada_en"] == "2026-09-08T12:00:00+00:00"
+
+
+def test_historial_usa_snapshot_activo_sobre_manifest_persistido(tmp_path: Path) -> None:
+    gestor, id_ejecucion, _directorio = _gestor_con_ejecucion(tmp_path)
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    ejecucion.estado = "limpiando"
+    gestor._persistir(ejecucion)
+    ejecucion.estado = "normalizando"
+
+    historial = gestor.listar_historial()
+
+    assert historial["ejecuciones"][0]["id_ejecucion"] == id_ejecucion
+    assert historial["ejecuciones"][0]["estado"] == "normalizando"
+
+
+def test_reporte_malformado_conserva_mensajes_publicos(tmp_path: Path) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    id_ejecucion, directorio = gestor.crear("empleabilidad", "fuente.xlsx")
+    reportes = directorio / "salidas" / "reportes"
+    reportes.mkdir(parents=True)
+    (reportes / "incompleto.json").write_text("{", encoding="utf-8")
+    (reportes / "incompleto.jsonl").write_text('{"ok":true}\n{', encoding="utf-8")
+
+    reporte = gestor.obtener_reporte(id_ejecucion)
+
+    assert reporte["reportes"] == {
+        "incompleto.json": {
+            "no_disponible": True,
+            "mensaje": "El reporte está malformado.",
+        },
+        "incompleto.jsonl": {
+            "no_disponible": True,
+            "mensaje": "El reporte contiene una línea malformada.",
+        },
+    }
+
+
+def test_retencion_ttl_y_lru_solo_eliminan_ejecuciones_terminales(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("NORMALIZADOR_HISTORIAL_MAX_EJECUCIONES", "1")
+    monkeypatch.setenv("NORMALIZADOR_HISTORIAL_RETENCION_DIAS", "1")
+    gestor = GestorEjecuciones(tmp_path)
+    activa_id, activa_directorio = gestor.crear("silabos", "activa.zip")
+    activa = gestor._obtener_objeto(activa_id)
+    activa.actualizada_en = "2020-01-01T00:00:00+00:00"
+    gestor._persistir(activa)
+
+    vencida_id, vencida_directorio = gestor.crear("silabos", "vencida.zip")
+    vencida = gestor._obtener_objeto(vencida_id)
+    vencida.estado = "limpiado"
+    vencida.actualizada_en = "2020-01-01T00:00:00+00:00"
+    gestor._persistir(vencida)
+
+    primera_id, primera_directorio = gestor.crear("silabos", "primera.zip")
+    primera = gestor._obtener_objeto(primera_id)
+    primera.estado = "limpiado"
+    gestor._finalizar(primera)
+    primera.actualizada_en = (datetime.now(UTC) - timedelta(minutes=1)).isoformat()
+    gestor._persistir(primera)
+
+    segunda_id, segunda_directorio = gestor.crear("silabos", "segunda.zip")
+    segunda = gestor._obtener_objeto(segunda_id)
+    segunda.estado = "limpiado"
+    gestor._finalizar(segunda)
+
+    assert activa_directorio.exists()
+    assert not vencida_directorio.exists()
+    assert not primera_directorio.exists()
+    assert segunda_directorio.exists()
 
 
 def test_cancelar_persiste_la_solicitud_y_el_worker_cierra_como_cancelado(
