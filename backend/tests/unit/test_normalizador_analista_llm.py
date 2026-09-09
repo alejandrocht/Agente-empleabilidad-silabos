@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import inspect
 import json
 from pathlib import Path
 from threading import Event
@@ -18,6 +19,7 @@ from agente.normalizador.silabos import (
     analista_llm,
     contexto_analista,
     normalizacion_decisiones,
+    respuesta_cache_analista,
     salida,
 )
 
@@ -236,9 +238,30 @@ def test_contexto_analista_reexporta_helpers_y_preserva_modelos_y_prompt() -> No
     ):
         assert getattr(analista_llm, nombre) is getattr(normalizacion_decisiones, nombre)
 
+    for nombre in (
+        "_validar_respuesta_por_orden",
+        "_clave_logro_literal",
+        "_clave_lote",
+        "_leer_cache",
+        "_guardar_cache",
+        "_nombre_modelo",
+    ):
+        assert getattr(analista_llm, nombre) is getattr(respuesta_cache_analista, nombre)
+
     assert "DecisionCurricular" not in normalizacion_decisiones.__dict__
+    assert "agente" not in Path(respuesta_cache_analista.__file__).read_text(encoding="utf-8")
+    assert tuple(inspect.signature(analista_llm._asignar_decisiones_por_orden).parameters) == (
+        "lote",
+        "respuesta",
+    )
+    assert tuple(
+        inspect.signature(analista_llm._asignar_decisiones_parciales_por_logro).parameters
+    ) == ("lote", "respuesta")
     assert analista_llm.DecisionCurricular.__module__ == analista_llm.__name__
     assert analista_llm.LoteDecisionesCurricularesLLM.__module__ == analista_llm.__name__
+    assert analista_llm.LoteDecisionesCurricularesLLM.model_json_schema()["properties"][
+        "decisiones"
+    ]["type"] == "array"
     lote = (
         {
             "id_silabo": "SIL_GOLD",
@@ -1819,4 +1842,9 @@ def test_cache_jsonl_hit_preserva_lineage_del_caso(monkeypatch, tmp_path: Path) 
     assert filas[0]["clave_lote"]
     assert list(primero.propuestas) == [esperado]
     assert list(segundo.propuestas) == [esperado]
+    assert cache.read_bytes() == b"".join(
+        json.dumps(fila, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n"
+        for fila in sorted(filas, key=lambda fila: fila["clave_lote"])
+    )
+    assert primero.modelo_analista == segundo.modelo_analista == "gpt-5.6-luna-test"
     assert analista.logros_por_llamada == [[logro]]
