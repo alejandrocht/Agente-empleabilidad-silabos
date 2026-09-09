@@ -1,10 +1,16 @@
+import hashlib
+import json
+
 import pytest
 
+from agente.normalizador.silabos import paquetes as paquetes_modulo
+from agente.normalizador.silabos import paquetes_componentes
 from agente.normalizador.silabos.paquetes import (
     IdentidadFuenteIncompleta,
     ensamblar_paquetes_chh,
     id_paquete_chh,
     identidad_fuente_chh,
+    revision_paquetes_chh,
     validar_integridad_paquetes_chh,
 )
 
@@ -21,6 +27,25 @@ def _row(**overrides):
     }
     row.update(overrides)
     return row
+
+
+def test_component_projection_reexports_preserve_canonical_bytes_and_review_hash():
+    packages = ensamblar_paquetes_chh(
+        [_row()], id_ejecucion="NOR_1", carrera="MARKETING", periodo="2026-1"
+    )
+    payload = json.dumps(packages, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == (
+        "b77ed9e1da2e7520d387341a06c847d4e92b3d89349f76b7ac847e840942b8e3"
+    )
+    assert revision_paquetes_chh(packages) == "4c9079e957468df1"
+    assert (
+        paquetes_modulo.PACKAGE_SOURCE_IDENTITY_FIELD
+        is paquetes_componentes.PACKAGE_SOURCE_IDENTITY_FIELD
+    )
+    assert paquetes_modulo._component_from_row is paquetes_componentes._component_from_row
+    assert paquetes_modulo._unique_components is paquetes_componentes._unique_components
+    assert "paquetes" not in paquetes_componentes.__dict__
 
 
 def test_package_identity_includes_execution_and_course_context():
