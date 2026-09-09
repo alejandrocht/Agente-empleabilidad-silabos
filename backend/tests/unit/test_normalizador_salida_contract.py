@@ -13,6 +13,7 @@ from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
 from agente.normalizador.modelos import ArchivoSilabo, Hallazgo, ResultadoValidacionSilabos
 from agente.normalizador.silabos import (
     normalizacion_curricular,
+    release_gate,
     resolucion_curricular,
     salida,
     validacion_salida,
@@ -636,3 +637,13 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
         assert facade is extraido
         if callable(facade):
             assert inspect.signature(facade) == inspect.signature(extraido)
+
+    for nombre in ("evaluar_release_gate", "_validar_pendientes_fuente"):
+        extraido = getattr(validacion_salida, nombre)
+        normalizador = getattr(release_gate, nombre)
+        assert extraido is normalizador
+        assert inspect.signature(extraido) == inspect.signature(normalizador)
+
+    source = inspect.getsource(release_gate)
+    assert "validacion_salida" not in source
+    assert "silabos.salida" not in source
