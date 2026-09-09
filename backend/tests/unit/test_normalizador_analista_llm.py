@@ -14,7 +14,12 @@ from agente.config import settings
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
 from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import ProgresoLimpiezaLLM
-from agente.normalizador.silabos import analista_llm, contexto_analista, salida
+from agente.normalizador.silabos import (
+    analista_llm,
+    contexto_analista,
+    normalizacion_decisiones,
+    salida,
+)
 
 
 class _LLMFalso:
@@ -212,6 +217,26 @@ def test_contexto_analista_reexporta_helpers_y_preserva_modelos_y_prompt() -> No
     ):
         assert getattr(analista_llm, nombre) is getattr(contexto_analista, nombre)
 
+    for nombre in (
+        "_validar_decision",
+        "_errores_grounding_decision",
+        "_anclas_grounding",
+        "_competencia_anclada_en_fuente_o_declarada",
+        "_reporte_sin_decision_llm",
+        "_reporte_reintento_omitidos",
+        "_asegurar_cobertura_reportes",
+        "_completar_evidencia",
+        "evidencia_decision",
+        "_normalizar_habilidad_nominalizada",
+        "_normalizar_habilidad_forma_conjugada",
+        "_normalizar_habilidad_frase_cerrada",
+        "_normalizar_habilidad",
+        "_evidencia_en_texto",
+        "_reporte_decision",
+    ):
+        assert getattr(analista_llm, nombre) is getattr(normalizacion_decisiones, nombre)
+
+    assert "DecisionCurricular" not in normalizacion_decisiones.__dict__
     assert analista_llm.DecisionCurricular.__module__ == analista_llm.__name__
     assert analista_llm.LoteDecisionesCurricularesLLM.__module__ == analista_llm.__name__
     lote = (
