@@ -15,7 +15,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
 
 import requests
 
@@ -39,6 +38,11 @@ from agente.normalizador.silabos.cactus_archivos import (
     ruta_curso,
     sanitize_filename,
     strip_accents,
+)
+from agente.normalizador.silabos.cactus_navegacion import (
+    CactusAuthenticationError,
+    NavegadorCactus,
+    _SesionCaida,  # noqa: F401
 )
 
 __all__ = (
@@ -71,17 +75,6 @@ MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
 
 ProgressCallback = Callable[[dict[str, object]], None]
 CancelCallback = Callable[[], bool]
-
-
-class CactusAuthenticationError(CactusExtractorError):
-    """La sesión de Cactus no pudo autenticarse."""
-
-    def __init__(self, mensaje: str) -> None:
-        super().__init__("CACTUS_AUTENTICACION_FALLIDA", mensaje)
-
-
-class _SesionCaida(RuntimeError):
-    """La sesión Domino volvió al formulario de login."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -329,38 +322,12 @@ class CactusExtractor:
         contrasena: str,
         cancelada: CancelCallback | None,
     ) -> None:
-        self._verificar_cancelacion(cancelada)
-        try:
-            if not is_login_page(pagina.content()):
-                pagina.goto(self.login_probe, wait_until="domcontentloaded", timeout=30000)
-        except Exception as exc:
-            raise CactusAuthenticationError(
-                f"No se pudo abrir la pantalla de autenticación de Cactus: {type(exc).__name__}."
-            ) from exc
-
-        if not is_login_page(pagina.content()):
-            return
-        if not usuario.strip() or not contrasena:
-            raise CactusAuthenticationError(
-                "Cactus solicitó autenticación y no se recibieron credenciales completas."
-            )
-        try:
-            pagina.locator("input[name='Username']").fill(usuario.strip())
-            pagina.locator("input[name='Password']").fill(contrasena)
-            boton = pagina.locator("a:has(img[alt='aceptar'])")
-            if boton.count() > 0:
-                boton.first.click()
-            else:
-                pagina.locator("a[href*='javascript:Aceptar']").click()
-            pagina.wait_for_load_state("networkidle", timeout=15000)
-        except Exception as exc:
-            raise CactusAuthenticationError(
-                f"No se pudo completar el login de Cactus: {type(exc).__name__}."
-            ) from exc
-        if is_login_page(pagina.content()):
-            raise CactusAuthenticationError(
-                "Cactus rechazó las credenciales o la sesión no terminó correctamente."
-            )
+        NavegadorCactus(
+            base_url=self.base_url,
+            view_url=self.view_url,
+            login_probe=self.login_probe,
+            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
+        ).esperar_login(pagina, usuario, contrasena, cancelada, self._verificar_cancelacion)
 
     def _procesar_carrera(
         self,
@@ -371,29 +338,24 @@ class CactusExtractor:
         contrasena: str,
         cancelada: CancelCallback | None,
     ) -> list[dict[str, str]] | None:
-        periodo_norm = normalize_text(periodo)
-        for _intento in range(3):
-            self._verificar_cancelacion(cancelada)
-            try:
-                pos_periodo = self._abrir_periodo(pagina, periodo_norm, cancelada)
-                if not pos_periodo:
-                    return None
-                pos_carrera = self._buscar_carrera(
-                    pagina,
-                    pos_periodo,
-                    normalize_text(carrera),
-                    cancelada,
-                )
-                if not pos_carrera:
-                    return None
-                return self._cursos_de_carrera(pagina, pos_carrera, carrera, periodo, cancelada)
-            except _SesionCaida:
-                if _intento == 2:
-                    raise CactusAuthenticationError(
-                        "La sesión de Cactus cayó tres veces mientras se buscaba la carrera."
-                    )
-                self._esperar_login(pagina, usuario, contrasena, cancelada)
-        return None
+        return NavegadorCactus(
+            base_url=self.base_url,
+            view_url=self.view_url,
+            login_probe=self.login_probe,
+            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
+        ).procesar_carrera(
+            pagina,
+            carrera,
+            periodo,
+            usuario,
+            contrasena,
+            cancelada,
+            verificar_cancelacion=self._verificar_cancelacion,
+            esperar_login=self._esperar_login,
+            esperar_vista=self._esperar_vista,
+            comprobar_login=self._comprobar_login,
+            clic_siguiente=self._clic_siguiente,
+        )
 
     def _abrir_periodo(
         self,
@@ -401,23 +363,20 @@ class CactusExtractor:
         periodo_norm: str,
         cancelada: CancelCallback | None,
     ) -> str | None:
-        pagina.goto(f"{self.view_url}?OpenView&CollapseView", wait_until="domcontentloaded")
-        self._esperar_vista(pagina)
-        self._comprobar_login(pagina)
-        while True:
-            self._verificar_cancelacion(cancelada)
-            for link in pagina.locator("a[href*='Expand=']").all():
-                href = link.get_attribute("href") or ""
-                match = re.search(r"Expand=(\d+)(?:[#&]|$)", href)
-                if match and periodo_norm in self._etiqueta(link):
-                    posicion = match.group(1)
-                    link.click()
-                    self._esperar_vista(pagina)
-                    self._comprobar_login(pagina)
-                    return posicion
-            if not self._clic_siguiente(pagina):
-                return None
-            self._comprobar_login(pagina)
+        return NavegadorCactus(
+            base_url=self.base_url,
+            view_url=self.view_url,
+            login_probe=self.login_probe,
+            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
+        ).abrir_periodo(
+            pagina,
+            periodo_norm,
+            cancelada,
+            verificar_cancelacion=self._verificar_cancelacion,
+            esperar_vista=self._esperar_vista,
+            comprobar_login=self._comprobar_login,
+            clic_siguiente=self._clic_siguiente,
+        )
 
     def _buscar_carrera(
         self,
@@ -426,24 +385,21 @@ class CactusExtractor:
         carrera_norm: str,
         cancelada: CancelCallback | None,
     ) -> str | None:
-        patron = re.compile(rf"{re.escape(pos_periodo)}\.\d+$")
-        prefijo = f"{pos_periodo}."
-        while True:
-            self._verificar_cancelacion(cancelada)
-            for posicion, link in self._iter_posiciones(pagina):
-                if patron.match(posicion) and self._etiqueta(link) == carrera_norm:
-                    link.click()
-                    self._esperar_vista(pagina)
-                    self._comprobar_login(pagina)
-                    return posicion
-            if not self._clic_siguiente(pagina):
-                return None
-            self._comprobar_login(pagina)
-            if not any(
-                posicion.startswith(prefijo)
-                for posicion, _ in self._iter_posiciones(pagina)
-            ):
-                return None
+        return NavegadorCactus(
+            base_url=self.base_url,
+            view_url=self.view_url,
+            login_probe=self.login_probe,
+            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
+        ).buscar_carrera(
+            pagina,
+            pos_periodo,
+            carrera_norm,
+            cancelada,
+            verificar_cancelacion=self._verificar_cancelacion,
+            esperar_vista=self._esperar_vista,
+            comprobar_login=self._comprobar_login,
+            clic_siguiente=self._clic_siguiente,
+        )
 
     def _cursos_de_carrera(
         self,
@@ -453,40 +409,22 @@ class CactusExtractor:
         periodo: str,
         cancelada: CancelCallback | None,
     ) -> list[dict[str, str]]:
-        ciclos = self._leer_ciclos(pagina, pos_carrera, cancelada)
-        cursos: list[dict[str, str]] = []
-        for nivel, href in ciclos:
-            self._verificar_cancelacion(cancelada)
-            match = re.search(r"Expand=([\d.]+)", href)
-            pos_ciclo = match.group(1) if match else None
-            full_url = urljoin(f"{self.base_url}/", href)
-            pagina.goto(full_url, wait_until="domcontentloaded")
-            self._esperar_vista(pagina)
-            self._comprobar_login(pagina)
-            while True:
-                self._verificar_cancelacion(cancelada)
-                for unid, nombre in self._cursos_visibles(pagina):
-                    if not any(item["unid"] == unid and item["nivel"] == nivel for item in cursos):
-                        cursos.append(
-                            {
-                                "unid": unid,
-                                "carrera": carrera,
-                                "periodo": periodo,
-                                "nivel": nivel,
-                                "nombre_curso": nombre,
-                            }
-                        )
-                if not pos_ciclo:
-                    break
-                if any(
-                    self._posicion_mayor(posicion, pos_ciclo)
-                    for posicion, _ in self._iter_posiciones(pagina)
-                ):
-                    break
-                if not self._clic_siguiente(pagina):
-                    break
-                self._comprobar_login(pagina)
-        return cursos
+        return NavegadorCactus(
+            base_url=self.base_url,
+            view_url=self.view_url,
+            login_probe=self.login_probe,
+            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
+        ).cursos_de_carrera(
+            pagina,
+            pos_carrera,
+            carrera,
+            periodo,
+            cancelada,
+            verificar_cancelacion=self._verificar_cancelacion,
+            esperar_vista=self._esperar_vista,
+            comprobar_login=self._comprobar_login,
+            clic_siguiente=self._clic_siguiente,
+        )
 
     def _leer_ciclos(
         self,
@@ -494,23 +432,19 @@ class CactusExtractor:
         pos_carrera: str,
         cancelada: CancelCallback | None,
     ) -> list[tuple[str, str]]:
-        patron = re.compile(rf"{re.escape(pos_carrera)}\.\d+$")
-        prefijo = f"{pos_carrera}."
-        ciclos: dict[str, tuple[str, str]] = {}
-        while True:
-            self._verificar_cancelacion(cancelada)
-            hay_subarbol = False
-            for posicion, link in self._iter_posiciones(pagina):
-                if posicion.startswith(prefijo):
-                    hay_subarbol = True
-                if patron.match(posicion) and posicion not in ciclos:
-                    match = re.search(r"(?<!\d)(\d{2})(?!\d)", self._etiqueta(link))
-                    nivel = match.group(1) if match else posicion.split(".")[-1].zfill(2)
-                    ciclos[posicion] = (nivel, link.get_attribute("href") or "")
-            if not hay_subarbol or not self._clic_siguiente(pagina):
-                break
-            self._comprobar_login(pagina)
-        return sorted(ciclos.values(), key=lambda item: item[0])
+        return NavegadorCactus(
+            base_url=self.base_url,
+            view_url=self.view_url,
+            login_probe=self.login_probe,
+            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
+        ).leer_ciclos(
+            pagina,
+            pos_carrera,
+            cancelada,
+            verificar_cancelacion=self._verificar_cancelacion,
+            comprobar_login=self._comprobar_login,
+            clic_siguiente=self._clic_siguiente,
+        )
 
     def _descargar_cursos(
         self,
@@ -769,44 +703,18 @@ class CactusExtractor:
         info: dict[str, str],
         directorio_salida: Path,
     ) -> str | None:
-        url_doc = f"{self.base_url}/0/{info['unid']}?OpenDocument"
-        try:
-            pagina.goto(url_doc, wait_until="domcontentloaded", timeout=30000)
-        except Exception:
-            return None
-        if is_login_page(pagina.content()):
-            return None
-        enlaces = pagina.locator("a[href*='$FILE']")
-        objetivo: Any = None
-        extension_objetivo: str | None = None
-        for indice in range(enlaces.count()):
-            enlace = enlaces.nth(indice)
-            href = enlace.get_attribute("href") or ""
-            match = re.search(r"\.(pdf|docx?)(?:[?#]|$)", href, re.IGNORECASE)
-            if not match:
-                continue
-            if not self._url_adjunto_segura(self._url_adjunto(href, info["unid"])):
-                continue
-            extension = match.group(1).lower()
-            if extension != "pdf" or objetivo is None:
-                objetivo = enlace
-                extension_objetivo = extension
-            if extension != "pdf":
-                break
-        if objetivo is None or extension_objetivo is None:
-            return None
-        ruta = ruta_curso(directorio_salida, info, extension_objetivo)
-        try:
-            with pagina.expect_download(timeout=12000) as descarga_info:
-                objetivo.click()
-            descarga_info.value.save_as(str(ruta))
-            if ruta.stat().st_size > MAX_ATTACHMENT_BYTES:
-                ruta.unlink(missing_ok=True)
-                return None
-        except Exception:
-            ruta.unlink(missing_ok=True)
-            return None
-        return extension_objetivo
+        return NavegadorCactus(
+            base_url=self.base_url,
+            view_url=self.view_url,
+            login_probe=self.login_probe,
+            max_attachment_bytes=MAX_ATTACHMENT_BYTES,
+        ).descargar_por_navegador(
+            pagina,
+            info,
+            directorio_salida,
+            url_adjunto=self._url_adjunto,
+            url_adjunto_segura=self._url_adjunto_segura,
+        )
 
     def _aplicar_resultado(
         self,
@@ -944,68 +852,13 @@ class CactusExtractor:
         if cancelada is not None and cancelada():
             raise CancelacionSolicitada()
 
-    @staticmethod
-    def _comprobar_login(pagina: Any) -> None:
-        if is_login_page(pagina.content()):
-            raise _SesionCaida()
-
-    @staticmethod
-    def _esperar_vista(pagina: Any) -> None:
-        try:
-            pagina.wait_for_load_state("domcontentloaded")
-            pagina.wait_for_selector(
-                "a[href*='Expand='], a[href*='OpenDocument']",
-                timeout=8000,
-            )
-        except Exception:
-            pass
+    _comprobar_login = staticmethod(NavegadorCactus.comprobar_login)
+    _esperar_vista = staticmethod(NavegadorCactus.esperar_vista)
+    _etiqueta = staticmethod(NavegadorCactus.etiqueta)
+    _iter_posiciones = staticmethod(NavegadorCactus.iter_posiciones)
+    _cursos_visibles = staticmethod(NavegadorCactus.cursos_visibles)
+    _posicion_mayor = staticmethod(NavegadorCactus.posicion_mayor)
 
     @staticmethod
     def _clic_siguiente(pagina: Any) -> bool:
-        siguiente = pagina.get_by_role("link", name=re.compile(r"Next", re.IGNORECASE))
-        if siguiente.count() == 0:
-            return False
-        siguiente.first.click()
-        CactusExtractor._esperar_vista(pagina)
-        return True
-
-    @staticmethod
-    def _etiqueta(link: Any) -> str:
-        texto_link = normalize_text(link.inner_text())
-        if texto_link:
-            return texto_link
-        fila = link.locator("xpath=ancestor::tr[1]")
-        texto = normalize_text(fila.inner_text()) if fila.count() else ""
-        return texto
-
-    @staticmethod
-    def _iter_posiciones(pagina: Any) -> list[tuple[str, Any]]:
-        resultado: list[tuple[str, Any]] = []
-        for link in pagina.locator("a[href*='Expand=']").all():
-            href = link.get_attribute("href") or ""
-            match = re.search(r"Expand=(\d+(?:\.\d+)*)(?:[#&]|$)", href)
-            if match:
-                resultado.append((match.group(1), link))
-        return resultado
-
-    @staticmethod
-    def _cursos_visibles(pagina: Any) -> list[tuple[str, str]]:
-        resultado: list[tuple[str, str]] = []
-        for link in pagina.locator("a[href*='?OpenDocument']").all():
-            href = link.get_attribute("href") or ""
-            match = re.search(r"/([A-Fa-f0-9]{32})\?OpenDocument", href)
-            if not match:
-                continue
-            unid = match.group(1)
-            texto = link.inner_text().strip()
-            resultado.append((unid, sanitize_filename(texto) if texto else unid[:8]))
-        return resultado
-
-    @staticmethod
-    def _posicion_mayor(left: str, right: str) -> bool:
-        try:
-            return tuple(int(part) for part in left.split(".")) > tuple(
-                int(part) for part in right.split(".")
-            )
-        except ValueError:
-            return False
+        return NavegadorCactus.clic_siguiente(pagina, CactusExtractor._esperar_vista)

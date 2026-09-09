@@ -6,9 +6,15 @@ import json
 from pathlib import Path
 from zipfile import ZipFile
 
+import pytest
+
 from agente.normalizador import ejecuciones
 from agente.normalizador.ejecuciones import GestorEjecuciones
 from agente.normalizador.modelos import ResultadoLimpiezaSilabos
+from agente.normalizador.silabos.cactus_navegacion import (
+    CactusAuthenticationError,
+    NavegadorCactus,
+)
 from agente.normalizador.silabos.fuente_cactus import (
     CactusExtractor,
     ResultadoExtraccionCactus,
@@ -133,6 +139,231 @@ def test_prefiere_texto_del_enlace_para_no_confundir_columnas_de_la_fila() -> No
             return FilaFalsa()
 
     assert CactusExtractor._etiqueta(EnlaceFalso()) == "MARKETING"
+
+
+class _LocatorFalso:
+    def __init__(self, enlaces: list[_EnlaceFalso] | None = None) -> None:
+        self.enlaces = enlaces or []
+
+    @property
+    def first(self) -> _EnlaceFalso:
+        return self.enlaces[0]
+
+    def all(self) -> list[_EnlaceFalso]:
+        return self.enlaces
+
+    def count(self) -> int:
+        return len(self.enlaces)
+
+    def nth(self, indice: int) -> _EnlaceFalso:
+        return self.enlaces[indice]
+
+
+class _EnlaceFalso:
+    def __init__(self, pagina: _PaginaFalsa, href: str, texto: str, accion: str = "") -> None:
+        self.pagina = pagina
+        self.href = href
+        self.texto = texto
+        self.accion = accion
+
+    def click(self) -> None:
+        if self.accion == "siguiente":
+            self.pagina.avanzar()
+        elif self.accion:
+            self.pagina.estado = self.accion
+
+    def get_attribute(self, nombre: str) -> str:
+        assert nombre == "href"
+        return self.href
+
+    def inner_text(self) -> str:
+        return self.texto
+
+    def locator(self, _selector: str) -> _LocatorFalso:
+        return _LocatorFalso()
+
+
+class _PaginaFalsa:
+    def __init__(self) -> None:
+        self.estado = "inicio"
+        self.pagina_periodos = 0
+        self.urls: list[str] = []
+
+    def content(self) -> str:
+        return "<html>contenido</html>"
+
+    def goto(self, url: str, **_kwargs: object) -> None:
+        self.urls.append(url)
+        if "CollapseView" in url:
+            self.estado = "periodos"
+        elif "Expand=1.2.3" in url:
+            self.estado = "curso"
+
+    def locator(self, selector: str) -> _LocatorFalso:
+        if selector == "a[href*='Expand=']":
+            if self.estado == "periodos":
+                if self.pagina_periodos == 0:
+                    return _LocatorFalso([_EnlaceFalso(self, "?Expand=9", "2025-2")])
+                return _LocatorFalso([_EnlaceFalso(self, "?Expand=1", "2026-1", "carrera")])
+            if self.estado == "carrera":
+                return _LocatorFalso(
+                    [_EnlaceFalso(self, "?Expand=1.2", "Marketing", "ciclos")]
+                )
+            if self.estado == "ciclos":
+                return _LocatorFalso([_EnlaceFalso(self, "?Expand=1.2.3", "Ciclo 03")])
+            return _LocatorFalso()
+        if selector == "a[href*='?OpenDocument']" and self.estado == "curso":
+            return _LocatorFalso(
+                [
+                    _EnlaceFalso(
+                        self,
+                        "/0123456789ABCDEF0123456789ABCDEF?OpenDocument",
+                        "Bases de datos",
+                    )
+                ]
+            )
+        return _LocatorFalso()
+
+    def get_by_role(self, role: str, *, name: object) -> _LocatorFalso:
+        assert role == "link"
+        if self.estado == "periodos" and self.pagina_periodos == 0:
+            return _LocatorFalso([_EnlaceFalso(self, "", "Next", "siguiente")])
+        return _LocatorFalso()
+
+    def wait_for_load_state(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    def wait_for_selector(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    def avanzar(self) -> bool:
+        if self.estado != "periodos" or self.pagina_periodos:
+            return False
+        self.pagina_periodos = 1
+        return True
+
+
+def test_navega_periodo_carrera_paginacion_expand_y_open_document(monkeypatch) -> None:
+    extractor = CactusExtractor(base_url="https://cactus.example.test/ac/base.nsf")
+    pagina = _PaginaFalsa()
+    esperas: list[str] = []
+
+    monkeypatch.setattr(extractor, "_esperar_vista", lambda _pagina: esperas.append("vista"))
+
+    cursos = extractor._procesar_carrera(
+        pagina, "Marketing", "2026-1", "usuario", "secreto", None
+    )
+
+    assert cursos == [
+        {
+            "unid": "0123456789ABCDEF0123456789ABCDEF",
+            "carrera": "Marketing",
+            "periodo": "2026-1",
+            "nivel": "03",
+            "nombre_curso": "BASES_DE_DATOS",
+        }
+    ]
+    assert any("CollapseView" in url for url in pagina.urls)
+    assert any("Expand=1.2.3" in url for url in pagina.urls)
+    assert esperas
+
+
+class _CampoFalso:
+    def __init__(self) -> None:
+        self.valor = ""
+
+    def fill(self, valor: str) -> None:
+        self.valor = valor
+
+
+class _DescargaFalsa:
+    def __init__(self, contenido: bytes) -> None:
+        self.contenido = contenido
+
+    def save_as(self, ruta: str) -> None:
+        Path(ruta).write_bytes(self.contenido)
+
+
+class _ContextoDescargaFalso:
+    def __init__(self, contenido: bytes) -> None:
+        self.value = _DescargaFalsa(contenido)
+
+    def __enter__(self) -> _ContextoDescargaFalso:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        pass
+
+
+class _PaginaLoginYDescargaFalsa:
+    def __init__(self, contenido: bytes) -> None:
+        self.login = True
+        self.usuario = _CampoFalso()
+        self.contrasena = _CampoFalso()
+        self.boton = _EnlaceFalso(self, "", "", "autenticado")
+        self.contenido = contenido
+
+    @property
+    def estado(self) -> str:
+        return ""
+
+    @estado.setter
+    def estado(self, valor: str) -> None:
+        if valor == "autenticado":
+            self.login = False
+
+    def content(self) -> str:
+        return "_CustomLoginform" if self.login else "<html>documento</html>"
+
+    def goto(self, _url: str, **_kwargs: object) -> None:
+        pass
+
+    def locator(self, selector: str) -> _CampoFalso | _LocatorFalso:
+        if selector == "input[name='Username']":
+            return self.usuario
+        if selector == "input[name='Password']":
+            return self.contrasena
+        if selector == "a:has(img[alt='aceptar'])":
+            return _LocatorFalso([self.boton])
+        if selector == "a[href*='$FILE']":
+            return _LocatorFalso([_EnlaceFalso(self, "$FILE/silabo.pdf", "Sílabo")])
+        return _LocatorFalso()
+
+    def wait_for_load_state(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    def expect_download(self, **_kwargs: object) -> _ContextoDescargaFalso:
+        return _ContextoDescargaFalso(self.contenido)
+
+
+def test_login_y_fallback_playwright_rechazan_credenciales_incompletas_y_archivos_grandes(
+    tmp_path: Path,
+) -> None:
+    navegador = NavegadorCactus(
+        base_url="https://cactus.example.test/ac/base.nsf",
+        view_url="https://cactus.example.test/ac/base.nsf/VCursosXCiclAcdXEspc",
+        login_probe="https://cactus.example.test/login",
+        max_attachment_bytes=3,
+    )
+    pagina = _PaginaLoginYDescargaFalsa(b"1234")
+
+    with pytest.raises(CactusAuthenticationError):
+        navegador.esperar_login(pagina, "", "", None, lambda _cancelada: None)
+
+    navegador.esperar_login(pagina, "usuario", "secreto", None, lambda _cancelada: None)
+    assert pagina.usuario.valor == "usuario"
+    assert pagina.contrasena.valor == "secreto"
+    assert (
+        navegador.descargar_por_navegador(
+            pagina,
+            {"unid": "ABC", "nivel": "1", "nombre_curso": "BASES"},
+            tmp_path,
+            url_adjunto=lambda href, _unid: f"https://cactus.example.test/{href}",
+            url_adjunto_segura=lambda _url: True,
+        )
+        is None
+    )
+    assert not list(tmp_path.rglob("*.pdf"))
 
 
 def test_el_worker_entrega_el_paquete_cactus_al_pipeline_sin_persistir_secretos(
