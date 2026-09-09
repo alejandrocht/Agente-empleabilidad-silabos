@@ -17,6 +17,67 @@ CANDIDATOS_ARCHIVO = "candidatos_curriculares.json"
 ExceptionFactory = Callable[[str], Exception]
 
 
+def _rutas_transaccionales(
+    directorio: Path,
+    *,
+    catalog_root: Path,
+    not_permitted_error: ExceptionFactory,
+) -> tuple[Path, ...]:
+    try:
+        manifest = json.loads((directorio / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise not_permitted_error("No se pudo leer el manifest de la ejecución.") from exc
+    if not isinstance(manifest, dict):
+        raise not_permitted_error("El manifest de la ejecución no es válido.")
+    parametros = manifest.get("parametros")
+    parametros = parametros if isinstance(parametros, dict) else {}
+    carrera = _clave_ruta(_texto(parametros.get("carrera")))
+    periodo = _texto(parametros.get("periodo"))
+    carrera_root = catalog_root / "carreras" / carrera if carrera else None
+    perfil = carrera_root / periodo if carrera_root is not None and periodo else None
+    return (
+        (directorio, carrera_root, perfil)
+        if carrera_root is not None and perfil is not None
+        else (directorio,)
+    )
+
+
+def _capturar_arboles(
+    roots: tuple[Path, ...], *, not_permitted_error: ExceptionFactory
+) -> dict[Path, bytes]:
+    snapshot: dict[Path, bytes] = {}
+    for root in roots:
+        if not root.is_dir() or root.is_symlink():
+            continue
+        for path in root.rglob("*"):
+            if path.is_file() and not path.is_symlink():
+                try:
+                    snapshot[path] = path.read_bytes()
+                except OSError as exc:
+                    raise not_permitted_error(
+                        "No se pudo preparar la transacción de aprobación."
+                    ) from exc
+    return snapshot
+
+
+def _restaurar_arboles(roots: tuple[Path, ...], snapshot: dict[Path, bytes]) -> None:
+    for root in roots:
+        if not root.exists() or root.is_symlink():
+            continue
+        for path in root.rglob("*"):
+            if path.is_file() and path not in snapshot:
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+    for path, content in snapshot.items():
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        except OSError:
+            pass
+
+
 def _fila_relacion(
     id_curso: str,
     id_silabo: str,

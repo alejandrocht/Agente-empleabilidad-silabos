@@ -612,52 +612,21 @@ def _paquetes(directorio: Path, filas: list[dict[str, object]]) -> list[dict[str
 
 
 def _rutas_transaccionales(directorio: Path) -> tuple[Path, ...]:
-    manifest = _leer_manifest(directorio)
-    parametros = manifest.get("parametros")
-    parametros = parametros if isinstance(parametros, dict) else {}
-    carrera = _clave_ruta(_texto(parametros.get("carrera")))
-    periodo = _texto(parametros.get("periodo"))
-    carrera_root = ruta_catalogos() / "carreras" / carrera if carrera else None
-    perfil = carrera_root / periodo if carrera_root is not None and periodo else None
-    return (
-        (directorio, carrera_root, perfil)
-        if carrera_root is not None and perfil is not None
-        else (directorio,)
+    return _persistencia_aprobaciones._rutas_transaccionales(
+        directorio,
+        catalog_root=ruta_catalogos(),
+        not_permitted_error=AprobacionNoPermitida,
     )
 
 
 def _capturar_arboles(roots: tuple[Path, ...]) -> dict[Path, bytes]:
-    snapshot: dict[Path, bytes] = {}
-    for root in roots:
-        if not root.is_dir() or root.is_symlink():
-            continue
-        for path in root.rglob("*"):
-            if path.is_file() and not path.is_symlink():
-                try:
-                    snapshot[path] = path.read_bytes()
-                except OSError as exc:
-                    raise AprobacionNoPermitida(
-                        "No se pudo preparar la transacción de aprobación."
-                    ) from exc
-    return snapshot
+    return _persistencia_aprobaciones._capturar_arboles(
+        roots, not_permitted_error=AprobacionNoPermitida
+    )
 
 
 def _restaurar_arboles(roots: tuple[Path, ...], snapshot: dict[Path, bytes]) -> None:
-    for root in roots:
-        if not root.exists() or root.is_symlink():
-            continue
-        for path in root.rglob("*"):
-            if path.is_file() and path not in snapshot:
-                try:
-                    path.unlink()
-                except OSError:
-                    pass
-    for path, content in snapshot.items():
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(content)
-        except OSError:
-            pass
+    _persistencia_aprobaciones._restaurar_arboles(roots, snapshot)
 
 
 def _validar_directorio(directorio: Path) -> Path:

@@ -17,7 +17,12 @@ from agente.api import normalizador, servidor
 from agente.normalizador.ejecuciones import GestorEjecuciones
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
 from agente.normalizador.modelos import ArchivoSilabo, ResultadoValidacionSilabos
-from agente.normalizador.silabos import analista_llm, aprobaciones, validacion_aprobaciones
+from agente.normalizador.silabos import (
+    analista_llm,
+    aprobaciones,
+    persistencia_aprobaciones,
+    validacion_aprobaciones,
+)
 from agente.normalizador.silabos.analista_llm import ConceptoPropuesto, DecisionCurricular
 from agente.normalizador.silabos.salida import construir_salidas_curriculares
 
@@ -124,6 +129,130 @@ def _arbol_de_bytes(*roots: Path) -> dict[Path, bytes]:
     }
 
 
+def _agregar_habilidad_materializable(directorio: Path) -> None:
+    ruta = directorio / "salidas/reportes/pendientes_curriculares.jsonl"
+    filas = [json.loads(linea) for linea in ruta.read_text(encoding="utf-8").splitlines()]
+    filas.append(
+        {
+            "id_pendiente": "PEN_SKILL",
+            "tipo": "habilidad",
+            "estado_resolucion": "PENDIENTE_AMPLIACION_PERFIL",
+            "id_curso": "CUR_1",
+            "id_silabo": "SIL_1",
+            "id_logro": "LOG_1",
+            "archivo": "curso.docx",
+            "id_habilidad_fuente": "HAB_SRC_1",
+            "descripcion_fuente": "Analizar campañas.",
+            "propuesta": {
+                "nombre": "Analizar campañas",
+                "descripcion": "Analizar campañas.",
+            },
+            "evidencia": ["Analizar campañas."],
+        }
+    )
+    ruta.write_text("".join(json.dumps(fila) + "\n" for fila in filas), encoding="utf-8")
+
+
+_FRONTERAS_POR_CASO = {
+    "ADD_KEEP_PENDING": (
+        "sources",
+        "relations",
+        "pending",
+        "candidates",
+        "csv",
+        "gate",
+        "decisions",
+        "discards",
+        "manifest",
+    ),
+    "ADD_MATERIALIZABLE": (
+        "sources",
+        "relations",
+        "pending",
+        "candidates",
+        "csv",
+        "gate",
+        "decisions",
+        "discards",
+        "profile_reports",
+        "manifest",
+    ),
+    "DISCARD": (
+        "sources",
+        "relations",
+        "pending",
+        "candidates",
+        "csv",
+        "gate",
+        "decisions",
+        "discards",
+        "manifest",
+    ),
+}
+
+
+def _solicitud_para_frontera(caso: str, directorio: Path) -> list[dict[str, str]]:
+    if caso == "ADD_KEEP_PENDING":
+        return [
+            {"id_pendiente": "PEN_COMP", "decision": "ADD"},
+            {"id_pendiente": "PEN_TOOL", "decision": "KEEP_PENDING"},
+        ]
+    if caso == "DISCARD":
+        filas = aprobaciones._filas_clasificadas(directorio)
+        paquete = aprobaciones._paquetes(directorio, filas)[0]
+        return [
+            {
+                "id_paquete_chh": str(paquete["id_paquete_chh"]),
+                "decision": "DISCARD",
+                "reason": "No corresponde al alcance curricular aprobado.",
+            }
+        ]
+    _agregar_habilidad_materializable(directorio)
+    return [
+        {"id_pendiente": "PEN_COMP", "decision": "ADD"},
+        {"id_pendiente": "PEN_TOOL", "decision": "ADD"},
+        {"id_pendiente": "PEN_SKILL", "decision": "ADD"},
+    ]
+
+
+def _forzar_fallo_despues_de_frontera(
+    monkeypatch: pytest.MonkeyPatch, caso: str, frontera: str
+) -> None:
+    nombre = {
+        "sources": "_escribir_fuentes",
+        "relations": "_escribir_relaciones",
+        "pending": "_escribir_jsonl_atomico",
+        "candidates": "_escribir_candidatos",
+        "gate": "_escribir_json_atomico",
+        "decisions": "_append_decisiones",
+        "discards": "_append_decisiones",
+        "profile_reports": "_materializar_perfil",
+        "manifest": "_persistir_manifest_aprobacion",
+    }.get(frontera)
+    if frontera == "csv":
+        nombre = (
+            "_escribir_archivos_curriculares"
+            if caso in {"ADD_KEEP_PENDING", "ADD_MATERIALIZABLE", "DISCARD"}
+            else "_eliminar_archivos_curriculares"
+        )
+    assert nombre is not None
+    original = getattr(aprobaciones, nombre)
+    archivo = {
+        "pending": aprobaciones.PENDIENTES_ARCHIVO,
+        "gate": "release_gate.json",
+        "decisions": aprobaciones.DECISIONES_ARCHIVO,
+        "discards": aprobaciones.DESCARTES_ARCHIVO,
+    }.get(frontera)
+
+    def persistir_y_fallar(*args: object, **kwargs: object) -> object:
+        resultado = original(*args, **kwargs)
+        if archivo is None or Path(args[0]).name == archivo:
+            raise RuntimeError(f"fallo de {frontera} simulado")
+        return resultado
+
+    monkeypatch.setattr(aprobaciones, nombre, persistir_y_fallar)
+
+
 def test_validacion_reexporta_misma_identidad_y_no_importa_la_fachada() -> None:
     for nombre in (
         "DECISIONES_VALIDAS",
@@ -145,6 +274,76 @@ def test_validacion_reexporta_misma_identidad_y_no_importa_la_fachada() -> None:
         and nodo.module == "agente.normalizador.silabos.aprobaciones"
         for nodo in imports
     )
+
+
+def test_persistencia_transaccional_no_importa_ni_reexporta_la_fachada_y_conserva_adaptadores(
+) -> None:
+    imports = ast.walk(ast.parse(inspect.getsource(persistencia_aprobaciones)))
+    assert not any(
+        (
+            isinstance(nodo, ast.ImportFrom)
+            and nodo.module == "agente.normalizador.silabos.aprobaciones"
+        )
+        or (
+            isinstance(nodo, ast.Import)
+            and any(
+                alias.name == "agente.normalizador.silabos.aprobaciones"
+                for alias in nodo.names
+            )
+        )
+        for nodo in imports
+    )
+    assert not hasattr(persistencia_aprobaciones, "AprobacionNoPermitida")
+    for nombre, parametros in (
+        ("_rutas_transaccionales", ("directorio",)),
+        ("_capturar_arboles", ("roots",)),
+        ("_restaurar_arboles", ("roots", "snapshot")),
+    ):
+        fachada = getattr(aprobaciones, nombre)
+        persistencia = getattr(persistencia_aprobaciones, nombre)
+        assert fachada is not persistencia
+        assert tuple(inspect.signature(fachada).parameters) == parametros
+    parametros_rutas = inspect.signature(
+        persistencia_aprobaciones._rutas_transaccionales
+    ).parameters
+    assert tuple(parametros_rutas) == (
+        "directorio",
+        "catalog_root",
+        "not_permitted_error",
+    )
+    assert tuple(inspect.signature(persistencia_aprobaciones._capturar_arboles).parameters) == (
+        "roots",
+        "not_permitted_error",
+    )
+
+
+@pytest.mark.parametrize(
+    ("caso", "frontera"),
+    [
+        (caso, frontera)
+        for caso, fronteras in _FRONTERAS_POR_CASO.items()
+        for frontera in fronteras
+    ],
+)
+def test_fallo_despues_de_cada_frontera_restaura_bytes_y_no_deja_temporales(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caso: str, frontera: str
+) -> None:
+    directorio, _ = _preparar(tmp_path, monkeypatch)
+    perfil = tmp_path / "catalogos" / "carreras" / "MARKETING" / "2026-1"
+    solicitud = _solicitud_para_frontera(caso, directorio)
+    antes = _arbol_de_bytes(directorio, perfil)
+    _forzar_fallo_despues_de_frontera(monkeypatch, caso, frontera)
+
+    with pytest.raises(RuntimeError, match=f"fallo de {frontera} simulado"):
+        aprobaciones.aplicar_decisiones_curriculares(directorio, solicitud)
+
+    assert _arbol_de_bytes(directorio, perfil) == antes
+    assert not [
+        ruta
+        for raiz in (directorio, perfil)
+        if raiz.is_dir()
+        for ruta in raiz.rglob("*.approval.tmp")
+    ]
 
 
 def test_error_tardio_restaura_el_arbol_de_bytes_de_aprobacion(
