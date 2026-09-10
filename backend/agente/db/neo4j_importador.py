@@ -30,6 +30,7 @@ from agente.normalizador.silabos.salida import (
     ARCHIVOS_SALIDA,
     COBERTURA_SCHEMA,
     COMPETENCIAS_SCHEMA,
+    CURSOS_SCHEMA,
     HABILIDADES_SCHEMA,
     HERRAMIENTAS_SCHEMA,
 )
@@ -40,9 +41,10 @@ ID_PATTERNS = {
     "id_competencia": re.compile(r"COMP_[0-9a-f]{16}"),
     "id_habilidad": re.compile(r"HAB_[0-9a-f]{16}"),
     "id_herramienta": re.compile(r"HERR_[0-9a-f]{16}"),
-    "id_cob_curricular": re.compile(r"COB_CUR_CAN_[0-9a-f]{16}"),
+    "id_cob_curricular": re.compile(r"COB_CUR_[0-9a-f]{16}"),
     "id_curso": re.compile(r"CUR_[0-9a-f]{16}"),
     "id_silabo": re.compile(r"SIL_[0-9a-f]{16}"),
+    "id_carrera": re.compile(r"CAR_[0-9a-f]{16}"),
 }
 
 RECOMENDACION = "Recomendamos revisar los datos antes de subirlos a la base de datos."
@@ -74,10 +76,11 @@ class ImportacionNeo4jError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class FuenteCurricular:
-    """Filas validadas y fingerprint de los cuatro archivos de una ejecución."""
+    """Filas validadas y fingerprint de los cinco archivos de una ejecución."""
 
     filas: dict[str, list[dict[str, str]]]
     fingerprint: str
+    silabos: tuple[dict[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +90,7 @@ class AnalisisImportacion:
     preview: dict[str, Any]
     fuente: FuenteCurricular
     filas_nuevas: dict[str, list[dict[str, str]]]
+    relaciones_curso_silabo_nuevas: tuple[dict[str, str], ...] = ()
 
 
 def _ahora() -> str:
@@ -191,7 +195,11 @@ class ImportadorNeo4j:
             }
             self._agregar_historial(registro)
             try:
-                self._escribir_grafo(id_importacion, analisis.filas_nuevas)
+                self._escribir_grafo(
+                    id_importacion,
+                    analisis.filas_nuevas,
+                    analisis.relaciones_curso_silabo_nuevas,
+                )
             except Exception:
                 self._actualizar_historial(
                     id_importacion,
@@ -301,7 +309,7 @@ class ImportadorNeo4j:
                 FuenteCurricular(self._filas_vacias(), ""),
                 self._filas_vacias(),
             )
-        errores = self._validar_formato(fuente.filas)
+        errores = self._validar_formato(fuente.filas, fuente.silabos)
         if errores:
             preview = self._preview_base(id_ejecucion, fuente.fingerprint)
             preview.update(
@@ -414,8 +422,18 @@ class ImportadorNeo4j:
             digest.update(b"\0")
             digest.update(contenido)
             filas[archivo] = self._leer_csv(ruta, esquema)
+        ruta_silabos = raiz / "limpios" / "silabos.jsonl"
+        if not ruta_silabos.is_file() or ruta_silabos.resolve().parent != (raiz / "limpios"):
+            raise ImportacionNeo4jError(
+                "La ejecución no contiene la fuente autoritativa de sílabos.",
+                status_code=404,
+            )
+        contenido_silabos = ruta_silabos.read_bytes()
+        digest.update(b"limpios/silabos.jsonl\0")
+        digest.update(contenido_silabos)
+        silabos = self._leer_silabos_jsonl(ruta_silabos)
         digest.update(id_ejecucion.encode("utf-8"))
-        return FuenteCurricular(filas, digest.hexdigest())
+        return FuenteCurricular(filas, digest.hexdigest(), tuple(silabos))
 
     @staticmethod
     def _leer_csv(ruta: Path, esquema: tuple[str, ...]) -> list[dict[str, str]]:
@@ -448,9 +466,53 @@ class ImportadorNeo4j:
                 f"El archivo {ruta.name} no está codificado como UTF-8."
             ) from exc
 
-    def _validar_formato(self, filas: dict[str, list[dict[str, str]]]) -> list[dict[str, str]]:
+    @staticmethod
+    def _leer_silabos_jsonl(ruta: Path) -> list[dict[str, str]]:
+        silabos: list[dict[str, str]] = []
+        try:
+            with ruta.open("r", encoding="utf-8") as archivo:
+                for numero, linea in enumerate(archivo, start=1):
+                    if numero > MAX_FILAS_POR_ARCHIVO:
+                        raise ImportacionNeo4jError(
+                            "El archivo silabos.jsonl supera el máximo de filas permitido."
+                        )
+                    if not linea.strip():
+                        continue
+                    try:
+                        registro = json.loads(linea)
+                    except json.JSONDecodeError as exc:
+                        raise ImportacionNeo4jError(
+                            f"La línea {numero} de silabos.jsonl no contiene JSON válido."
+                        ) from exc
+                    if not isinstance(registro, dict):
+                        raise ImportacionNeo4jError(
+                            f"La línea {numero} de silabos.jsonl no contiene un objeto."
+                        )
+                    datos = registro.get("datos")
+                    codigo_silabo = _texto(registro.get("codigo_silabo"))
+                    if not codigo_silabo and isinstance(datos, dict):
+                        codigo_silabo = _texto(datos.get("codigo_curso"))
+                    silabos.append(
+                        {
+                            "id_silabo": _texto(registro.get("id_silabo")),
+                            "id_curso": _texto(registro.get("id_curso")),
+                            "codigo_silabo": codigo_silabo,
+                        }
+                    )
+        except UnicodeDecodeError as exc:
+            raise ImportacionNeo4jError(
+                "El archivo silabos.jsonl no está codificado como UTF-8."
+            ) from exc
+        return silabos
+
+    def _validar_formato(
+        self,
+        filas: dict[str, list[dict[str, str]]],
+        silabos: tuple[dict[str, str], ...],
+    ) -> list[dict[str, str]]:
         errores: list[dict[str, str]] = []
         reglas = {
+            "curso.csv": (CURSOS_SCHEMA, "id_curso", "nombre_curso"),
             "catalogo_competencias.csv": (
                 COMPETENCIAS_SCHEMA,
                 "id_competencia",
@@ -491,8 +553,16 @@ class ImportadorNeo4j:
                 else:
                     vistos_id[id_fila] = numero
 
-                for campo in filas[archivo][0].keys() if filas[archivo] else ():
-                    if campo == "id_herramienta" and archivo == "cobertura_curricular.csv":
+                campos_obligatorios = (
+                    ("id_curso", "nombre_curso", "id_carrera")
+                    if archivo == "curso.csv"
+                    else filas[archivo][0].keys() if filas[archivo] else ()
+                )
+                for campo in campos_obligatorios:
+                    if (
+                        campo in {"id_habilidad", "id_herramienta"}
+                        and archivo == "cobertura_curricular.csv"
+                    ):
                         continue
                     if not fila.get(campo):
                         errores.append(
@@ -517,6 +587,18 @@ class ImportadorNeo4j:
                     elif nombre_norm:
                         vistos_nombre[nombre_norm] = str(numero)
 
+                if archivo == "curso.csv":
+                    id_carrera = fila.get("id_carrera", "")
+                    if not ID_PATTERNS["id_carrera"].fullmatch(id_carrera):
+                        errores.append(
+                            self._error(
+                                "REFERENCIA_INVALIDA",
+                                archivo,
+                                numero,
+                                "id_carrera no sigue el formato CAR_.",
+                            )
+                        )
+
             if archivo == "cobertura_curricular.csv":
                 vistos_clave: dict[tuple[str, ...], int] = {}
                 for numero, fila in enumerate(filas[archivo], start=2):
@@ -534,7 +616,7 @@ class ImportadorNeo4j:
                     else:
                         vistos_clave[clave] = numero
                     for campo in COBERTURA_SCHEMA[1:]:
-                        if campo == "id_herramienta" and not fila[campo]:
+                        if campo in {"id_habilidad", "id_herramienta"} and not fila[campo]:
                             continue
                         patron = ID_PATTERNS[campo]
                         if not fila[campo] or patron.fullmatch(fila[campo]) is None:
@@ -546,6 +628,73 @@ class ImportadorNeo4j:
                                     f"{campo} no sigue el formato del catálogo.",
                                 )
                             )
+        errores.extend(self._validar_integridad_silabos(filas, silabos))
+        return errores
+
+    def _validar_integridad_silabos(
+        self,
+        filas: dict[str, list[dict[str, str]]],
+        silabos: tuple[dict[str, str], ...],
+    ) -> list[dict[str, str]]:
+        errores: list[dict[str, str]] = []
+        cursos = {fila["id_curso"]: fila for fila in filas["curso.csv"]}
+        silabos_vistos: dict[str, str] = {}
+        for numero, silabo in enumerate(silabos, start=1):
+            id_silabo = silabo["id_silabo"]
+            id_curso = silabo["id_curso"]
+            if ID_PATTERNS["id_silabo"].fullmatch(id_silabo) is None:
+                errores.append(
+                    self._error(
+                        "ID_INVALIDO",
+                        "limpios/silabos.jsonl",
+                        numero,
+                        "id_silabo no sigue el formato SIL_.",
+                    )
+                )
+            if ID_PATTERNS["id_curso"].fullmatch(id_curso) is None:
+                errores.append(
+                    self._error(
+                        "REFERENCIA_INVALIDA",
+                        "limpios/silabos.jsonl",
+                        numero,
+                        "id_curso no sigue el formato CUR_.",
+                    )
+                )
+            curso = cursos.get(id_curso)
+            if curso is None:
+                errores.append(
+                    self._error(
+                        "SILABO_CURSO_NO_EXISTE",
+                        "limpios/silabos.jsonl",
+                        numero,
+                        "id_curso no existe en curso.csv.",
+                    )
+                )
+            elif (
+                silabo["codigo_silabo"]
+                and curso["codigo_curso"]
+                and silabo["codigo_silabo"] != curso["codigo_curso"]
+            ):
+                errores.append(
+                    self._error(
+                        "SILABO_CODIGO_CURSO_NO_COINCIDE",
+                        "limpios/silabos.jsonl",
+                        numero,
+                        "codigo_curso no coincide con el curso referenciado.",
+                    )
+                )
+            anterior = silabos_vistos.get(id_silabo)
+            if anterior is not None and anterior != id_curso:
+                errores.append(
+                    self._error(
+                        "SILABO_PAR_INCONSISTENTE",
+                        "limpios/silabos.jsonl",
+                        numero,
+                        "id_silabo declara más de un curso.",
+                    )
+                )
+            else:
+                silabos_vistos[id_silabo] = id_curso
         return errores
 
     @staticmethod
@@ -563,12 +712,64 @@ class ImportadorNeo4j:
             archivo: [] for archivo, _ in ARCHIVOS_SALIDA
         }
         resumen = {
+            "nuevos_cursos": 0,
+            "cursos_actualizados": 0,
+            "nuevas_relaciones_curso_silabo": 0,
             "nuevas_competencias": 0,
             "nuevas_habilidades": 0,
             "nuevas_herramientas": 0,
             "nuevas_coberturas": 0,
             "sin_cambios": 0,
         }
+        cursos_lote = {fila["id_curso"] for fila in fuente.filas["curso.csv"]}
+        carreras = existentes["carreras"]
+        for fila in fuente.filas["curso.csv"]:
+            id_curso = fila["id_curso"]
+            id_carrera = fila["id_carrera"]
+            if id_carrera not in carreras:
+                conflictos.append(
+                    self._conflicto(
+                        "CARRERA_NO_EXISTE",
+                        "curso.csv",
+                        f"La carrera {id_carrera} no existe en Neo4j.",
+                    )
+                )
+                continue
+            actual = existentes["cursos_detalle"].get(id_curso)
+            if actual is None:
+                filas_nuevas["curso.csv"].append(fila)
+                resumen["nuevos_cursos"] += 1
+                continue
+            campos = CURSOS_SCHEMA[1:]
+            conflictos_curso = [
+                campo
+                for campo in campos
+                if _texto(actual.get(campo)) and _texto(actual.get(campo)) != fila[campo]
+            ]
+            if conflictos_curso:
+                conflictos.append(
+                    self._conflicto(
+                        "CURSO_ID_EXISTENTE_CON_CONFLICTO",
+                        "curso.csv",
+                        (
+                            f"El curso {id_curso} ya existe con otros atributos: "
+                            f"{', '.join(conflictos_curso)}."
+                        ),
+                    )
+                )
+                continue
+            metadata_incompleta = any(
+                not _texto(actual.get(campo)) and fila[campo] for campo in campos
+            )
+            relacion_ensenia_faltante = (id_carrera, id_curso) not in existentes[
+                "pares_carrera_curso"
+            ]
+            if metadata_incompleta or relacion_ensenia_faltante:
+                filas_nuevas["curso.csv"].append(fila)
+                resumen["cursos_actualizados"] += 1
+            else:
+                resumen["sin_cambios"] += 1
+
         catalogo_info = {
             "catalogo_competencias.csv": (
                 "competencias",
@@ -621,10 +822,42 @@ class ImportadorNeo4j:
                 filas_nuevas[archivo].append(fila)
                 resumen[f"nuevas_{resumen_key}"] += 1
 
+        pares_silabos = {
+            (silabo["id_curso"], silabo["id_silabo"]) for silabo in fuente.silabos
+        }
+        relaciones_curso_silabo_nuevas: list[dict[str, str]] = []
+        pares_por_silabo: dict[str, set[str]] = {}
+        for id_curso_existente, id_silabo_existente in existentes["pares_curso_silabo"]:
+            pares_por_silabo.setdefault(id_silabo_existente, set()).add(id_curso_existente)
+        for id_curso, id_silabo in sorted(pares_silabos):
+            if id_silabo not in existentes["silabos"]:
+                conflictos.append(
+                    self._conflicto(
+                        "SILABO_NO_EXISTE",
+                        "limpios/silabos.jsonl",
+                        f"El sílabo {id_silabo} no existe en Neo4j.",
+                    )
+                )
+                continue
+            cursos_existentes_del_silabo = pares_por_silabo.get(id_silabo, set())
+            if cursos_existentes_del_silabo and id_curso not in cursos_existentes_del_silabo:
+                conflictos.append(
+                    self._conflicto(
+                        "RELACION_CURSO_SILABO_CONFLICTIVA",
+                        "limpios/silabos.jsonl",
+                        f"El sílabo {id_silabo} ya está vinculado con otro curso.",
+                    )
+                )
+                continue
+            if (id_curso, id_silabo) not in existentes["pares_curso_silabo"]:
+                relaciones_curso_silabo_nuevas.append(
+                    {"id_curso": id_curso, "id_silabo": id_silabo}
+                )
+                resumen["nuevas_relaciones_curso_silabo"] += 1
+
         existentes_coberturas = existentes["Cobertura_Curricular"]
-        cursos = existentes["cursos"]
+        cursos = existentes["cursos"] | cursos_lote
         silabos = existentes["silabos"]
-        pares_curso_silabo = existentes["pares_curso_silabo"]
         ids_catalogo = {
             "id_competencia": {
                 fila["id_competencia"] for fila in fuente.filas["catalogo_competencias.csv"]
@@ -676,26 +909,40 @@ class ImportadorNeo4j:
                     )
                 )
                 continue
-            if (fila["id_curso"], fila["id_silabo"]) not in pares_curso_silabo:
+            if (fila["id_curso"], fila["id_silabo"]) not in pares_silabos:
                 conflictos.append(
                     self._conflicto(
-                        "RELACION_CURSO_SILABO_NO_EXISTE",
+                        "COBERTURA_PAR_CURSO_SILABO_INVALIDO",
                         "cobertura_curricular.csv",
-                        f"La cobertura {id_cobertura} no tiene un vínculo Curso-Silabo válido.",
+                        (
+                            f"La cobertura {id_cobertura} no coincide con el curso "
+                            "declarado por su sílabo."
+                        ),
                     )
                 )
                 continue
             referencia_catalogo_valida = True
-            for campo in ("id_competencia", "id_habilidad"):
-                if fila[campo] not in ids_catalogo[campo]:
-                    referencia_catalogo_valida = False
-                    conflictos.append(
-                        self._conflicto(
-                            "REFERENCIA_CATALOGO_NO_EXISTE",
-                            "cobertura_curricular.csv",
-                            f"{campo} no existe en los catálogos disponibles.",
-                        )
+            if fila["id_competencia"] not in ids_catalogo["id_competencia"]:
+                referencia_catalogo_valida = False
+                conflictos.append(
+                    self._conflicto(
+                        "REFERENCIA_CATALOGO_NO_EXISTE",
+                        "cobertura_curricular.csv",
+                        "id_competencia no existe en los catálogos disponibles.",
                     )
+                )
+            if (
+                fila["id_habilidad"]
+                and fila["id_habilidad"] not in ids_catalogo["id_habilidad"]
+            ):
+                referencia_catalogo_valida = False
+                conflictos.append(
+                    self._conflicto(
+                        "REFERENCIA_CATALOGO_NO_EXISTE",
+                        "cobertura_curricular.csv",
+                        "id_habilidad no existe en los catálogos disponibles.",
+                    )
+                )
             if (
                 fila["id_herramienta"]
                 and fila["id_herramienta"] not in ids_catalogo["id_herramienta"]
@@ -715,7 +962,7 @@ class ImportadorNeo4j:
         total_nuevo = sum(
             len(filas_nuevas[archivo])
             for archivo, _ in ARCHIVOS_SALIDA
-        )
+        ) + len(relaciones_curso_silabo_nuevas)
         preview = self._preview_base(id_ejecucion, fuente.fingerprint)
         preview.update(
             {
@@ -733,7 +980,12 @@ class ImportadorNeo4j:
                 "release_gate": {"decision": RELEASE_GATE_DECISION},
             }
         )
-        return AnalisisImportacion(preview, fuente, filas_nuevas)
+        return AnalisisImportacion(
+            preview,
+            fuente,
+            filas_nuevas,
+            tuple(relaciones_curso_silabo_nuevas),
+        )
 
     @staticmethod
     def _conflicto(codigo: str, archivo: str, mensaje: str) -> dict[str, str]:
@@ -749,6 +1001,9 @@ class ImportadorNeo4j:
             "recomendacion": RECOMENDACION,
             "archivos": [],
             "resumen": {
+                "nuevos_cursos": 0,
+                "cursos_actualizados": 0,
+                "nuevas_relaciones_curso_silabo": 0,
                 "nuevas_competencias": 0,
                 "nuevas_habilidades": 0,
                 "nuevas_herramientas": 0,
@@ -772,6 +1027,7 @@ class ImportadorNeo4j:
         existentes: dict[str, Any],
     ) -> list[dict[str, Any]]:
         mapa = {
+            "curso.csv": ("cursos_detalle", "id_curso"),
             "catalogo_competencias.csv": ("Competencia", "id_competencia"),
             "catalogo_habilidades.csv": ("Habilidad", "id_habilidad"),
             "catalogo_herramientas.csv": ("Herramienta", "id_herramienta"),
@@ -781,8 +1037,8 @@ class ImportadorNeo4j:
         for archivo, _ in ARCHIVOS_SALIDA:
             label, campo = mapa[archivo]
             existentes_ids = (
-                set(existentes[label]["por_id"])
-                if label != "Cobertura_Curricular"
+                set(existentes[label])
+                if label == "cursos_detalle"
                 else set(existentes[label]["por_id"])
             )
             resultado.append(
@@ -840,6 +1096,26 @@ class ImportadorNeo4j:
                 )
                 if _texto(registro.get("id"))
             }
+            cursos_detalle = {
+                _texto(registro.get("id_curso")): registro
+                for registro in _filas_registro(
+                    sesion.run(
+                        "MATCH (n:Curso) "
+                        "RETURN n.id_curso AS id_curso, n.nombre_curso AS nombre_curso, "
+                        "n.coordinador AS coordinador, n.creditos AS creditos, "
+                        "n.nivel AS nivel, n.tipo_curso AS tipo_curso, "
+                        "n.codigo_curso AS codigo_curso, n.id_carrera AS id_carrera"
+                    )
+                )
+                if _texto(registro.get("id_curso"))
+            }
+            carreras = {
+                _texto(registro.get("id"))
+                for registro in _filas_registro(
+                    sesion.run("MATCH (n:Carrera) RETURN n.id_carrera AS id")
+                )
+                if _texto(registro.get("id"))
+            }
             silabos = {
                 _texto(registro.get("id"))
                 for registro in _filas_registro(
@@ -851,8 +1127,17 @@ class ImportadorNeo4j:
                 (_texto(registro.get("id_curso")), _texto(registro.get("id_silabo")))
                 for registro in _filas_registro(
                     sesion.run(
-                        "MATCH (curso:Curso)-[:TIENE]-(silabo:Silabo) "
+                        "MATCH (curso:Curso)-[:TIENE]->(silabo:Silabo) "
                         "RETURN curso.id_curso AS id_curso, silabo.id_silabo AS id_silabo"
+                    )
+                )
+            }
+            pares_carrera_curso = {
+                (_texto(registro.get("id_carrera")), _texto(registro.get("id_curso")))
+                for registro in _filas_registro(
+                    sesion.run(
+                        "MATCH (carrera:Carrera)-[:ENSENIA]->(curso:Curso) "
+                        "RETURN carrera.id_carrera AS id_carrera, curso.id_curso AS id_curso"
                     )
                 )
             }
@@ -874,8 +1159,11 @@ class ImportadorNeo4j:
                 },
             },
             "cursos": cursos,
+            "cursos_detalle": cursos_detalle,
+            "carreras": carreras,
             "silabos": silabos,
             "pares_curso_silabo": pares,
+            "pares_carrera_curso": pares_carrera_curso,
         }
 
     @staticmethod
@@ -900,9 +1188,16 @@ class ImportadorNeo4j:
         self,
         id_importacion: str,
         filas_nuevas: dict[str, list[dict[str, str]]],
+        relaciones_curso_silabo_nuevas: tuple[dict[str, str], ...],
     ) -> None:
         with self._sesion(WRITE_ACCESS) as sesion:
             def transaccion(tx: Any) -> None:
+                self._escribir_cursos(tx, filas_nuevas["curso.csv"], id_importacion)
+                self._escribir_relaciones_curso_silabo(
+                    tx,
+                    relaciones_curso_silabo_nuevas,
+                    id_importacion,
+                )
                 self._escribir_catalogo(
                     tx,
                     "Competencia",
@@ -934,28 +1229,107 @@ class ImportadorNeo4j:
                 filas_cobertura = filas_nuevas["cobertura_curricular.csv"]
                 if not filas_cobertura:
                     return
-                for requiere_herramienta in (False, True):
-                    lote = [
-                        fila
-                        for fila in filas_cobertura
-                        if bool(fila["id_herramienta"]) is requiere_herramienta
-                    ]
-                    if not lote:
-                        continue
-                    procesadas = _resultado_count(
-                        tx.run(
-                            self._cypher_cobertura(requiere_herramienta),
-                            {"rows": lote, "import_id": id_importacion},
+                for requiere_habilidad in (False, True):
+                    for requiere_herramienta in (False, True):
+                        lote = [
+                            fila
+                            for fila in filas_cobertura
+                            if bool(fila["id_habilidad"]) is requiere_habilidad
+                            and bool(fila["id_herramienta"]) is requiere_herramienta
+                        ]
+                        if not lote:
+                            continue
+                        procesadas = _resultado_count(
+                            tx.run(
+                                self._cypher_cobertura(
+                                    requiere_habilidad, requiere_herramienta
+                                ),
+                                {"rows": lote, "import_id": id_importacion},
+                            )
                         )
-                    )
-                    if procesadas != len(lote):
-                        raise ImportacionNeo4jError(
-                            "Neo4j cambió mientras se validaba la importación; "
-                            "no se escribió la cobertura.",
-                            status_code=409,
-                        )
+                        if procesadas != len(lote):
+                            raise ImportacionNeo4jError(
+                                "Neo4j cambió mientras se validaba la importación; "
+                                "no se escribió la cobertura.",
+                                status_code=409,
+                            )
 
             sesion.execute_write(transaccion)
+
+    @staticmethod
+    def _escribir_relaciones_curso_silabo(
+        tx: Any,
+        filas: tuple[dict[str, str], ...],
+        id_importacion: str,
+    ) -> None:
+        if not filas:
+            return
+        procesadas = _resultado_count(
+            tx.run(
+                "UNWIND $rows AS row "
+                "MATCH (curso:Curso {id_curso: row.id_curso}) "
+                "MATCH (silabo:Silabo {id_silabo: row.id_silabo}) "
+                "MERGE (curso)-[rel:TIENE]->(silabo) "
+                "ON CREATE SET rel._ciar_import_id = $import_id, "
+                "rel._ciar_import_created = true "
+                "RETURN count(rel) AS total",
+                {"rows": list(filas), "import_id": id_importacion},
+            )
+        )
+        if procesadas != len(filas):
+            raise ImportacionNeo4jError(
+                "Neo4j cambió mientras se validaba la importación; "
+                "no se vinculó el curso con su sílabo.",
+                status_code=409,
+            )
+
+    @staticmethod
+    def _escribir_cursos(tx: Any, filas: list[dict[str, str]], id_importacion: str) -> None:
+        if not filas:
+            return
+        campos = list(CURSOS_SCHEMA[1:])
+        procesadas = _resultado_count(
+            tx.run(
+                "UNWIND $rows AS row "
+                "MATCH (carrera:Carrera {id_carrera: row.id_carrera}) "
+                "OPTIONAL MATCH (curso_existente:Curso {id_curso: row.id_curso}) "
+                "WITH row, carrera, curso_existente, "
+                "[campo IN $campos WHERE curso_existente[campo] IS NOT NULL] "
+                "AS propiedades_presentes, "
+                "any(campo IN $campos WHERE coalesce(curso_existente[campo], '') <> row[campo]) "
+                "AS cambia_metadata "
+                "MERGE (curso:Curso {id_curso: row.id_curso}) "
+                "ON CREATE SET curso._ciar_import_id = $import_id, "
+                "curso._ciar_import_created = true "
+                "FOREACH (_ IN CASE WHEN curso_existente IS NOT NULL AND cambia_metadata "
+                "THEN [1] ELSE [] END | "
+                "MERGE (reversion:CiarImportacionCursoReversion "
+                "{id_importacion: $import_id, id_curso: row.id_curso}) "
+                "SET reversion.propiedades_presentes = propiedades_presentes, "
+                "reversion.nombre_curso = curso_existente.nombre_curso, "
+                "reversion.coordinador = curso_existente.coordinador, "
+                "reversion.creditos = curso_existente.creditos, "
+                "reversion.nivel = curso_existente.nivel, "
+                "reversion.tipo_curso = curso_existente.tipo_curso, "
+                "reversion.codigo_curso = curso_existente.codigo_curso, "
+                "reversion.id_carrera = curso_existente.id_carrera) "
+                "FOREACH (_ IN CASE WHEN curso_existente IS NULL OR cambia_metadata "
+                "THEN [1] ELSE [] END | "
+                "SET curso.nombre_curso = row.nombre_curso, curso.coordinador = row.coordinador, "
+                "curso.creditos = row.creditos, curso.nivel = row.nivel, "
+                "curso.tipo_curso = row.tipo_curso, curso.codigo_curso = row.codigo_curso, "
+                "curso.id_carrera = row.id_carrera) "
+                "MERGE (carrera)-[rel:ENSENIA]->(curso) "
+                "ON CREATE SET rel._ciar_import_id = $import_id, rel._ciar_import_created = true "
+                "RETURN count(curso) AS total",
+                {"rows": filas, "import_id": id_importacion, "campos": campos},
+            )
+        )
+        if procesadas != len(filas):
+            raise ImportacionNeo4jError(
+                "Neo4j cambió mientras se validaba la importación; no se escribió el curso.",
+                status_code=409,
+            )
 
     @staticmethod
     def _escribir_catalogo(
@@ -977,10 +1351,24 @@ class ImportadorNeo4j:
         _resultado_count(tx.run(consulta, {"rows": filas, "import_id": id_importacion}))
 
     @staticmethod
-    def _cypher_cobertura(requiere_herramienta: bool) -> str:
+    def _cypher_cobertura(
+        requiere_habilidad: bool,
+        requiere_herramienta: bool,
+    ) -> str:
+        match_habilidad = (
+            "MATCH (habilidad:Habilidad {id_habilidad: row.id_habilidad}) "
+            if requiere_habilidad
+            else ""
+        )
         match_herramienta = (
             "MATCH (herramienta:Herramienta {id_herramienta: row.id_herramienta}) "
             if requiere_herramienta
+            else ""
+        )
+        merge_habilidad = (
+            "MERGE (cob)-[rhb:ENSENIA]->(habilidad) "
+            "ON CREATE SET rhb._ciar_import_id = $import_id, rhb._ciar_import_created = true "
+            if requiere_habilidad
             else ""
         )
         merge_herramienta = (
@@ -991,10 +1379,10 @@ class ImportadorNeo4j:
         )
         return (
             "UNWIND $rows AS row "
-            "MATCH (curso:Curso {id_curso: row.id_curso})-[:TIENE]-(silabo:Silabo "
-            "{id_silabo: row.id_silabo}) "
+            "MATCH (curso:Curso {id_curso: row.id_curso}) "
+            "MATCH (silabo:Silabo {id_silabo: row.id_silabo}) "
             "MATCH (competencia:Competencia {id_competencia: row.id_competencia}) "
-            "MATCH (habilidad:Habilidad {id_habilidad: row.id_habilidad}) "
+            f"{match_habilidad}"
             f"{match_herramienta}"
             "MERGE (cob:Cobertura_Curricular {id_cob_curricular: row.id_cob_curricular}) "
             "ON CREATE SET cob.id_curso = row.id_curso, cob.id_silabo = row.id_silabo, "
@@ -1005,8 +1393,7 @@ class ImportadorNeo4j:
             "ON CREATE SET rt._ciar_import_id = $import_id, rt._ciar_import_created = true "
             "MERGE (cob)-[rc:CUBRE]->(competencia) "
             "ON CREATE SET rc._ciar_import_id = $import_id, rc._ciar_import_created = true "
-            "MERGE (cob)-[rhb:ENSENIA]->(habilidad) "
-            "ON CREATE SET rhb._ciar_import_id = $import_id, rhb._ciar_import_created = true "
+            f"{merge_habilidad}"
             f"{merge_herramienta}"
             "RETURN count(cob) AS total"
         )
@@ -1038,10 +1425,47 @@ class ImportadorNeo4j:
                         {"import_id": id_importacion},
                     )
                 )
+                propiedades_restauradas = _resultado_count(
+                    tx.run(
+                        "MATCH (reversion:CiarImportacionCursoReversion "
+                        "{id_importacion: $import_id}) "
+                        "MATCH (curso:Curso {id_curso: reversion.id_curso}) "
+                        "SET curso.nombre_curso = CASE WHEN 'nombre_curso' "
+                        "IN reversion.propiedades_presentes THEN "
+                        "reversion.nombre_curso ELSE NULL END, "
+                        "curso.coordinador = CASE WHEN 'coordinador' "
+                        "IN reversion.propiedades_presentes THEN "
+                        "reversion.coordinador ELSE NULL END, "
+                        "curso.creditos = CASE WHEN 'creditos' "
+                        "IN reversion.propiedades_presentes THEN reversion.creditos ELSE NULL END, "
+                        "curso.nivel = CASE WHEN 'nivel' "
+                        "IN reversion.propiedades_presentes THEN reversion.nivel ELSE NULL END, "
+                        "curso.tipo_curso = CASE WHEN 'tipo_curso' "
+                        "IN reversion.propiedades_presentes THEN "
+                        "reversion.tipo_curso ELSE NULL END, "
+                        "curso.codigo_curso = CASE WHEN 'codigo_curso' "
+                        "IN reversion.propiedades_presentes THEN "
+                        "reversion.codigo_curso ELSE NULL END, "
+                        "curso.id_carrera = CASE WHEN 'id_carrera' "
+                        "IN reversion.propiedades_presentes THEN "
+                        "reversion.id_carrera ELSE NULL END "
+                        "RETURN count(curso) AS total",
+                        {"import_id": id_importacion},
+                    )
+                )
+                _resultado_count(
+                    tx.run(
+                        "MATCH (reversion:CiarImportacionCursoReversion "
+                        "{id_importacion: $import_id}) DELETE reversion "
+                        "RETURN count(reversion) AS total",
+                        {"import_id": id_importacion},
+                    )
+                )
                 return {
                     "relaciones_eliminadas": relaciones,
                     "nodos_eliminados": nodos,
                     "conservados": conservados,
+                    "propiedades_restauradas": propiedades_restauradas,
                 }
 
             return cast(dict[str, int], sesion.execute_write(transaccion))

@@ -177,6 +177,39 @@ Reglas prácticas:
 - Los archivos, nombres técnicos y resultados de normalización pueden usar `IBM Plex Mono` como apoyo funcional.
 - Los estados de éxito, advertencia y error deben incluir una descripción accionable y mantener la jerarquía institucional.
 
+### Inspección CHH y aprobación HITL
+
+La inspección CHH es un espacio de revisión enfocado, no un visor de logs. Debe llevar al usuario directamente a decidir qué requiere atención y qué puede publicarse sin convertir la pantalla en una consola técnica.
+
+- La lectura principal presenta únicamente el estado positivo de la ejecución, la huella de la normalización y, cuando existen pendientes, el panel principal `Revisión curricular requerida`. No se duplica esta decisión en una tarjeta separada de `Siguiente paso` o `Qué falta para publicar`.
+- Los warnings y errores viven en la pestaña `Advertencias y errores`, no como una segunda lista de ruido dentro del panel principal. Los logs crudos y las salidas técnicas generadas pertenecen al backend y a sus artefactos internos.
+- La cabecera y las pestañas usan naranja institucional para el foco y negro para la jerarquía. El estado activo se reconoce por texto, peso, selección accesible y una señal naranja; no depende solo del color.
+- Los warnings se agrupan por acción de usuario y se explican en lenguaje llano. Las tarjetas son neutrales; el naranja funciona como una única señal de atención y el color semántico de error se reserva para bloqueos reales, siempre acompañado de icono y texto.
+- El panel HITL usa filas o tarjetas compactas, divulgación progresiva para proveniencia y evidencia, paginación de paquetes CHH y un resumen de aprobación sticky. Las decisiones visibles son `Agregar al perfil` y `Mantener pendiente`; los payloads conservan `ADD` y `KEEP_PENDING`.
+- La evidencia, la proveniencia y las etiquetas de accesibilidad permanecen disponibles al expandir el detalle, sin añadir paneles de logs ni ruido visual innecesario.
+- No asignes un color permanente a una carrera, facultad, dependencia o categoría. Los secundarios solo pueden apoyar un significado explícito y nunca dominar la identidad institucional.
+
+#### Mapeo de tokens para Normalizador y CHH
+
+| Estado o uso | Tokens preferidos | Tratamiento |
+| --- | --- | --- |
+| Cabecera, pestaña activa y acción principal | `ulima`, `institucional.naranja` | Línea, foco o acción naranja; usa texto negro sobre naranja cuando el tamaño sea pequeño. |
+| Títulos y autoridad | `institucional.negro`, `ink` | Jerarquía tipográfica fuerte y alineación editorial. |
+| Superficies y estructura | `paper`, `fondo`, `ash`, `line`, `institucional.gris` | Fondos claros, bordes finos y separación sobria. |
+| Atención revisable | `ulima` con neutrales | Una señal naranja, texto accionable e icono; no uses bloques ámbar sostenidos. |
+| Error bloqueante | Acento semántico funcional existente | Solo cuando bloquea una acción; acompaña siempre con texto e icono. |
+| Éxito o estado informativo | `paper`, `fondo`, `line`, `muted` | Mantén la lectura neutral; no conviertas verde o rojo en lenguaje de marca. |
+
+#### Checklist específico antes de entregar el panel
+
+- [ ] La cabecera y la pestaña activa comunican Universidad de Lima con naranja y negro, sin logotipo inventado.
+- [ ] No existe pestaña o panel de logs ni se muestran salidas técnicas crudas en la lectura principal.
+- [ ] Cada warning tiene grupo, lenguaje claro y una acción dentro de `Advertencias y errores`; los errores bloqueantes se distinguen también por texto e icono.
+- [ ] Los paquetes CHH siguen compactos, paginados y con selección persistente; el resumen de aprobación permanece sticky.
+- [ ] La jerarquía principal no agrega una tarjeta de checklist duplicada: `Revisión curricular requerida` es el foco de decisión y `Huella de la ejecución` permanece como contexto.
+- [ ] Proveniencia, evidencia, foco de teclado, responsive y reducción de movimiento siguen funcionando.
+- [ ] No hay mapeos cromáticos permanentes para carreras, facultades o dependencias.
+
 ## Iconos, imágenes y recursos gráficos
 
 - Usa una sola familia de iconos lineales, con peso y tamaño consistentes. Los iconos de Lucide ya usados en el frontend son adecuados para acciones de interfaz.

@@ -33,7 +33,8 @@ class DecisionCurricularIn(BaseModel):
     id_paquete_chh: str | None = Field(default=None, min_length=1, max_length=200)
     package_id: str | None = Field(default=None, min_length=1, max_length=200)
     id_paquete: str | None = Field(default=None, min_length=1, max_length=200)
-    decision: Literal["ADD", "KEEP_PENDING"]
+    decision: Literal["ADD", "KEEP_PENDING", "DISCARD"]
+    reason: str | None = Field(default=None, min_length=1, max_length=600)
 
 
 class DecidirPendientesIn(BaseModel):
@@ -344,34 +345,52 @@ def pendientes_ejecucion(
         / "reportes"
         / "pendientes_curriculares.jsonl"
     )
+    directorio_ejecucion = gestor_ejecuciones.base_dir / id_ejecucion
     filas: list[object]
     if incluir_resueltas:
         filas, total = _leer_ventana_jsonl(ruta, desde, limite)
-        todas_filas = aprobaciones._filas_clasificadas(gestor_ejecuciones.base_dir / id_ejecucion)
+        todas_filas = aprobaciones._filas_clasificadas(directorio_ejecucion)
     else:
-        todas = aprobaciones.pendientes_para_revision(gestor_ejecuciones.base_dir / id_ejecucion)
+        todas_filas = aprobaciones._filas_clasificadas(directorio_ejecucion)
+        todas = [
+            fila
+            for fila in todas_filas
+            if aprobaciones.puede_recibir_decision(fila)
+            and not aprobaciones._texto(fila.get("decision"))
+        ]
         total = len(todas)
         filas = []
         filas.extend(todas[desde : desde + limite])
-        todas_filas = aprobaciones._filas_clasificadas(gestor_ejecuciones.base_dir / id_ejecucion)
-    paquetes = aprobaciones._paquetes(
-        gestor_ejecuciones.base_dir / id_ejecucion,
+    paquetes_completos = aprobaciones._paquetes(
+        directorio_ejecucion,
         todas_filas,
     )
-    paquetes = [
-        paquete for paquete in paquetes if incluir_resueltas or paquete.get("requiere_decision")
+    paquetes_visibles_completos = [
+        paquete
+        for paquete in paquetes_completos
+        if paquete.get("decision") != "DISCARD"
+        and (incluir_resueltas or paquete.get("requiere_decision"))
     ]
+    filas = [
+        fila
+        for fila in filas
+        if not (isinstance(fila, dict) and fila.get("decision") == "DISCARD")
+    ]
+    revision = aprobaciones.revision_paquetes_chh(paquetes_visibles_completos)
+    paquetes = aprobaciones.paquetes_para_presentacion_api(paquetes_visibles_completos)
     return {
         "id_ejecucion": id_ejecucion,
         "total": total,
         "desde": desde,
         "limite": limite,
-        "filas": filas,
+        "filas": aprobaciones.filas_para_presentacion_api(filas),
         "paquetes": paquetes,
         "paquetes_total": len(paquetes),
-        "revision": aprobaciones.revision_paquetes_chh(paquetes),
+        "revision": revision,
         "aprobacion": aprobaciones.resumen_aprobacion_curricular(
-            gestor_ejecuciones.base_dir / id_ejecucion
+            directorio_ejecucion,
+            filas=todas_filas,
+            paquetes=paquetes_completos,
         ),
     }
 

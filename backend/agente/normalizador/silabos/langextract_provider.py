@@ -9,6 +9,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 from agente.normalizador.silabos.langextract_ciar import PROMPT_EXTRACCION_CIAR
+from agente.observabilidad.langsmith import envolver_cliente_openai
 
 _langextract_base_model: Any | None
 _langextract_types: Any | None
@@ -104,10 +105,18 @@ class OpenAICiarLanguageModel(_ProviderBase):
             raise RuntimeError(
                 "OpenAI SDK is required for the CIAR LangExtract provider."
             ) from error
-        return OpenAI(
+        cliente = OpenAI(
             api_key=self.api_key,
             timeout=self.request_timeout_seconds,
             max_retries=self.max_retries,
+        )
+        return envolver_cliente_openai(
+            cliente,
+            metadata={
+                "langextract_model_id": self.model_id,
+                "langextract_reasoning_effort": self._extra_kwargs.get("reasoning_effort"),
+            },
+            tags=["langextract", "extraccion"],
         )
 
 

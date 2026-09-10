@@ -22,7 +22,7 @@ def test_configuracion_llm_publica_nombre_tags_y_metadata_sin_secretos(monkeypat
     monkeypatch.setenv("LANGSMITH_TRACING", "true")
 
     config = langsmith.configuracion_llm(
-        "inspector_curricular",
+        "analista_curricular",
         id_ejecucion="NOR_123",
         carrera="MARKETING",
         periodo="2026-1",
@@ -30,8 +30,8 @@ def test_configuracion_llm_publica_nombre_tags_y_metadata_sin_secretos(monkeypat
     )
 
     assert config is not None
-    assert config["run_name"] == "normalizador.curricular.inspector_curricular"
-    assert "rol:inspector_curricular" in config["tags"]
+    assert config["run_name"] == "normalizador.curricular.analista_curricular"
+    assert "rol:analista_curricular" in config["tags"]
     assert "carrera:MARKETING" in config["tags"]
     assert "periodo:2026-1" in config["tags"]
     assert config["metadata"] == {
@@ -39,7 +39,7 @@ def test_configuracion_llm_publica_nombre_tags_y_metadata_sin_secretos(monkeypat
         "execution_id": "NOR_123",
         "career": "MARKETING",
         "period": "2026-1",
-        "llm_role": "inspector_curricular",
+        "llm_role": "analista_curricular",
         "retry": False,
         "chunk": "3",
     }
@@ -177,3 +177,34 @@ def test_analista_asigna_run_name_y_rol_distinguibles(monkeypatch, tmp_path) -> 
     assert capturado["run_name"] == "normalizador.curricular.analista_curricular"
     assert "rol:analista_curricular" in capturado["tags"]
     assert capturado["metadata"]["execution_id"] == "NOR_123"
+
+
+def test_envolver_cliente_openai_no_parchea_con_tracing_apagado(monkeypatch) -> None:
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    from openai import OpenAI
+
+    cliente = OpenAI(api_key="test-key", base_url="http://127.0.0.1:9/v1")
+    original = cliente.chat.completions.create
+
+    devuelto = langsmith.envolver_cliente_openai(cliente, tags=["langextract"])
+
+    assert devuelto is cliente
+    assert cliente.chat.completions.create == original
+
+
+def test_envolver_cliente_openai_parchea_create_con_tracing_activo(monkeypatch) -> None:
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "test-key")
+    from openai import OpenAI
+
+    cliente = OpenAI(api_key="test-key", base_url="http://127.0.0.1:9/v1")
+    original = cliente.chat.completions.create
+
+    devuelto = langsmith.envolver_cliente_openai(
+        cliente,
+        metadata={"langextract_model_id": "ciar-openai/gpt-4o-mini"},
+        tags=["langextract", "extraccion"],
+    )
+
+    assert devuelto is cliente
+    assert cliente.chat.completions.create != original

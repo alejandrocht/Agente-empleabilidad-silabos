@@ -10,7 +10,6 @@ from pathlib import Path
 # hace que el resultado sea reproducible y no dependa de credenciales.
 os.environ["LANGSMITH_TRACING"] = "false"
 os.environ["NORMALIZADOR_CURRICULAR_LLM"] = "false"
-os.environ["NORMALIZADOR_CURRICULAR_INSPECTOR"] = "false"
 os.environ["NORMALIZADOR_CATALOGOS_DIR"] = str(
     Path(__file__).resolve().parent / "fixtures" / "catalogos"
 )

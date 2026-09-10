@@ -91,9 +91,10 @@ NORMALIZADOR_CACTUS_DOWNLOAD_WORKERS=3
 
 El corte curricular valida el paquete, extrae metadatos, sumilla, logro general, logros específicos
 y programa analítico. El JSONL de limpieza es staging interno y no se ofrece como salida de negocio.
-Cada ejecución conserva exactamente cuatro CSV curriculares como paquete candidato:
+Cada ejecución conserva exactamente cinco CSV curriculares como paquete candidato:
 
 ```text
+salidas/curso.csv
 salidas/catalogo_competencias.csv
 salidas/catalogo_habilidades.csv
 salidas/catalogo_herramientas.csv
@@ -136,41 +137,34 @@ reportan para revisión. DOCX y PDF admiten códigos `E/G` numéricos y alfabét
 
 ### Analista curricular LLM por carrera
 
-En producción la ejecución curricular debe activar el analista semántico y su inspector. Para ello:
+En producción la ejecución curricular debe activar el analista semántico. Para ello:
 
 ```dotenv
 NORMALIZADOR_CURRICULAR_LLM=true
-NORMALIZADOR_CURRICULAR_INSPECTOR=true
-OPENAI_MODEL_CURRICULAR=gpt-5.6-luna
-# Opcional: si no se define, el inspector curricular usa el mismo modelo.
-OPENAI_MODEL_INSPECTOR_CURRICULAR=gpt-5.6-luna
-# Opcional: Terra solo para residuales semánticos; por defecto permanece desactivado.
-NORMALIZADOR_CURRICULAR_ESCALAR_RESIDUALES=false
-OPENAI_MODEL_CURRICULAR_RESIDUAL=gpt-5.6-terra
-OPENAI_MODEL_INSPECTOR_CURRICULAR_RESIDUAL=gpt-5.6-terra
-LLM_TIMEOUT_SECONDS=120
-LLM_MAX_RETRIES=2
+NORMALIZADOR_CURRICULAR_ANALYST_MODEL=gpt-5.6-luna
+NORMALIZADOR_CURRICULAR_ANALYST_REASONING_EFFORT=medium
+NORMALIZADOR_CURRICULAR_LLM_TIMEOUT_SECONDS=120
+NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES=2
+NORMALIZADOR_CURRICULAR_LLM_BATCH_SIZE=8
+NORMALIZADOR_CURRICULAR_LLM_TEMPERATURE=0
 ```
 
-La primera pasada usa Luna para el analista y el inspector (`OPENAI_MODEL_CURRICULAR` y
-`OPENAI_MODEL_INSPECTOR_CURRICULAR`). El escalamiento residual está desactivado por defecto con
-`NORMALIZADOR_CURRICULAR_ESCALAR_RESIDUALES=false`; al activarlo, solo los residuales semánticos
-se envían a Terra mediante `OPENAI_MODEL_CURRICULAR_RESIDUAL` y
-`OPENAI_MODEL_INSPECTOR_CURRICULAR_RESIDUAL`. Se escalan únicamente decisiones con
-`LLM_SOLICITA_REVISION` o `CONFIANZA_BAJA`. No se escalan fallos mecánicos de evidencia,
-herramientas o formato: Python los conserva como revisión determinista.
+El analista usa `NORMALIZADOR_CURRICULAR_ANALYST_MODEL`. No existe una segunda pasada
+LLM residual: los errores de validación quedan para revisión. Se conserva el único
+reintento del mismo analista para IDs omitidos y la nominalización determinista.
+Las antiguas variables de escalamiento residual ya no se requieren ni se utilizan.
 
 El analista recibe lotes compactos de logros, sumilla, contenido y perfil de la carrera. Devuelve
 competencia, habilidad, herramientas y evidencia en JSON estructurado; Python genera los IDs,
 normaliza nominalizaciones cerradas y valida la evidencia estructurada del programa analítico.
-También rechaza habilidades genéricas, herramientas no detectadas, evidencia ausente o baja
-confianza. El inspector puede aprobar, revisar o rechazar cada decisión. Si el proveedor falla,
+También rechaza competencias y habilidades genéricas, herramientas no detectadas y evidencia ausente.
+Toda propuesta LLM válida queda pendiente de decisión humana; `confianza` se conserva solo como metadata auditable y nunca aprueba ni enruta. Si el proveedor falla,
 se conserva el resultado determinista y se registra `ANALISTA_LLM_NO_DISPONIBLE`.
 
 La auditoría se guarda fuera de los CSV en `salidas/reportes/decisiones_llm.jsonl` y
-`salidas/reportes/analisis_llm.json`. Los reportes incluyen los modelos y las decisiones escaladas
-para mantener la trazabilidad. Python no modifica los CSV: los cuatro archivos mantienen exactamente
-sus columnas actuales.
+`salidas/reportes/analisis_llm.json`. Los reportes conservan los campos históricos `modelo_analista_residual=no_ejecutado` y
+`decisiones_escaladas=0` por compatibilidad con lectores anteriores. Python conserva sin cambios los esquemas de los
+cinco CSV publicados, incluido `curso.csv` con su contrato exacto.
 
 ### Embeddings curriculares por carrera (opt-in)
 
@@ -182,7 +176,7 @@ evidencia: Python sigue verificando las citas contra el sílabo literal antes de
 # Requiere OPENAI_API_KEY y un catálogo curricular revisado para la carrera/periodo.
 NORMALIZADOR_CURRICULAR_EMBEDDINGS=true
 NORMALIZADOR_CURRICULAR_EMBEDDING_CARRERAS=MARKETING@2026-1,INGENIERIA@2026-1
-NORMALIZADOR_EMBEDDING_MODEL=text-embedding-3-small
+NORMALIZADOR_CURRICULAR_EMBEDDING_MODEL=text-embedding-3-small
 # Se aceptan únicamente similitudes estrictamente mayores al umbral.
 # El valor seguro por defecto 0 excluye similitudes cero y negativas.
 NORMALIZADOR_CURRICULAR_EMBEDDING_MIN_SIMILARITY=0
@@ -206,6 +200,41 @@ términos financieros. Cada evidencia incluye sección, texto fuente y coinciden
 
 ### Contrato evidence-first y esquemas CSV
 
+#### Diagnóstico LangExtract con catálogo explícito
+
+El runner aislado `agente.normalizador.silabos.langextract_runner` no tiene catálogo
+por defecto. Para canonicalizar una extracción se deben indicar juntos `--catalog-dir`,
+`--career`, `--period` y `--catalog-version`; la selección nunca se deduce de una ruta,
+un ID ni una carrera histórica. El directorio seleccionado debe contener los tres CSV
+con sus encabezados estándar y un `catalogo_metadata.json` que declare exactamente la
+misma carrera, período, versión y proveniencia no vacía:
+
+```json
+{
+  "career": "Nombre de carrera",
+  "period": "2026-1",
+  "version": "v1",
+  "provenance": "exportación aprobada 2026-1",
+  "aliases": {"herramienta": {"Alias aprobado": "Nombre canónico"}}
+}
+```
+
+`aliases` es opcional y solo admite alias completos que apunten a un nombre canónico
+del mismo catálogo. El sílabo debe declarar carrera y período literales que coincidan
+con la selección. CSV/manifest ausente, malformado, duplicado o no coincidente bloquea
+el preflight antes de una llamada LLM; no hay propuestas crudas todavía, no existe
+fallback entre carreras ni se crean IDs. Un fallo posterior de metadata del sílabo
+conserva `paquetes_crudos` y deja la resolución en `PENDIENTE` sin IDs.
+
+Con catálogo, cada paquete conserva `habilidad_propuesta`, `competencia_propuesta`,
+`herramientas` y sus citas originales, y añade `catalogo` con estado, código e ID
+canónico separado. `herramientas_vinculadas` solo reúne menciones literales del programa
+semanal declaradas explícitamente por el paquete y que se solapan con la evidencia de
+habilidad. Las demás quedan en
+`herramientas_sin_vinculo`; una herramienta explícita fuera del catálogo usa
+`HERRAMIENTA_CATALOGO_NO_ENCONTRADA` con cita literal y sin ID. Sin argumentos de
+catálogo, el diagnóstico conserva exactamente su salida previa.
+
 El flujo curricular es determinista y respeta la evidencia en este orden:
 
 1. registra todas las competencias declaradas por cada sílabo;
@@ -220,10 +249,11 @@ El flujo curricular es determinista y respeta la evidencia en este orden:
 5. ejecuta un juez determinista que rechaza esquemas inválidos, IDs duplicados, relaciones huérfanas
    y competencias placeholder.
 
-Los cuatro CSV del paquete candidato conservan exactamente las columnas de los catálogos existentes; no se
-agregan columnas ni archivos CSV alternativos:
+Los cinco CSV del paquete candidato conservan el contrato exacto; no se agregan columnas ni archivos CSV alternativos:
 
 ```text
+curso.csv:
+id_curso,nombre_curso,coordinador,creditos,nivel,tipo_curso,codigo_curso,id_carrera
 catalogo_competencias.csv:
 id_competencia,nombre_competencia,descripcion_breve_competencia,tipo_competencia
 catalogo_habilidades.csv:

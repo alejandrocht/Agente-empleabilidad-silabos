@@ -62,3 +62,42 @@ uv run --no-sync python -m agente.normalizador.silabos.langextract_runner \
   --catalog-dir /external/catalogs/systems-2026-2 \
   --career "Ingeniería de Sistemas" --period 2026-2 --catalog-version v1
 ```
+
+## Reference-Only Candidate Suggestions
+
+`--reference-catalog-dir` is advisory-only. It accepts a directory with the three
+standard CSV files, decoded as `utf-8-sig`, but does not require
+`catalogo_metadata.json`. It never emits a canonical ID, selects a target catalog,
+resolves coverage, or approves a C-H-H relation. The output labels its scope as
+`catalogo_referencia.modo=reference_only` and keeps each raw proposal unchanged.
+
+For every raw competence, skill, and tool, `paquetes[].referencia` contains a
+`candidatos_humanos` list. Every candidate has only `nombre`, `descripcion`, `score`,
+`catalog_source`, and `catalog_type`; a human must choose any later catalog identity.
+Catalog names create case, accent, punctuation, and compact aliases mechanically.
+Optional human-maintained aliases can be added in `catalogo_aliases.json`:
+
+```json
+{
+  "herramienta": {"nombre alternativo": "Nombre del catálogo"}
+}
+```
+
+Candidates use `rapidfuzz.process.extract` with `fuzz.WRatio`,
+`utils.default_process`, a top-three limit, and a `75` score cutoff. Suggestions do
+not cross careers: the supplied reference directory remains visible in the output and
+the future target catalog selection is an explicit human action.
+
+It cannot be combined with `--catalog-dir`, `--career`, `--period`, or
+`--catalog-version`. This benchmark command keeps the durable records outside the
+repository and runs all DOCX matched by the injected path:
+
+```bash
+cd backend
+RESULTS_DIR="$(mktemp -d /tmp/ciar-langextract-luna-max-XXXXXX)"
+OPENAI_API_KEY="$OPENAI_API_KEY" uv run --no-sync python -m agente.normalizador.silabos.langextract_runner \
+  --profile benchmark --model gpt-5.6-luna --reasoning-effort max \
+  --reference-catalog-dir "<user reference csv dir>" \
+  --stream --results-dir "$RESULTS_DIR" \
+  "$HOME/Desktop/Silabos_train"/*.docx
+```

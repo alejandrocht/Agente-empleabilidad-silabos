@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -83,7 +85,7 @@ def test_runner_defaults_model_and_reasoning_effort_from_environment(
     monkeypatch.setattr(langextract_runner, "ejecutar_corpus_langextract", lambda *_, **__: {})
 
     assert langextract_runner.main(["--profile", "strict", "syllabus.docx"]) == 0
-    assert calls == [{**expected_kwargs, "request_timeout_seconds": 120.0, "max_retries": 0}]
+    assert calls == [{**expected_kwargs, "request_timeout_seconds": 600.0, "max_retries": 2}]
 
 
 def test_runner_uses_injected_fake_without_network_and_returns_diagnostics(tmp_path: Path) -> None:
@@ -273,6 +275,35 @@ def test_runner_emits_each_document_before_a_later_timeout(tmp_path: Path) -> No
     assert len(diagnostico["documentos"]) == 3
 
 
+def test_runner_limits_requests_to_two_and_keeps_source_order(tmp_path: Path) -> None:
+    syllabi = [tmp_path / f"{name}.docx" for name in ("first", "second", "third", "fourth")]
+    for syllabus in syllabi:
+        _write_minimal_docx(syllabus, [f"Semana 1: {syllabus.stem}."])
+
+    active = 0
+    maximum = 0
+    lock = threading.Lock()
+
+    def extractor(documento: object) -> dict[str, object]:
+        nonlocal active, maximum
+        with lock:
+            active += 1
+            maximum = max(maximum, active)
+        try:
+            time.sleep(0.02 if "first" in getattr(documento, "contenido_documental") else 0.01)
+            return {"text": getattr(documento, "contenido_documental"), "extractions": []}
+        finally:
+            with lock:
+                active -= 1
+
+    diagnostico = ejecutar_corpus_langextract(syllabi, extractor)
+
+    assert maximum == 2
+    assert [documento["source"]["path"] for documento in diagnostico["documentos"]] == [
+        str(syllabus) for syllabus in syllabi
+    ]
+
+
 def test_runner_keeps_raw_packages_when_catalog_metadata_is_invalid(tmp_path: Path) -> None:
     syllabus = tmp_path / "syllabus.docx"
     _write_minimal_docx(syllabus, ["Semana 1: Implementar servicios con Node.js."])
@@ -359,6 +390,46 @@ def test_stream_prints_document_records_then_a_summary_without_absolute_paths(
     assert records[1]["duracion_total_segundos"] >= 0
 
 
+def test_results_directory_enables_streaming_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    document = {
+        "source": {"path": "/private/source/syllabus.docx", "sha256": "a" * 64},
+        "structural_metadata": {},
+        "paquetes": [],
+        "pendientes": [],
+        "errores": [],
+        "fragmentos": [],
+        "resumen": {
+            "propuestas_generadas": 0,
+            "paquetes_aceptados": 0,
+            "pendientes_por_motivo": {},
+            "errores": 0,
+        },
+    }
+
+    def fake_run(*_: object, on_document: object, **__: object) -> dict[str, object]:
+        assert callable(on_document)
+        on_document(document)
+        return {"documentos": [document]}
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(langextract_runner, "OpenAICiarLanguageModel", lambda **_: object())
+    monkeypatch.setattr(langextract_runner, "ejecutar_corpus_langextract", fake_run)
+
+    assert (
+        langextract_runner.main(
+            ["--results-dir", str(tmp_path / "results"), "syllabus.docx"]
+        )
+        == 0
+    )
+
+    assert [json.loads(line)["tipo"] for line in capsys.readouterr().out.splitlines()] == [
+        "documento",
+        "resumen",
+    ]
+
+
 def test_resume_reprocesses_only_failed_documents(tmp_path: Path) -> None:
     successful = tmp_path / "successful.docx"
     failed = tmp_path / "failed.docx"
@@ -424,8 +495,8 @@ def test_baseline_profile_forces_legacy_openai_configuration(
             "model_id": "ciar-openai/gpt-4o-mini",
             "api_key": "test-key",
             "temperature": 0,
-            "request_timeout_seconds": 120.0,
-            "max_retries": 0,
+            "request_timeout_seconds": 600.0,
+            "max_retries": 2,
         }
     ]
 
@@ -460,6 +531,222 @@ def test_baseline_rejects_catalog_before_canonical_resolution(
         )
 
     assert not called
+
+
+@pytest.mark.parametrize("argumentos", [[], ["--model", "gpt-5.6-luna"]])
+def test_benchmark_requires_explicit_cli_model_and_reasoning_effort(
+    monkeypatch: pytest.MonkeyPatch, argumentos: list[str]
+) -> None:
+    monkeypatch.setenv("CIAR_LANGEXTRACT_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("CIAR_LANGEXTRACT_REASONING_EFFORT", "low")
+
+    with pytest.raises(SystemExit):
+        langextract_runner.main(["--profile", "benchmark", *argumentos, "syllabus.docx"])
+
+
+def test_benchmark_rejects_catalog_before_canonical_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def preflight(_: object) -> object:
+        nonlocal called
+        called = True
+        return object()
+
+    monkeypatch.setattr(langextract_runner, "preflight_catalog", preflight)
+
+    with pytest.raises(SystemExit):
+        langextract_runner.main(
+            [
+                "--profile",
+                "benchmark",
+                "--model",
+                "gpt-5.6-luna",
+                "--reasoning-effort",
+                "high",
+                "--catalog-dir",
+                "catalogo",
+                "--career",
+                "Software",
+                "--period",
+                "2026-1",
+                "--catalog-version",
+                "v1",
+                "syllabus.docx",
+            ]
+        )
+
+    assert not called
+
+
+def test_reference_only_rejects_canonical_catalog_options_before_extraction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def fake_provider(**_: object) -> object:
+        nonlocal called
+        called = True
+        return object()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(langextract_runner, "OpenAICiarLanguageModel", fake_provider)
+
+    with pytest.raises(SystemExit):
+        langextract_runner.main(
+            [
+                "--profile",
+                "benchmark",
+                "--model",
+                "gpt-5.6-luna",
+                "--reasoning-effort",
+                "max",
+                "--reference-catalog-dir",
+                "reference-catalog",
+                "--catalog-dir",
+                "canonical-catalog",
+                "--career",
+                "Software",
+                "--period",
+                "2026-1",
+                "--catalog-version",
+                "v1",
+                "syllabus.docx",
+            ]
+        )
+
+    assert not called
+
+
+def test_benchmark_accepts_reference_only_catalog_without_canonical_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(langextract_runner, "OpenAICiarLanguageModel", lambda **_: object())
+
+    def fake_run(*_: object, **kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"documentos": []}
+
+    monkeypatch.setattr(langextract_runner, "ejecutar_corpus_langextract", fake_run)
+
+    assert (
+        langextract_runner.main(
+            [
+                "--profile",
+                "benchmark",
+                "--model",
+                "gpt-5.6-luna",
+                "--reasoning-effort",
+                "max",
+                "--reference-catalog-dir",
+                "reference-catalog",
+                "syllabus.docx",
+            ]
+        )
+        == 0
+    )
+
+    assert captured["catalog_selection"] is None
+    assert captured["reference_catalog_selection"].directory == Path("reference-catalog")
+
+
+@pytest.mark.parametrize("reasoning_effort", ["high", "max"])
+def test_benchmark_uses_explicit_luna_request_configuration(
+    monkeypatch: pytest.MonkeyPatch, reasoning_effort: str
+) -> None:
+    calls: list[dict[str, str]] = []
+
+    class FakeProvider:
+        def __init__(self, **kwargs: str) -> None:
+            calls.append(kwargs)
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("CIAR_LANGEXTRACT_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("CIAR_LANGEXTRACT_REASONING_EFFORT", "low")
+    monkeypatch.setattr(langextract_runner, "OpenAICiarLanguageModel", FakeProvider)
+    monkeypatch.setattr(langextract_runner, "ejecutar_corpus_langextract", lambda *_, **__: {})
+
+    assert (
+        langextract_runner.main(
+            [
+                "--profile",
+                "benchmark",
+                "--model",
+                "gpt-5.6-luna",
+                "--reasoning-effort",
+                reasoning_effort,
+                "syllabus.docx",
+            ]
+        )
+        == 0
+    )
+
+    assert calls == [
+        {
+            "model_id": "ciar-openai/gpt-5.6-luna",
+            "api_key": "test-key",
+            "reasoning_effort": reasoning_effort,
+            "request_timeout_seconds": 600.0,
+            "max_retries": 2,
+        }
+    ]
+
+
+def test_benchmark_uses_full_syllabus_and_tags_request(tmp_path: Path) -> None:
+    syllabus = tmp_path / "syllabus.docx"
+    _write_minimal_docx(
+        syllabus,
+        [
+            "Objetivos",
+            "Usar Tableau para analizar indicadores.",
+            "Semana 1: Gestionar datos con Software.",
+        ],
+    )
+
+    evidence: list[str] = []
+
+    def fake_extractor(documento: object) -> dict[str, object]:
+        texto = getattr(documento, "contenido_documental")
+        evidence.append(texto)
+        evidencia = "Gestionar datos"
+        inicio = texto.index(evidencia)
+        return {
+            "text": texto,
+            "extractions": [
+                {
+                    "extraction_class": "paquete_respaldado",
+                    "extraction_text": evidencia,
+                    "char_interval": {"start_pos": inicio, "end_pos": inicio + len(evidencia)},
+                    "attributes": {
+                        "competencia_propuesta": "Competencia sin catalogar",
+                        "habilidad_propuesta": "Gestion",
+                        "herramientas": [{"nombre": "Software"}],
+                    },
+                }
+            ],
+        }
+
+    [documento] = ejecutar_corpus_langextract(
+        [syllabus],
+        fake_extractor,
+        profile="benchmark",
+        benchmark_model="gpt-5.6-luna",
+        benchmark_reasoning_effort="max",
+    )["documentos"]
+
+    assert documento["profile"] == "benchmark_unverified"
+    assert documento["benchmark"] == {
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "max",
+    }
+    assert documento["paquetes"][0]["herramientas"] == ["Software"]
+    assert evidence == [
+        "Objetivos\nUsar Tableau para analizar indicadores.\n"
+        "Semana 1: Gestionar datos con Software."
+    ]
 
 
 def test_baseline_uses_full_syllabus_and_tags_raw_diagnostic(tmp_path: Path) -> None:
@@ -506,3 +793,33 @@ def test_baseline_uses_full_syllabus_and_tags_raw_diagnostic(tmp_path: Path) -> 
         "Objetivos\nUsar Tableau para analizar indicadores.\n"
         "Semana 1: Gestionar datos con Software."
     ]
+
+
+def test_cli_forwards_document_concurrency_above_the_old_two_document_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ten independent syllabi must be able to fly concurrently, not in pairs."""
+
+    recibidos: dict[str, object] = {}
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(
+        langextract_runner, "OpenAICiarLanguageModel", lambda **_: object()
+    )
+    monkeypatch.setattr(
+        langextract_runner,
+        "ejecutar_corpus_langextract",
+        lambda *_, **kwargs: recibidos.update(kwargs) or {},
+    )
+
+    assert langextract_runner.main(["--max-in-flight", "10", "syllabus.docx"]) == 0
+    assert recibidos["max_in_flight"] == 10
+
+
+def test_corpus_rejects_concurrency_beyond_the_bounded_limit() -> None:
+    with pytest.raises(ValueError, match="max_in_flight"):
+        langextract_runner.ejecutar_corpus_langextract(
+            ["syllabus.docx"],
+            lambda _: {},
+            max_in_flight=langextract_runner._MAX_IN_FLIGHT_LIMITE + 1,
+        )

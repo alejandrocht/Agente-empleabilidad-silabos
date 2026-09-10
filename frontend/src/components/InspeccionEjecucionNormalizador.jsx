@@ -2,27 +2,22 @@
 
 import {
   AlertTriangle,
+  ChevronRight,
   CheckCircle2,
-  Download,
   ExternalLink,
-  FileSpreadsheet,
   History,
   LoaderCircle,
-  ScrollText,
   XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   obtenerReporteEjecucionNormalizador,
   obtenerUrlOutputNormalizador,
-  obtenerUrlReporteEjecucionNormalizador,
 } from "../api/normalizador";
 import CurricularApprovalPanel from "./CurricularApprovalPanel";
 import Neo4jImportPanel from "./Neo4jImportPanel";
 
-export const MAX_PREVIEW_ROWS = 100;
 export const MAX_CSV_PREVIEW_ROWS = 500;
-export const CSV_PREVIEW_PAGE_SIZE = 20;
 const MAX_PREVIEW_BYTES = 512 * 1024;
 const RUTA_SALIDA_SEGURA = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[\w./-]+$/;
 const CSV_PREVIEW_NAMES = new Set([
@@ -30,6 +25,55 @@ const CSV_PREVIEW_NAMES = new Set([
   "catalogo_habilidades.csv",
   "catalogo_herramientas.csv",
 ]);
+
+const INSPECCION_TABS = [
+  { id: "normalizador", label: "Normalizador" },
+  { id: "advertencias", label: "Advertencias y errores" },
+];
+
+const COMPETENCY_FINDING_CODES = [
+  "COMPETENCIA_REFERENCIADA_NO_DECLARADA",
+  "COMPETENCIA_DECLARADA_SIN_LOGRO",
+  "COMPETENCIA_CODIGO_DUPLICADO",
+  "LOGRO_SIN_COMPETENCIA",
+  "LOGRO_ETIQUETA_DUPLICADA",
+];
+
+const COMPETENCY_FINDING_LABELS = {
+  COMPETENCIA_REFERENCIADA_NO_DECLARADA: "Competencia referenciada no declarada",
+  COMPETENCIA_DECLARADA_SIN_LOGRO: "Competencia declarada sin logro",
+  COMPETENCIA_CODIGO_DUPLICADO: "Código de competencia duplicado",
+  LOGRO_SIN_COMPETENCIA: "Logro sin competencia",
+  LOGRO_ETIQUETA_DUPLICADA: "Etiqueta de logro duplicada",
+};
+
+const FINDING_GROUP_COPY = {
+  habilidades_catalogo: {
+    title: "Habilidades aún no están en el catálogo",
+    description: "Conserva la fuente original y revisa la equivalencia antes de incorporarlas al catálogo institucional.",
+    action: "Revisar equivalencias",
+  },
+  logros_codigo: {
+    title: "Logros tienen un código inconsistente",
+    description: "Verifica el código contra el logro del sílabo y conserva el texto fuente para confirmar la correspondencia.",
+    action: "Revisar códigos",
+  },
+  competencias: {
+    title: "Inconsistencias en competencias",
+    description: "Compara lo declarado en el curso con las relaciones de la malla y confirma qué vínculo debe conservarse.",
+    action: "Revisar relaciones",
+  },
+  cactus_sin_silabo: {
+    title: "Cursos sin sílabo descargable",
+    description: "Carga o vincula el documento fuente y vuelve a ejecutar la extracción para completar la cobertura curricular.",
+    action: "Revisar cursos afectados",
+  },
+  otros: {
+    title: "Otros avisos registrados",
+    description: "Hay avisos adicionales de la ejecución. Abre el detalle para revisar su origen y la acción recomendada.",
+    action: "Ver detalle",
+  },
+};
 
 export function parseCsvPreview(texto, limite = MAX_CSV_PREVIEW_ROWS) {
   const filas = [];
@@ -184,13 +228,19 @@ function filaResuelta(fila) {
 }
 
 function pendientesPorDecidirDe(manifest, reportes, aprobacion, gate) {
+  const pendientesDePaquetes = numeroNoNegativo(
+    aprobacion?.paquetes?.pendientes_por_decidir,
+    aprobacion?.paquetes?.pending_decision,
+  );
   const explicitos = numeroNoNegativo(
     aprobacion?.pendientes_por_decidir,
     aprobacion?.pending_decision,
     gate?.checks?.approval?.pending_decision,
     gate?.checks?.approval?.pendingDecision,
   );
+  if (pendientesDePaquetes !== null && pendientesDePaquetes > 0) return pendientesDePaquetes;
   if (explicitos !== null) return explicitos;
+  if (pendientesDePaquetes !== null) return pendientesDePaquetes;
   return filasDePendientes(reportes).filter((fila) => !filaResuelta(fila)).length || (
     aprobacion?.requiere_decision === true || manifest?.requiere_decision === true ? 1 : 0
   );
@@ -238,59 +288,184 @@ function releaseGatePermiteImportar(gate, aprobacion, salidas, previews) {
     && vistasPreviasCompletas(salidas, previews);
 }
 
-function bloqueosPublicacion(gate, aprobacion, pendientes, salidas, puedeImportar) {
-  if (puedeImportar) return [];
-  const bloqueos = [];
-  const declarados = gate?.blockers || gate?.bloqueadores || gate?.reasons || gate?.razones;
-  if (Array.isArray(declarados)) bloqueos.push(...declarados.filter(Boolean).map(String));
-  if (gate?.decision !== "ALLOW_IMPORT") {
-    bloqueos.push(`release gate ${gate?.decision || "no declarado"}`);
-  }
-  if (pendientes > 0) {
-    bloqueos.push(`${pendientes} decisión${pendientes === 1 ? "" : "es"} humana${pendientes === 1 ? "" : "s"} pendiente${pendientes === 1 ? "" : "s"}`);
-  } else if (aprobacion?.requiere_decision === true) {
-    bloqueos.push("el checkpoint curricular requiere una decisión humana");
-  }
-  if (
-    salidas.filter(salidaCanonica).length !== CSV_PREVIEW_NAMES.size
-    || aprobacion?.materializacion?.csv_canonicos_disponibles !== true
-    || gate?.checks?.approval?.canonical_materialized !== true
-    || gate?.decision === "ALLOW_IMPORT"
-  ) {
-    bloqueos.push("los CSV canónicos no están materializados");
-  }
-  return [...new Set(bloqueos)];
+function findingSearchText(hallazgo) {
+  return [
+    hallazgo?.codigo,
+    hallazgo?.mensaje,
+    hallazgo?.detalle,
+    hallazgo?.fuente,
+    hallazgo?.origen,
+    hallazgo?.etapa,
+    hallazgo?.proceso,
+  ]
+    .map((valor) => String(valor || ""))
+    .join(" ")
+    .toUpperCase();
 }
 
-function decisionesDe(reportes) {
-  const decisiones = reportes?.["decisiones_llm.jsonl"];
-  return Array.isArray(decisiones)
-    ? decisiones.filter((decision) => decision && typeof decision === "object")
+function findingCode(hallazgo) {
+  return String(hallazgo?.codigo || "").trim().toUpperCase();
+}
+
+function isBlockingFinding(hallazgo) {
+  return hallazgo?.bloqueante === true
+    || hallazgo?.blocking === true
+    || hallazgo?.bloquea_publicacion === true
+    || hallazgo?.block_import === true;
+}
+
+function hallazgosDe(manifest, reportes) {
+  const hallazgosManifest = Array.isArray(manifest?.hallazgos)
+    ? manifest.hallazgos.filter((hallazgo) => hallazgo && typeof hallazgo === "object")
     : [];
-}
-
-function esAceptada(decision) {
-  const estado = String(decision?.estado || "").toUpperCase();
-  return estado === "ACEPTADA" || estado === "APROBADA" || estado === "APROBAR";
-}
-
-function detalleDecision(decision) {
-  const inspeccion = decision?.inspeccion || decision?.inspector;
-  const problemas = inspeccion?.problemas || decision?.problemas;
-  if (Array.isArray(problemas) && problemas.length) return problemas.join("; ");
-  return decision?.justificacion || decision?.sugerencia || decision?.detalle || "Decisión aceptada.";
-}
-
-function eventosDe(manifest, reportes) {
-  const eventos = Array.isArray(manifest?.progreso_llm?.eventos)
-    ? manifest.progreso_llm.eventos
+  const reporteExtraccion = objetoReporte(reportePorNombre(reportes, ["extraccion_cactus.json"]));
+  const erroresCactus = Array.isArray(reporteExtraccion?.errores)
+    ? reporteExtraccion.errores
     : [];
-  const eventosReporte = Array.isArray(reportes?.eventos_llm?.eventos)
-    ? reportes.eventos_llm.eventos
-    : [];
-  return [...eventos, ...eventosReporte]
-    .filter((evento) => evento && typeof evento === "object")
-    .slice(-MAX_PREVIEW_ROWS);
+  const hallazgosCactus = erroresCactus
+    .map((error) => {
+      if (typeof error === "string") {
+        return {
+          codigo: "EXTRACCION_CACTUS_INCOMPLETA",
+          mensaje: error,
+          severidad: "error",
+          fuente: "extraccion_cactus",
+          origen: "extraccion_cactus",
+        };
+      }
+      if (!error || typeof error !== "object") return null;
+      const codigo = error.codigo || error.code;
+      return {
+        ...error,
+        codigo,
+        mensaje: error.mensaje || error.message,
+        // A missing syllabus is a coverage condition, not an extraction failure.
+        severidad: codigo === "CACTUS_SIN_SILABO" ? "warning" : (error.severidad || "error"),
+        fuente: error.fuente || "extraccion_cactus",
+        origen: error.origen || "extraccion_cactus",
+      };
+    })
+    .filter((hallazgo) => hallazgo && (hallazgo.codigo || hallazgo.mensaje));
+
+  const resultado = [...hallazgosManifest];
+  const tieneExtraccionIncompleta = hallazgosManifest.some((hallazgo) => findingCode(hallazgo) === "EXTRACCION_CACTUS_INCOMPLETA");
+  let agregoExtraccionIncompleta = tieneExtraccionIncompleta;
+  hallazgosCactus.forEach((hallazgo) => {
+    if (findingCode(hallazgo) === "EXTRACCION_CACTUS_INCOMPLETA") {
+      if (agregoExtraccionIncompleta) return;
+      agregoExtraccionIncompleta = true;
+    }
+    resultado.push(hallazgo);
+  });
+  return resultado;
+}
+
+function isCompetencyFinding(hallazgo) {
+  const texto = findingSearchText(hallazgo);
+  return COMPETENCY_FINDING_CODES.some((codigo) => texto.includes(codigo));
+}
+
+function isSkillFinding(hallazgo) {
+  return /\bHABILIDAD_[A-Z0-9_]+\b/.test(findingSearchText(hallazgo));
+}
+
+function isOutcomeFinding(hallazgo) {
+  const texto = findingSearchText(hallazgo);
+  return /\bLOGRO_[A-Z0-9_]+\b/.test(texto) && !isCompetencyFinding(hallazgo);
+}
+
+function isCactusSyllabusFinding(hallazgo) {
+  return findingCode(hallazgo) === "CACTUS_SIN_SILABO";
+}
+
+function hallazgosAccionablesDe(hallazgos) {
+  const tieneDetalleCactus = hallazgos.some(isCactusSyllabusFinding);
+  return hallazgos.filter((hallazgo) => {
+    const codigo = findingCode(hallazgo);
+    if (codigo === "CHH_GRAPH_GATE_BLOCKED") return false;
+    if (codigo === "EXTRACCION_CACTUS_INCOMPLETA" && tieneDetalleCactus) return false;
+    return true;
+  });
+}
+
+function findingLink(hallazgo) {
+  const candidatos = [
+    hallazgo?.url,
+    hallazgo?.enlace,
+    hallazgo?.link,
+    hallazgo?.href,
+    hallazgo?.afectados_url,
+    hallazgo?.affected_url,
+  ];
+  return candidatos.find((valor) => typeof valor === "string" && /^(?:https?:\/\/|\/)/.test(valor));
+}
+
+function findingAffectedCount(hallazgo) {
+  const afectados = hallazgo?.afectados || hallazgo?.affected || hallazgo?.items;
+  if (Array.isArray(afectados)) return afectados.length;
+  return numeroNoNegativo(
+    hallazgo?.cantidad_afectados,
+    hallazgo?.affected_count,
+    hallazgo?.count,
+    hallazgo?.total,
+  );
+}
+
+function getCompetencySubgroups(hallazgos) {
+  return COMPETENCY_FINDING_CODES
+    .map((codigo) => ({
+      codigo,
+      etiqueta: COMPETENCY_FINDING_LABELS[codigo],
+      cantidad: hallazgos.filter((hallazgo) => findingSearchText(hallazgo).includes(codigo)).length,
+    }))
+    .filter((grupo) => grupo.cantidad > 0);
+}
+
+function groupFindings(hallazgos) {
+  const gruposBase = [
+    {
+      id: "habilidades_catalogo",
+      coincide: isSkillFinding,
+    },
+    {
+      id: "logros_codigo",
+      coincide: isOutcomeFinding,
+    },
+    {
+      id: "competencias",
+      coincide: isCompetencyFinding,
+    },
+    {
+      id: "cactus_sin_silabo",
+      coincide: isCactusSyllabusFinding,
+    },
+  ];
+  const asignados = new Set();
+  const grupos = gruposBase.map((grupo) => {
+    const items = hallazgos.filter((hallazgo) => {
+      const coincide = grupo.coincide(hallazgo);
+      if (coincide) asignados.add(hallazgo);
+      return coincide;
+    });
+    return {
+      ...grupo,
+      ...FINDING_GROUP_COPY[grupo.id],
+      items,
+      cantidad: items.length,
+      subgrupos: grupo.id === "competencias" ? getCompetencySubgroups(items) : [],
+    };
+  }).filter((grupo) => grupo.cantidad > 0);
+  const otros = hallazgos.filter((hallazgo) => !asignados.has(hallazgo));
+  if (otros.length) {
+    grupos.push({
+      id: "otros",
+      ...FINDING_GROUP_COPY.otros,
+      items: otros,
+      cantidad: otros.length,
+      subgrupos: [],
+    });
+  }
+  return grupos;
 }
 
 function conteosDe(manifest) {
@@ -412,89 +587,181 @@ async function cargarPreviewCsv(idEjecucion, salida) {
 
 function Check({ children, ok = true }) {
   return (
-    <li className={`flex items-start gap-2 rounded-xl border px-3.5 py-3 text-sm ${ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
-      {ok ? <CheckCircle2 className="mt-0.5 shrink-0" size={17} /> : <AlertTriangle className="mt-0.5 shrink-0" size={17} />}
+    <li className={`flex items-start gap-2 rounded-xl border px-3.5 py-3 text-sm ${ok ? "border-line bg-fondo text-ink" : "border-ulima/35 bg-ulima/5 text-ink"}`}>
+      {ok ? <CheckCircle2 className="mt-0.5 shrink-0 text-muted" size={17} /> : <AlertTriangle className="mt-0.5 shrink-0 text-ulima" size={17} />}
       <span>{children}</span>
     </li>
   );
 }
 
-function CsvPreview({ nombre, preview }) {
-  const [pagina, setPagina] = useState(0);
-  if (preview?.error) {
-    return <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{preview.error}</p>;
-  }
-  if (!preview?.encabezados?.length) {
-    return <p className="mt-3 rounded-lg border border-dashed border-line px-3 py-3 text-xs text-muted">El CSV está vacío o no tiene encabezado legible.</p>;
-  }
-  const totalPaginas = Math.max(1, Math.ceil(preview.filas.length / CSV_PREVIEW_PAGE_SIZE));
-  const paginaSegura = Math.min(pagina, totalPaginas - 1);
-  const inicio = paginaSegura * CSV_PREVIEW_PAGE_SIZE;
-  const filasPagina = preview.filas.slice(inicio, inicio + CSV_PREVIEW_PAGE_SIZE);
-  const fin = Math.min(inicio + filasPagina.length, preview.filas.length);
+function InspectionTabs({ activeTab, onChange }) {
+  const tabRefs = useRef([]);
+
+  const moveTab = (indice) => {
+    const siguiente = INSPECCION_TABS[(indice + INSPECCION_TABS.length) % INSPECCION_TABS.length];
+    onChange(siguiente.id);
+    tabRefs.current[indice]?.focus();
+  };
+
+  const handleKeyDown = (event, indice) => {
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      moveTab((indice + 1) % INSPECCION_TABS.length);
+    }
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      moveTab((indice - 1 + INSPECCION_TABS.length) % INSPECCION_TABS.length);
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      moveTab(0);
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      moveTab(INSPECCION_TABS.length - 1);
+    }
+  };
+
   return (
-    <details className="mt-3 overflow-hidden rounded-xl border border-line bg-paper" open>
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 text-xs font-bold text-ink">
-        <span>Vista previa de {nombre}</span>
-        <span className="font-mono text-[10px] font-medium text-muted">20 filas por página</span>
-      </summary>
-      <div className="overflow-x-auto border-t border-line">
-        <table className="min-w-full text-left text-xs">
-          <thead className="bg-fondo text-[10px] uppercase tracking-[0.06em] text-muted">
-            <tr>
-              {preview.encabezados.map((encabezado, indice) => <th key={`${encabezado}-${indice}`} className="whitespace-nowrap px-3 py-2 font-bold">{encabezado || `Columna ${indice + 1}`}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {filasPagina.map((fila, filaIndice) => {
-              const indiceAbsoluto = inicio + filaIndice;
-              return (
-                <tr key={`fila-${indiceAbsoluto}`} className="border-t border-line align-top">
-                  {preview.encabezados.map((_encabezado, columnaIndice) => <td key={`celda-${indiceAbsoluto}-${columnaIndice}`} className="max-w-[18rem] px-3 py-2 text-muted">{fila[columnaIndice] || "—"}</td>)}
-                </tr>
-              );
-            })}
-            {!filasPagina.length ? (
-              <tr className="border-t border-line">
-                <td colSpan={preview.encabezados.length} className="px-3 py-4 text-center text-muted">No hay registros para mostrar.</td>
-              </tr>
+    <nav className="mt-5 border-y border-line" aria-label="Secciones de la inspección CHH">
+      <div className="flex gap-0 overflow-x-auto" role="tablist" aria-label="Secciones de la inspección">
+        {INSPECCION_TABS.map((tab, indice) => {
+          const activa = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              ref={(elemento) => { tabRefs.current[indice] = elemento; }}
+              id={`tab-${tab.id}`}
+              type="button"
+              role="tab"
+              aria-selected={activa}
+              aria-controls={`panel-${tab.id}`}
+              tabIndex={activa ? 0 : -1}
+              onClick={() => onChange(tab.id)}
+              onKeyDown={(event) => handleKeyDown(event, indice)}
+              className={`relative shrink-0 border-b-2 border-transparent px-4 py-3 text-sm font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ulima/40 focus-visible:ring-offset-2 ${activa ? "bg-ulima/5 font-extrabold text-institucional-negro" : "text-muted hover:bg-fondo hover:text-ink"}`}
+            >
+              {tab.label}
+              {activa ? <span className="absolute inset-x-3 bottom-[-1px] h-0.5 bg-institucional-naranja" aria-hidden="true" /> : null}
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+function getFindingGroupColors(grupo) {
+  return grupo.items.some(isBlockingFinding)
+    ? {
+      wrapper: "border-red-200 bg-red-50/40",
+      icon: "border-red-200 bg-red-50 text-red-700",
+      title: "text-ink",
+      body: "text-muted",
+    }
+    : {
+      wrapper: "border-line bg-paper",
+      icon: "border-ulima/30 bg-ulima/5 text-ulima",
+      title: "text-ink",
+      body: "text-muted",
+    };
+}
+
+function FindingGroupCard({ grupo, detailed = false, onOpen }) {
+  const colores = getFindingGroupColors(grupo);
+  const tieneBloqueo = grupo.items.some(isBlockingFinding);
+  const hallazgoConEnlace = grupo.items.find((hallazgo) => findingLink(hallazgo));
+  const affectedCount = grupo.items
+    .map(findingAffectedCount)
+    .find((cantidad) => cantidad !== null && cantidad !== undefined);
+  return (
+    <article className={`rounded-2xl border p-4 sm:p-5 ${colores.wrapper}`}>
+      <div className="flex items-start gap-3">
+        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl border ${colores.icon}`} aria-hidden="true">
+          {tieneBloqueo ? <XCircle size={18} /> : <AlertTriangle size={18} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className={`text-base font-extrabold ${colores.title}`}>{grupo.title}</h3>
+            <span className={`font-mono text-[11px] font-bold ${colores.body}`}>
+              {grupo.cantidad} {grupo.cantidad === 1 ? "aviso" : "avisos"}
+            </span>
+          </div>
+          <p className={`mt-2 max-w-3xl text-sm leading-6 ${colores.body}`}>{grupo.description}</p>
+          {affectedCount !== null && affectedCount !== undefined ? <p className={`mt-2 text-xs font-semibold ${colores.body}`}>Afecta a {affectedCount.toLocaleString("es-PE")} {affectedCount === 1 ? "elemento" : "elementos"} reportado{affectedCount === 1 ? "" : "s"}.</p> : null}
+          {grupo.subgrupos.length ? (
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2" aria-label="Detalle de inconsistencias en competencias">
+              {grupo.subgrupos.map((subgrupo) => (
+                <li key={subgrupo.codigo} className="rounded-xl border border-line bg-fondo px-3 py-2 text-xs text-ink">
+                  <span className="font-bold">{subgrupo.etiqueta}</span>
+                  <span className="ml-2 font-mono text-[11px]">{subgrupo.cantidad}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold">
+            {hallazgoConEnlace ? (
+              <a
+                href={findingLink(hallazgoConEnlace)}
+                target={findingLink(hallazgoConEnlace).startsWith("http") ? "_blank" : undefined}
+                rel={findingLink(hallazgoConEnlace).startsWith("http") ? "noopener noreferrer" : undefined}
+                className={`inline-flex items-center gap-1 text-ink underline decoration-current/30 underline-offset-4 transition hover:text-ulima ${colores.title}`}
+              >
+                Ver afectados <ChevronRight size={14} aria-hidden="true" />
+              </a>
             ) : null}
-          </tbody>
-        </table>
+            {onOpen ? (
+              <button type="button" onClick={onOpen} className={`inline-flex items-center gap-1 underline decoration-current/30 underline-offset-4 transition hover:text-ulima ${colores.title}`}>
+                {grupo.action} <ChevronRight size={14} aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
+          {detailed ? (
+            <details className="mt-4 rounded-xl border border-line bg-fondo">
+              <summary className="cursor-pointer list-none px-3 py-2.5 text-xs font-bold text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ulima/40 focus-visible:ring-inset">Ver trazabilidad y evidencia</summary>
+              <div className="border-t border-line px-3 py-3">
+                <ul className="space-y-3">
+                  {grupo.items.map((hallazgo, indice) => (
+                    <li key={`${findingCode(hallazgo) || "hallazgo"}-${indice}`} className="text-xs leading-5 text-muted">
+                      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-ink">{findingCode(hallazgo) || "SIN_CODIGO"} · {hallazgo?.severidad || "warning"}</p>
+                      <p className="mt-1">{hallazgo?.mensaje || hallazgo?.detalle || "Hallazgo sin detalle."}</p>
+                      {hallazgo?.detalle && hallazgo.detalle !== hallazgo.mensaje ? <p className="mt-1 text-muted/80">{hallazgo.detalle}</p> : null}
+                      {findingLink(hallazgo) ? <a href={findingLink(hallazgo)} className="mt-1 inline-flex font-bold text-ulima underline underline-offset-2">Abrir afectados</a> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </details>
+          ) : null}
+        </div>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-3.5 py-2 text-[11px] text-muted">
-        <p>
-          Filas {filasPagina.length ? `${inicio + 1}–${fin}` : "0"} de {preview.totalFilas} · Página {paginaSegura + 1} de {totalPaginas}
-          {preview.truncado ? `; se muestran como máximo ${MAX_CSV_PREVIEW_ROWS}.` : "."}
-        </p>
-        <nav className="flex items-center gap-1.5" aria-label={`Paginación de ${nombre}`}>
-          <button
-            type="button"
-            className="rounded-md border border-line bg-paper px-2 py-1 font-semibold text-ink transition hover:border-ulima hover:text-ulima disabled:cursor-not-allowed disabled:opacity-40"
-            onClick={() => setPagina((actual) => Math.max(0, actual - 1))}
-            disabled={paginaSegura === 0}
-            aria-label={`Página anterior de ${nombre}`}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="rounded-md border border-line bg-paper px-2 py-1 font-semibold text-ink transition hover:border-ulima hover:text-ulima disabled:cursor-not-allowed disabled:opacity-40"
-            onClick={() => setPagina((actual) => Math.min(totalPaginas - 1, actual + 1))}
-            disabled={paginaSegura >= totalPaginas - 1}
-            aria-label={`Página siguiente de ${nombre}`}
-          >
-            Siguiente
-          </button>
-        </nav>
+    </article>
+  );
+}
+
+function FindingsDetail({ grupos, total, errors, warnings }) {
+  return (
+    <section className="rounded-2xl border border-line bg-paper p-5 shadow-sm sm:p-6" aria-labelledby="hallazgos-title">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-muted">Detalle agrupado</p>
+          <h2 id="hallazgos-title" className="mt-2 flex items-center gap-2 text-xl font-extrabold"><AlertTriangle className="text-ulima" size={20} /> Advertencias y errores</h2>
+        </div>
+        <span className="font-mono text-xs font-bold text-muted">{total} {total === 1 ? "hallazgo" : "hallazgos"} · {errors} errores · {warnings} advertencias</span>
       </div>
-    </details>
+      {grupos.length ? (
+        <div className="mt-5 space-y-3">{grupos.map((grupo) => <FindingGroupCard key={grupo.id} grupo={grupo} detailed />)}</div>
+      ) : (
+        <p className="mt-5 rounded-xl border border-line bg-fondo px-3.5 py-3 text-sm text-muted">No hay advertencias ni errores registrados en esta ejecución.</p>
+      )}
+    </section>
   );
 }
 
 export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
   const [estado, setEstado] = useState({ cargando: true, reporte: null, error: "", previews: {} });
   const [revisionReporte, setRevisionReporte] = useState(0);
+  const [activeTab, setActiveTab] = useState("normalizador");
 
   useEffect(() => {
     let activo = true;
@@ -557,6 +824,10 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
     };
   }, [idEjecucion, revisionReporte]);
 
+  useEffect(() => {
+    setActiveTab("normalizador");
+  }, [idEjecucion]);
+
   const manifest = estado.reporte?.manifest || {};
   const reportes = estado.reporte?.reportes || {};
   const parametros = parametrosDe(manifest);
@@ -568,24 +839,20 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
   const esCurricular = esEjecucionCurricular(manifest, reportes, salidas);
   const pendientesPorDecidir = pendientesPorDecidirDe(manifest, reportes, aprobacionCurricular, releaseGate);
   const requiereDecision = requiereDecisionCurricular(manifest, aprobacionCurricular, releaseGate, pendientesPorDecidir);
-  const tieneCatalogosCurriculares = csvsParaPreview.length === CSV_PREVIEW_NAMES.size;
   const csvCanonicosListos = releaseGatePermiteImportar(releaseGate, aprobacionCurricular, salidas, estado.previews);
   const mostrarAprobacionCurricular = !esEstadoActivo(manifest.estado)
     && esCurricular
     && (requiereDecision || filasDePendientes(reportes).some((fila) => !filaResuelta(fila)));
-  const bloqueos = bloqueosPublicacion(releaseGate, aprobacionCurricular, pendientesPorDecidir, salidas, csvCanonicosListos);
-  const decisionesAceptadas = decisionesDe(reportes).filter(esAceptada);
-  const hallazgos = Array.isArray(manifest.hallazgos)
-    ? manifest.hallazgos.filter((hallazgo) => hallazgo && typeof hallazgo === "object")
-    : [];
-  const advertencias = hallazgos.filter((hallazgo) => hallazgo?.severidad === "warning");
-  const errores = hallazgos.filter((hallazgo) => hallazgo?.severidad === "error");
-  const eventos = eventosDe(manifest, reportes);
+  const hallazgos = useMemo(() => hallazgosDe(manifest, reportes), [manifest, reportes]);
+  const hallazgosAccionables = useMemo(() => hallazgosAccionablesDe(hallazgos), [hallazgos]);
+  const advertencias = hallazgosAccionables.filter((hallazgo) => hallazgo?.severidad === "warning");
+  const errores = hallazgosAccionables.filter((hallazgo) => hallazgo?.severidad === "error");
   const conteos = conteosDe(manifest);
   const validacion = manifest.validacion_silabos || manifest.validacion;
   const ejecucionActiva = esEstadoActivo(manifest.estado);
   const progresoActivo = progresoActivoDe(manifest);
-  const estadoError = ["error", "rechazado", "no_publicado"].includes(estadoNormalizado(manifest.estado));
+  const estadoError = ["error", "rechazado"].includes(estadoNormalizado(manifest.estado));
+  const gruposHallazgos = useMemo(() => groupFindings(hallazgosAccionables), [hallazgosAccionables]);
   const contextoEstado = {
     esCurricular,
     csvCanonicosListos,
@@ -595,108 +862,113 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
   };
 
   return (
-    <main className="h-[100dvh] min-h-screen overflow-y-auto overscroll-y-contain bg-fondo px-4 pb-24 pt-6 text-ink sm:px-8 sm:pb-32 sm:pt-8">
+    <main className="h-[100dvh] min-h-screen overflow-y-auto overscroll-y-contain bg-fondo px-4 pb-24 pt-6 font-body text-ink sm:px-8 sm:pb-32 sm:pt-8">
       <div className="mx-auto max-w-7xl">
-        <header className="rounded-2xl border border-line bg-paper p-5 shadow-panel sm:p-7">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
+        <header className="rounded-2xl border border-line border-t-4 border-t-ulima bg-paper p-5 shadow-sm sm:p-7">
+          <div className="flex flex-wrap items-start justify-between gap-5">
+            <div className="min-w-0">
               <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ulima">Inspección histórica / normalizador</p>
-              <h1 className="mt-2 flex items-center gap-2 text-2xl font-extrabold tracking-[-0.03em] sm:text-3xl"><History className="text-ulima" size={26} /> Inspección de ejecución</h1>
+              <h1 className="mt-2 flex items-center gap-2 font-editorial text-3xl font-extrabold tracking-[-0.04em] text-institucional-negro sm:text-4xl"><History className="shrink-0 text-ulima" size={28} /> Inspección CHH</h1>
+              <p className="mt-2 text-sm font-semibold text-muted">
+                <span>Inspección de ejecución</span>
+                <span aria-hidden="true"> · </span>
+                <span>revisión humana y trazabilidad curricular</span>
+              </p>
               <p className="mt-2 break-all font-mono text-xs text-muted">{idEjecucion}</p>
-              {estado.reporte ? <section aria-label="Parámetros de la ejecución" className="mt-4 flex flex-wrap gap-2">
-                <dl className="min-w-[10rem] flex-1 rounded-xl border border-line bg-fondo px-3.5 py-2.5">
+              {estado.reporte ? <section aria-label="Parámetros de la ejecución" className="mt-5 grid max-w-2xl gap-2 sm:grid-cols-2">
+                <dl className="rounded-xl border border-line bg-fondo px-3.5 py-2.5">
                   <dt className="font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-muted">Carrera</dt>
                   <dd className="mt-1 break-words text-sm font-bold text-ink">{parametros.carrera}</dd>
                 </dl>
-                <dl className="min-w-[10rem] flex-1 rounded-xl border border-line bg-fondo px-3.5 py-2.5">
+                <dl className="rounded-xl border border-line bg-fondo px-3.5 py-2.5">
                   <dt className="font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-muted">Periodo</dt>
                   <dd className="mt-1 break-words text-sm font-bold text-ink">{parametros.periodo}</dd>
                 </dl>
               </section> : null}
             </div>
-            {estado.reporte ? <span className={`rounded-full px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.06em] ${estadoError ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-800"}`}>{estadoLegible(manifest.estado, contextoEstado)}</span> : null}
+            {estado.reporte ? <span className={`shrink-0 rounded-xl border px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.06em] ${estadoError ? "border-red-200 bg-red-50 text-red-900" : manifest.estado === "no_publicado" ? "border-ulima/30 bg-ulima/5 text-ink" : "border-line bg-fondo text-ink"}`}>{estadoLegible(manifest.estado, contextoEstado)}</span> : null}
           </div>
-          {estado.reporte ? <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted"><span>Estado persistido: <strong className="text-ink">{manifest.estado || "no disponible"}</strong></span><a href={obtenerUrlReporteEjecucionNormalizador(idEjecucion)} download rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-paper px-3 py-2 font-bold text-ink transition hover:border-ulima hover:text-ulima"><Download size={14} /> Descargar reporte JSON</a></div> : null}
+          {estado.reporte ? <InspectionTabs activeTab={activeTab} onChange={setActiveTab} /> : null}
         </header>
 
-        {estado.cargando ? <p className="mt-5 flex items-center gap-2 rounded-xl border border-line bg-paper px-4 py-4 text-sm text-muted"><LoaderCircle className="animate-girar" size={17} /> Cargando reporte, salidas y vistas previas…</p> : null}
+        {estado.cargando ? <p className="mt-5 flex items-center gap-2 rounded-xl border border-line bg-paper px-4 py-4 text-sm text-muted"><LoaderCircle className="animate-girar" size={17} /> Cargando reporte y artefactos de la ejecución…</p> : null}
         {estado.error ? <div role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm font-semibold text-red-700"><p className="flex items-start gap-2"><XCircle className="mt-0.5 shrink-0" size={18} /> {estado.error}</p><p className="mt-2 text-xs font-normal leading-5">La ejecución puede ser antigua, haber sido eliminada o no tener un reporte legible.</p></div> : null}
 
         {estado.reporte ? (
           <>
-            {ejecucionActiva ? (
-              <section className="mt-5 rounded-2xl border border-ulima/20 bg-ulima/5 p-5 shadow-panel sm:p-6" role="status" aria-live="polite" aria-label="Progreso de la ejecución">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="flex items-start gap-2.5">
-                    <LoaderCircle className="mt-0.5 shrink-0 animate-girar text-ulima" size={20} />
-                    <div>
-                      <h2 className="text-lg font-extrabold">Ejecución en curso</h2>
-                      <p className="mt-1 text-sm font-semibold text-ulima">{estadoLegible(manifest.estado, contextoEstado)}</p>
+            <section id="panel-normalizador" role="tabpanel" aria-labelledby="tab-normalizador" tabIndex={0} hidden={activeTab !== "normalizador"} className="mt-5 space-y-5 outline-none focus-visible:ring-2 focus-visible:ring-ulima/30">
+              {ejecucionActiva ? (
+              <section className="rounded-2xl border border-ulima/20 bg-ulima/5 p-5 shadow-sm sm:p-6" role="status" aria-live="polite" aria-label="Progreso de la ejecución">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <LoaderCircle className="mt-0.5 shrink-0 animate-girar text-ulima" size={20} />
+                      <div>
+                        <h2 className="text-lg font-extrabold">Ejecución en curso</h2>
+                        <p className="mt-1 text-sm font-semibold text-ulima">{estadoLegible(manifest.estado, contextoEstado)}</p>
+                      </div>
                     </div>
+                    {progresoActivo?.chunksTotales ? <span className="font-mono text-xs font-bold text-muted">{progresoActivo.chunksCompletados} / {progresoActivo.chunksTotales} chunks</span> : null}
                   </div>
-                  {progresoActivo?.chunksTotales ? <span className="font-mono text-xs font-bold text-muted">{progresoActivo.chunksCompletados} / {progresoActivo.chunksTotales} chunks</span> : null}
+                  {progresoActivo?.chunksTotales ? (
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-ulima/10" role="progressbar" aria-label="Avance de la ejecución" aria-valuemin={0} aria-valuemax={progresoActivo.chunksTotales} aria-valuenow={progresoActivo.chunksCompletados} aria-valuetext={`${progresoActivo.chunksCompletados} de ${progresoActivo.chunksTotales} chunks completados`}>
+                      <div className="h-full rounded-full bg-ulima transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${progresoActivo.porcentaje}%` }} />
+                    </div>
+                  ) : null}
+                  <p className="mt-3 text-sm leading-5 text-muted">
+                    {progresoActivo?.chunksTotales
+                      ? `${progresoActivo.chunksCompletados} de ${progresoActivo.chunksTotales} chunks completados.`
+                      : progresoActivo?.eventos
+                        ? `${progresoActivo.eventos} hitos de progreso registrados.`
+                        : "El procesamiento continúa y el avance se actualizará automáticamente."} Las salidas se habilitarán al finalizar.
+                  </p>
+                </section>
+              ) : null}
+
+              <section className="rounded-2xl border border-line bg-paper p-5 shadow-sm sm:p-6" aria-labelledby="resultados-positivos-title">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-muted">Resumen de la ejecución</p>
+                    <h2 id="resultados-positivos-title" className="mt-2 flex items-center gap-2 text-xl font-extrabold tracking-[-0.025em]"><CheckCircle2 className="text-ulima" size={20} /> Resultados positivos y estado</h2>
+                  </div>
+                  <span className="font-mono text-xs font-bold text-muted">Solo lectura</span>
                 </div>
-                {progresoActivo?.chunksTotales ? (
-                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-ulima/10" role="progressbar" aria-label="Avance de la ejecución" aria-valuemin={0} aria-valuemax={progresoActivo.chunksTotales} aria-valuenow={progresoActivo.chunksCompletados} aria-valuetext={`${progresoActivo.chunksCompletados} de ${progresoActivo.chunksTotales} chunks completados`}>
-                    <div className="h-full rounded-full bg-ulima transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${progresoActivo.porcentaje}%` }} />
+                <ul className="mt-5 grid gap-2 md:grid-cols-2">
+                  {validacion ? <Check ok={validacion.valida !== false}>{validacion.valida === false ? "La validación de entrada no fue aprobada." : "Validación curricular aprobada"}</Check> : <Check ok={false}>No hay una validación de entrada disponible en este manifest.</Check>}
+                  {ejecucionActiva ? <Check>Las salidas se habilitarán al finalizar la ejecución.</Check> : esCurricular ? csvCanonicosListos ? <Check>Los CSV canónicos están materializados y disponibles para inspección.</Check> : <Check ok={false}>{csvs.length ? "Hay archivos curriculares declarados, pero todavía no están certificados para publicar." : "Aún no hay catálogos curriculares materializados."}</Check> : csvs.length ? <Check>{csvs.length} salidas CSV declaradas y disponibles para inspección.</Check> : <Check ok={false}>Esta ejecución no declara salidas CSV accesibles.</Check>}
+                  {ejecucionActiva ? <Check>Estado actual: {estadoLegible(manifest.estado, contextoEstado)}. La inspección se actualizará automáticamente.</Check> : manifest.estado === "cancelado" ? <Check ok={false}>La ejecución fue cancelada; se muestran los artefactos que alcanzaron a persistirse.</Check> : <Check>{manifest.estado ? `Estado final registrado: ${estadoLegible(manifest.estado, contextoEstado)}.` : "El estado final no está disponible."}</Check>}
+                  {manifest.limpieza_silabos?.publicable === false || manifest.normalizacion?.publicable === false ? <Check ok={false}>La ejecución quedó marcada como no publicable; los artefactos siguen disponibles para revisión.</Check> : <Check>Los resultados se presentan como evidencia de solo lectura.</Check>}
+                </ul>
+              </section>
+
+              <section className="rounded-2xl border border-line bg-paper p-5 shadow-sm sm:p-6" aria-labelledby="conteos-title">
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-muted">Huella de la ejecución</p>
+                    <h2 id="conteos-title" className="mt-2 text-xl font-extrabold tracking-[-0.025em]">Conteos de la normalización</h2>
                   </div>
-                ) : null}
-                <p className="mt-3 text-sm leading-5 text-muted">
-                  {progresoActivo?.chunksTotales
-                    ? `${progresoActivo.chunksCompletados} de ${progresoActivo.chunksTotales} chunks completados.`
-                    : progresoActivo?.eventos
-                      ? `${progresoActivo.eventos} hitos de progreso registrados.`
-                      : "El procesamiento continúa y el avance se actualizará automáticamente."} Las salidas CSV se habilitarán al finalizar.
-                </p>
+                  <span className="text-xs text-muted">Valores reportados por el manifest</span>
+                </div>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  {conteos.map((conteo) => <article key={conteo.clave} className="rounded-xl border border-line bg-fondo px-3.5 py-3"><p className="font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-muted">{conteo.etiqueta}</p><p className="mt-1 tabular-nums text-2xl font-extrabold text-ink">{conteo.valor == null || Number.isNaN(Number(conteo.valor)) ? "—" : Number(conteo.valor).toLocaleString("es-PE")}</p></article>)}
+                </div>
               </section>
-            ) : null}
-            <section className="mt-5 rounded-2xl border border-line bg-paper p-5 shadow-panel sm:p-6" aria-labelledby="resultados-positivos-title">
-              <h2 id="resultados-positivos-title" className="flex items-center gap-2 text-lg font-extrabold"><CheckCircle2 className="text-emerald-600" size={20} /> Resultados positivos y estado</h2>
-              <ul className="mt-4 grid gap-2 md:grid-cols-2">
-                {validacion ? <Check ok={validacion.valida !== false}>{validacion.valida === false ? "La validación de entrada no fue aprobada." : "Validación curricular aprobada"}</Check> : <Check ok={false}>No hay una validación de entrada disponible en este manifest.</Check>}
-                {ejecucionActiva ? <Check>Las salidas CSV se habilitarán al finalizar la ejecución.</Check> : esCurricular ? csvCanonicosListos ? <Check>{CSV_PREVIEW_NAMES.size} CSV canónicos materializados y disponibles para inspección.</Check> : <Check ok={false}>{csvs.length ? "Hay archivos CSV declarados, pero todavía no están certificados como CSV canónicos materializados." : "No hay CSV canónicos materializados; los reportes JSON/JSONL son solo evidencia de revisión y proveniencia."}</Check> : csvs.length ? <Check>{csvs.length} salidas CSV declaradas y disponibles para inspección.</Check> : <Check ok={false}>Esta ejecución no declara salidas CSV accesibles.</Check>}
-                {ejecucionActiva ? <Check>Estado actual: {estadoLegible(manifest.estado, contextoEstado)}. La inspección se actualizará automáticamente.</Check> : manifest.estado === "cancelado" ? <Check ok={false}>La ejecución fue cancelada; se muestran los artefactos que alcanzaron a persistirse.</Check> : <Check>{manifest.estado ? `Estado final registrado: ${estadoLegible(manifest.estado, contextoEstado)}.` : "El estado final no está disponible."}</Check>}
-                {manifest.limpieza_silabos?.publicable === false || manifest.normalizacion?.publicable === false ? <Check ok={false}>El gate marcó la ejecución como no publicable; los artefactos siguen siendo de solo lectura.</Check> : <Check>Los resultados se presentan como evidencia de solo lectura.</Check>}
-              </ul>
+
+              {mostrarAprobacionCurricular ? (
+                <div id="aprobacion-curricular">
+                  <CurricularApprovalPanel
+                    idEjecucion={idEjecucion}
+                    onResolved={() => setRevisionReporte((actual) => actual + 1)}
+                  />
+                </div>
+              ) : null}
+
+              {!ejecucionActiva && csvCanonicosListos ? <Neo4jImportPanel idEjecucion={idEjecucion} /> : null}
             </section>
 
-            <section className="mt-5 rounded-2xl border border-line bg-paper p-5 shadow-panel sm:p-6" aria-labelledby="conteos-title">
-              <h2 id="conteos-title" className="text-lg font-extrabold">Conteos de la normalización</h2>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                {conteos.map((conteo) => <article key={conteo.clave} className="rounded-xl border border-line bg-fondo px-3.5 py-3"><p className="font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-muted">{conteo.etiqueta}</p><p className="mt-1 text-xl font-extrabold text-ink">{conteo.valor == null || Number.isNaN(Number(conteo.valor)) ? "—" : Number(conteo.valor).toLocaleString("es-PE")}</p></article>)}
-              </div>
+            <section id="panel-advertencias" role="tabpanel" aria-labelledby="tab-advertencias" tabIndex={0} hidden={activeTab !== "advertencias"} className="mt-5 space-y-5 outline-none focus-visible:ring-2 focus-visible:ring-ulima/30">
+              <FindingsDetail grupos={gruposHallazgos} total={hallazgosAccionables.length} errors={errores.length} warnings={advertencias.length} />
+              <p className="text-xs text-muted">La trazabilidad detallada aparece al expandir cada aviso; los logs y las salidas técnicas generadas permanecen en el backend.</p>
             </section>
-
-            <section className="mt-5 rounded-2xl border border-line bg-paper p-5 shadow-panel sm:p-6" aria-labelledby="salidas-title">
-              <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="salidas-title" className="flex items-center gap-2 text-lg font-extrabold"><FileSpreadsheet className="text-ulima" size={20} /> Salidas generadas</h2><span className="text-xs text-muted">{ejecucionActiva ? "Se habilitarán al finalizar" : `${salidas.length} archivos declarados`}</span></div>
-              {salidas.length ? <ul className="mt-4 grid gap-2 md:grid-cols-2">{salidas.map((salida) => <li key={salida.archivo} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-fondo px-3.5 py-3"><div className="min-w-0"><p className="truncate font-mono text-xs font-bold text-ink">{nombreArchivo(salida.archivo)}</p><p className="mt-1 text-xs text-muted">{salida.registros == null ? "Cantidad no declarada" : `${salida.registros} registros`} · {salida.tipo || "artefacto"}</p></div><a href={obtenerUrlOutputNormalizador(idEjecucion, salida.archivo)} download rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-2 text-xs font-bold text-ink transition hover:border-ulima hover:text-ulima"><Download size={14} /> Descargar</a></li>)}</ul> : <p className="mt-4 rounded-xl border border-dashed border-line px-3.5 py-4 text-sm leading-5 text-muted">{ejecucionActiva ? "La ejecución sigue en curso. Las salidas CSV aparecerán cuando el procesamiento termine." : "No hay salidas declaradas. Puede tratarse de una ejecución cancelada, rechazada o de un manifest legado incompleto."}</p>}
-              {csvsParaPreview.length ? <div className="mt-5 space-y-3">{csvsParaPreview.map((salida) => <CsvPreview key={salida.archivo} nombre={nombreArchivo(salida.archivo)} preview={estado.previews[salida.archivo]} />)}</div> : null}
-            </section>
-
-            {mostrarAprobacionCurricular ? (
-              <CurricularApprovalPanel
-                idEjecucion={idEjecucion}
-                onResolved={() => setRevisionReporte((actual) => actual + 1)}
-              />
-            ) : null}
-
-            {!ejecucionActiva && esCurricular && !csvCanonicosListos ? (
-              <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50/60 p-5 shadow-panel sm:p-6" aria-label="Estado de publicación curricular" role="status">
-                <h2 className="flex items-center gap-2 text-lg font-extrabold text-amber-950"><AlertTriangle className="text-amber-600" size={20} /> Publicación en Neo4j bloqueada</h2>
-                <p className="mt-2 text-sm leading-5 text-amber-950/80">La inspección conserva la revisión y la proveniencia, pero no habilita una importación hasta resolver el checkpoint y materializar los CSV canónicos.</p>
-                {bloqueos.length ? <ul className="mt-3 space-y-1 text-sm leading-5 text-amber-950">{bloqueos.map((bloqueo) => <li key={bloqueo}>• {bloqueo}</li>)}</ul> : null}
-                {!tieneCatalogosCurriculares ? <p className="mt-3 text-xs leading-5 text-amber-950/80">Los archivos JSON/JSONL persistidos son reportes de auditoría/proveniencia y no equivalen a CSV canónicos.</p> : null}
-              </section>
-            ) : null}
-
-            {!ejecucionActiva && csvCanonicosListos ? <Neo4jImportPanel idEjecucion={idEjecucion} /> : null}
-
-            <section className="mt-5 grid gap-5 lg:grid-cols-2">
-              <article className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 shadow-panel" aria-labelledby="decisiones-aceptadas-title"><h2 id="decisiones-aceptadas-title" className="text-lg font-extrabold text-emerald-950">Decisiones LLM aceptadas</h2>{decisionesAceptadas.length ? <ul className="mt-4 max-h-96 space-y-2 overflow-y-auto">{decisionesAceptadas.slice(0, MAX_PREVIEW_ROWS).map((decision, indice) => <li key={`${decision.id_habilidad_fuente || "decision"}-${indice}`} className="rounded-xl border border-emerald-200 bg-paper px-3.5 py-3 text-sm"><p className="font-mono text-[10px] font-bold uppercase tracking-[0.07em] text-emerald-700">{decision.estado}{decision.id_habilidad_fuente ? ` · ${decision.id_habilidad_fuente}` : ""}</p><p className="mt-1 leading-5 text-emerald-950">{detalleDecision(decision)}</p></li>)}</ul> : <p className="mt-4 rounded-xl border border-dashed border-emerald-200 bg-paper px-3.5 py-3 text-sm leading-5 text-emerald-900">No hay decisiones aceptadas registradas. Esto es normal en ejecuciones canceladas o deterministas.</p>}</article>
-              <article className="rounded-2xl border border-line bg-paper p-5 shadow-panel" aria-labelledby="logs-title"><h2 id="logs-title" className="flex items-center gap-2 text-lg font-extrabold"><ScrollText className="text-ulima" size={20} /> Logs y eventos</h2>{eventos.length ? <ul className="mt-4 max-h-96 space-y-2 overflow-y-auto">{eventos.map((evento, indice) => <li key={`${evento.secuencia || "evento"}-${indice}`} className="rounded-xl border border-line bg-fondo px-3.5 py-3 text-xs leading-5"><span className="font-mono text-[10px] font-bold uppercase text-ulima">{evento.fase || "evento"}</span><p className="mt-1 text-muted">{evento.mensaje || evento.detalle || "Evento sin detalle."}</p></li>)}</ul> : <p className="mt-4 rounded-xl border border-dashed border-line px-3.5 py-3 text-sm leading-5 text-muted">No hay eventos de progreso persistidos.</p>}</article>
-            </section>
-
-            <section className="mt-5 rounded-2xl border border-line bg-paper p-5 shadow-panel sm:p-6" aria-labelledby="hallazgos-title"><h2 id="hallazgos-title" className="flex items-center gap-2 text-lg font-extrabold"><AlertTriangle className="text-amber-600" size={20} /> Advertencias y errores</h2>{hallazgos.length ? <div className="mt-4 grid gap-3 md:grid-cols-2">{[...errores, ...advertencias].slice(0, MAX_PREVIEW_ROWS).map((hallazgo, indice) => <article key={`${hallazgo.codigo || "hallazgo"}-${indice}`} className={`rounded-xl border px-3.5 py-3 text-sm ${hallazgo.severidad === "error" ? "border-red-200 bg-red-50 text-red-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}><p className="font-mono text-[10px] font-bold uppercase">{hallazgo.severidad || "warning"} · {hallazgo.codigo || "SIN_CODIGO"}</p><p className="mt-1 leading-5">{hallazgo.mensaje || hallazgo.detalle || "Hallazgo sin detalle."}</p>{hallazgo.detalle && hallazgo.detalle !== hallazgo.mensaje ? <p className="mt-1 text-xs opacity-80">{hallazgo.detalle}</p> : null}</article>)}</div> : <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-900">No hay advertencias ni errores registrados en esta ejecución.</p>}</section>
           </>
         ) : null}
         <p className="mt-6 flex items-center gap-2 text-xs text-muted"><ExternalLink size={14} /> Esta página es de solo lectura y usa únicamente los outputs declarados por el backend.</p>

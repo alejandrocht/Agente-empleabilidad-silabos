@@ -102,7 +102,8 @@ schema; they must not be represented with graph data or hidden mocks.
 - Toda ejecución real de sílabos debe pasar por el analista LLM curricular; mantener `NORMALIZADOR_CURRICULAR_LLM=true` en `backend/.env`.
 - El flujo semántico divide los logros en lotes de 8, conserva cache y publica `analisis_llm.json` y `decisiones_llm.jsonl` como evidencia.
 - No considerar `limpios/silabos.jsonl` como resultado final: es staging previo al análisis LLM.
-- `NORMALIZADOR_CURRICULAR_INSPECTOR=true` debe mantenerse activo para revisar las decisiones del analista.
+- Las propuestas semánticas del analista nunca se aprueban por confianza: quedan pendientes de decisión humana.
+- Las competencias transversales se excluyen antes de la proyección canónica con motivo `COMPETENCIA_GENERICA`.
 - El valor `NORMALIZADOR_CURRICULAR_LLM=false` solo es válido en pruebas offline explícitas; no usarlo para ejecuciones reales ni para smoke tests del producto.
 - `NORMALIZADOR_CATALOGOS_DIR` apunta al catálogo CHH externo; una ejecución real no debe sustituirlo por datos inventados.
 

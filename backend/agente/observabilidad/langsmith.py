@@ -30,6 +30,36 @@ def tracing_activo() -> bool:
     return booleano("LANGSMITH_TRACING", False)
 
 
+def envolver_cliente_openai(
+    cliente: Any,
+    *,
+    metadata: Mapping[str, Any] | None = None,
+    tags: Sequence[str] | None = None,
+) -> Any:
+    """Envuelve un cliente OpenAI con trazas LangSmith cuando están activas.
+
+    El envoltorio registra tokens y costo por llamada. Si el tracing está apagado
+    o LangSmith no está disponible, se devuelve el cliente original sin cambios.
+    """
+
+    if not tracing_activo():
+        return cliente
+    try:
+        from langsmith.wrappers import wrap_openai
+    except Exception:
+        return cliente
+    try:
+        return wrap_openai(
+            cliente,
+            tracing_extra={
+                "metadata": dict(metadata or {}),
+                "tags": list(tags or ()),
+            },
+        )
+    except Exception:
+        return cliente
+
+
 def contexto_ejecucion(
     id_ejecucion: str,
     carrera: str,

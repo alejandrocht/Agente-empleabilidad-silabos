@@ -66,12 +66,13 @@ def test_provider_never_promotes_q_delimited_document_text_to_system() -> None:
     assert call["messages"][1]["content"] == prompt
 
 
-def test_provider_uses_luna_reasoning_without_sampling_parameters() -> None:
+@pytest.mark.parametrize("reasoning_effort", ["high", "max"])
+def test_provider_uses_luna_reasoning_without_sampling_parameters(reasoning_effort: str) -> None:
     client = _FakeClient()
     provider = OpenAICiarLanguageModel(
         model_id="ciar-openai/gpt-5.6-luna",
         client=client,
-        reasoning_effort="high",
+        reasoning_effort=reasoning_effort,
         top_p=0.5,
         seed=1,
     )
@@ -80,7 +81,7 @@ def test_provider_uses_luna_reasoning_without_sampling_parameters() -> None:
 
     [call] = client.chat.completions.calls
     assert call["model"] == "gpt-5.6-luna"
-    assert call["reasoning_effort"] == "high"
+    assert call["reasoning_effort"] == reasoning_effort
     assert "temperature" not in call
     assert "top_p" not in call
     assert "seed" not in call
