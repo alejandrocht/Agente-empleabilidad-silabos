@@ -5,7 +5,7 @@ import asyncio
 from langchain_core.messages import BaseMessage
 
 from agente.nodos.construye_cypher import _debug_cypher, construye_cypher
-from agente.nodos.generar_cypher import GeneratedQuery
+from agente.nodos.contrato_cypher import GeneratedQuery
 from agente.utils.neo4j_schema import Neo4jSchemaSnapshot
 
 
@@ -84,6 +84,43 @@ class SequenceGenerator:
         return self.outputs[len(self.calls) - 1]
 
 
+def test_cypher_generator_receives_orchestrator_question() -> None:
+    generator = SequenceGenerator(
+        [
+            GeneratedQuery(
+                cypher=(
+                    "MATCH (c:Curso) WHERE c.id_curso = $curso_id "
+                    "RETURN c.nombre AS curso LIMIT $limite"
+                ),
+                parameters={"curso_id": "CUR_1", "limite": 20},
+            )
+        ]
+    )
+    snapshot = Neo4jSchemaSnapshot(
+        text="schema",
+        structured={
+            "node_props": {"Curso": ["id_curso", "nombre"]},
+            "rel_props": {},
+            "relationships": [],
+        },
+    )
+    improved = "¿Qué capacidades desarrolla el curso de Análisis de Algoritmos?"
+
+    result = asyncio.run(
+        construye_cypher(
+            {
+                "pregunta": "q puede hacer el curs de analis",
+                "pregunta_mejorada": improved,
+                "schema": snapshot,
+            },
+            generated_runnable=generator,
+        )
+    )
+
+    assert result["cypher"] == generator.outputs[0].cypher
+    assert improved in str(generator.calls[0][1].content)
+
+
 def test_semantic_id_mismatch_triggers_bounded_regeneration_before_neo4j() -> None:
     bad = GeneratedQuery(
         cypher=(
@@ -122,55 +159,3 @@ def test_semantic_id_mismatch_triggers_bounded_regeneration_before_neo4j() -> No
     retry_prompt = str(generator.calls[1][1].content)
     assert "contrato semántico de parámetros" in retry_prompt
     assert "CONTAINS" in retry_prompt
-
-
-def test_technology_follow_up_retries_when_generated_query_ignores_tool_node() -> None:
-    bad = GeneratedQuery(
-        cypher=(
-            "MATCH (c:Curso)-[:TIENE]->(s:Silabo) "
-            "WHERE toLower(c.nombre_curso) CONTAINS toLower($curso_texto) "
-            "RETURN DISTINCT c.nombre_curso AS curso, s.sumilla AS contenido LIMIT $limite"
-        ),
-        parameters={"curso_texto": "ciberseguridad", "limite": 10},
-    )
-    good = GeneratedQuery(
-        cypher=(
-            "MATCH (c:Curso)-[:TIENE]->(s:Silabo)-[:ENSENA]->(h:Herramienta) "
-            "RETURN DISTINCT h.nombre_herramienta AS tecnologia LIMIT $limite"
-        ),
-        parameters={"limite": 10},
-    )
-    generator = SequenceGenerator([bad, good])
-    snapshot = Neo4jSchemaSnapshot(
-        text="schema",
-        structured={
-            "node_props": {
-                "Curso": ["id_curso", "nombre_curso"],
-                "Silabo": ["sumilla"],
-                "Herramienta": ["id_herramienta", "nombre_herramienta"],
-            },
-            "rel_props": {"TIENE": [], "ENSENA": []},
-            "relationships": [
-                {"start": "Curso", "type": "TIENE", "end": "Silabo"},
-                {"start": "Silabo", "type": "ENSENA", "end": "Herramienta"},
-            ],
-        },
-    )
-
-    result = asyncio.run(
-        construye_cypher(
-            {
-                "pregunta": "con que tecnologias se ensenan",
-                "pregunta_contextualizada": (
-                    "Consulta previa relevante: Ciberseguridad. "
-                    "Consulta actual: con que tecnologias se ensenan"
-                ),
-                "schema": snapshot,
-            },
-            generated_runnable=generator,
-        )
-    )
-
-    assert len(generator.calls) == 2
-    assert result["cypher"] == good.cypher
-    assert "Herramienta" in str(generator.calls[1][1].content)

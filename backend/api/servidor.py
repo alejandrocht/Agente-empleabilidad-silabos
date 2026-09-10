@@ -6,7 +6,7 @@ import math
 import os
 import secrets
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import Any, TypeVar, cast
@@ -24,19 +24,24 @@ from agente.dashboard import servicio as dashboard
 from agente.grafo.constructor import construir_grafo
 from agente.memoria_corta import DEFAULT_CONVERSATION_MEMORY, server_memory_scope
 from agente.utils.cypher_guard import CypherGuardError, guard_cypher
-from agente.utils.logger import attempt_context, log_error, log_event, trace_context
+from agente.utils.logger import (
+    attempt_context,
+    configure_node_log_scope,
+    log_error,
+    log_event,
+    trace_context,
+)
 from agente.utils.validacion import EntradaInvalida, validar_pregunta
 
-USER_FACING_STREAM_NODES: frozenset[str] = frozenset()
-STREAM_TEXT_CHUNK_SIZE = 8
-STREAM_TEXT_CHUNK_DELAY_SECONDS = 0.04
+USER_FACING_STREAM_NODES: frozenset[str] = frozenset(
+    {"redacta_respuesta", "responder_directo"}
+)
 DEFAULT_GRAPH_TIMEOUT_SECONDS = 90.0
 GRAPH_TIMEOUT_RESPONSE = (
     "La consulta tardó más de lo esperado y fue detenida de forma segura. "
     "Intentá nuevamente o formulala de manera más específica."
 )
 PUBLIC_TEXT_FIELDS = ("respuesta", "error")
-PUBLIC_LIST_FIELDS = ("filas",)
 PUBLIC_PHASES = frozenset(
     {
         "analizando",
@@ -48,46 +53,45 @@ PUBLIC_PHASES = frozenset(
     }
 )
 MAX_PUBLIC_CYPHER_CHARS = 12_000
-GRAPH_INTERNAL_KEYS = frozenset(
-    {
-        "cypher",
-        "filas",
-        "generated_query",
-        "guide",
-        "parametros",
-        "parameters",
-        "plan",
-        "pregunta",
-        "pregunta_contextualizada",
-        "memory_scope",
-        "historial",
-        "rows",
-        "schema",
-        "query_limit",
-        "variables",
-        "usuario_id",
-        "entity_resolution",
-    }
-)
 TEXT_BLOCK_TYPES = frozenset({"text", "output_text"})
 STREAM_PHASE_BY_NODE = {
     "obtiene_pregunta": "analizando",
     "prompt_injection": "analizando",
-    "contextualiza_pregunta": "analizando",
-    "contextualized_prompt_injection": "analizando",
     "orquestador": "analizando",
     "obtiene_schema": "preparando_consulta",
     "construye_cypher": "preparando_consulta",
     "resuelve_entidades": "preparando_consulta",
     "cypher_guard": "validando_consulta",
     "devuelve_respuesta": "consultando_grafo",
+    "redacta_respuesta": "redactando",
     "responder_directo": "redactando",
     "LangGraph": "completado",
+}
+STREAM_PROGRESS_BY_NODE = {
+    "obtiene_pregunta": "Recibiendo tu pregunta…",
+    "prompt_injection": "Validando la entrada…",
+    "orquestador": "Entendiendo tu solicitud…",
+    "obtiene_schema": "Preparando la información…",
+    "construye_cypher": "Preparando la consulta…",
+    "resuelve_entidades": "Identificando los conceptos clave…",
+    "cypher_guard": "Verificando la consulta…",
+    "devuelve_respuesta": "Buscando la información…",
+    "redacta_respuesta": "Escribiendo la respuesta…",
+    "responder_directo": "Preparando la respuesta…",
+}
+STREAM_TOKEN_PROGRESS_BY_NODE = {
+    "orquestador": "Analizando la intención…",
+    "construye_cypher": "Diseñando la consulta…",
+    "responder_directo": "Escribiendo la respuesta…",
+    "redacta_respuesta": "Escribiendo la respuesta…",
 }
 _UNSAFE_VALUE = object()
 ANONYMOUS_ID_COOKIE = "ciar_anon_identity"
 _ANONYMOUS_ID_MAX_AGE = 60 * 60 * 24 * 30
 _ANONYMOUS_SIGNING_SECRET = secrets.token_bytes(32)
+
+# Apply the operator-selected node-only scope before Uvicorn starts serving requests.
+configure_node_log_scope()
 
 
 @asynccontextmanager
@@ -188,10 +192,7 @@ def extract_public_text(content: object) -> str:
 
 def _stream_text_from_event(event: dict[str, Any]) -> str:
     """Return text only when LangGraph attributes the model event to a public node."""
-    metadata = event.get("metadata")
-    if not isinstance(metadata, dict):
-        return ""
-    if metadata.get("langgraph_node") not in USER_FACING_STREAM_NODES:
+    if _stream_node_from_event(event) not in USER_FACING_STREAM_NODES:
         return ""
 
     data = event.get("data")
@@ -201,64 +202,38 @@ def _stream_text_from_event(event: dict[str, Any]) -> str:
     return extract_public_text(getattr(chunk, "content", ""))
 
 
-def _stream_text_chunks(
-    text: str,
-    *,
-    chunk_size: int = STREAM_TEXT_CHUNK_SIZE,
-) -> Iterator[str]:
-    """Split a public answer into small cumulative updates for the SSE client."""
-    if chunk_size < 1:
-        raise ValueError("chunk_size must be positive")
-    for start in range(0, len(text), chunk_size):
-        yield text[start : start + chunk_size]
+def _stream_node_from_event(event: dict[str, Any]) -> str:
+    """Resolve the graph node without exposing callback or model names."""
+    metadata = event.get("metadata")
+    node = metadata.get("langgraph_node") if isinstance(metadata, dict) else None
+    if isinstance(node, str):
+        return node
+    name = event.get("name")
+    return name if isinstance(name, str) else ""
 
 
 def _stream_phase_from_event(event: dict[str, Any]) -> str:
     """Map internal graph events to a small, user-facing progress vocabulary."""
-    metadata = event.get("metadata")
-    node = metadata.get("langgraph_node") if isinstance(metadata, dict) else None
-    if not isinstance(node, str):
-        node = event.get("name")
+    node = _stream_node_from_event(event)
     if node == "LangGraph" and event.get("event") != "on_chain_end":
         return ""
     phase = STREAM_PHASE_BY_NODE.get(node) if isinstance(node, str) else None
     return phase if isinstance(phase, str) and phase in PUBLIC_PHASES else ""
 
 
-def _es_identificador_publico(key: str) -> bool:
-    clave = key.strip().lower()
-    return (
-        clave in {"id", "identificador"}
-        or clave.startswith("id_")
-        or clave.endswith("_id")
-        or clave.endswith("_ids")
-    )
+def stream_progress_event(text: str, phase: str) -> str:
+    """Serialize one user-facing progress event for the LangGraph SDK."""
+    payload = {"type": "progress", "fase": phase, "texto": text}
+    return f"event: custom\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _json_safe_public_value(value: object) -> object:
-    if value is None or isinstance(value, (str, bool, int, float)):
-        return value
-    if isinstance(value, (list, tuple)):
-        sanitized_items: list[object] = []
-        for item in value:
-            public_item = _json_safe_public_value(item)
-            if public_item is not _UNSAFE_VALUE:
-                sanitized_items.append(public_item)
-        return sanitized_items
-    if isinstance(value, dict):
-        sanitized_dict: dict[str, object] = {}
-        for key, item in value.items():
-            if (
-                not isinstance(key, str)
-                or key in GRAPH_INTERNAL_KEYS
-                or _es_identificador_publico(key)
-            ):
-                continue
-            public_item = _json_safe_public_value(item)
-            if public_item is not _UNSAFE_VALUE:
-                sanitized_dict[key] = public_item
-        return sanitized_dict
-    return _UNSAFE_VALUE
+def stream_message_event(message_id: str, node: str, content: str) -> str:
+    """Serialize a token using the native LangGraph ``messages`` protocol."""
+    payload = [
+        {"type": "ai", "id": message_id, "content": content},
+        {"langgraph_node": node},
+    ]
+    return f"event: messages\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def _validated_public_cypher(output: Mapping[str, object]) -> str | None:
@@ -285,13 +260,6 @@ def sanitize_public_state(output: object) -> dict[str, object]:
     for field in PUBLIC_TEXT_FIELDS:
         value = output.get(field, _UNSAFE_VALUE)
         if value is None or isinstance(value, str):
-            public_state[field] = value
-    for field in PUBLIC_LIST_FIELDS:
-        value = output.get(field, _UNSAFE_VALUE)
-        if not isinstance(value, (list, tuple)):
-            continue
-        value = _json_safe_public_value(value)
-        if value is not _UNSAFE_VALUE:
             public_state[field] = value
     if isinstance(output, Mapping):
         cypher = _validated_public_cypher(output)
@@ -605,43 +573,54 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
         async def generate() -> AsyncIterator[str]:
             nonlocal stream_status
             with trace_context(active_trace), attempt_context(1):
-                accumulated_text = ""
-                accumulated_state: dict[str, Any] = {}
-                emission_index = 0
+                public_state: dict[str, Any] = {}
+                last_progress = ""
+                answer_started = False
+                message_ids: dict[str, str] = {}
 
-                def merge_public_state(state: object) -> None:
-                    if isinstance(state, dict):
-                        accumulated_state.update(state)
-                    if accumulated_text:
-                        accumulated_state["respuesta"] = accumulated_text
-
-                def emit_state(emission: str) -> str:
-                    nonlocal emission_index
+                def emit_values() -> str:
                     ordered_state: dict[str, Any] = {}
-                    for key in ("respuesta", "cypher", "filas", "error", "fase"):
-                        if key in accumulated_state:
-                            ordered_state[key] = accumulated_state[key]
-                    for key, value in accumulated_state.items():
+                    for key in ("respuesta", "cypher", "error", "fase"):
+                        if key in public_state:
+                            ordered_state[key] = public_state[key]
+                    for key, value in public_state.items():
                         if key not in ordered_state:
                             ordered_state[key] = value
                     payload = json.dumps(ordered_state, ensure_ascii=False)
-                    emission_index += 1
-                    filas = accumulated_state.get("filas")
-                    log_event(
-                        "api",
-                        "stream_emission",
-                        route="chat_stream",
-                        emission=emission,
-                        emission_index=emission_index,
-                        output_keys=sorted(accumulated_state),
-                        rows_count=len(filas) if isinstance(filas, list) else 0,
-                        payload_size=len(payload),
-                    )
                     return f"event: values\ndata: {payload}\n\n"
 
+                def emit_progress(node: str, *, from_model: bool = False) -> str | None:
+                    nonlocal last_progress
+                    progress_map = (
+                        STREAM_TOKEN_PROGRESS_BY_NODE
+                        if from_model
+                        else STREAM_PROGRESS_BY_NODE
+                    )
+                    progress = progress_map.get(node)
+                    if not progress or progress == last_progress:
+                        return None
+                    phase = STREAM_PHASE_BY_NODE.get(node)
+                    if phase not in PUBLIC_PHASES:
+                        return None
+                    last_progress = progress
+                    return stream_progress_event(progress, phase)
+
+                def update_public_state(output: object, phase: str = "") -> bool:
+                    if not isinstance(output, dict):
+                        return False
+                    sanitized = sanitize_public_state(output)
+                    sanitized.pop("respuesta", None)
+                    if sanitized.get("error") is None:
+                        sanitized.pop("error", None)
+                    if phase:
+                        sanitized["fase"] = phase
+                    previous_state = dict(public_state)
+                    public_state.update(sanitized)
+                    return public_state != previous_state
+
                 try:
-                    merge_public_state({"fase": "analizando"})
-                    yield emit_state("phase")
+                    yield stream_progress_event("Analizando tu consulta…", "analizando")
+                    last_progress = "Analizando tu consulta…"
                     graph = construir_grafo()
                     async for event in _bounded_memory_serialized_events(
                         graph,
@@ -654,67 +633,38 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                         memory_scope,
                         _graph_timeout_seconds(),
                     ):
-                        kind = event["event"]
+                        kind = event.get("event", "")
+                        node = _stream_node_from_event(event)
                         phase = _stream_phase_from_event(event)
                         if kind == "on_chain_start":
-                            if phase and phase != accumulated_state.get("fase"):
-                                merge_public_state({"fase": phase})
-                                yield emit_state("phase")
+                            progress_event = emit_progress(node)
+                            if progress_event:
+                                yield progress_event
                             continue
 
                         if kind == "on_chat_model_stream":
+                            progress_event = emit_progress(node, from_model=True)
+                            if progress_event:
+                                yield progress_event
                             content = _stream_text_from_event(event)
                             if content:
-                                accumulated_text += content
-                                merge_public_state({"fase": "redactando"})
-                                yield emit_state("text")
+                                answer_started = True
+                                message_id = message_ids.setdefault(node, str(uuid4()))
+                                yield stream_message_event(message_id, node, content)
                         elif kind == "on_chain_end":
                             data = event.get("data")
                             output = data.get("output", {}) if isinstance(data, dict) else {}
                             if isinstance(output, dict) and output.get("error"):
                                 stream_status = "degraded"
                             sanitized = sanitize_public_state(output)
-                            if event.get("name") == "LangGraph":
-                                final_response = sanitized.get("respuesta")
-                                if isinstance(final_response, str) and final_response:
-                                    streamed_prefix = (
-                                        accumulated_text
-                                        if final_response.startswith(accumulated_text)
-                                        else ""
-                                    )
-                                    remaining_text = final_response[len(streamed_prefix) :]
-                                    accumulated_text = streamed_prefix
-                                    phase_changed = accumulated_state.get("fase") != "redactando"
-                                    merge_public_state({"fase": "redactando"})
-                                    if remaining_text and phase_changed:
-                                        yield emit_state("phase")
-                                    for chunk in _stream_text_chunks(remaining_text):
-                                        accumulated_text += chunk
-                                        merge_public_state({"fase": "redactando"})
-                                        yield emit_state("text")
-                                        if accumulated_text != final_response:
-                                            await asyncio.sleep(STREAM_TEXT_CHUNK_DELAY_SECONDS)
-                                if accumulated_text:
-                                    sanitized["respuesta"] = accumulated_text
+                            if node == "LangGraph":
                                 sanitized["fase"] = "completado"
-                                merge_public_state(sanitized)
-                                yield emit_state("state")
+                                public_state.update(sanitized)
+                                yield emit_values()
                                 continue
 
-                            if sanitized:
-                                sanitized.pop("respuesta", None)
-                                if sanitized.get("error") is None:
-                                    sanitized.pop("error", None)
-                                if phase:
-                                    sanitized["fase"] = phase
-                                previous_state = dict(accumulated_state)
-                                merge_public_state(sanitized)
-                                changed = any(
-                                    accumulated_state.get(key) != previous_state.get(key)
-                                    for key in ("cypher", "filas", "error", "fase")
-                                )
-                                if changed:
-                                    yield emit_state("state")
+                            if update_public_state(output, phase) and not answer_started:
+                                yield emit_values()
                 except TimeoutError as exc:
                     log_error(
                         "api",
@@ -724,12 +674,15 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                         status="degraded",
                     )
                     stream_status = "degraded"
-                    accumulated_state.clear()
-                    accumulated_text = GRAPH_TIMEOUT_RESPONSE
-                    merge_public_state(
-                        {"error": "graph_timeout", "fase": "completado"}
+                    public_state.clear()
+                    public_state.update(
+                        {
+                            "respuesta": GRAPH_TIMEOUT_RESPONSE,
+                            "error": "graph_timeout",
+                            "fase": "completado",
+                        }
                     )
-                    yield emit_state("timeout")
+                    yield emit_values()
                 except EntradaInvalida as exc:
                     log_error("api", "stream_rejected", exc, route="chat_stream", status="failed")
                     yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
@@ -752,7 +705,7 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                         route="chat_stream",
                         duration_ms=round((time.perf_counter() - started_at) * 1000, 2),
                         status=stream_status,
-                        output_keys=sorted(accumulated_state),
+                        output_keys=sorted(public_state),
                     )
                 log_event("api", "stream_emission", route="chat_stream", emission="end")
                 yield "event: end\ndata: {}\n\n"

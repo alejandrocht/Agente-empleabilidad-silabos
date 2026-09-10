@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agente.grafo.constructor import construir_grafo
 from agente.utils.cypher_guard import CypherGuardError, guard_cypher, mask_cypher_for_analysis
+from agente.utils.identifier_intent import requests_identifier
 
 PREGUNTAS_AUDITORIA = (
     (
@@ -180,6 +181,78 @@ def _return_projects_label_property(
     )
 
 
+def _return_projects_identifier(cypher: str) -> bool:
+    return_matches = list(re.finditer(r"(?i)\bRETURN\b", cypher))
+    if not return_matches:
+        return False
+    tail = cypher[return_matches[-1].end() :]
+    boundary = re.search(r"(?i)\b(?:ORDER\s+BY|SKIP|LIMIT)\b", tail)
+    return_clause = tail[: boundary.start()] if boundary else tail
+    direct_identifier = re.search(
+        r"(?i)(?:^|,)\s*(?:DISTINCT\s+)?[A-Za-z_][A-Za-z0-9_]*\."
+        r"id_[A-Za-z0-9_]+\s*(?:AS\s+[A-Za-z_][A-Za-z0-9_]*)?\s*(?=,|$)",
+        return_clause,
+    )
+    identifier_alias = re.search(
+        r"(?i)\bAS\s+[A-Za-z_][A-Za-z0-9_]*_ids?\b", return_clause
+    )
+    identifier_in_map = any(
+        re.search(
+            r"(?i)(?:^|,)\s*[A-Za-z_][A-Za-z0-9_]*\s*:\s*"
+            r"[A-Za-z_][A-Za-z0-9_]*\.id_[A-Za-z0-9_]+\s*(?=,|$)",
+            match.group("body"),
+        )
+        for match in re.finditer(r"\{(?P<body>[^{}]*)\}", return_clause)
+    )
+    return bool(direct_identifier or identifier_alias or identifier_in_map)
+
+
+def _ranking_dimension_aliases(cypher: str) -> set[str]:
+    """Return aliases of direct, visible properties that define aggregate groups."""
+    return_matches = list(re.finditer(r"(?i)\bRETURN\b", cypher))
+    if not return_matches:
+        return set()
+    tail = cypher[return_matches[-1].end() :]
+    boundary = re.search(r"(?i)\b(?:ORDER\s+BY|SKIP|LIMIT)\b", tail)
+    return_clause = tail[: boundary.start()] if boundary else tail
+    aliases: set[str] = set()
+    for match in re.finditer(
+        r"(?i)(?:^|,)\s*(?:DISTINCT\s+)?[A-Za-z_][A-Za-z0-9_]*\."
+        r"(?P<property>[A-Za-z_][A-Za-z0-9_]*)"
+        r"(?:\s+AS\s+(?P<alias>[A-Za-z_][A-Za-z0-9_]*))?\s*(?=,|$)",
+        return_clause,
+    ):
+        property_name = match.group("property").casefold()
+        alias = (match.group("alias") or property_name).casefold()
+        if not property_name.startswith("id_") and not alias.endswith(("_id", "_ids")):
+            aliases.add(alias)
+    for match in re.finditer(
+        r"(?i)\{(?P<body>[^{}]*)\}\s+AS\s+(?P<alias>[A-Za-z_][A-Za-z0-9_]*)",
+        return_clause,
+    ):
+        visible_properties = re.findall(
+            r"(?i)\b[A-Za-z_][A-Za-z0-9_]*\.(?P<property>[A-Za-z_][A-Za-z0-9_]*)\b",
+            match.group("body"),
+        )
+        if any(not property.casefold().startswith("id_") for property in visible_properties):
+            aliases.add(match.group("alias").casefold())
+    return aliases
+
+
+def _contains_blank_visible_value(value: object) -> bool:
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, Mapping):
+        return any(
+            not str(key).casefold().endswith(("_id", "_ids"))
+            and _contains_blank_visible_value(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return any(_contains_blank_visible_value(item) for item in value)
+    return False
+
+
 def evaluar_semantica(
     question: str,
     state: Mapping[str, Any],
@@ -225,6 +298,22 @@ def evaluar_semantica(
         marker in question_normalized
         for marker in ("mas ", "mayor", "frecuent", "demandad", "concentran")
     ) and "mas recient" not in question_normalized
+    identifier_intent = requests_identifier(question)
+    if ranking_intent and not identifier_intent and _return_projects_identifier(
+        cypher_for_analysis
+    ):
+        failures.append("ranking_projects_unrequested_identifiers")
+    ranking_dimensions = _ranking_dimension_aliases(cypher_for_analysis)
+    if ranking_intent and ranking_dimensions and any(
+        isinstance(row, Mapping)
+        and any(
+            str(key).casefold() in ranking_dimensions
+            and _contains_blank_visible_value(value)
+            for key, value in row.items()
+        )
+        for row in rows
+    ):
+        failures.append("ranking_contains_blank_dimension")
     offer_count_intent = (
         "oferta" in question_normalized
         and "herramientas distintas" not in question_normalized

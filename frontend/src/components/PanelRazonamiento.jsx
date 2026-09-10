@@ -93,20 +93,21 @@ export function detalleError(error) {
 }
 
 export default function PanelRazonamiento({
-  pasos = [],
   cypher = "",
   entidades = [],
   error = "",
   errorRed = "",
 }) {
-  const [abierto, setAbierto] = useState(Boolean(cypher));
+  const [abierto, setAbierto] = useState(
+    Boolean(cypher || entidades.length),
+  );
   const [copiado, setCopiado] = useState(false);
-  const tieneDetalle = cypher || entidades.length > 0 || error || errorRed || pasos.length > 0;
+  const tieneDetalle = cypher || entidades.length > 0 || error || errorRed;
   const detalle = error ? detalleError(error) : null;
 
   useEffect(() => {
-    if (cypher) setAbierto(true);
-  }, [cypher]);
+    if (cypher || entidades.length) setAbierto(true);
+  }, [cypher, entidades.length]);
 
   if (!tieneDetalle) return null;
 
@@ -127,7 +128,7 @@ export default function PanelRazonamiento({
       >
         <span className="flex items-center gap-2">
           <Hexagon size={13} />
-          Traza del grafo{pasos.length > 0 ? ` · ${pasos.length} pasos` : ""}
+          Detalles de la consulta
         </span>
         <ChevronDown size={15} className={`transition ${abierto ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
@@ -138,25 +139,6 @@ export default function PanelRazonamiento({
             <div className="mt-3 flex gap-2 rounded-[10px] bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
               <ShieldAlert size={18} className="shrink-0" />
               {detalle.text}
-            </div>
-          ) : null}
-
-          {pasos.length > 0 ? (
-            <div>
-              <p className="mb-2.5 mt-4 text-[10.5px] font-bold uppercase tracking-[0.14em] text-muted">
-                Ruta ejecutada
-              </p>
-              <ol className="relative ml-1.5 border-l-2 border-line pl-6">
-                {pasos.map((paso, index) => (
-                  <li key={`${paso}-${index}`} className="relative pb-3.5 text-[13.5px] last:pb-0.5">
-                    <span
-                      className="absolute -left-[31px] top-1 h-3 w-3 rounded-full border-[2.5px] border-ulima bg-paper"
-                      aria-hidden="true"
-                    />
-                    <span className="font-semibold text-ink">{paso}</span>
-                  </li>
-                ))}
-              </ol>
             </div>
           ) : null}
 

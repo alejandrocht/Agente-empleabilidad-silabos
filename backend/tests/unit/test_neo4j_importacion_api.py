@@ -68,13 +68,17 @@ def test_estado_neo4j_reports_a_verified_ciar_graph(monkeypatch: Any) -> None:
         text="schema CIAR",
         structured={"node_props": {"Carrera": {}, "Empresa": {}, "OfertaLaboral": {}}},
     )
+    cache_calls: list[dict[str, Any]] = []
+    def cached_schema(**kwargs: Any) -> neo4j_schema.Neo4jSchemaSnapshot:
+        cache_calls.append(kwargs)
+        return snapshot
+
     monkeypatch.setattr(
         neo4j_importacion,
         "get_cached_neo4j_schema",
-        lambda *, force_refresh: snapshot,
+        cached_schema,
         raising=False,
     )
-
     response = TestClient(servidor.app).get("/neo4j/estado")
 
     assert response.status_code == 200
@@ -84,10 +88,11 @@ def test_estado_neo4j_reports_a_verified_ciar_graph(monkeypatch: Any) -> None:
     assert body["latency_ms"] >= 0
     assert body["checked_at"].endswith("Z")
     assert "password" not in body
+    assert cache_calls == [{}]
 
 
 def test_estado_neo4j_distinguishes_a_reachable_incompatible_graph(monkeypatch: Any) -> None:
-    def incompatible_schema(*, force_refresh: bool) -> neo4j_schema.Neo4jSchemaSnapshot:
+    def incompatible_schema(**_kwargs: Any) -> neo4j_schema.Neo4jSchemaSnapshot:
         raise neo4j_schema.Neo4jSchemaMismatchError(["OfertaLaboral"])
 
     monkeypatch.setattr(
@@ -105,7 +110,7 @@ def test_estado_neo4j_distinguishes_a_reachable_incompatible_graph(monkeypatch: 
 
 
 def test_estado_neo4j_maps_connectivity_failures_to_disconnected(monkeypatch: Any) -> None:
-    def unavailable_schema(*, force_refresh: bool) -> neo4j_schema.Neo4jSchemaSnapshot:
+    def unavailable_schema(**_kwargs: Any) -> neo4j_schema.Neo4jSchemaSnapshot:
         raise ConnectionError("unreachable")
 
     monkeypatch.setattr(

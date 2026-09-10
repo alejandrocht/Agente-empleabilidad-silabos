@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Generator
 from dataclasses import dataclass
+from datetime import date as python_date
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from neo4j import RoutingControl
-from neo4j.exceptions import AuthError, ServiceUnavailable
+from neo4j.exceptions import AuthError, CypherSyntaxError, ServiceUnavailable
 from neo4j.spatial import WGS84Point
 from neo4j.time import Date, DateTime, Duration
 
@@ -23,6 +25,8 @@ from agente.utils.db import (
     Neo4jQueryError,
     Neo4jReadConfig,
     classify_neo4j_error,
+    format_temporal_year,
+    invalidate_fulltext_index_cache,
     neo4j_diagnostic_context,
     normalize_neo4j_value,
     query_fingerprint,
@@ -30,6 +34,13 @@ from agente.utils.db import (
 from agente.utils.logger import trace_context
 
 SAFE_QUERY = "MATCH (n:Carrera) RETURN n.nombre AS nombre LIMIT $limit"
+
+
+@pytest.fixture(autouse=True)
+def reset_fulltext_index_cache() -> Generator[None, None, None]:
+    invalidate_fulltext_index_cache()
+    yield
+    invalidate_fulltext_index_cache()
 
 
 @pytest.mark.parametrize(
@@ -376,6 +387,154 @@ def test_gateway_explains_before_execution_with_same_parameters_and_read_routing
     assert all(call["database_"] == "ciar" for call in driver.calls)
 
 
+def test_gateway_fulltext_search_is_schema_bound_and_read_only() -> None:
+    driver = FakeAsyncDriver(
+        [
+            read_result(),
+            read_result(
+                FakeRecord(
+                    {
+                        "name": "curso_coordinador_ft",
+                        "labelsOrTypes": ["Curso"],
+                        "properties": ["coordinador"],
+                        "state": "ONLINE",
+                    }
+                )
+            ),
+            read_result(),
+            read_result(FakeRecord({"value": "Ángela Mayhua", "score": 0.9})),
+        ]
+    )
+    config = Neo4jReadConfig("neo4j://unused", "reader", "secret", "ciar")
+    gateway = AsyncNeo4jQueryGateway(driver, config)
+
+    rows = asyncio.run(
+        gateway.search_fulltext(
+            label="Curso",
+            property_name="coordinador",
+            query="angla~2 AND mayhua~2",
+            limit=10,
+        )
+    )
+
+    assert rows == [{"value": "Ángela Mayhua", "score": 0.9}]
+    assert [call["query"].text for call in driver.calls] == [
+        "EXPLAIN SHOW FULLTEXT INDEXES YIELD name, labelsOrTypes, properties, state "
+        "RETURN name, labelsOrTypes, properties, state LIMIT 100",
+        "SHOW FULLTEXT INDEXES YIELD name, labelsOrTypes, properties, state "
+        "RETURN name, labelsOrTypes, properties, state LIMIT 100",
+        "EXPLAIN CALL db.index.fulltext.queryNodes($index_name, $query_text, "
+        "{limit: $fulltext_limit}) YIELD node, score "
+        "WHERE $node_label IN labels(node) "
+        "RETURN node.coordinador AS value, score",
+        "CALL db.index.fulltext.queryNodes($index_name, $query_text, "
+        "{limit: $fulltext_limit}) YIELD node, score "
+        "WHERE $node_label IN labels(node) "
+        "RETURN node.coordinador AS value, score",
+    ]
+    assert driver.calls[3]["parameters_"] == {
+        "index_name": "curso_coordinador_ft",
+        "query_text": "coordinador:angla~2 AND coordinador:mayhua~2",
+        "fulltext_limit": 10,
+        "node_label": "Curso",
+    }
+    assert all(call["routing_"] is RoutingControl.READ for call in driver.calls)
+
+
+def test_gateway_fulltext_search_caches_index_metadata_for_gateway_lifecycle() -> None:
+    index_row = FakeRecord(
+        {
+            "name": "curso_coordinador_ft",
+            "labelsOrTypes": ["Curso"],
+            "properties": ["coordinador"],
+            "state": "ONLINE",
+        }
+    )
+    driver = FakeAsyncDriver(
+        [
+            read_result(),
+            read_result(index_row),
+            read_result(),
+            read_result(FakeRecord({"value": "Ángela Mayhua", "score": 0.9})),
+            read_result(),
+            read_result(FakeRecord({"value": "Carlos Pérez", "score": 0.8})),
+        ]
+    )
+    config = Neo4jReadConfig("neo4j://unused", "reader", "secret", "ciar")
+    gateway = AsyncNeo4jQueryGateway(driver, config)
+
+    async def search_twice() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        first = await gateway.search_fulltext(
+            label="Curso",
+            property_name="coordinador",
+            query="angela~2 AND mayhua~2",
+            limit=10,
+        )
+        second = await gateway.search_fulltext(
+            label="Curso",
+            property_name="coordinador",
+            query="carlos~2 AND perez~2",
+            limit=10,
+        )
+        return first, second
+
+    first, second = asyncio.run(search_twice())
+
+    assert first == [{"value": "Ángela Mayhua", "score": 0.9}]
+    assert second == [{"value": "Carlos Pérez", "score": 0.8}]
+    assert sum("FULLTEXT INDEXES" in call["query"].text for call in driver.calls) == 2
+    assert len(driver.calls) == 6
+
+
+def test_gateway_fulltext_search_falls_back_when_matching_index_is_absent() -> None:
+    driver = FakeAsyncDriver(
+        [
+            read_result(),
+            read_result(
+                FakeRecord(
+                    {
+                        "name": "otro_indice",
+                        "labelsOrTypes": ["Profesor"],
+                        "properties": ["nombre"],
+                        "state": "ONLINE",
+                    }
+                )
+            ),
+            read_result(),
+        ]
+    )
+    config = Neo4jReadConfig("neo4j://unused", "reader", "secret", "ciar")
+
+    rows = asyncio.run(
+        AsyncNeo4jQueryGateway(driver, config).search_fulltext(
+            label="Curso",
+            property_name="coordinador",
+            query="angla~2 AND mayhua~2",
+            limit=10,
+        )
+    )
+
+    assert rows == []
+    assert len(driver.calls) == 2
+
+
+def test_gateway_fulltext_search_rejects_unbounded_lucene_syntax() -> None:
+    driver = FakeAsyncDriver([])
+    config = Neo4jReadConfig("neo4j://unused", "reader", "secret", "ciar")
+
+    with pytest.raises(Neo4jQueryError, match="Invalid full-text query"):
+        asyncio.run(
+            AsyncNeo4jQueryGateway(driver, config).search_fulltext(
+                label="Curso",
+                property_name="coordinador",
+                query="*",
+                limit=10,
+            )
+        )
+
+    assert driver.calls == []
+
+
 def test_gateway_logs_guard_explain_execution_and_redacts_parameter_values(capsys) -> None:
     driver = FakeAsyncDriver(
         [
@@ -482,6 +641,25 @@ def test_query_fingerprint_is_stable_and_payload_free() -> None:
     assert len(query_fingerprint(query)) == 64
 
 
+def test_neo4j_diagnostics_keep_syntax_error_position() -> None:
+    error = CypherSyntaxError(
+        "Invalid input 'RETURN' (line 2, column 7 (offset: 42))"
+    )
+
+    context = neo4j_diagnostic_context(
+        stage="dynamic_explain",
+        duration_ms=12.5,
+        cypher=SAFE_QUERY,
+        error=error,
+    )
+
+    assert context["neo4j_line"] == 2
+    assert context["neo4j_column"] == 7
+    assert context["neo4j_offset"] == 42
+    assert len(context["query_fingerprint"]) == 64
+    assert "RETURN" not in json.dumps(context)
+
+
 def test_read_config_rejects_partially_configured_dedicated_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -513,6 +691,23 @@ def test_read_config_prefers_complete_dedicated_credentials(
         "domain",
     )
     assert config.uses_legacy_credentials is False
+
+
+def test_read_config_uses_fifteen_second_default_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("NEO4J_READ_URI", raising=False)
+    monkeypatch.delenv("NEO4J_READ_USER", raising=False)
+    monkeypatch.delenv("NEO4J_READ_PASSWORD", raising=False)
+    monkeypatch.delenv("NEO4J_READ_DATABASE", raising=False)
+    monkeypatch.delenv("NEO4J_READ_QUERY_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.setenv("NEO4J_URI", "neo4j://legacy")
+    monkeypatch.setenv("NEO4J_USER", "legacy")
+    monkeypatch.setenv("NEO4J_PASSWORD", "legacy-secret")
+
+    config = Neo4jReadConfig.from_env()
+
+    assert config.timeout_seconds == 15.0
 
 
 def test_owned_gateway_closes_fake_async_driver() -> None:
@@ -552,3 +747,21 @@ def test_normalization_handles_nested_temporal_spatial_and_nonfinite_values() ->
         "nested": [{"value": "inf"}],
     }
     assert json.loads(json.dumps(normalized, allow_nan=False)) == normalized
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (Date(2025, 1, 2), 2025),
+        (DateTime(2024, 6, 3, 10, 0, 0), 2024),
+        (python_date(2023, 5, 1), 2023),
+        ("2022-09-15", 2022),
+        ("2021-09-15T10:30:00", 2021),
+        ("2,022", 2022),
+        (2020, 2020),
+        ("sin fecha", None),
+        (None, None),
+    ],
+)
+def test_temporal_year_formatter_covers_native_iso_and_invalid_values(value, expected) -> None:
+    assert format_temporal_year(value) == expected

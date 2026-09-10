@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from agente.grafo.estado import Estado
 from agente.nodos.devuelve_respuesta import SAFE_QUERY_ERROR
 from agente.utils.cypher_guard import CypherGuardError, guard_cypher
+from agente.utils.db import query_fingerprint
 from agente.utils.logger import log_error, log_event
 from agente.utils.verbose import verbose_step
 
@@ -36,6 +37,8 @@ def cypher_guard(estado: Estado) -> Estado:
             step="cypher_guard",
             status="failed",
             guard_decision="rejected",
+            query_fingerprint=query_fingerprint(cypher),
+            query_length=len(cypher),
         )
         return {
             "respuesta": SAFE_QUERY_ERROR,
@@ -51,6 +54,8 @@ def cypher_guard(estado: Estado) -> Estado:
         guard_decision="accepted",
         read_only=True,
         query_limit=guarded.limit,
+        query_fingerprint=query_fingerprint(guarded.text),
+        query_length=len(guarded.text),
         parameter_names=sorted(guarded.parameters),
         parameter_count=len(guarded.parameters),
     )

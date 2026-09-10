@@ -6,11 +6,13 @@ from collections.abc import Mapping
 from typing import Literal, cast
 
 from agente.grafo.estado import Estado
+from agente.utils.db import query_fingerprint
 from agente.utils.entity_resolver import (
     EntityResolutionGateway,
     normalize_entity_text_parameters,
     reconcile_entity_parameters,
     resolve_plan_parameters_result,
+    resolve_schema_text_parameters,
 )
 from agente.utils.logger import log_error, log_event
 
@@ -105,6 +107,12 @@ async def resuelve_entidades(
         cardinality=cardinality,
     )
     try:
+        parameters = await resolve_schema_text_parameters(
+            cypher,
+            parameters,
+            schema,
+            query_gateway=entity_gateway,
+        )
         result = await resolve_plan_parameters_result(
             parameters,
             cardinality=cardinality,
@@ -125,6 +133,7 @@ async def resuelve_entidades(
             "rejected",
             status=result.status,
             cardinality=cardinality,
+            parameter_names=sorted(str(name) for name in parameters),
         )
         return {
             "respuesta": SAFE_ENTITY_RESOLUTION_ERROR,
@@ -153,6 +162,17 @@ async def resuelve_entidades(
             "error": "entity_resolution_failed",
         }
 
+    log_event(
+        "entity_resolution",
+        "query_reconciled",
+        status="success",
+        query_changed=reconciled_cypher != cypher,
+        previous_query_fingerprint=query_fingerprint(cypher),
+        query_fingerprint=query_fingerprint(reconciled_cypher),
+        query_length=len(reconciled_cypher),
+        parameter_names=sorted(reconciled_parameters),
+        parameter_count=len(reconciled_parameters),
+    )
     log_event(
         "entity_resolution",
         "completed",

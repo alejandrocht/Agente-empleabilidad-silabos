@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 from agente.grafo.estado import Estado
 from agente.utils.logger import log_error, log_event
 from agente.utils.validacion import EntradaInvalida, validar_pregunta
@@ -18,15 +16,6 @@ def prompt_injection(estado: Estado) -> Estado:
         estado,
         field="pregunta",
         step="prompt_injection",
-    )
-
-
-def contextualized_prompt_injection(estado: Estado) -> Estado:
-    """Revalidate memory-enriched text before schema, model, or database work."""
-    return _validate_question_field(
-        estado,
-        field="pregunta_contextualizada",
-        step="contextualized_prompt_injection",
     )
 
 
@@ -69,4 +58,4 @@ def _validate_question_field(estado: Estado, *, field: str, step: str) -> Estado
         length=len(validada),
     )
     verbose_step("prompt_injection", "Entrada validada")
-    return cast(Estado, {field: validada, "error": None})
+    return {field: validada, "error": None}

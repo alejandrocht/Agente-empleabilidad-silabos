@@ -1,4 +1,4 @@
-"""Execute the validated read query and build a deterministic public answer."""
+"""Execute the validated read query and prepare a safe analyst fallback."""
 
 from __future__ import annotations
 
@@ -7,7 +7,14 @@ from collections.abc import Mapping
 from typing import Any, Protocol, cast
 
 from agente.grafo.estado import Estado
-from agente.utils.db import normalize_neo4j_value, open_query_gateway, run_gateway_with_diagnostics
+from agente.utils.db import (
+    format_temporal_year,
+    neo4j_diagnostic_context,
+    normalize_neo4j_value,
+    open_query_gateway,
+    query_fingerprint,
+    run_gateway_with_diagnostics,
+)
 from agente.utils.logger import log_error, log_event
 from agente.utils.verbose import verbose_label
 
@@ -20,62 +27,30 @@ NO_RESULTS_RESPONSE = (
     "CIAR. Prueba con carreras, cursos, facultades, empresas, ofertas, puestos, herramientas o "
     "competencias."
 )
-_AGGREGATE_PREFIXES = (
-    "total_",
-    "cantidad_",
-    "conteo_",
-    "count_",
-    "numero_",
-    "num_",
+ANALYST_FALLBACK_RESPONSE = (
+    "La consulta se completó, pero no pude redactar una respuesta segura en este momento."
 )
-_AGGREGATE_KEYS = frozenset({"total", "cantidad", "conteo", "count", "numero", "num"})
+
+
+def _normalize_temporal_aliases(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize common year aliases without changing original temporal fields."""
+    aliases = {"anio", "año", "year"}
+    normalized_rows: list[dict[str, Any]] = []
+    for row in rows:
+        normalized_row = dict(row)
+        for key, value in row.items():
+            if isinstance(key, str) and key.casefold() in aliases:
+                year = format_temporal_year(value)
+                if year is not None:
+                    normalized_row[key] = year
+        normalized_rows.append(normalized_row)
+    return normalized_rows
 
 
 class ReadQueryGateway(Protocol):
     async def run(
         self, cypher: str, parameters: Mapping[str, Any] | None = None
     ) -> list[dict[str, Any]]: ...
-
-
-def _aggregate_response(rows: list[dict[str, Any]]) -> str | None:
-    """Render a single numeric aggregate using its returned alias."""
-    if len(rows) != 1 or len(rows[0]) != 1:
-        return None
-
-    key, value = next(iter(rows[0].items()))
-    if (
-        not isinstance(key, str)
-        or isinstance(value, bool)
-        or not isinstance(value, (int, float))
-    ):
-        return None
-
-    field = key.strip().casefold()
-    label = next(
-        (
-            field[len(prefix) :].replace("_", " ").strip()
-            for prefix in _AGGREGATE_PREFIXES
-            if field.startswith(prefix) and field[len(prefix) :].strip("_")
-        ),
-        None,
-    )
-    displayed_value = f"{value:g}" if isinstance(value, float) else str(value)
-    if label:
-        return f"Hay {displayed_value} {label}."
-    if field in _AGGREGATE_KEYS:
-        return f"El total es {displayed_value}."
-    return None
-
-
-def _deterministic_response(rows: list[dict[str, Any]]) -> str:
-    if not rows:
-        return NO_RESULTS_RESPONSE
-    aggregate = _aggregate_response(rows)
-    if aggregate is not None:
-        return aggregate
-    count = len(rows)
-    suffix = "resultado" if count == 1 else "resultados"
-    return f"Encontré {count} {suffix} para tu consulta."
 
 
 async def devuelve_respuesta(
@@ -129,6 +104,7 @@ async def devuelve_respuesta(
         query_length=len(cypher),
         parameter_names=parameter_names,
         parameter_count=len(parameters),
+        query_fingerprint=query_fingerprint(cypher),
         read_only=True,
         query_limit=limit,
     )
@@ -152,13 +128,21 @@ async def devuelve_respuesta(
             "query_response",
             "execution_failed",
             exc,
+            context=neo4j_diagnostic_context(
+                stage="dynamic_explain",
+                duration_ms=(time.perf_counter() - started_at) * 1000,
+                cypher=cypher,
+                error=exc,
+            ),
             status="failed",
             duration_ms=round((time.perf_counter() - started_at) * 1000, 2),
             input_keys=["cypher", "parameters"],
         )
         return {"respuesta": SAFE_QUERY_ERROR, "filas": [], "error": "query_failed"}
 
-    bounded_rows = cast(list[dict[str, Any]], normalized[:limit])
+    bounded_rows = _normalize_temporal_aliases(
+        cast(list[dict[str, Any]], normalized[:limit])
+    )
     duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
     verbose_label("devuelve_respuesta", "Filas crudas devueltas por Neo4j", rows)
     verbose_label("devuelve_respuesta", "Filas normalizadas y acotadas", bounded_rows)
@@ -170,8 +154,8 @@ async def devuelve_respuesta(
         rows_count=len(bounded_rows),
         output_keys=["filas"],
     )
-    response = _deterministic_response(bounded_rows)
-    verbose_label("devuelve_respuesta", "Respuesta determinista generada", response)
+    response = NO_RESULTS_RESPONSE if not bounded_rows else ANALYST_FALLBACK_RESPONSE
+    verbose_label("devuelve_respuesta", "Respaldo seguro preparado", response)
     log_event(
         "query_response",
         "response_ready",

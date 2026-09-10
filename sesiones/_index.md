@@ -1,2 +1,2 @@
-- [estado-actual.md](estado-actual.md) — estado real del proyecto: flujo de 9 nodos, calidad, checklist de "proyecto real" y roadmap (incluye pendiente futuro: composición de plantillas)
+- [estado-actual.md](estado-actual.md) — estado canónico del runtime actual, contratos de seguridad, verificación y pendientes de producto
 - [agente-langgraph.md](agente-langgraph.md) — histórico técnico del agente (evolución: 8 nodos en consola → migración a OpenAI / CIAR v2)

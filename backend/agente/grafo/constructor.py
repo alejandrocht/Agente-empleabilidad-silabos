@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Awaitable, Callable
 from typing import cast
@@ -18,25 +19,34 @@ from agente.memoria_corta import (
     server_memory_scope,
 )
 from agente.nodos.construye_cypher import construye_cypher
-from agente.nodos.contextualiza_pregunta import contextualiza_pregunta
+from agente.nodos.contrato_cypher import GeneratedQueryRunnable
 from agente.nodos.cypher_guard import cypher_guard
 from agente.nodos.devuelve_respuesta import ReadQueryGateway, devuelve_respuesta
-from agente.nodos.generar_cypher import GeneratedQueryRunnable
 from agente.nodos.guarda_memoria_corta import guarda_memoria_corta
 from agente.nodos.obtiene_pregunta import obtiene_pregunta
 from agente.nodos.obtiene_schema import SchemaLoader, obtiene_schema
-from agente.nodos.orquestador import Route, orquestador
-from agente.nodos.prompt_injection import contextualized_prompt_injection, prompt_injection
+from agente.nodos.orquestador import OrchestratorRunnable, Route, orquestador
+from agente.nodos.prompt_injection import prompt_injection
+from agente.nodos.redacta_respuesta import AnalystRunnable, redacta_respuesta
 from agente.nodos.responder_directo import DirectResponseRunnable, responder_directo
 from agente.nodos.resuelve_entidades import resuelve_entidades
-from agente.utils.logger import attempt_context, log_error, log_event, trace_context, trace_id
+from agente.utils.logger import (
+    attempt_context,
+    log_error,
+    log_event,
+    trace_context,
+    trace_id,
+)
+from agente.utils.prompt import build_orchestrator_system_prompt
 from agente.utils.verbose import verbose_scope, verbose_step
 
 
 def construir_grafo(
     *,
+    orchestrator_runnable: OrchestratorRunnable | None = None,
     generated_runnable: GeneratedQueryRunnable | None = None,
     direct_runnable: DirectResponseRunnable | None = None,
+    analyst_runnable: AnalystRunnable | None = None,
     schema_loader: SchemaLoader | None = None,
     cypher_gateway: ReadQueryGateway | None = None,
     entity_gateway: ReadQueryGateway | None = None,
@@ -45,31 +55,23 @@ def construir_grafo(
     """Compile one isolated request graph without a checkpointer."""
     builder = StateGraph(Estado)
 
-    private_state_keys = frozenset(
-        {
-            "pregunta",
-            "pregunta_contextualizada",
-            "memory_scope",
-            "historial",
-            "schema",
-            "cypher",
-            "parameters",
-            "filas",
-            "ruta",
-        }
-    )
-
     def state_keys(value: object) -> list[str]:
         if not isinstance(value, dict):
             return []
         return sorted(
             key
             for key in value
-            if isinstance(key, str) and key not in private_state_keys
+            if isinstance(key, str)
         )
 
     def state_size(value: object) -> int:
         return len(value) if isinstance(value, dict) else 0
+
+    def node_status(input_state: Estado, output_state: Estado) -> str:
+        """Classify a boundary without treating a node-produced error as success."""
+        if input_state.get("error"):
+            return "skipped"
+        return "failed" if output_state.get("error") else "success"
 
     def run_sync_node(step: str, function: Callable[[Estado], Estado], estado: Estado) -> Estado:
         current_trace = estado.get("trace_id")
@@ -84,6 +86,7 @@ def construir_grafo(
                 step=step,
                 input_keys=state_keys(estado),
                 input_size=state_size(estado),
+                node_input=estado,
             )
             try:
                 result = function(estado)
@@ -103,6 +106,7 @@ def construir_grafo(
                     status="failed",
                     duration_ms=duration_ms,
                     input_keys=state_keys(estado),
+                    node_input=estado,
                 )
                 raise
             output = dict(result)
@@ -113,11 +117,14 @@ def construir_grafo(
                 "graph",
                 "node_completed",
                 step=step,
-                status="skipped" if estado.get("error") else "success",
+                status=node_status(estado, output),
                 duration_ms=duration_ms,
                 input_keys=state_keys(estado),
                 output_keys=state_keys(output),
                 output_size=state_size(output),
+                # The start event already contains the input. Avoid serializing
+                # the accumulated state a second time in the completion event.
+                node_output=output,
             )
             return cast(Estado, output)
 
@@ -138,6 +145,7 @@ def construir_grafo(
                 step=step,
                 input_keys=state_keys(estado),
                 input_size=state_size(estado),
+                node_input=estado,
             )
             try:
                 result = await function(estado)
@@ -157,6 +165,7 @@ def construir_grafo(
                     status="failed",
                     duration_ms=duration_ms,
                     input_keys=state_keys(estado),
+                    node_input=estado,
                 )
                 raise
             output = dict(result)
@@ -167,11 +176,14 @@ def construir_grafo(
                 "graph",
                 "node_completed",
                 step=step,
-                status="skipped" if estado.get("error") else "success",
+                status=node_status(estado, output),
                 duration_ms=duration_ms,
                 input_keys=state_keys(estado),
                 output_keys=state_keys(output),
                 output_size=state_size(output),
+                # The start event already contains the input. Avoid serializing
+                # the accumulated state a second time in the completion event.
+                node_output=output,
             )
             return cast(Estado, output)
 
@@ -185,35 +197,30 @@ def construir_grafo(
 
     builder.add_node("prompt_injection", RunnableLambda(prompt_injection_node))
 
-    def contextualization_node(estado: Estado) -> Estado:
-        return run_sync_node(
-            "contextualiza_pregunta",
-            lambda value: contextualiza_pregunta(value, memory_store=memory_store),
+    async def orchestrator_node(estado: Estado) -> Estado:
+        async def invoke(value: Estado) -> Estado:
+            if value.get("error"):
+                return {"ruta": "finalizar"}
+            question = value.get("pregunta")
+            result = await orquestador(
+                question if isinstance(question, str) else "",
+                build_orchestrator_system_prompt(),
+                orchestrator_runnable=orchestrator_runnable,
+            )
+            return cast(Estado, result)
+
+        return await run_async_node(
+            "orquestador",
+            invoke,
             estado,
         )
-
-    builder.add_node("contextualiza_pregunta", RunnableLambda(contextualization_node))
-
-    def contextualized_prompt_injection_node(estado: Estado) -> Estado:
-        return run_sync_node(
-            "contextualized_prompt_injection",
-            contextualized_prompt_injection,
-            estado,
-        )
-
-    builder.add_node(
-        "contextualized_prompt_injection",
-        RunnableLambda(contextualized_prompt_injection_node),
-    )
-
-    def orchestrator_node(estado: Estado) -> Estado:
-        return run_sync_node("orquestador", orquestador, estado)
 
     builder.add_node("orquestador", RunnableLambda(orchestrator_node))
 
     async def direct_response_node(estado: Estado) -> Estado:
         if isinstance(estado.get("respuesta"), str) and estado["respuesta"]:
-            return {}
+            # Keep the skipped branch visible in the per-node trace.
+            return run_sync_node("responder_directo", lambda _value: {}, estado)
         return await run_async_node(
             "responder_directo",
             lambda value: responder_directo(value, direct_runnable=direct_runnable),
@@ -266,6 +273,18 @@ def construir_grafo(
 
     builder.add_node("devuelve_respuesta", RunnableLambda(response_node))
 
+    async def analyst_response_node(estado: Estado) -> Estado:
+        return await run_async_node(
+            "redacta_respuesta",
+            lambda value: redacta_respuesta(
+                value,
+                analyst_runnable=analyst_runnable,
+            ),
+            estado,
+        )
+
+    builder.add_node("redacta_respuesta", RunnableLambda(analyst_response_node))
+
     def memory_node(estado: Estado) -> Estado:
         return run_sync_node(
             "guarda_memoria_corta",
@@ -285,9 +304,7 @@ def construir_grafo(
 
     builder.add_edge(START, "obtiene_pregunta")
     builder.add_edge("obtiene_pregunta", "prompt_injection")
-    builder.add_edge("prompt_injection", "contextualiza_pregunta")
-    builder.add_edge("contextualiza_pregunta", "contextualized_prompt_injection")
-    builder.add_edge("contextualized_prompt_injection", "orquestador")
+    builder.add_edge("prompt_injection", "orquestador")
     builder.add_conditional_edges(
         "orquestador",
         route_after_orchestrator,
@@ -302,7 +319,8 @@ def construir_grafo(
     builder.add_edge("construye_cypher", "resuelve_entidades")
     builder.add_edge("resuelve_entidades", "cypher_guard")
     builder.add_edge("cypher_guard", "devuelve_respuesta")
-    builder.add_edge("devuelve_respuesta", "guarda_memoria_corta")
+    builder.add_edge("devuelve_respuesta", "redacta_respuesta")
+    builder.add_edge("redacta_respuesta", "guarda_memoria_corta")
     builder.add_edge("guarda_memoria_corta", END)
     return builder.compile()
 
@@ -328,7 +346,9 @@ async def responder(
     with (
         trace_context(trace_id()) as active_trace,
         attempt_context(1),
-        verbose_scope(verbose),
+        verbose_scope(
+            verbose or os.getenv("CIAR_VERBOSE") == "1"
+        ),
     ):
         verbose_step("request", "Solicitud recibida", f"input_size={len(pregunta)}")
         log_event("graph", "request_started", input_keys=["pregunta"], input_size=len(pregunta))

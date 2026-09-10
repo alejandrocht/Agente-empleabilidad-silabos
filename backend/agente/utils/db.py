@@ -10,6 +10,9 @@ import time
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import date as python_date
+from datetime import datetime as python_datetime
+from threading import RLock
 from typing import Any, Literal, cast
 
 from dotenv import load_dotenv
@@ -31,8 +34,24 @@ from agente.utils.logger import log_error, log_event
 
 load_dotenv()
 
-DEFAULT_QUERY_TIMEOUT_SECONDS = 10.0
+DEFAULT_QUERY_TIMEOUT_SECONDS = 15.0
 DEFAULT_NEO4J_DATABASE = "neo4j"
+MAX_FULLTEXT_INDEXES = 100
+MAX_FULLTEXT_QUERY_LENGTH = 512
+FULLTEXT_INDEX_CACHE_TTL_SECONDS = 900.0
+_FULLTEXT_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_FULLTEXT_QUERY = re.compile(
+    r"^[a-z0-9]+(?:~[012])?(?: AND [a-z0-9]+(?:~[012])?)*$"
+)
+_FULLTEXT_INDEX_DISCOVERY_QUERY = (
+    "SHOW FULLTEXT INDEXES "
+    "YIELD name, labelsOrTypes, properties, state "
+    "RETURN name, labelsOrTypes, properties, state "
+    f"LIMIT {MAX_FULLTEXT_INDEXES}"
+)
+_fulltext_index_cache_lock = RLock()
+_fulltext_index_cache: tuple[dict[str, Any], ...] | None = None
+_fulltext_index_cache_created_at = 0.0
 
 
 class Neo4jQueryError(RuntimeError):
@@ -58,6 +77,11 @@ Neo4jErrorClassification = Literal[
 _DIAGNOSTIC_STAGES = frozenset(
     {"entity_resolution", "dynamic_generation", "dynamic_explain", "dynamic_execution"}
 )
+_NEO4J_ERROR_POSITION = re.compile(
+    r"\bline\s+(?P<line>\d+),\s*column\s+(?P<column>\d+)"
+    r"\s*\(offset:\s*(?P<offset>\d+)\)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +105,7 @@ class Neo4jExplainError(Neo4jQueryError):
     ):
         self.category = category
         self.code = code or (_stable_neo4j_code(cause) if cause is not None else None)
+        self.cause = cause
         self.classification: Neo4jErrorClassification = (
             _classify_neo4j_exception(cause)[1]
             if cause is not None
@@ -181,6 +206,13 @@ def neo4j_diagnostic_context(
         context["neo4j_classification"] = diagnostic.classification
         if diagnostic.code is not None:
             context["neo4j_code"] = diagnostic.code
+        cause = getattr(error, "cause", None)
+        source_error = cause if isinstance(cause, BaseException) else error
+        position = _NEO4J_ERROR_POSITION.search(str(source_error))
+        if position is not None:
+            context["neo4j_line"] = int(position.group("line"))
+            context["neo4j_column"] = int(position.group("column"))
+            context["neo4j_offset"] = int(position.group("offset"))
     return context
 
 
@@ -295,6 +327,46 @@ def _has_schema_warning(summary: object) -> bool:
     )
 
 
+def _fulltext_index_values(value: object) -> tuple[str, ...]:
+    """Normalize Neo4j's labels/properties metadata to comparable strings."""
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return tuple(item for item in value if isinstance(item, str))
+    return ()
+
+
+def _find_fulltext_index(
+    rows: Sequence[Mapping[str, Any]],
+    label: str,
+    property_name: str,
+) -> str | None:
+    """Select one online full-text index covering the requested schema field."""
+    matches: list[str] = []
+    for row in rows:
+        name = row.get("name")
+        state = row.get("state")
+        labels = _fulltext_index_values(row.get("labelsOrTypes"))
+        properties = _fulltext_index_values(row.get("properties"))
+        if (
+            isinstance(name, str)
+            and bool(name.strip())
+            and len(name) <= 256
+            and isinstance(state, str)
+            and state.upper() == "ONLINE"
+            and label in labels
+            and property_name in properties
+        ):
+            matches.append(name)
+    return sorted(set(matches))[0] if matches else None
+
+
+def _is_security_forbidden(error: BaseException) -> bool:
+    """Identify a missing metadata privilege without hiding transport failures."""
+    code = getattr(error, "code", "")
+    return isinstance(code, str) and code.startswith("Neo.ClientError.Security.")
+
+
 def normalize_neo4j_value(value: Any) -> Any:
     """Recursively convert Neo4j-native values into strict JSON-safe values."""
     if value is None or isinstance(value, (str, bool, int)):
@@ -323,6 +395,33 @@ def normalize_neo4j_value(value: Any) -> Any:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [normalize_neo4j_value(item) for item in value]
     raise Neo4jQueryError(f"Unsupported Neo4j result value type: {type(value).__name__}")
+
+
+def format_temporal_year(value: Any) -> int | None:
+    """Return one year from Neo4j/Python temporal, ISO, or numeric values."""
+    if isinstance(value, (Date, DateTime, python_date, python_datetime)):
+        return int(value.year)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if 1000 <= value <= 9999 else None
+    if isinstance(value, float) and value.is_integer():
+        year = int(value)
+        return year if 1000 <= year <= 9999 else None
+    if not isinstance(value, str):
+        return None
+
+    candidate = value.strip()
+    if not candidate:
+        return None
+    if re.fullmatch(r"[+-]?\d{1,3}[,.]\d{3}", candidate):
+        candidate = candidate.replace(",", "").replace(".", "")
+    match = re.match(r"^[+-]?(\d{4})(?:[-T\s]|$)", candidate)
+    if match is not None:
+        return int(match.group(1))
+    if candidate.isdigit() and len(candidate) == 4:
+        return int(candidate)
+    return None
 
 
 class AsyncNeo4jQueryGateway:
@@ -510,6 +609,259 @@ class AsyncNeo4jQueryGateway:
         )
         return rows
 
+    async def search_fulltext(
+        self,
+        *,
+        label: str,
+        property_name: str,
+        query: str,
+        limit: int,
+        diagnostic_stage: DiagnosticStage = "entity_resolution",
+    ) -> list[dict[str, Any]]:
+        """Search a schema-matching full-text index through a fixed read-only seam.
+
+        Generated Cypher still cannot use ``CALL``. This method is an internal
+        gateway operation with validated identifiers and a parameterized Lucene
+        query, so the resolver can use a provisioned index without widening the
+        general Cypher guard.
+        """
+        if (
+            not isinstance(label, str)
+            or not _FULLTEXT_IDENTIFIER.fullmatch(label)
+            or not isinstance(property_name, str)
+            or not _FULLTEXT_IDENTIFIER.fullmatch(property_name)
+        ):
+            raise Neo4jQueryError("Invalid full-text schema target")
+        if (
+            not isinstance(query, str)
+            or not query.strip()
+            or len(query) > MAX_FULLTEXT_QUERY_LENGTH
+            or _FULLTEXT_QUERY.fullmatch(query) is None
+        ):
+            raise Neo4jQueryError("Invalid full-text query")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise Neo4jQueryError("Invalid full-text result limit")
+
+        try:
+            index_rows = await self._fulltext_indexes(
+                diagnostic_stage=diagnostic_stage,
+            )
+        except ClientError as exc:
+            if not _is_security_forbidden(exc):
+                raise
+            log_event(
+                "neo4j_query",
+                "fulltext_index_unavailable",
+                status="fallback",
+                reason="missing_index_metadata_privilege",
+                label=label,
+                property_name=property_name,
+            )
+            return []
+        index_name = _find_fulltext_index(index_rows, label, property_name)
+        if index_name is None:
+            log_event(
+                "neo4j_query",
+                "fulltext_index_unavailable",
+                status="fallback",
+                label=label,
+                property_name=property_name,
+            )
+            return []
+
+        log_event(
+            "neo4j_query",
+            "fulltext_search_started",
+            index_name=index_name,
+            label=label,
+            property_name=property_name,
+            query_limit=limit,
+        )
+        cypher = (
+            "CALL db.index.fulltext.queryNodes($index_name, $query_text, "
+            "{limit: $fulltext_limit}) "
+            "YIELD node, score "
+            "WHERE $node_label IN labels(node) "
+            f"RETURN node.{property_name} AS value, score"
+        )
+        field_query = " AND ".join(
+            f"{property_name}:{term}" for term in query.split(" AND ")
+        )
+        parameters = {
+            "index_name": index_name,
+            "query_text": field_query,
+            "fulltext_limit": limit,
+            "node_label": label,
+        }
+        try:
+            rows = await self._run_trusted_read_query(
+                cypher,
+                parameters,
+                limit=limit,
+                diagnostic_stage=diagnostic_stage,
+                operation="fulltext_search",
+            )
+            log_event(
+                "neo4j_query",
+                "fulltext_search_completed",
+                status="success",
+                index_name=index_name,
+                label=label,
+                property_name=property_name,
+                rows_count=len(rows),
+            )
+            return rows
+        except ClientError as exc:
+            if not _is_security_forbidden(exc):
+                raise
+            log_event(
+                "neo4j_query",
+                "fulltext_index_unavailable",
+                status="fallback",
+                reason="missing_fulltext_read_privilege",
+                label=label,
+                property_name=property_name,
+            )
+            return []
+
+    async def _fulltext_indexes(
+        self,
+        *,
+        diagnostic_stage: DiagnosticStage,
+    ) -> list[dict[str, Any]]:
+        """Read and share full-text metadata across gateway lifecycles."""
+        global _fulltext_index_cache, _fulltext_index_cache_created_at
+
+        with _fulltext_index_cache_lock:
+            now = time.monotonic()
+            if (
+                _fulltext_index_cache is not None
+                and now - _fulltext_index_cache_created_at
+                < FULLTEXT_INDEX_CACHE_TTL_SECONDS
+            ):
+                log_event(
+                    "neo4j_query",
+                    "fulltext_index_cache_hit",
+                    status="hit",
+                    cache_age_ms=round(
+                        (now - _fulltext_index_cache_created_at) * 1000, 2
+                    ),
+                    indexes_count=len(_fulltext_index_cache),
+                    cache_ttl_seconds=FULLTEXT_INDEX_CACHE_TTL_SECONDS,
+                )
+                return list(_fulltext_index_cache)
+
+            refresh_reason = (
+                "miss" if _fulltext_index_cache is None else "expired"
+            )
+
+        rows = await self._run_trusted_read_query(
+            _FULLTEXT_INDEX_DISCOVERY_QUERY,
+            {},
+            limit=MAX_FULLTEXT_INDEXES,
+            diagnostic_stage=diagnostic_stage,
+            operation="fulltext_index_discovery",
+        )
+        refreshed = tuple(
+            row for row in rows if isinstance(row, dict)
+        )
+        with _fulltext_index_cache_lock:
+            _fulltext_index_cache = refreshed
+            _fulltext_index_cache_created_at = time.monotonic()
+        log_event(
+            "neo4j_query",
+            "fulltext_index_cache_refresh",
+            status="success",
+            reason=refresh_reason,
+            indexes_count=len(refreshed),
+            cache_ttl_seconds=FULLTEXT_INDEX_CACHE_TTL_SECONDS,
+        )
+        return list(refreshed)
+
+    async def _run_trusted_read_query(
+        self,
+        cypher: str,
+        parameters: Mapping[str, Any],
+        *,
+        limit: int,
+        diagnostic_stage: DiagnosticStage,
+        operation: str,
+    ) -> list[dict[str, Any]]:
+        """Execute one gateway-owned read query without accepting user Cypher."""
+        guarded = GuardedCypher(text=cypher, parameters=dict(parameters), limit=limit)
+        log_event(
+            "neo4j_query",
+            "trusted_read_started",
+            operation=operation,
+            read_only=True,
+            query_length=len(cypher),
+            parameter_names=sorted(parameters),
+            query_limit=limit,
+        )
+        explain_started_at = time.perf_counter()
+        try:
+            explain = await self._execute(
+                Query(f"EXPLAIN {cypher}", timeout=self._config.timeout_seconds), guarded
+            )
+            if getattr(explain.summary, "query_type", None) != "r":
+                raise Neo4jQueryError("Neo4j did not classify the query as read-only")
+            if _has_schema_warning(explain.summary):
+                raise Neo4jExplainError("schema")
+        except Exception as exc:
+            log_error(
+                "neo4j_query",
+                "trusted_read_explain_failed",
+                exc,
+                status="failed",
+                operation=operation,
+                context=neo4j_diagnostic_context(
+                    stage=diagnostic_stage,
+                    duration_ms=(time.perf_counter() - explain_started_at) * 1000,
+                    cypher=cypher,
+                    error=exc,
+                ),
+            )
+            category = _explain_failure_category(exc)
+            if category is not None:
+                raise Neo4jExplainError(category, cause=exc) from exc
+            raise
+
+        execution_started_at = time.perf_counter()
+        try:
+            result = await self._execute(
+                Query(cypher, timeout=self._config.timeout_seconds), guarded
+            )
+            if getattr(result.summary, "query_type", None) != "r":
+                raise Neo4jQueryError("Neo4j did not classify the query as read-only")
+            if _has_schema_warning(result.summary):
+                raise Neo4jQueryError("Neo4j reported a schema warning during execution")
+            rows = [normalize_neo4j_value(record.data()) for record in result.records]
+        except Exception as exc:
+            log_error(
+                "neo4j_query",
+                "trusted_read_execution_failed",
+                exc,
+                status="failed",
+                operation=operation,
+                context=neo4j_diagnostic_context(
+                    stage=diagnostic_stage,
+                    duration_ms=(time.perf_counter() - execution_started_at) * 1000,
+                    cypher=cypher,
+                    error=exc,
+                ),
+            )
+            raise
+        log_event(
+            "neo4j_query",
+            "trusted_read_completed",
+            status="success",
+            operation=operation,
+            read_only=True,
+            rows_count=len(rows),
+            duration_ms=round((time.perf_counter() - execution_started_at) * 1000, 2),
+        )
+        return rows
+
     async def _execute(self, query: Query, guarded: GuardedCypher) -> Any:
         return await self._driver.execute_query(
             query,
@@ -530,6 +882,14 @@ async def run_gateway_with_diagnostics(
     if isinstance(gateway, AsyncNeo4jQueryGateway):
         return await gateway.run(cypher, parameters, diagnostic_stage=stage)
     return cast(list[dict[str, Any]], await gateway.run(cypher, parameters))
+
+
+def invalidate_fulltext_index_cache() -> None:
+    """Force index metadata discovery on the next full-text resolution."""
+    global _fulltext_index_cache, _fulltext_index_cache_created_at
+    with _fulltext_index_cache_lock:
+        _fulltext_index_cache = None
+        _fulltext_index_cache_created_at = 0.0
 
 
 @asynccontextmanager

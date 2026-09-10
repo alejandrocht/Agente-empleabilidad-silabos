@@ -16,4 +16,8 @@ def obtiene_pregunta(estado: Estado) -> Estado:
         length=len(pregunta),
     )
     verbose_step("obtiene_pregunta", "Pregunta preparada para validación")
-    return {"pregunta": pregunta, "error": None}
+    return {
+        "pregunta": pregunta,
+        "pregunta_original": pregunta,
+        "error": None,
+    }
