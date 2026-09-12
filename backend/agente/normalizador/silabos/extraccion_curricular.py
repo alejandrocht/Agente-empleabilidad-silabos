@@ -292,16 +292,16 @@ def _extraer_docx(
             for valores in filas[1:]:
                 if len(valores) < 3:
                     continue
-                if (
-                    _codigos(valores[-1])
-                    and valores[0]
-                    and not re.fullmatch(r"L\d+", valores[0], re.I)
-                ):
+                codigos = _codigos(valores[-1])
+                if codigos and valores[0] and not re.fullmatch(r"L\d+", valores[0], re.I):
                     competencias.append(
                         {
                             "orden": str(len(competencias) + 1),
                             "nombre": _sin_referencias_curriculares(valores[0]).strip(" ."),
                             "descripcion": _sin_referencias_curriculares(valores[1]),
+                            # El código declarado viaja al catálogo final como
+                            # `codigo_competencia`.
+                            "codigo": codigos[0],
                             "texto_evidencia": _sin_referencias_curriculares(
                                 " | ".join(valores[:2])
                             ),

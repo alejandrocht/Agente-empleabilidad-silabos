@@ -259,9 +259,12 @@ def test_contexto_analista_reexporta_helpers_y_preserva_modelos_y_prompt() -> No
     ) == ("lote", "respuesta")
     assert analista_llm.DecisionCurricular.__module__ == analista_llm.__name__
     assert analista_llm.LoteDecisionesCurricularesLLM.__module__ == analista_llm.__name__
-    assert analista_llm.LoteDecisionesCurricularesLLM.model_json_schema()["properties"][
-        "decisiones"
-    ]["type"] == "array"
+    assert (
+        analista_llm.LoteDecisionesCurricularesLLM.model_json_schema()["properties"]["decisiones"][
+            "type"
+        ]
+        == "array"
+    )
     lote = (
         {
             "id_silabo": "SIL_GOLD",
@@ -917,6 +920,7 @@ def test_los_cinco_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None
             "nombre_competencia",
             "descripcion_breve_competencia",
             "tipo_competencia",
+            "codigo_competencia",
         ],
         "catalogo_habilidades.csv": [
             "id_habilidad",
@@ -1825,9 +1829,7 @@ def test_historial_de_progreso_se_limita_a_los_ultimos_cien_eventos() -> None:
 
 def test_cache_jsonl_hit_preserva_lineage_del_caso(monkeypatch, tmp_path: Path) -> None:
     logro = "Analizar campañas de marketing"
-    analista = _LLMLoteSecuencialFalso(
-        "gpt-5.6-luna-test", [[_decision_para(logro)]]
-    )
+    analista = _LLMLoteSecuencialFalso("gpt-5.6-luna-test", [[_decision_para(logro)]])
     monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
 
     primero = analista_llm.analizar_registros_curriculares(

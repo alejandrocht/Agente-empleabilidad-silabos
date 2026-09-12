@@ -42,6 +42,21 @@ from agente.normalizador.silabos.resolucion_curricular import (
 )
 
 
+def _codigo_competencia(
+    codigos: dict[str, str], id_competencia: str, declaracion: dict[str, str]
+) -> str:
+    """Conserva el primer código no vacío declarado para una competencia canónica.
+
+    Varias declaraciones pueden resolver a la misma competencia canónica. La primera
+    presentación con código válido gana y ningún valor vacío la sobrescribe después.
+    """
+
+    codigo = _texto(declaracion.get("codigo"))
+    if codigo and not codigos.get(id_competencia):
+        codigos[id_competencia] = codigo
+    return codigos.get(id_competencia, "")
+
+
 def normalizar_registros_curriculares(
     registros: list[dict[str, object]],
     validacion: ResultadoValidacionSilabos,
@@ -61,6 +76,7 @@ def normalizar_registros_curriculares(
     hallazgos: list[Hallazgo] = []
     cuarentena: list[dict[str, object]] = []
     competencias: dict[str, dict[str, str]] = {}
+    codigos_competencia: dict[str, str] = {}
     competencias_fuente: dict[str, dict[str, object]] = {}
     habilidades: dict[str, dict[str, str]] = {}
     habilidades_fuente: dict[str, dict[str, object]] = {}
@@ -190,6 +206,9 @@ def normalizar_registros_curriculares(
                 "nombre_competencia": competencia.nombre,
                 "descripcion_breve_competencia": competencia.descripcion,
                 "tipo_competencia": competencia.tipo,
+                "codigo_competencia": _codigo_competencia(
+                    codigos_competencia, competencia.id, declaracion
+                ),
             }
 
         for indice_logro, logro in enumerate(outcomes, start=1):
@@ -260,6 +279,9 @@ def normalizar_registros_curriculares(
                     "nombre_competencia": competencia.nombre,
                     "descripcion_breve_competencia": competencia.descripcion,
                     "tipo_competencia": competencia.tipo,
+                    "codigo_competencia": _codigo_competencia(
+                        codigos_competencia, competencia.id, declaracion
+                    ),
                 }
 
             id_habilidad_fuente = _hash_id(

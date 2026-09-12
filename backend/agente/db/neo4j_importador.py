@@ -51,6 +51,12 @@ RECOMENDACION = "Recomendamos revisar los datos antes de subirlos a la base de d
 ESTADOS_CURRICULARES_PUBLICABLES = {"limpiado", "limpiado_con_advertencias"}
 MAX_FILAS_POR_ARCHIVO = 100_000
 RELEASE_GATE_DECISION = "ALLOW_IMPORT"
+# Columnas cuyo vacío es válido por contrato, por archivo: las competencias técnicas
+# no declaran código curricular y la cobertura puede no tener habilidad o herramienta.
+CAMPOS_OPCIONALES: dict[str, frozenset[str]] = {
+    "cobertura_curricular.csv": frozenset({"id_habilidad", "id_herramienta"}),
+    "catalogo_competencias.csv": frozenset({"codigo_competencia"}),
+}
 
 
 class SesionNeo4j(Protocol):
@@ -556,13 +562,12 @@ class ImportadorNeo4j:
                 campos_obligatorios = (
                     ("id_curso", "nombre_curso", "id_carrera")
                     if archivo == "curso.csv"
-                    else filas[archivo][0].keys() if filas[archivo] else ()
+                    else filas[archivo][0].keys()
+                    if filas[archivo]
+                    else ()
                 )
                 for campo in campos_obligatorios:
-                    if (
-                        campo in {"id_habilidad", "id_herramienta"}
-                        and archivo == "cobertura_curricular.csv"
-                    ):
+                    if campo in CAMPOS_OPCIONALES.get(archivo, frozenset()):
                         continue
                     if not fila.get(campo):
                         errores.append(
@@ -610,7 +615,7 @@ class ImportadorNeo4j:
                                 archivo,
                                 numero,
                                 "La combinación curricular está repetida en la fila "
-                                f"{vistos_clave[clave]}."
+                                f"{vistos_clave[clave]}.",
                             )
                         )
                     else:
@@ -822,9 +827,7 @@ class ImportadorNeo4j:
                 filas_nuevas[archivo].append(fila)
                 resumen[f"nuevas_{resumen_key}"] += 1
 
-        pares_silabos = {
-            (silabo["id_curso"], silabo["id_silabo"]) for silabo in fuente.silabos
-        }
+        pares_silabos = {(silabo["id_curso"], silabo["id_silabo"]) for silabo in fuente.silabos}
         relaciones_curso_silabo_nuevas: list[dict[str, str]] = []
         pares_por_silabo: dict[str, set[str]] = {}
         for id_curso_existente, id_silabo_existente in existentes["pares_curso_silabo"]:
@@ -931,10 +934,7 @@ class ImportadorNeo4j:
                         "id_competencia no existe en los catálogos disponibles.",
                     )
                 )
-            if (
-                fila["id_habilidad"]
-                and fila["id_habilidad"] not in ids_catalogo["id_habilidad"]
-            ):
+            if fila["id_habilidad"] and fila["id_habilidad"] not in ids_catalogo["id_habilidad"]:
                 referencia_catalogo_valida = False
                 conflictos.append(
                     self._conflicto(
@@ -959,10 +959,9 @@ class ImportadorNeo4j:
                 filas_nuevas["cobertura_curricular.csv"].append(fila)
                 resumen["nuevas_coberturas"] += 1
 
-        total_nuevo = sum(
-            len(filas_nuevas[archivo])
-            for archivo, _ in ARCHIVOS_SALIDA
-        ) + len(relaciones_curso_silabo_nuevas)
+        total_nuevo = sum(len(filas_nuevas[archivo]) for archivo, _ in ARCHIVOS_SALIDA) + len(
+            relaciones_curso_silabo_nuevas
+        )
         preview = self._preview_base(id_ejecucion, fuente.fingerprint)
         preview.update(
             {
@@ -1191,6 +1190,7 @@ class ImportadorNeo4j:
         relaciones_curso_silabo_nuevas: tuple[dict[str, str], ...],
     ) -> None:
         with self._sesion(WRITE_ACCESS) as sesion:
+
             def transaccion(tx: Any) -> None:
                 self._escribir_cursos(tx, filas_nuevas["curso.csv"], id_importacion)
                 self._escribir_relaciones_curso_silabo(
@@ -1241,9 +1241,7 @@ class ImportadorNeo4j:
                             continue
                         procesadas = _resultado_count(
                             tx.run(
-                                self._cypher_cobertura(
-                                    requiere_habilidad, requiere_herramienta
-                                ),
+                                self._cypher_cobertura(requiere_habilidad, requiere_herramienta),
                                 {"rows": lote, "import_id": id_importacion},
                             )
                         )
@@ -1400,6 +1398,7 @@ class ImportadorNeo4j:
 
     def _revertir_grafo(self, id_importacion: str) -> dict[str, int]:
         with self._sesion(WRITE_ACCESS) as sesion:
+
             def transaccion(tx: Any) -> dict[str, int]:
                 relaciones = _resultado_count(
                     tx.run(
