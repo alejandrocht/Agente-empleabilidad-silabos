@@ -77,6 +77,22 @@ def _preparar(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, st
                     "evidencia": ["Diseñar campañas omnicanal."],
                 },
                 {
+                    "id_pendiente": "PEN_SKILL",
+                    "tipo": "habilidad",
+                    "estado_resolucion": "PENDIENTE_AMPLIACION_PERFIL",
+                    "id_curso": "CUR_1",
+                    "id_silabo": "SIL_1",
+                    "id_logro": "LOG_1",
+                    "archivo": "curso.docx",
+                    "id_habilidad_fuente": "HAB_SRC_1",
+                    "descripcion_fuente": "La actividad analiza campañas.",
+                    "propuesta": {
+                        "nombre": "Analizar campañas",
+                        "descripcion": "Analizar campañas.",
+                    },
+                    "evidencia": ["Analizar campañas."],
+                },
+                {
                     "id_pendiente": "PEN_TOOL",
                     "tipo": "herramienta",
                     "estado_resolucion": "PENDIENTE_AMPLIACION_PERFIL",
@@ -135,6 +151,8 @@ def _arbol_de_bytes(*roots: Path) -> dict[Path, bytes]:
 def _agregar_habilidad_materializable(directorio: Path) -> None:
     ruta = directorio / "salidas/reportes/pendientes_curriculares.jsonl"
     filas = [json.loads(linea) for linea in ruta.read_text(encoding="utf-8").splitlines()]
+    if any(fila.get("id_pendiente") == "PEN_SKILL" for fila in filas):
+        return
     filas.append(
         {
             "id_pendiente": "PEN_SKILL",
@@ -145,7 +163,7 @@ def _agregar_habilidad_materializable(directorio: Path) -> None:
             "id_logro": "LOG_1",
             "archivo": "curso.docx",
             "id_habilidad_fuente": "HAB_SRC_1",
-            "descripcion_fuente": "Analizar campañas.",
+            "descripcion_fuente": "La actividad analiza campañas.",
             "propuesta": {
                 "nombre": "Analizar campañas",
                 "descripcion": "Analizar campañas.",
@@ -199,6 +217,7 @@ def _solicitud_para_frontera(caso: str, directorio: Path) -> list[dict[str, str]
         return [
             {"id_pendiente": "PEN_COMP", "decision": "ADD"},
             {"id_pendiente": "PEN_TOOL", "decision": "KEEP_PENDING"},
+            {"id_pendiente": "PEN_SKILL", "decision": "KEEP_PENDING"},
         ]
     if caso == "DISCARD":
         filas = aprobaciones._filas_clasificadas(directorio)
@@ -597,12 +616,13 @@ def test_aprobar_y_mantener_pendiente_promueve_solo_al_perfil_y_conserva_evidenc
         [
             {"id_pendiente": "PEN_COMP", "decision": "ADD"},
             {"id_pendiente": "PEN_TOOL", "decision": "KEEP_PENDING"},
+            {"id_pendiente": "PEN_SKILL", "decision": "KEEP_PENDING"},
         ],
         actor="revisor@example.com",
     )
 
     assert resultado["aprobacion"]["accepted"] == 1
-    assert resultado["aprobacion"]["remaining_pending"] == 1
+    assert resultado["aprobacion"]["remaining_pending"] == 2
     perfil = tmp_path / "catalogos" / "carreras" / "MARKETING" / "2026-1"
     assert (perfil / "catalogo_competencias.csv").is_file()
     assert (
@@ -617,15 +637,17 @@ def test_aprobar_y_mantener_pendiente_promueve_solo_al_perfil_y_conserva_evidenc
     ]
     assert {fila["id_pendiente"]: fila["decision"] for fila in pendientes} == {
         "PEN_COMP": "ADD",
+        "PEN_SKILL": "KEEP_PENDING",
         "PEN_TOOL": "KEEP_PENDING",
     }
-    assert pendientes[1]["evidencia"] == ["Usar CampaignOS."]
+    por_id = {fila["id_pendiente"]: fila for fila in pendientes}
+    assert por_id["PEN_TOOL"]["evidencia"] == ["Usar CampaignOS."]
     decisiones = (
         (directorio / "salidas/reportes/decisiones_curriculares.jsonl")
         .read_text(encoding="utf-8")
         .splitlines()
     )
-    assert len(decisiones) == 2
+    assert len(decisiones) == 3
     assert all("revisor@example.com" in linea for linea in decisiones)
 
 
@@ -683,13 +705,14 @@ def test_release_gate_cuenta_una_vez_la_fila_sin_decision_y_conserva_keep_pendin
         [
             {"id_pendiente": "PEN_COMP", "decision": "ADD"},
             {"id_pendiente": "PEN_TOOL", "decision": "KEEP_PENDING"},
+            {"id_pendiente": "PEN_SKILL", "decision": "KEEP_PENDING"},
         ],
     )
 
     aprobacion = resultado["aprobacion"]["release_gate"]["approval"]
     assert aprobacion["pending_decision"] == 1
     assert aprobacion["unresolved_records"] == 1
-    assert aprobacion["remaining_pending"] == 2
+    assert aprobacion["remaining_pending"] == 3
 
 
 def test_summary_counts_raw_unresolved_rows_per_type(
@@ -810,7 +833,7 @@ def test_decision_de_paquete_resuelve_todas_las_filas_accionables_de_forma_atomi
     )
 
     assert resultado["aprobacion"]["accepted_in_request"] == 0
-    assert resultado["aprobacion"]["kept_pending_in_request"] == 2
+    assert resultado["aprobacion"]["kept_pending_in_request"] == 3
     filas = [
         json.loads(line)
         for line in (directorio / "salidas/reportes/pendientes_curriculares.jsonl")
@@ -837,8 +860,8 @@ def test_descartar_paquete_es_idempotente_y_conserva_auditoria(
     primera = aprobaciones.aplicar_decisiones_curriculares(directorio, solicitud, actor="revisor")
     segunda = aprobaciones.aplicar_decisiones_curriculares(directorio, solicitud, actor="revisor")
 
-    assert primera["aprobacion"]["discarded_in_request"] == 2
-    assert segunda["aprobacion"]["discarded_in_request"] == 2
+    assert primera["aprobacion"]["discarded_in_request"] == 3
+    assert segunda["aprobacion"]["discarded_in_request"] == 3
     assert aprobaciones.paquetes_para_revision(directorio) == []
     filas = aprobaciones._filas_clasificadas(directorio)
     assert {fila["decision"] for fila in filas} == {"DISCARD"}
@@ -885,27 +908,6 @@ def test_aprobar_los_tres_extremos_materializa_una_cadena_chh_valida(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     directorio, _ = _preparar(tmp_path, monkeypatch)
-    ruta = directorio / "salidas/reportes/pendientes_curriculares.jsonl"
-    filas = [json.loads(linea) for linea in ruta.read_text(encoding="utf-8").splitlines()]
-    filas.append(
-        {
-            "id_pendiente": "PEN_SKILL",
-            "tipo": "habilidad",
-            "estado_resolucion": "PENDIENTE_AMPLIACION_PERFIL",
-            "id_curso": "CUR_1",
-            "id_silabo": "SIL_1",
-            "id_logro": "LOG_1",
-            "archivo": "curso.docx",
-            "id_habilidad_fuente": "HAB_SRC_1",
-            "descripcion_fuente": "Analizar campañas.",
-            "propuesta": {
-                "nombre": "Analizar campañas",
-                "descripcion": "Analizar campañas.",
-            },
-            "evidencia": ["Analizar campañas."],
-        }
-    )
-    ruta.write_text("".join(json.dumps(fila) + "\n" for fila in filas), encoding="utf-8")
 
     resultado = aprobaciones.aplicar_decisiones_curriculares(
         directorio,
@@ -988,7 +990,7 @@ def test_endpoint_expone_y_aplica_el_checkpoint_curricular(
     )
     assert pendientes.status_code == 200
     datos_pendientes = pendientes.json()
-    assert datos_pendientes["total"] == 2
+    assert datos_pendientes["total"] == 3
     paquete = datos_pendientes["paquetes"][0]
     assert {"source_relationships", "relationships", "legacy_rows"}.isdisjoint(paquete)
     assert "provenance" not in paquete["componentes"]["competencias"][0]
@@ -1010,8 +1012,11 @@ def test_endpoint_expone_y_aplica_el_checkpoint_curricular(
     restantes = cliente.get(
         f"/normalizador/ejecuciones/{id_ejecucion}/pendientes?incluir_resueltas=false"
     )
-    assert restantes.json()["total"] == 1
-    assert restantes.json()["filas"][0]["id_pendiente"] == "PEN_TOOL"
+    assert restantes.json()["total"] == 2
+    assert {fila["id_pendiente"] for fila in restantes.json()["filas"]} == {
+        "PEN_SKILL",
+        "PEN_TOOL",
+    }
 
     reloaded = GestorEjecuciones(directorio.parent)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", reloaded)
@@ -1043,7 +1048,7 @@ def test_endpoint_acepta_decision_de_paquete_y_expone_revision(
     )
 
     assert respuesta.status_code == 200
-    assert respuesta.json()["aprobacion"]["kept_pending_in_request"] == 2
+    assert respuesta.json()["aprobacion"]["kept_pending_in_request"] == 3
 
 
 def test_endpoint_descarta_paquete_con_revision_y_motivo(
@@ -1071,7 +1076,7 @@ def test_endpoint_descarta_paquete_con_revision_y_motivo(
     )
 
     assert respuesta.status_code == 200
-    assert respuesta.json()["aprobacion"]["discarded_in_request"] == 2
+    assert respuesta.json()["aprobacion"]["discarded_in_request"] == 3
     activa = cliente.get(
         f"/normalizador/ejecuciones/{id_ejecucion}/pendientes?incluir_resueltas=false"
     ).json()
@@ -1116,7 +1121,7 @@ def test_endpoint_reutiliza_filas_y_paquetes_completos_para_el_resumen(
     assert resumen_entradas["filas"] is ensamblajes[0][0]
     assert resumen_entradas["paquetes"] is ensamblajes[0][1]
     aprobacion = respuesta.json()["aprobacion"]
-    assert aprobacion["total"] == 2
+    assert aprobacion["total"] == 3
     assert aprobacion["paquetes"] == {
         "total": 1,
         "pendientes_por_decidir": 1,
@@ -1728,7 +1733,11 @@ def test_add_de_herramienta_sin_cadena_chh_no_contamina_catalogos(
 ) -> None:
     directorio, _ = _preparar(tmp_path, monkeypatch)
     ruta = directorio / "salidas/reportes/pendientes_curriculares.jsonl"
-    tool_only = json.loads(ruta.read_text(encoding="utf-8").splitlines()[1])
+    tool_only = next(
+        json.loads(linea)
+        for linea in ruta.read_text(encoding="utf-8").splitlines()
+        if json.loads(linea)["id_pendiente"] == "PEN_TOOL"
+    )
     ruta.write_text(json.dumps(tool_only) + "\n", encoding="utf-8")
 
     with pytest.raises(
@@ -1773,9 +1782,11 @@ def test_add_preserva_relaciones_n_a_n_existentes_del_paquete(
 ) -> None:
     directorio, _ = _preparar(tmp_path, monkeypatch)
     ruta = directorio / "salidas/reportes/pendientes_curriculares.jsonl"
-    competencia, herramienta = [
-        json.loads(linea) for linea in ruta.read_text(encoding="utf-8").splitlines()
-    ]
+    por_id = {
+        fila["id_pendiente"]: fila
+        for fila in (json.loads(linea) for linea in ruta.read_text(encoding="utf-8").splitlines())
+    }
+    competencia, herramienta = por_id["PEN_COMP"], por_id["PEN_TOOL"]
     competencia_extra = {
         **competencia,
         "id_pendiente": "PEN_COMP_2",
@@ -1975,3 +1986,65 @@ def test_approving_literal_program_tools_materializes_catalog_and_coverage(
         and fila["estado_resolucion"] == "ACEPTADA_POR_USUARIO"
         for fila in fuentes
     )
+
+
+def test_decision_de_un_fan_promueve_solo_su_herramienta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directorio, _ = _preparar(tmp_path, monkeypatch)
+    ruta = directorio / "salidas/reportes/pendientes_curriculares.jsonl"
+    filas = [json.loads(linea) for linea in ruta.read_text(encoding="utf-8").splitlines()]
+    herramienta = next(fila for fila in filas if fila["id_pendiente"] == "PEN_TOOL")
+    filas.append(
+        {
+            **herramienta,
+            "id_pendiente": "PEN_TOOL_2",
+            "propuesta": {
+                "nombre": "Metricool",
+                "descripcion": "Analítica social.",
+                "tipo": "herramienta",
+            },
+            "evidencia": ["Usar Metricool."],
+        }
+    )
+    ruta.write_text("".join(json.dumps(fila) + "\n" for fila in filas), encoding="utf-8")
+
+    paquetes = aprobaciones._paquetes(directorio, aprobaciones._filas_clasificadas(directorio))
+    assert len(paquetes) == 2
+    por_nombre = {paquete["herramientas"][0]["nombre"]: paquete for paquete in paquetes}
+    assert len({paquete["id_paquete_chh"] for paquete in paquetes}) == 2
+
+    resultado = aprobaciones.aplicar_decisiones_curriculares(
+        directorio,
+        [{"id_paquete_chh": por_nombre["CampaignOS"]["id_paquete_chh"], "decision": "ADD"}],
+    )
+
+    assert resultado["aprobacion"]["accepted_in_request"] == 3
+    filas = {
+        fila["id_pendiente"]: fila for fila in aprobaciones._filas_clasificadas(directorio)
+    }
+    assert filas["PEN_TOOL"]["decision"] == "ADD"
+    assert filas["PEN_TOOL"].get("id_canonico")
+    assert not filas["PEN_TOOL_2"].get("decision")
+
+
+def test_aprobacion_disponible_cuando_la_ejecucion_quedo_no_publicada(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directorio, _ = _preparar(tmp_path, monkeypatch)
+    manifest = json.loads((directorio / "manifest.json").read_text(encoding="utf-8"))
+    manifest["estado"] = "no_publicado"
+    (directorio / "manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+
+    resultado = aprobaciones.aplicar_decisiones_curriculares(
+        directorio, [{"id_pendiente": "PEN_COMP", "decision": "ADD"}]
+    )
+
+    assert resultado["aprobacion"]["accepted"] == 1
+
+
+def test_clave_ruta_pliega_acentos_para_el_alcance_curricular() -> None:
+    assert aprobaciones._clave_ruta("Ingeniería de Sistemas") == "INGENIERIA_DE_SISTEMAS"
+    assert aprobaciones._clave_ruta("Educación") == "EDUCACION"

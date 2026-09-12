@@ -61,9 +61,25 @@ def _prompt_analista(
         f"de {carrera} del periodo {periodo}. El sílabo es la única fuente de verdad.\n\n"
         "Tu tarea es representar TODOS los logros específicos, no reducirlos a los matches "
         "del catálogo. Propón una habilidad observable por logro, una competencia profesional "
-        "que agrupe la habilidad y herramientas solo cuando aparezcan en la evidencia. Puedes "
-        "crear conceptos nuevos si el sílabo los respalda. No inventes identificadores ni "
-        "evidencia. No uses "
+        "que agrupe la habilidad y TODAS las herramientas que el sílabo cite literalmente. "
+        "Toda herramienta concreta nombrada en el sílabo debe proponerse con su cita exacta: "
+        "lenguajes (Python, Java, JavaScript, SQL), librerías y frameworks (React, Flutter, "
+        "Node.js), IDE y editores (VS Code, IntelliJ), sistemas operativos (Linux, Windows), "
+        "servicios y plataformas (Meta Ads, Google Ads, GitHub, Docker, Unity) y sistemas "
+        "empresariales (SAP, ERP). Evita frases genéricas como 'herramientas de X', "
+        "'software de análisis' o 'plataformas digitales': nombra el producto concreto. "
+        "Puedes crear conceptos nuevos si el sílabo los respalda. No inventes identificadores ni "
+        "evidencia. "
+        "Ningún logro puede quedar sin habilidad ni competencia: aunque el sílabo no cite "
+        "herramientas, la habilidad y la competencia se proponen igual con la evidencia del logro. "
+        "La competencia debe ser un dominio profesional específico (por ejemplo: Desarrollo de "
+        "aplicaciones web, Administración de sistemas ERP, Seguridad ofensiva, Modelado de datos, "
+        "Desarrollo de videojuegos). Nunca propongas competencias transversales o institucionales "
+        "(Trabajo colaborativo, Pensamiento crítico, Comunicación efectiva, Experimentación, "
+        "Solución creativa de problemas, Curiosidad por el conocimiento, Aprendizaje autónomo): "
+        "si el sílabo solo declara esas, deriva la competencia de dominio desde la evidencia "
+        "técnica semanal. "
+        "No uses "
         "taxonomías de otra carrera: usa el perfil entregado como contexto específico.\n\n"
         "Perfil curado y defensivo:\n"
         f"{json.dumps(_perfil_semantico(perfil_prompt), ensure_ascii=False, indent=2)}\n\n"
@@ -75,6 +91,12 @@ def _prompt_analista(
         "evidencia debe copiar fragmentos exactos del caso.\n\n"
         f"CASOS:\n{json.dumps(_payload_semantico_lote(lote), ensure_ascii=False, indent=2)}"
     )
+
+
+def version_prompt_analista() -> str:
+    """Huella estable de la plantilla del prompt para invalidar cachés al editarla."""
+
+    return hashlib.sha256(_prompt_analista((), {}, "", "").encode("utf-8")).hexdigest()[:16]
 
 
 def _perfil_semantico(perfil_prompt: Mapping[str, object]) -> dict[str, object]:

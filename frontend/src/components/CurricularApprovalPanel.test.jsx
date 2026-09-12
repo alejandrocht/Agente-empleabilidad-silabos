@@ -211,7 +211,6 @@ describe("aprobación de propuestas curriculares", () => {
     expect(within(summaryPanel).getByText("Diseño omnicanal → Diseñar campañas")).toBeTruthy();
     expect(within(card).getByText("Proveniencia y evidencia de fuente")).toBeTruthy();
     fireEvent.click(within(card).getByRole("button", { name: /Agregar al perfil para paquete PKG_CHH_123/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Guardar decisiones (1)" }));
 
     await waitFor(() => expect(decidirPendientesNormalizador).toHaveBeenCalledWith(
       "NOR_0123456789abcdef",
@@ -219,6 +218,7 @@ describe("aprobación de propuestas curriculares", () => {
       "ejecutor",
       "rev-1",
     ));
+    await waitFor(() => expect(screen.queryByTestId("curricular-package-card")).toBeNull());
   });
 
   it("muestra competencia, habilidad y herramienta en la tarjeta principal sin triple canónica", async () => {
@@ -671,18 +671,19 @@ describe("aprobación de propuestas curriculares", () => {
     expect(pageTwoCard.dataset.packageId).toBe("PKG_16");
     fireEvent.click(within(pageTwoCard).getByRole("button", { name: /Agregar al perfil para paquete PKG_16/ }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Página anterior de paquetes" }));
-    expect(await screen.findByText(/Paquetes 1–15 de 31/)).toBeTruthy();
+    await waitFor(() => expect(decidirPendientesNormalizador).toHaveBeenCalledWith(
+      "NOR_BULK_PACKAGES",
+      [{ id_paquete_chh: "PKG_16", decision: "ADD" }],
+      "ejecutor",
+      "rev-bulk",
+    ));
+    await waitFor(() => expect(screen.getByText(/Paquetes 1–15 de 31/)).toBeTruthy());
     const pageOneCard = screen.getAllByTestId("curricular-package-card")[0];
     fireEvent.click(within(pageOneCard).getByRole("button", { name: /Agregar al perfil para paquete PKG_1/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Guardar decisiones (2)" }));
 
     await waitFor(() => expect(decidirPendientesNormalizador).toHaveBeenCalledWith(
       "NOR_BULK_PACKAGES",
-      [
-        { id_paquete_chh: "PKG_1", decision: "ADD" },
-        { id_paquete_chh: "PKG_16", decision: "ADD" },
-      ],
+      [{ id_paquete_chh: "PKG_1", decision: "ADD" }],
       "ejecutor",
       "rev-bulk",
     ));
@@ -752,18 +753,14 @@ describe("aprobación de propuestas curriculares", () => {
     expect(within(card).getByText("Gestión de campañas → Analizar campañas")).toBeTruthy();
     expect(within(card.firstElementChild).getByText("Propuestas pendientes")).toBeTruthy();
     fireEvent.click(within(card).getByRole("button", { name: "Descartar paquete" }));
-    expect(screen.getByRole("dialog", { name: "Descartar paquete" })).toBeTruthy();
-    const confirmar = screen.getByRole("button", { name: "Confirmar descarte" });
-    expect(confirmar.disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText("Motivo del descarte"), { target: { value: "No corresponde al sílabo." } });
-    fireEvent.click(confirmar);
 
     await waitFor(() => expect(decidirPendientesNormalizador).toHaveBeenCalledWith(
       "NOR_DISCARD",
-      [{ id_paquete_chh: "PKG_DISCARD", decision: "DISCARD", reason: "No corresponde al sílabo." }],
+      [{ id_paquete_chh: "PKG_DISCARD", decision: "DISCARD", reason: "Descarte manual desde la revisión HITL." }],
       "ejecutor",
       "rev-discard",
     ));
+    await waitFor(() => expect(screen.queryByTestId("curricular-package-card")).toBeNull());
   });
 
   it("no muestra el checkpoint cuando no hay propuestas abiertas", async () => {

@@ -26,19 +26,44 @@ class RevisionCurricularInvalida(DecisionCurricularInvalida):
 def _expandir_decisiones_de_paquete(
     solicitudes: list[dict[str, str]],
     pendientes: list[dict[str, object]],
+    paquetes: Sequence[Mapping[str, object]] | None = None,
 ) -> list[dict[str, str]]:
-    """Expand one package decision to all actionable rows in that package."""
+    """Expand one package decision to all actionable rows in that package.
+
+    Triple-scoped packages expose only their own rows, so a package decision
+    promotes exactly the CHH triple it represents.
+    """
 
     by_id = {_texto(row.get("id_pendiente")): row for row in pendientes}
     package_rows: dict[str, list[dict[str, object]]] = {}
     for row in pendientes:
         package_rows.setdefault(_texto(row.get(PACKAGE_ID_FIELD)), []).append(row)
+    filas_por_paquete: dict[str, set[str]] = {}
+    for paquete in paquetes or ():
+        if not isinstance(paquete, Mapping):
+            continue
+        paquete_id = _texto(paquete.get(PACKAGE_ID_FIELD) or paquete.get("package_id"))
+        if not paquete_id:
+            continue
+        ids = {
+            _texto(fila.get("id_pendiente"))
+            for fila in (paquete.get("filas") or [])
+            if isinstance(fila, Mapping)
+        } | {_texto(item) for item in (paquete.get("id_pendientes") or [])}
+        ids.discard("")
+        if ids:
+            filas_por_paquete[paquete_id] = ids
     expanded: list[dict[str, str]] = []
     seen: set[str] = set()
     for solicitud in solicitudes:
         package_id = _texto(solicitud.get(PACKAGE_ID_FIELD))
         if package_id:
-            rows = package_rows.get(package_id)
+            ids_paquete = filas_por_paquete.get(package_id)
+            rows = (
+                [row for row in pendientes if _texto(row.get("id_pendiente")) in ids_paquete]
+                if ids_paquete
+                else package_rows.get(package_id)
+            )
             if not rows:
                 raise DecisionCurricularInvalida(
                     f"No existe el paquete {package_id!r} en esta ejecución."

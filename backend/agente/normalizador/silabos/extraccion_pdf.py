@@ -15,6 +15,7 @@ from agente.normalizador.silabos.extraccion_curricular import (
     _ids_curriculares,
     _nombre_desde_archivo,
     _normalizar_modalidad,
+    _normalizar_naturaleza,
     _sin_referencias_curriculares,
     _texto,
     _unir_metadata,
@@ -604,7 +605,10 @@ def _extraer_pdf(
     nivel = _campo_pdf_metadata(texto_layout, r"Nivel")
     coordinador = _campo_pdf_metadata(texto_layout, r"Coordinador", continuacion=True)
     creditos = _campo_pdf_metadata(texto_layout, r"Cr[eé]ditos")
-    tipo_curso = _normalizar_modalidad(
+    tipo_curso = _normalizar_naturaleza(
+        _campo_pdf_metadata(texto_layout, r"Tipo\s+de\s+asignatura")
+    )
+    modalidad = _normalizar_modalidad(
         _campo_pdf_metadata(
             texto_layout,
             r"Modalidad(?:\s+de\s+(?:estudios|enseñanza))?",
@@ -670,6 +674,7 @@ def _extraer_pdf(
             "creditos": creditos,
             "nivel": nivel,
             "tipo_curso": tipo_curso,
+            "modalidad": modalidad,
             "codigo_curso": codigo_curso,
             "sumilla": sumilla,
             "logro_general": logro_general,

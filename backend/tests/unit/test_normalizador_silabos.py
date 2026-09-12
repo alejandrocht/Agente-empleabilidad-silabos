@@ -304,11 +304,12 @@ def test_extrae_metadatos_estructurados_docx_y_conserva_coordinadores(tmp_path: 
         "coordinador": "Ana Pérez | Bruno Díaz",
         "creditos": "4",
         "nivel": "Sexto",
-        "tipo_curso": "Híbrido",
+        "tipo_curso": "Obligatorio",
     }
+    assert datos["modalidad"] == "Híbrido"
 
 
-def test_modalidad_no_se_infiere_de_tipo_de_asignatura_o_naturaleza(tmp_path: Path) -> None:
+def test_tipo_curso_publica_la_naturaleza_declarada_de_la_asignatura(tmp_path: Path) -> None:
     fuente = tmp_path / "curso-sin-modalidad.docx"
     documento = Document()
     metadata = documento.add_table(rows=3, cols=2)
@@ -324,7 +325,8 @@ def test_modalidad_no_se_infiere_de_tipo_de_asignatura_o_naturaleza(tmp_path: Pa
     datos = _extraer_docx(fuente, fuente.name, "PRUEBA", "2031-2")["datos"]
 
     assert isinstance(datos, dict)
-    assert datos["tipo_curso"] == ""
+    assert datos["tipo_curso"] == "Electivo"
+    assert datos["modalidad"] == ""
 
 
 def test_extrae_programa_docx_con_y_sin_celdas_combinadas_horizontalmente(
@@ -1039,7 +1041,7 @@ def test_extrae_pdf_layout_i_vi_y_conserva_vii_viii_solo_en_fuente(
     assert isinstance(datos, dict)
     assert datos["curso"] == "Sistemas de Inteligencia Empresarial"
     assert datos["nombre_curso"] == "Sistemas de Inteligencia Empresarial"
-    assert datos["tipo_curso"] == "Presencial"
+    assert datos["tipo_curso"] == "Obligatorio"
     assert datos["codigo_curso"] == "650062"
     assert datos["nivel"] == "Séptimo"
     assert datos["creditos"] == "4"

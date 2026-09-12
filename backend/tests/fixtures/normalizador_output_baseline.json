@@ -5,8 +5,8 @@
       "salidas/catalogo_habilidades.csv": "0e4d58da1c6385d5d7decbc82b918a24be42b1bf7a614bfc78b8bc08ae77dc3b",
       "salidas/catalogo_herramientas.csv": "b7e8db9bb823a80d174720b9b5c606d03bb71a35fe281835c306956cf67e405a",
       "salidas/cobertura_curricular.csv": "c5c4f6ef01ab1bbf81d33ec4234c6d52a2d5d90c60cfb0413d8e0f0bb080e0ff",
-      "salidas/curso.csv": "b9735fa0466a8504a53083a6815b03db2a1c60eac1abfe93033e9561293817dd",
-      "salidas/reportes/candidatos_curriculares.json": "40e813f577237593402128e5ffedb14fae8b331016bfe92c13272231221901e4",
+      "salidas/curso.csv": "02bbc9fd7fc3236eec084aa6241dd1094c4b18d510c5e707201e706bbc326498",
+      "salidas/reportes/candidatos_curriculares.json": "bb6ad7b4e4744fb7f169bd9918b3af2f4f2ec6d942eccf859ab0a1193aa38db2",
       "salidas/reportes/cobertura_curricular_canonica.jsonl": "95c5132491cafc3fc3fc7681eac10193743ebde693647092eeff4cdbd0202396",
       "salidas/reportes/cobertura_curricular_fuente.jsonl": "50b4116b8c789127cc1cafa2c0c8932851fe145a338da4ec992958a5ee7d8906",
       "salidas/reportes/competencias_fuente.jsonl": "44616562a7457eaa85044615e00f35e9cfbb326f79b5740aa4cc5340e5d8bcd3",
@@ -16,170 +16,170 @@
       "salidas/reportes/release_gate.json": "745f732790048e152cc36007807191db508cd1beffdddb6d69cc6279653c2c8c"
     },
     "result": {
-      "publicable": true,
-      "relaciones": 2,
       "competencias": 1,
+      "cuarentena": [],
       "habilidades": 1,
+      "hallazgos": [],
       "herramientas": 2,
       "outputs": [
         {
-          "tipo": "csv_curricular",
           "archivo": "salidas/curso.csv",
+          "bytes": 178,
           "registros": 1,
-          "bytes": 184,
-          "sha256": "b9735fa0466a8504a53083a6815b03db2a1c60eac1abfe93033e9561293817dd"
+          "sha256": "02bbc9fd7fc3236eec084aa6241dd1094c4b18d510c5e707201e706bbc326498",
+          "tipo": "csv_curricular"
         },
         {
-          "tipo": "csv_curricular",
           "archivo": "salidas/catalogo_competencias.csv",
-          "registros": 1,
           "bytes": 139,
-          "sha256": "f3e32c125374666980b1d2afe3d06d8179647918b5591d70e113dad36d4ae89a"
+          "registros": 1,
+          "sha256": "f3e32c125374666980b1d2afe3d06d8179647918b5591d70e113dad36d4ae89a",
+          "tipo": "csv_curricular"
         },
         {
-          "tipo": "csv_curricular",
           "archivo": "salidas/catalogo_habilidades.csv",
-          "registros": 1,
           "bytes": 98,
-          "sha256": "0e4d58da1c6385d5d7decbc82b918a24be42b1bf7a614bfc78b8bc08ae77dc3b"
+          "registros": 1,
+          "sha256": "0e4d58da1c6385d5d7decbc82b918a24be42b1bf7a614bfc78b8bc08ae77dc3b",
+          "tipo": "csv_curricular"
         },
         {
-          "tipo": "csv_curricular",
           "archivo": "salidas/catalogo_herramientas.csv",
-          "registros": 2,
           "bytes": 152,
-          "sha256": "b7e8db9bb823a80d174720b9b5c606d03bb71a35fe281835c306956cf67e405a"
+          "registros": 2,
+          "sha256": "b7e8db9bb823a80d174720b9b5c606d03bb71a35fe281835c306956cf67e405a",
+          "tipo": "csv_curricular"
         },
         {
-          "tipo": "csv_curricular",
           "archivo": "salidas/cobertura_curricular.csv",
-          "registros": 2,
           "bytes": 210,
-          "sha256": "c5c4f6ef01ab1bbf81d33ec4234c6d52a2d5d90c60cfb0413d8e0f0bb080e0ff"
+          "registros": 2,
+          "sha256": "c5c4f6ef01ab1bbf81d33ec4234c6d52a2d5d90c60cfb0413d8e0f0bb080e0ff",
+          "tipo": "csv_curricular"
         },
         {
-          "tipo": "provenance",
           "archivo": "salidas/reportes/competencias_fuente.jsonl",
-          "registros": 1,
           "bytes": 578,
-          "sha256": "5d6896b52cbe40efb9303ae6ee9fd1df0afc1b63d9dedeb21c58c686c64d553d"
+          "registros": 1,
+          "sha256": "5d6896b52cbe40efb9303ae6ee9fd1df0afc1b63d9dedeb21c58c686c64d553d",
+          "tipo": "provenance"
         },
         {
-          "tipo": "provenance",
           "archivo": "salidas/reportes/habilidades_fuente.jsonl",
-          "registros": 1,
           "bytes": 413,
-          "sha256": "f0c503d5ce3eee6aae73891b4d8e95b1a6a1486ad05a9c3866f1798aefe04995"
-        },
-        {
-          "tipo": "provenance",
-          "archivo": "salidas/reportes/herramientas_fuente.jsonl",
-          "registros": 2,
-          "bytes": 856,
-          "sha256": "b694b01617ea61ea2e3e49fd44ca6ea14763666a5f2097530a2e49b5a60cbb85"
-        },
-        {
-          "tipo": "provenance",
-          "archivo": "salidas/reportes/cobertura_curricular_fuente.jsonl",
-          "registros": 2,
-          "bytes": 1144,
-          "sha256": "f72ae3ed1ddef5ae04dca5288a027d25e8e652212b155ab3b2c4ab3b606ca449"
-        },
-        {
-          "tipo": "provenance",
-          "archivo": "salidas/reportes/cobertura_curricular_canonica.jsonl",
-          "registros": 2,
-          "bytes": 1040,
-          "sha256": "52025738b253d279fa73528a724898b11e981375ab5db36c4647aa440592d449"
-        },
-        {
-          "tipo": "pendientes_curriculares",
-          "archivo": "salidas/reportes/pendientes_curriculares.jsonl",
-          "registros": 0,
-          "bytes": 0,
-          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        },
-        {
-          "tipo": "release_gate",
-          "archivo": "salidas/reportes/release_gate.json",
           "registros": 1,
+          "sha256": "f0c503d5ce3eee6aae73891b4d8e95b1a6a1486ad05a9c3866f1798aefe04995",
+          "tipo": "provenance"
+        },
+        {
+          "archivo": "salidas/reportes/herramientas_fuente.jsonl",
+          "bytes": 856,
+          "registros": 2,
+          "sha256": "b694b01617ea61ea2e3e49fd44ca6ea14763666a5f2097530a2e49b5a60cbb85",
+          "tipo": "provenance"
+        },
+        {
+          "archivo": "salidas/reportes/cobertura_curricular_fuente.jsonl",
+          "bytes": 1144,
+          "registros": 2,
+          "sha256": "f72ae3ed1ddef5ae04dca5288a027d25e8e652212b155ab3b2c4ab3b606ca449",
+          "tipo": "provenance"
+        },
+        {
+          "archivo": "salidas/reportes/cobertura_curricular_canonica.jsonl",
+          "bytes": 1040,
+          "registros": 2,
+          "sha256": "52025738b253d279fa73528a724898b11e981375ab5db36c4647aa440592d449",
+          "tipo": "provenance"
+        },
+        {
+          "archivo": "salidas/reportes/pendientes_curriculares.jsonl",
+          "bytes": 0,
+          "registros": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tipo": "pendientes_curriculares"
+        },
+        {
+          "archivo": "salidas/reportes/release_gate.json",
           "bytes": 1323,
-          "sha256": "8614efde2b6c89ec92823aefe9b87bf86d6a81aaca62243fe8bf80dfb1d954d2"
+          "registros": 1,
+          "sha256": "8614efde2b6c89ec92823aefe9b87bf86d6a81aaca62243fe8bf80dfb1d954d2",
+          "tipo": "release_gate"
         }
       ],
-      "hallazgos": [],
-      "cuarentena": [],
       "pendientes": 0,
+      "publicable": true,
+      "relaciones": 2,
       "release_gate": {
-        "version": "curricular-release-gate/v1",
-        "decision": "ALLOW_IMPORT",
-        "carrera": "MARKETING",
-        "periodo": "2026-1",
         "blockers": [],
+        "carrera": "MARKETING",
         "checks": {
-          "source_coverage": {
-            "ok": true,
-            "records": 1,
-            "logros_fuente": 1,
-            "habilidades_fuente": 1
-          },
-          "provenance": {
-            "ok": true,
-            "missing_competencies": [],
-            "missing_skills": [],
-            "missing_tools": []
-          },
-          "canonical_relations": {
-            "ok": true,
-            "rows": 2,
-            "verified": 2,
-            "missing": []
-          },
-          "canonical_references": {
-            "ok": true,
-            "missing": []
-          },
-          "chh_graph": {
-            "ok": true,
-            "errors": []
-          },
-          "chh_packages": {
-            "ok": true,
-            "errors": []
-          },
-          "structural_errors": {
-            "ok": true,
-            "count": 0
-          },
-          "pending_preserved": {
-            "ok": true,
-            "total": 0,
-            "by_state": {},
-            "expected_unresolved": 0,
-            "unresolved_without_pending": 0
-          },
           "approval": {
+            "canonical_materialized": true,
             "ok": true,
             "pending_decision": 0,
-            "unresolved_records": 0,
-            "canonical_materialized": true
+            "unresolved_records": 0
+          },
+          "canonical_references": {
+            "missing": [],
+            "ok": true
+          },
+          "canonical_relations": {
+            "missing": [],
+            "ok": true,
+            "rows": 2,
+            "verified": 2
+          },
+          "chh_graph": {
+            "errors": [],
+            "ok": true
+          },
+          "chh_packages": {
+            "errors": [],
+            "ok": true
+          },
+          "pending_preserved": {
+            "by_state": {},
+            "expected_unresolved": 0,
+            "ok": true,
+            "total": 0,
+            "unresolved_without_pending": 0
+          },
+          "provenance": {
+            "missing_competencies": [],
+            "missing_skills": [],
+            "missing_tools": [],
+            "ok": true
+          },
+          "source_coverage": {
+            "habilidades_fuente": 1,
+            "logros_fuente": 1,
+            "ok": true,
+            "records": 1
+          },
+          "structural_errors": {
+            "count": 0,
+            "ok": true
           }
         },
+        "decision": "ALLOW_IMPORT",
         "observability": {
-          "source_records": 1,
-          "source_logros": 1,
           "canonical_competencies": 1,
+          "canonical_relations": 2,
           "canonical_skills": 1,
           "canonical_tools": 2,
-          "canonical_relations": 2,
-          "pending_records": 0
-        }
+          "pending_records": 0,
+          "source_logros": 1,
+          "source_records": 1
+        },
+        "periodo": "2026-1",
+        "version": "curricular-release-gate/v1"
       }
     }
   },
   "True": {
     "files": {
-      "salidas/reportes/candidatos_curriculares.json": "b498f15e77848196de3c7e245912025b2544d57482ce3d391a619d3779b1fae8",
+      "salidas/reportes/candidatos_curriculares.json": "e2d56967a2cbbc8f244acbadece26f40ab7c02dd2e35dc35332c7d276d00f8e3",
       "salidas/reportes/cobertura_curricular_canonica.jsonl": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "salidas/reportes/cobertura_curricular_fuente.jsonl": "affe1f9e31a36210457218222a8fcbc2d13989aea2c46571344979fa34c9f156",
       "salidas/reportes/competencias_fuente.jsonl": "44616562a7457eaa85044615e00f35e9cfbb326f79b5740aa4cc5340e5d8bcd3",
@@ -189,151 +189,151 @@
       "salidas/reportes/release_gate.json": "6bf202969937eb2a0cc8423df1766cd8121216ec5fed2f39477d18396b503065"
     },
     "result": {
-      "publicable": true,
-      "relaciones": 0,
       "competencias": 1,
+      "cuarentena": [],
       "habilidades": 0,
+      "hallazgos": [
+        {
+          "campo": null,
+          "codigo": "HABILIDAD_PENDIENTE_CANONICALIZACION",
+          "detalle": "logro 1: Analizar campañas",
+          "fila": null,
+          "hoja": "curso.docx",
+          "mensaje": "El logro se conserva como habilidad fuente, pero no se encontró una habilidad canónica con evidencia suficiente.",
+          "severidad": "warning"
+        }
+      ],
       "herramientas": 0,
       "outputs": [
         {
-          "tipo": "provenance",
           "archivo": "salidas/reportes/competencias_fuente.jsonl",
-          "registros": 1,
           "bytes": 578,
-          "sha256": "5d6896b52cbe40efb9303ae6ee9fd1df0afc1b63d9dedeb21c58c686c64d553d"
+          "registros": 1,
+          "sha256": "5d6896b52cbe40efb9303ae6ee9fd1df0afc1b63d9dedeb21c58c686c64d553d",
+          "tipo": "provenance"
         },
         {
-          "tipo": "provenance",
           "archivo": "salidas/reportes/habilidades_fuente.jsonl",
-          "registros": 1,
           "bytes": 421,
-          "sha256": "7cf0811e43c4fb68957aed2ba7691ae5192791993b72a4dd49ae70b2a997e1ad"
-        },
-        {
-          "tipo": "provenance",
-          "archivo": "salidas/reportes/herramientas_fuente.jsonl",
-          "registros": 2,
-          "bytes": 856,
-          "sha256": "b694b01617ea61ea2e3e49fd44ca6ea14763666a5f2097530a2e49b5a60cbb85"
-        },
-        {
-          "tipo": "provenance",
-          "archivo": "salidas/reportes/cobertura_curricular_fuente.jsonl",
-          "registros": 2,
-          "bytes": 1134,
-          "sha256": "698c42dc9ed7c256591ca61fd7fcaae6f3673865f32ede321fd35f0594c7115e"
-        },
-        {
-          "tipo": "provenance",
-          "archivo": "salidas/reportes/cobertura_curricular_canonica.jsonl",
-          "registros": 0,
-          "bytes": 0,
-          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        },
-        {
-          "tipo": "pendientes_curriculares",
-          "archivo": "salidas/reportes/pendientes_curriculares.jsonl",
-          "registros": 2,
-          "bytes": 4954,
-          "sha256": "18531528b183c152aa4c6c9437a093761b995e7cb9e906f0c127819b985a428a"
-        },
-        {
-          "tipo": "release_gate",
-          "archivo": "salidas/reportes/release_gate.json",
           "registros": 1,
-          "bytes": 1448,
-          "sha256": "a472113334beb01ffad496ca6be5901d0c0ae31e07121b4ea1fdd3d3ad3b47c0"
+          "sha256": "7cf0811e43c4fb68957aed2ba7691ae5192791993b72a4dd49ae70b2a997e1ad",
+          "tipo": "provenance"
         },
         {
-          "tipo": "candidatos_curriculares",
-          "archivo": "salidas/reportes/candidatos_curriculares.json",
+          "archivo": "salidas/reportes/herramientas_fuente.jsonl",
+          "bytes": 856,
           "registros": 2,
-          "bytes": 92105,
-          "sha256": "04d99b769bddeff50af1c13b353fbee4277fad95cbb24a45939d1f9069d3fae0"
-        }
-      ],
-      "hallazgos": [
+          "sha256": "b694b01617ea61ea2e3e49fd44ca6ea14763666a5f2097530a2e49b5a60cbb85",
+          "tipo": "provenance"
+        },
         {
-          "codigo": "HABILIDAD_PENDIENTE_CANONICALIZACION",
-          "severidad": "warning",
-          "mensaje": "El logro se conserva como habilidad fuente, pero no se encontró una habilidad canónica con evidencia suficiente.",
-          "hoja": "curso.docx",
-          "fila": null,
-          "campo": null,
-          "detalle": "logro 1: Analizar campañas"
+          "archivo": "salidas/reportes/cobertura_curricular_fuente.jsonl",
+          "bytes": 1134,
+          "registros": 2,
+          "sha256": "698c42dc9ed7c256591ca61fd7fcaae6f3673865f32ede321fd35f0594c7115e",
+          "tipo": "provenance"
+        },
+        {
+          "archivo": "salidas/reportes/cobertura_curricular_canonica.jsonl",
+          "bytes": 0,
+          "registros": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tipo": "provenance"
+        },
+        {
+          "archivo": "salidas/reportes/pendientes_curriculares.jsonl",
+          "bytes": 4954,
+          "registros": 2,
+          "sha256": "18531528b183c152aa4c6c9437a093761b995e7cb9e906f0c127819b985a428a",
+          "tipo": "pendientes_curriculares"
+        },
+        {
+          "archivo": "salidas/reportes/release_gate.json",
+          "bytes": 1448,
+          "registros": 1,
+          "sha256": "a472113334beb01ffad496ca6be5901d0c0ae31e07121b4ea1fdd3d3ad3b47c0",
+          "tipo": "release_gate"
+        },
+        {
+          "archivo": "salidas/reportes/candidatos_curriculares.json",
+          "bytes": 92099,
+          "registros": 2,
+          "sha256": "10b29953f2cdbcd1c7eefeb908f0ab8ee439439a2cf24e6af5c0cf998d7b96c6",
+          "tipo": "candidatos_curriculares"
         }
       ],
-      "cuarentena": [],
       "pendientes": 2,
+      "publicable": true,
+      "relaciones": 0,
       "release_gate": {
-        "version": "curricular-release-gate/v1",
-        "decision": "BLOCK_IMPORT",
-        "carrera": "MARKETING",
-        "periodo": "2026-1",
         "blockers": [
           "UNRESOLVED_CURRICULAR_RECORDS",
           "CANONICAL_MATERIALIZATION_PENDING"
         ],
+        "carrera": "MARKETING",
         "checks": {
-          "source_coverage": {
-            "ok": true,
-            "records": 1,
-            "logros_fuente": 1,
-            "habilidades_fuente": 1
-          },
-          "provenance": {
-            "ok": true,
-            "missing_competencies": [],
-            "missing_skills": [],
-            "missing_tools": []
-          },
-          "canonical_relations": {
-            "ok": true,
-            "rows": 0,
-            "verified": 0,
-            "missing": []
+          "approval": {
+            "canonical_materialized": false,
+            "ok": false,
+            "pending_decision": 0,
+            "unresolved_records": 2
           },
           "canonical_references": {
+            "missing": [],
+            "ok": true
+          },
+          "canonical_relations": {
+            "missing": [],
             "ok": true,
-            "missing": []
+            "rows": 0,
+            "verified": 0
           },
           "chh_graph": {
-            "ok": true,
-            "errors": []
+            "errors": [],
+            "ok": true
           },
           "chh_packages": {
-            "ok": true,
-            "errors": []
-          },
-          "structural_errors": {
-            "ok": true,
-            "count": 0
+            "errors": [],
+            "ok": true
           },
           "pending_preserved": {
-            "ok": true,
-            "total": 2,
             "by_state": {
               "PENDIENTE_CATALOGACION": 2
             },
             "expected_unresolved": 1,
+            "ok": true,
+            "total": 2,
             "unresolved_without_pending": 0
           },
-          "approval": {
-            "ok": false,
-            "pending_decision": 0,
-            "unresolved_records": 2,
-            "canonical_materialized": false
+          "provenance": {
+            "missing_competencies": [],
+            "missing_skills": [],
+            "missing_tools": [],
+            "ok": true
+          },
+          "source_coverage": {
+            "habilidades_fuente": 1,
+            "logros_fuente": 1,
+            "ok": true,
+            "records": 1
+          },
+          "structural_errors": {
+            "count": 0,
+            "ok": true
           }
         },
+        "decision": "BLOCK_IMPORT",
         "observability": {
-          "source_records": 1,
-          "source_logros": 1,
           "canonical_competencies": 1,
+          "canonical_relations": 0,
           "canonical_skills": 0,
           "canonical_tools": 0,
-          "canonical_relations": 0,
-          "pending_records": 2
-        }
+          "pending_records": 2,
+          "source_logros": 1,
+          "source_records": 1
+        },
+        "periodo": "2026-1",
+        "version": "curricular-release-gate/v1"
       }
     }
   }

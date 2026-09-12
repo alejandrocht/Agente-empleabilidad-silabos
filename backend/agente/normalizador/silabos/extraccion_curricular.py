@@ -36,6 +36,22 @@ def _normalizar_modalidad(valor: object) -> str:
     return ""
 
 
+def _normalizar_naturaleza(valor: object) -> str:
+    """Publica la naturaleza académica declarada (Obligatorio/Electivo) en curso.csv."""
+
+    clave = normalizar_etiqueta(valor).replace("_", " ").upper()
+    if "OBLIGAT" in clave:
+        return "Obligatorio"
+    if "ELECTIV" in clave:
+        return "Electivo"
+    if "ESPECIAL" in clave:
+        return "Especialidad"
+    if "GENERAL" in clave:
+        return "General"
+    texto = _texto(valor)
+    return texto[:1].upper() + texto[1:].lower() if texto else ""
+
+
 def _texto(valor: object) -> str:
     return re.sub(r"\s+", " ", str(valor or "")).strip()
 
@@ -359,7 +375,13 @@ def _extraer_docx(
             "coordinador": _primer_metadata(metadata, ("coordinador", "coordinador_del_curso")),
             "creditos": _primer_metadata(metadata, ("creditos", "creditos_academicos")),
             "nivel": nivel,
-            "tipo_curso": _normalizar_modalidad(
+            "tipo_curso": _normalizar_naturaleza(
+                _primer_metadata(
+                    metadata,
+                    ("tipo_de_asignatura", "tipo_asignatura", "naturaleza"),
+                )
+            ),
+            "modalidad": _normalizar_modalidad(
                 _primer_metadata(
                     metadata,
                     ("modalidad", "modalidad_de_estudios", "modalidad_de_ensenanza"),
