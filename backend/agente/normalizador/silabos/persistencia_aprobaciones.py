@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -11,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from agente.normalizador.empleabilidad.catalogo import clave_concepto
+from agente.normalizador.identidad import hashed
 from agente.normalizador.silabos.salida import ARCHIVOS_SALIDA, COBERTURA_SCHEMA
 
 CANDIDATOS_ARCHIVO = "candidatos_curriculares.json"
@@ -330,9 +330,7 @@ def _escribir_archivos_curriculares(
         _escribir_csv_atomico(salida / nombre, columnas, filas)
 
 
-def _eliminar_archivos_curriculares(
-    salida: Path, *, not_permitted_error: ExceptionFactory
-) -> None:
+def _eliminar_archivos_curriculares(salida: Path, *, not_permitted_error: ExceptionFactory) -> None:
     """Remove stale canonical files while an approval batch is unresolved."""
 
     for nombre, _ in ARCHIVOS_SALIDA:
@@ -384,9 +382,7 @@ def _escribir_relaciones(
     invalid_error: ExceptionFactory,
 ) -> None:
     relaciones_enriquecidas = _preservar_relaciones_enriquecidas(
-        _leer_jsonl(
-            reportes / "cobertura_curricular_canonica.jsonl", invalid_error=invalid_error
-        ),
+        _leer_jsonl(reportes / "cobertura_curricular_canonica.jsonl", invalid_error=invalid_error),
         relaciones,
     )
     relaciones_enriquecidas.sort(
@@ -414,9 +410,7 @@ def _leer_jsonl(ruta: Path, *, invalid_error: ExceptionFactory) -> list[dict[str
     return filas
 
 
-def _leer_descartes(
-    ruta: Path, *, invalid_error: ExceptionFactory
-) -> dict[str, dict[str, object]]:
+def _leer_descartes(ruta: Path, *, invalid_error: ExceptionFactory) -> dict[str, dict[str, object]]:
     return {
         _texto(fila.get("package_id")): fila
         for fila in _leer_jsonl(ruta, invalid_error=invalid_error)
@@ -496,8 +490,7 @@ def _id_canonico(tipo: str, *partes: str) -> str:
         "COB_CUR": "COB_CUR",
     }
     prefijo = prefijos.get(tipo, tipo)
-    payload = "|".join(clave_concepto(parte) for parte in partes).encode("utf-8")
-    return f"{prefijo}_{hashlib.sha256(payload).hexdigest()[:16]}"
+    return hashed(prefijo, *partes)
 
 
 def _clave_ruta(valor: str) -> str:

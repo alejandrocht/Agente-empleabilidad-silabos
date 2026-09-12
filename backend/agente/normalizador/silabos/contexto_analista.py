@@ -17,6 +17,7 @@ from agente.normalizador.embeddings import (
     EmbeddingScope,
 )
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, clave_concepto
+from agente.normalizador.identidad import hashed
 from agente.normalizador.silabos.contexto_curricular import (
     _sanear_perfil_transportable,
     construir_contexto_por_logro,
@@ -172,7 +173,7 @@ def _casos_curriculares(
     limite_ejemplos: int = 3,
     crear_id_habilidad: Callable[[str, str, str, str], str] | None = None,
 ) -> Iterable[dict[str, object]]:
-    crear_id_habilidad = crear_id_habilidad or _id_habilidad_fuente
+    crear_id_habilidad = crear_id_habilidad or hashed
     for registro in registros:
         datos = registro.get("datos")
         if not isinstance(datos, dict):
@@ -245,13 +246,6 @@ def _casos_curriculares(
                 limite_ejemplos=limite_ejemplos,
             )
             yield caso
-
-
-def _id_habilidad_fuente(prefijo: str, id_silabo: str, orden: str, descripcion: str) -> str:
-    payload = "|".join(
-        clave_concepto(parte) for parte in (id_silabo, orden, descripcion)
-    ).encode("utf-8")
-    return f"{prefijo}_{hashlib.sha256(payload).hexdigest()[:16]}"
 
 
 def _auditoria_contexto(

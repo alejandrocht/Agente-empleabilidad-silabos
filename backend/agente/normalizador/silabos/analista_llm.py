@@ -7,7 +7,6 @@ decisiones que puedan verificarse contra el sílabo y los candidatos detectados.
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -19,11 +18,9 @@ from agente.config.settings import (
 )
 from agente.llm.fabrica import obtener_llm
 from agente.normalizador.embeddings import EmbeddingRetriever, EmbeddingScope
-from agente.normalizador.empleabilidad.catalogo import (
-    CatalogoCHH,
-    clave_concepto,
-)
+from agente.normalizador.empleabilidad.catalogo import CatalogoCHH
 from agente.normalizador.excepciones import CancelacionSolicitada
+from agente.normalizador.identidad import hashed
 from agente.normalizador.modelos import (
     EstadoReporteFinalLLM,
     FaseProgresoLLM,
@@ -247,7 +244,7 @@ def analizar_registros_curriculares(
             limites_lexicales=limites_lexicales,
             pool_retrieval=pool_retrieval,
             limite_ejemplos=configuracion.limite_ejemplos_contexto,
-            crear_id_habilidad=_hash_id,
+            crear_id_habilidad=hashed,
         )
     )
     auditoria_contexto = _auditoria_contexto(casos, contexto_perfil)
@@ -654,9 +651,10 @@ def _cargar_perfil(carrera: str, periodo: str) -> dict[str, object]:
     return cargar_perfil_carrera(carrera, periodo)
 
 
-def _hash_id(prefijo: str, *partes: str) -> str:
-    payload = "|".join(clave_concepto(parte) for parte in partes).encode("utf-8")
-    return f"{prefijo}_{hashlib.sha256(payload).hexdigest()[:16]}"
+# `_hash_id` stays bound for the callers that reach it by name (the
+# curricular test suite and `resolucion_curricular`'s seam); it is now only a
+# name for the shared helper.
+_hash_id = hashed
 
 
 def _trocear_por_silabo(

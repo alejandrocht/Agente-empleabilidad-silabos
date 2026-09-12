@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
 
-from agente.normalizador.empleabilidad.catalogo import clave_concepto
+from agente.normalizador.identidad import hashed
 from agente.normalizador.modelos import Hallazgo
 
 ESTADO_PENDIENTE_CATALOGACION = "PENDIENTE_CATALOGACION"
@@ -201,7 +200,7 @@ def _fila_cobertura(
 ) -> dict[str, str]:
     id_curso, id_silabo, id_competencia, id_habilidad, id_herramienta = relacion
     fila = {
-        "id_cob_curricular": _hash_id(
+        "id_cob_curricular": hashed(
             prefijo,
             id_curso,
             id_silabo,
@@ -262,7 +261,7 @@ def _registrar_pendiente(
 ) -> dict[str, object]:
     nombre_propuesta = _texto((propuesta or {}).get("nombre") or (propuesta or {}).get("id"))
     pendiente = {
-        "id_pendiente": _hash_id(
+        "id_pendiente": hashed(
             "PEN",
             tipo,
             id_silabo,
@@ -342,7 +341,7 @@ def _pendientes_por_relacion_fuente(
         for relation_id in complete_ids:
             scoped = dict(row)
             scoped["id_pendiente_origen"] = _texto(row.get("id_pendiente"))
-            scoped["id_pendiente"] = _hash_id("PEN_REL", scoped["id_pendiente_origen"], relation_id)
+            scoped["id_pendiente"] = hashed("PEN_REL", scoped["id_pendiente_origen"], relation_id)
             scoped["id_cob_curricular"] = relation_id
             materialized.append(scoped)
     return materialized
@@ -363,9 +362,9 @@ def _texto(valor: object) -> str:
     return re.sub(r"\s+", " ", str(valor or "")).strip()
 
 
-def _hash_id(prefijo: str, *partes: str) -> str:
-    payload = "|".join(clave_concepto(parte) for parte in partes).encode("utf-8")
-    return f"{prefijo}_{hashlib.sha256(payload).hexdigest()[:16]}"
+# `_hash_id` stays bound so downstream importers can still bind it from this
+# module; it is now only a name for the shared helper.
+_hash_id = hashed
 
 
 def _estado_resolucion_determinista(resolucion: ResolucionConcepto) -> str:  # noqa: F821

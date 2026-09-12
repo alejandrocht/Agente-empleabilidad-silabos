@@ -11,17 +11,13 @@ from functools import lru_cache
 from pathlib import Path
 
 from agente.config.settings import BASE_DIR, texto
+from agente.normalizador.identidad import normalize
 
 
 def clave_concepto(valor: object) -> str:
     """Normaliza nombres para comparar conceptos sin perder signos de herramientas."""
 
-    normalizado = unicodedata.normalize("NFKD", str(valor or "")).lower()
-    normalizado = "".join(
-        caracter for caracter in normalizado if not unicodedata.combining(caracter)
-    )
-    normalizado = re.sub(r"[^a-z0-9+#.]+", " ", normalizado)
-    return re.sub(r"\s+", " ", normalizado).strip()
+    return normalize(valor)
 
 
 @dataclass(frozen=True, slots=True)
