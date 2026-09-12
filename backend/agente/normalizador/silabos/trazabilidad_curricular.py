@@ -259,12 +259,42 @@ def _warning(
     )
 
 
+def _id_logro(nombre_logro: str) -> str:
+    """Canonical outcome identifier derived from its normalized name.
+
+    The published entity is the learning outcome itself, so two syllabi that
+    declare the same normalized outcome share one identifier and one row.
+    """
+
+    return hashed("LOGRO", nombre_logro)
+
+
+def _descripcion_breve_logro(nombre_logro: str) -> str:
+    """Derive the public short description instead of authoring it."""
+
+    nombre = _texto(nombre_logro)
+    if not nombre:
+        return ""
+    descripcion = f"Capacidad para {nombre[0].lower()}{nombre[1:]}"
+    return descripcion if descripcion.endswith(".") else f"{descripcion}."
+
+
+def _fila_logro(nombre_logro: str) -> dict[str, str]:
+    """Build the published ``catalogo_logros.csv`` row for one outcome."""
+
+    return {
+        "id_logro": _id_logro(nombre_logro),
+        "nombre_logro": _texto(nombre_logro),
+        "descripcion_breve": _descripcion_breve_logro(nombre_logro),
+    }
+
+
 def _fila_cobertura(
     relacion: tuple[str, str, str, str, str],
     prefijo: str,
     *,
     id_ejecucion: str = "",
-    id_logro: str = "",
+    id_logro_fuente: str = "",
     id_competencia_fuente: str = "",
     id_habilidad_fuente: str = "",
     id_herramienta_fuente: str = "",
@@ -273,26 +303,26 @@ def _fila_cobertura(
     id_herramienta_canonica: str = "",
     source_ref: str = "",
 ) -> dict[str, str]:
-    id_curso, id_silabo, id_competencia, id_habilidad, id_herramienta = relacion
+    id_curso, id_silabo, id_competencia, id_logro, id_herramienta = relacion
     fila = {
         "id_cob_curricular": hashed(
             prefijo,
             id_curso,
             id_silabo,
             id_competencia,
-            id_habilidad,
+            id_logro,
             id_herramienta,
         ),
         "id_curso": id_curso,
         "id_silabo": id_silabo,
         "id_competencia": id_competencia,
-        "id_habilidad": id_habilidad,
+        "id_logro": id_logro,
         "id_herramienta": id_herramienta,
     }
     if any(
         (
             id_ejecucion,
-            id_logro,
+            id_logro_fuente,
             id_competencia_fuente,
             id_habilidad_fuente,
             id_herramienta_fuente,
@@ -305,7 +335,7 @@ def _fila_cobertura(
         fila.update(
             {
                 "id_ejecucion": id_ejecucion,
-                "id_logro": id_logro,
+                "id_logro_fuente": id_logro_fuente,
                 "id_competencia_fuente": id_competencia_fuente,
                 "id_habilidad_fuente": id_habilidad_fuente,
                 "id_herramienta_fuente": id_herramienta_fuente,

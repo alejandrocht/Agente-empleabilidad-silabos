@@ -44,7 +44,7 @@ def evaluar_release_gate(
 
     relaciones_fuente = tuple(relaciones_fuente)
     competencias = filas_por_archivo.get("catalogo_competencias.csv", [])
-    habilidades = filas_por_archivo.get("catalogo_habilidades.csv", [])
+    habilidades = filas_por_archivo.get("catalogo_logros.csv", [])
     herramientas = filas_por_archivo.get("catalogo_herramientas.csv", [])
     cobertura = filas_por_archivo.get("cobertura_curricular.csv", [])
 
@@ -53,8 +53,8 @@ def evaluar_release_gate(
         for fila in competencias
         if _texto(fila.get("id_competencia"))
     }
-    ids_habilidades = {
-        _texto(fila.get("id_habilidad")) for fila in habilidades if _texto(fila.get("id_habilidad"))
+    ids_logros = {
+        _texto(fila.get("id_logro")) for fila in habilidades if _texto(fila.get("id_logro"))
     }
     ids_herramientas = {
         _texto(fila.get("id_herramienta"))
@@ -71,7 +71,7 @@ def evaluar_release_gate(
             }
         ),
         "missing_skills": sorted(
-            ids_habilidades
+            ids_logros
             - {
                 _texto(fila.get("id_habilidad_canonica"))
                 for fila in habilidades_fuente
@@ -94,7 +94,7 @@ def evaluar_release_gate(
             _texto(fila.get("id_curso")),
             _texto(fila.get("id_silabo")),
             _texto(fila.get("id_competencia")),
-            _texto(fila.get("id_habilidad")),
+            _texto(fila.get("id_logro")),
             _texto(fila.get("id_herramienta")),
         )
         for fila in cobertura
@@ -104,14 +104,14 @@ def evaluar_release_gate(
         {
             identificador
             for fila in cobertura
-            for columna in ("id_competencia", "id_habilidad", "id_herramienta")
+            for columna in ("id_competencia", "id_logro", "id_herramienta")
             if (identificador := _texto(fila.get(columna)))
             and identificador
             not in (
                 ids_competencias
                 if columna == "id_competencia"
-                else ids_habilidades
-                if columna == "id_habilidad"
+                else ids_logros
+                if columna == "id_logro"
                 else ids_herramientas
             )
         }

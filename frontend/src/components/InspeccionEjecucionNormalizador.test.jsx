@@ -68,7 +68,7 @@ describe("inspección de ejecución normalizada", () => {
               registros: 2,
             },
             {
-              archivo: "salidas/catalogo_habilidades.csv",
+              archivo: "salidas/catalogo_logros.csv",
               tipo: "csv_curricular",
               registros: 45,
             },
@@ -127,12 +127,12 @@ describe("inspección de ejecución normalizada", () => {
       vi.fn().mockImplementation(async (url) => ({
         ok: true,
         text: async () => {
-          if (url.includes("catalogo_habilidades")) {
+          if (url.includes("catalogo_logros")) {
             return [
-              "id_habilidad,nombre_habilidad",
+              "id_logro,nombre_logro",
               ...Array.from(
                 { length: 45 },
-                (_item, indice) => `HAB_${indice + 1},Habilidad ${indice + 1}`,
+                (_item, indice) => `LOGRO_${indice + 1},Logro ${indice + 1}`,
               ),
             ].join("\n");
           }
@@ -350,7 +350,7 @@ describe("inspección de ejecución normalizada", () => {
               registros: 1,
             },
             {
-              archivo: "salidas/catalogo_habilidades.csv",
+              archivo: "salidas/catalogo_logros.csv",
               tipo: "csv_curricular",
               registros: 1,
             },

@@ -41,9 +41,12 @@ SILABO_SCHEMA: tuple[str, ...] = (
     "sumilla",
     "id_curso",
 )
+# The published entity is the learning outcome, not the canonical skill, so
+# this table keeps its historical constant name while carrying the outcome
+# columns consumed by ``catalogo_logros.csv``.
 HABILIDADES_SCHEMA: tuple[str, ...] = (
-    "id_habilidad",
-    "nombre_habilidad",
+    "id_logro",
+    "nombre_logro",
     "descripcion_breve",
 )
 HERRAMIENTAS_SCHEMA: tuple[str, ...] = (
@@ -56,7 +59,7 @@ COBERTURA_SCHEMA: tuple[str, ...] = (
     "id_curso",
     "id_silabo",
     "id_competencia",
-    "id_habilidad",
+    "id_logro",
     "id_herramienta",
 )
 
@@ -64,7 +67,7 @@ ARCHIVOS_SALIDA: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("curso.csv", CURSOS_SCHEMA),
     ("silabo.csv", SILABO_SCHEMA),
     ("catalogo_competencias.csv", COMPETENCIAS_SCHEMA),
-    ("catalogo_habilidades.csv", HABILIDADES_SCHEMA),
+    ("catalogo_logros.csv", HABILIDADES_SCHEMA),
     ("catalogo_herramientas.csv", HERRAMIENTAS_SCHEMA),
     ("cobertura_curricular.csv", COBERTURA_SCHEMA),
 )
@@ -158,7 +161,7 @@ def validar_salidas_curriculares(
         "curso.csv": CURSOS_SCHEMA,
         "silabo.csv": SILABO_SCHEMA,
         "catalogo_competencias.csv": COMPETENCIAS_SCHEMA,
-        "catalogo_habilidades.csv": HABILIDADES_SCHEMA,
+        "catalogo_logros.csv": HABILIDADES_SCHEMA,
         "catalogo_herramientas.csv": HERRAMIENTAS_SCHEMA,
         "cobertura_curricular.csv": COBERTURA_SCHEMA,
     }
@@ -192,7 +195,7 @@ def validar_salidas_curriculares(
 
     cursos_csv = filas_leidas.get("curso.csv", [])
     competencias_csv = filas_leidas.get("catalogo_competencias.csv", [])
-    habilidades_csv = filas_leidas.get("catalogo_habilidades.csv", [])
+    logros_csv = filas_leidas.get("catalogo_logros.csv", [])
     herramientas_csv = filas_leidas.get("catalogo_herramientas.csv", [])
     cobertura_csv = filas_leidas.get("cobertura_curricular.csv", [])
     ids_competencias = _ids_unicos(
@@ -201,10 +204,10 @@ def validar_salidas_curriculares(
         "COMPETENCIA_ID_DUPLICADO",
         hallazgos,
     )
-    ids_habilidades = _ids_unicos(
-        habilidades_csv,
-        "id_habilidad",
-        "HABILIDAD_ID_DUPLICADO",
+    ids_logros = _ids_unicos(
+        logros_csv,
+        "id_logro",
+        "LOGRO_ID_DUPLICADO",
         hallazgos,
     )
     ids_herramientas = _ids_unicos(
@@ -275,7 +278,7 @@ def validar_salidas_curriculares(
                     )
                 )
         competencia_id = _texto(fila.get("id_competencia"))
-        habilidad_id = _texto(fila.get("id_habilidad"))
+        logro_id = _texto(fila.get("id_logro"))
         herramienta_id = _texto(fila.get("id_herramienta"))
         if competencia_id not in ids_competencias:
             hallazgos.append(
@@ -287,14 +290,14 @@ def validar_salidas_curriculares(
                     detalle=competencia_id,
                 )
             )
-        if habilidad_id not in ids_habilidades:
+        if logro_id and logro_id not in ids_logros:
             hallazgos.append(
                 Hallazgo(
-                    codigo="COBERTURA_HABILIDAD_INEXISTENTE",
+                    codigo="COBERTURA_LOGRO_INEXISTENTE",
                     severidad="error",
-                    mensaje="La cobertura apunta a una habilidad que no existe en el CSV.",
+                    mensaje="La cobertura apunta a un logro que no existe en el CSV.",
                     hoja="cobertura_curricular.csv",
-                    detalle=habilidad_id,
+                    detalle=logro_id,
                 )
             )
         if herramienta_id and herramienta_id not in ids_herramientas:
@@ -309,12 +312,12 @@ def validar_salidas_curriculares(
             )
 
     ids_cobertura_canonica = {
-        (id_curso, id_silabo, id_competencia, id_habilidad, id_herramienta)
+        (id_curso, id_silabo, id_competencia, id_logro, id_herramienta)
         for (
             id_curso,
             id_silabo,
             id_competencia,
-            id_habilidad,
+            id_logro,
             id_herramienta,
         ) in relaciones_canonicas
     }
@@ -323,7 +326,7 @@ def validar_salidas_curriculares(
             _texto(fila.get("id_curso")),
             _texto(fila.get("id_silabo")),
             _texto(fila.get("id_competencia")),
-            _texto(fila.get("id_habilidad")),
+            _texto(fila.get("id_logro")),
             _texto(fila.get("id_herramienta")),
         )
         for fila in cobertura_csv
@@ -399,24 +402,24 @@ def validar_salidas_curriculares(
             )
         )
 
-    ids_habilidades_salida = {_texto(fila.get("id_habilidad")) for fila in habilidades_csv}
-    ids_habilidades_fuente = {
+    ids_logros_salida = {_texto(fila.get("id_logro")) for fila in logros_csv}
+    ids_logros_fuente = {
         _texto(fila.get("id_habilidad_canonica"))
         for fila in habilidades_fuente.values()
         if _texto(fila.get("id_habilidad_canonica"))
     }
-    ids_habilidades_sin_proveniencia = ids_habilidades_salida - ids_habilidades_fuente
-    if ids_habilidades_sin_proveniencia:
+    ids_logros_sin_proveniencia = ids_logros_salida - ids_logros_fuente
+    if ids_logros_sin_proveniencia:
         hallazgos.append(
             Hallazgo(
-                codigo="HABILIDAD_CANONICA_SIN_PROVENANCE",
+                codigo="LOGRO_SIN_PROVENANCE",
                 severidad="warning",
                 mensaje=(
-                    "Una habilidad canónica no tiene una fila de provenance "
+                    "Un logro publicada no tiene una fila de provenance "
                     "que explique su logro de origen."
                 ),
                 hoja="reportes/habilidades_fuente.jsonl",
-                detalle="; ".join(sorted(ids_habilidades_sin_proveniencia)),
+                detalle="; ".join(sorted(ids_logros_sin_proveniencia)),
             )
         )
 

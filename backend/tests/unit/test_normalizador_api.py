@@ -285,7 +285,7 @@ def test_inicia_y_consulta_ejecucion_de_silabos(monkeypatch, tmp_path: Path) -> 
         "salidas/curso.csv",
         "salidas/silabo.csv",
         "salidas/catalogo_competencias.csv",
-        "salidas/catalogo_habilidades.csv",
+        "salidas/catalogo_logros.csv",
         "salidas/catalogo_herramientas.csv",
         "salidas/cobertura_curricular.csv",
     }
@@ -323,7 +323,7 @@ def test_silabos_bloqueado_no_expone_outputs_curriculares_y_conserva_revision(
     reportes.mkdir(parents=True)
     for nombre in (
         "catalogo_competencias.csv",
-        "catalogo_habilidades.csv",
+        "catalogo_logros.csv",
         "catalogo_herramientas.csv",
         "cobertura_curricular.csv",
     ):

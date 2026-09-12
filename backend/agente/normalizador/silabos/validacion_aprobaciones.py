@@ -189,8 +189,8 @@ def _validar_precondiciones_promocion(
                 "habilidades_fuente.jsonl",
                 "id_habilidad_fuente",
                 "id_habilidad_canonica",
-                "catalogo_habilidades.csv",
-                "id_habilidad",
+                "catalogo_logros.csv",
+                "id_logro",
             ),
         }[tipo]
         ids_catalogo = {

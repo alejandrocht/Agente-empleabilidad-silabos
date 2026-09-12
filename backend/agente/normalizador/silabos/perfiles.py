@@ -24,6 +24,22 @@ class PerfilBootstrap:
     habilidades_pendientes: int
 
 
+# El catálogo publicado son los logros, pero el perfil de carrera alimenta el
+# lector de catálogos curados, que en este paso sigue esperando el contrato de
+# habilidades. El logro se copia bajo el nombre y esquema internos para no
+# romper ese lector, el resolver de entidades ni el panel.
+_CATALOGO_PERFIL: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
+    "catalogo_logros.csv": (
+        "catalogo_habilidades.csv",
+        (
+            ("id_habilidad", "id_logro"),
+            ("nombre_habilidad", "nombre_logro"),
+            ("descripcion_breve", "descripcion_breve"),
+        ),
+    ),
+}
+
+
 def crear_perfil_bootstrap(
     directorio_ejecucion: Path,
     directorio_catalogos: Path,
@@ -63,7 +79,22 @@ def crear_perfil_bootstrap(
         if nombre == "cobertura_curricular.csv" and not origen.is_file():
             continue
         filas = _leer_y_validar_csv(origen, columnas)
-        _escribir_csv(destino / nombre, columnas, filas)
+        nombre_destino, reescritura = _CATALOGO_PERFIL.get(nombre, (nombre, ()))
+        _escribir_csv(
+            destino / nombre_destino,
+            tuple(destino_columna for destino_columna, _ in reescritura) or columnas,
+            (
+                [
+                    {
+                        destino_columna: fila.get(columna_origen, "")
+                        for destino_columna, columna_origen in reescritura
+                    }
+                    for fila in filas
+                ]
+                if reescritura
+                else filas
+            ),
+        )
         conteos[nombre] = len(filas)
 
     reportes_origen = salida / "reportes"
@@ -111,7 +142,7 @@ def crear_perfil_bootstrap(
         ),
         "conteos": {
             "competencias": conteos.get("catalogo_competencias.csv", 0),
-            "habilidades": conteos.get("catalogo_habilidades.csv", 0),
+            "habilidades": conteos.get("catalogo_logros.csv", 0),
             "herramientas": conteos.get("catalogo_herramientas.csv", 0),
             "cobertura": conteos.get("cobertura_curricular.csv", 0),
             "habilidades_pendientes": len(pendientes),
@@ -127,7 +158,7 @@ def crear_perfil_bootstrap(
     return PerfilBootstrap(
         destino,
         conteos.get("catalogo_competencias.csv", 0),
-        conteos.get("catalogo_habilidades.csv", 0),
+        conteos.get("catalogo_logros.csv", 0),
         conteos.get("catalogo_herramientas.csv", 0),
         len(pendientes),
     )

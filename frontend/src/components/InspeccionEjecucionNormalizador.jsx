@@ -22,7 +22,7 @@ const MAX_PREVIEW_BYTES = 512 * 1024;
 const RUTA_SALIDA_SEGURA = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[\w./-]+$/;
 const CSV_PREVIEW_NAMES = new Set([
   "catalogo_competencias.csv",
-  "catalogo_habilidades.csv",
+  "catalogo_logros.csv",
   "catalogo_herramientas.csv",
 ]);
 

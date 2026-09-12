@@ -98,7 +98,7 @@ def test_relation_wrappers_inject_facade_package_hash(monkeypatch: pytest.Monkey
     monkeypatch.setattr(paquetes_modulo, "id_paquete_chh", lambda _: "PKG_MONKEYPATCHED")
 
     selected = paquetes_modulo.relaciones_fuente_para_paquete_chh(
-        [{**identity, "id_competencia": "COMP_1", "id_habilidad": "HAB_1"}], identity
+        [{**identity, "id_competencia": "COMP_1", "id_logro": "HAB_1"}], identity
     )
 
     assert selected[0]["id_paquete_chh"] == "PKG_MONKEYPATCHED"
@@ -184,14 +184,14 @@ def test_relations_for_same_course_and_syllabus_do_not_cross_source_packages():
             "id_curso": "CUR_1",
             "id_silabo": "SIL_1",
             "id_competencia": "COMP_1",
-            "id_habilidad": "HAB_1",
+            "id_logro": "HAB_1",
             "id_herramienta": "",
         },
         {
             "id_curso": "CUR_1",
             "id_silabo": "SIL_1",
             "id_competencia": "COMP_2",
-            "id_habilidad": "HAB_2",
+            "id_logro": "HAB_2",
             "id_herramienta": "",
         },
     ]
@@ -220,11 +220,11 @@ def test_competency_only_package_is_valid_and_six_field_relation_maps_correctly(
 
     package = {
         **competency_only,
-        "habilidades": [{"id_habilidad": "HAB_1", "id_canonico": "HAB_1"}],
+        "habilidades": [{"id_logro": "HAB_1", "id_canonico": "HAB_1"}],
         "herramientas": [{"id_herramienta": "HERR_1", "id_canonico": "HERR_1"}],
         "componentes": {
             "competencias": [{"id_competencia": "COMP_1", "id_canonico": "COMP_1"}],
-            "habilidades": [{"id_habilidad": "HAB_1", "id_canonico": "HAB_1"}],
+            "habilidades": [{"id_logro": "HAB_1", "id_canonico": "HAB_1"}],
             "herramientas": [{"id_herramienta": "HERR_1", "id_canonico": "HERR_1"}],
         },
         "relaciones": [
@@ -233,7 +233,7 @@ def test_competency_only_package_is_valid_and_six_field_relation_maps_correctly(
                 "id_curso": "CUR_1",
                 "id_silabo": "SIL_1",
                 "id_competencia": "COMP_1",
-                "id_habilidad": "HAB_1",
+                "id_logro": "HAB_1",
                 "id_herramienta": "HERR_1",
                 "source_identity": competency_only["source_identity"],
             }
@@ -275,7 +275,7 @@ def test_competency_only_package_does_not_inherit_another_packages_skill_require
                 "id_curso": "CUR_1",
                 "id_silabo": "SIL_1",
                 "id_competencia": "COMP_2",
-                "id_habilidad": "HAB_2",
+                "id_logro": "HAB_2",
                 "id_herramienta": "",
                 "source_identity": {
                     "id_ejecucion": "NOR_1",
@@ -331,7 +331,7 @@ def test_pending_skill_package_inherits_competency_from_source_coverage():
                 "id_curso": "CUR_1",
                 "id_silabo": "SIL_1",
                 "id_competencia": "SRC_COMP",
-                "id_habilidad": "SRC_SKILL",
+                "id_logro": "SRC_SKILL",
                 "id_herramienta": "",
                 "id_competencia_fuente": "SRC_COMP",
                 "id_habilidad_fuente": "SRC_SKILL",
@@ -478,13 +478,13 @@ def test_package_component_prefers_catalog_name_and_keeps_llm_proposal_metadata(
                     "id_curso": "CUR_1",
                     "id_silabo": "SIL_1",
                     "id_competencia": "COMP_CAN",
-                    "id_habilidad": "HAB_CAN",
+                    "id_logro": "HAB_CAN",
                     "id_herramienta": "",
                     "source_identity": identity,
                 }
             ],
-            "catalogo_habilidades.csv": [
-                {"id_habilidad": "HAB_CAN", "nombre_habilidad": "Nombre del catálogo"}
+            "catalogo_logros.csv": [
+                {"id_logro": "HAB_CAN", "nombre_logro": "Nombre del catálogo"}
             ],
         },
     )[0]
@@ -544,13 +544,13 @@ def test_skill_catalog_name_replaces_blank_source_projection():
                     "id_curso": "CUR_1",
                     "id_silabo": "SIL_1",
                     "id_competencia": "COMP_1",
-                    "id_habilidad": "HAB_CAN",
+                    "id_logro": "HAB_CAN",
                     "id_herramienta": "",
                     "source_identity": identity,
                 }
             ],
-            "catalogo_habilidades.csv": [
-                {"id_habilidad": "HAB_CAN", "nombre_habilidad": "Planificación de comunicación"}
+            "catalogo_logros.csv": [
+                {"id_logro": "HAB_CAN", "nombre_logro": "Planificación de comunicación"}
             ],
         },
     )[0]
@@ -604,8 +604,8 @@ def test_skill_catalog_name_survives_without_canonical_coverage():
         },
         archivos={
             "cobertura_curricular.csv": [],
-            "catalogo_habilidades.csv": [
-                {"id_habilidad": "HAB_CAN", "nombre_habilidad": "Planificación de comunicación"}
+            "catalogo_logros.csv": [
+                {"id_logro": "HAB_CAN", "nombre_logro": "Planificación de comunicación"}
             ],
         },
     )[0]
