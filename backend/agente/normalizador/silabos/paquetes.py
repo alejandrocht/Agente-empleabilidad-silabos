@@ -567,7 +567,9 @@ def _fila_pertenece_a_componente(
     propuesta = fila.get("propuesta")
     nombre_fila = _text(propuesta.get("nombre") if isinstance(propuesta, Mapping) else "")
     nombre_componente = _nombre_componente(componente)
-    return bool(nombre_fila) and _normalized_name(nombre_fila) == _normalized_name(nombre_componente)
+    return bool(nombre_fila) and _normalized_name(nombre_fila) == _normalized_name(
+        nombre_componente
+    )
 
 
 def _referencia_coincide(referencia: object, componente: Mapping[str, object]) -> bool:

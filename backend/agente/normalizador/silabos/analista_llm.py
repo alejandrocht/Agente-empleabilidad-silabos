@@ -445,7 +445,11 @@ def analizar_registros_curriculares(
         ]
         if ids_omitidos:
             lote_reintento = tuple(por_id[id_habilidad] for id_habilidad in ids_omitidos)
-            clave_reintento = f"reintento:{_clave_lote(lote_reintento, perfil, modelo_analista, _version_prompt_analista())}"
+            lote_reintento = tuple(por_id[id_habilidad] for id_habilidad in ids_omitidos)
+            clave_lote_reintento = _clave_lote(
+                lote_reintento, perfil, modelo_analista, _version_prompt_analista()
+            )
+            clave_reintento = f"reintento:{clave_lote_reintento}"
             if clave_reintento not in reintentos_lanzados:
                 reintentos_lanzados.add(clave_reintento)
                 reintentos += 1

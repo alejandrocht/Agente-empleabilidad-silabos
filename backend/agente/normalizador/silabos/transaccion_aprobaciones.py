@@ -257,7 +257,9 @@ def _aplicar_decisiones_curriculares(
 
         paquetes_descartados_en_solicitud: set[str] = set()
         paquetes_por_id = {
-            _persistencia._texto(paquete.get(PACKAGE_ID_FIELD) or paquete.get("package_id")): paquete
+            _persistencia._texto(
+                paquete.get(PACKAGE_ID_FIELD) or paquete.get("package_id")
+            ): paquete
             for paquete in paquetes_actuales
             if isinstance(paquete, Mapping)
         }
