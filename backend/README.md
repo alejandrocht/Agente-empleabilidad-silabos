@@ -200,41 +200,6 @@ términos financieros. Cada evidencia incluye sección, texto fuente y coinciden
 
 ### Contrato evidence-first y esquemas CSV
 
-#### Diagnóstico LangExtract con catálogo explícito
-
-El runner aislado `agente.normalizador.silabos.langextract_runner` no tiene catálogo
-por defecto. Para canonicalizar una extracción se deben indicar juntos `--catalog-dir`,
-`--career`, `--period` y `--catalog-version`; la selección nunca se deduce de una ruta,
-un ID ni una carrera histórica. El directorio seleccionado debe contener los tres CSV
-con sus encabezados estándar y un `catalogo_metadata.json` que declare exactamente la
-misma carrera, período, versión y proveniencia no vacía:
-
-```json
-{
-  "career": "Nombre de carrera",
-  "period": "2026-1",
-  "version": "v1",
-  "provenance": "exportación aprobada 2026-1",
-  "aliases": {"herramienta": {"Alias aprobado": "Nombre canónico"}}
-}
-```
-
-`aliases` es opcional y solo admite alias completos que apunten a un nombre canónico
-del mismo catálogo. El sílabo debe declarar carrera y período literales que coincidan
-con la selección. CSV/manifest ausente, malformado, duplicado o no coincidente bloquea
-el preflight antes de una llamada LLM; no hay propuestas crudas todavía, no existe
-fallback entre carreras ni se crean IDs. Un fallo posterior de metadata del sílabo
-conserva `paquetes_crudos` y deja la resolución en `PENDIENTE` sin IDs.
-
-Con catálogo, cada paquete conserva `habilidad_propuesta`, `competencia_propuesta`,
-`herramientas` y sus citas originales, y añade `catalogo` con estado, código e ID
-canónico separado. `herramientas_vinculadas` solo reúne menciones literales del programa
-semanal declaradas explícitamente por el paquete y que se solapan con la evidencia de
-habilidad. Las demás quedan en
-`herramientas_sin_vinculo`; una herramienta explícita fuera del catálogo usa
-`HERRAMIENTA_CATALOGO_NO_ENCONTRADA` con cita literal y sin ID. Sin argumentos de
-catálogo, el diagnóstico conserva exactamente su salida previa.
-
 El flujo curricular es determinista y respeta la evidencia en este orden:
 
 1. registra todas las competencias declaradas por cada sílabo;

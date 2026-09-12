@@ -186,7 +186,7 @@ def test_envolver_cliente_openai_no_parchea_con_tracing_apagado(monkeypatch) -> 
     cliente = OpenAI(api_key="test-key", base_url="http://127.0.0.1:9/v1")
     original = cliente.chat.completions.create
 
-    devuelto = langsmith.envolver_cliente_openai(cliente, tags=["langextract"])
+    devuelto = langsmith.envolver_cliente_openai(cliente, tags=["analista_curricular"])
 
     assert devuelto is cliente
     assert cliente.chat.completions.create == original
@@ -202,8 +202,8 @@ def test_envolver_cliente_openai_parchea_create_con_tracing_activo(monkeypatch) 
 
     devuelto = langsmith.envolver_cliente_openai(
         cliente,
-        metadata={"langextract_model_id": "ciar-openai/gpt-4o-mini"},
-        tags=["langextract", "extraccion"],
+        metadata={"analista_model_id": "ciar-openai/gpt-5.6-luna"},
+        tags=["analista_curricular", "curricular"],
     )
 
     assert devuelto is cliente
