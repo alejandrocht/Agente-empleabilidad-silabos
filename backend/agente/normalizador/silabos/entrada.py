@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 from typing import Literal
 
 from agente.normalizador.empleabilidad.entrada import calcular_sha256, normalizar_etiqueta
+from agente.normalizador.identidad import normalize
 from agente.normalizador.modelos import (
     ArchivoSilabo,
     Hallazgo,
@@ -237,6 +238,10 @@ def validar_archivo(
             )
         )
     valida = not any(hallazgo.severidad == "error" for hallazgo in hallazgos)
+    # El orden de `infolist()` depende de cómo se empaquetó el ZIP, así que el
+    # mismo contenido reempaquetado producía lotes distintos y con ellos otra
+    # salida del LLM. Ordenar por ruta normalizada fija esa composición.
+    archivos.sort(key=lambda item: normalize(item.nombre))
     return ResultadoValidacionSilabos(
         archivo,
         carrera_normalizada,

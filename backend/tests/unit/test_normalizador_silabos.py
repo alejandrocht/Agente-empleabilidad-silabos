@@ -271,7 +271,38 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
     for nombre, esperado in schemas.items():
         with (ejecucion / "salidas" / nombre).open(encoding="utf-8-sig", newline="") as archivo:
             assert next(csv.reader(archivo)) == esperado
-    assert (ejecucion / "salidas" / "reportes" / "habilidades_fuente.jsonl").is_file()
+        assert (ejecucion / "salidas" / "reportes" / "habilidades_fuente.jsonl").is_file()
+
+
+def test_orden_de_archivos_no_depende_del_empaquetado_del_zip(tmp_path: Path) -> None:
+    """El orden interno de `infolist()` no debe filtrarse al resultado.
+
+    El mismo contenido reempaquetado en otro orden producía lotes distintos y,
+    con ellos, otra respuesta del LLM. El orden normalizado lo fija.
+    """
+
+    nombres = [
+        "2026-2 SIL ZOOLOGÍA.docx",
+        "2026-2 SIL ÁLGEBRA.docx",
+        "2026-2 SIL CÁLCULO II.docx",
+    ]
+    observados: list[list[str]] = []
+    for etiqueta, orden in (("ascendente", nombres), ("descendente", list(reversed(nombres)))):
+        paquete = tmp_path / f"{etiqueta}.zip"
+        with zipfile.ZipFile(paquete, "w") as archivo:
+            for nombre in orden:
+                archivo.writestr(nombre, b"contenido")
+        validacion = validar_archivo(paquete, "Ingeniería de Sistemas", "2026-2")
+        observados.append([item.nombre for item in validacion.archivos])
+
+    esperado = [
+        "2026-2 SIL ÁLGEBRA.docx",
+        "2026-2 SIL CÁLCULO II.docx",
+        "2026-2 SIL ZOOLOGÍA.docx",
+    ]
+    assert observados[0] == esperado
+    assert observados[1] == esperado
+    assert observados[0] == observados[1]
 
 
 def test_extrae_metadatos_estructurados_docx_y_conserva_coordinadores(tmp_path: Path) -> None:

@@ -17,6 +17,7 @@ from agente.normalizador.empleabilidad.extractor import (
     extraer,
     extraer_informe,
 )
+from agente.normalizador.identidad import hashed
 from agente.normalizador.modelos import (
     Hallazgo,
     ResultadoNormalizacion,
@@ -88,11 +89,6 @@ def _digitos(valor: object) -> str:
     return re.sub(r"\D", "", _texto(valor))
 
 
-def _hash_id(prefijo: str, *partes: str) -> str:
-    payload = "|".join(partes).encode("utf-8")
-    return f"{prefijo}_{hashlib.sha256(payload).hexdigest()[:16]}"
-
-
 def _resumen_texto(datos: dict[str, object]) -> str:
     return _texto(datos.get("funciones", ""))
 
@@ -119,7 +115,7 @@ def _resolver_empresa(
     if not ruc and not nombre:
         return "", None, "No se encontró RUC ni razón social resoluble."
     clave = f"ruc:{ruc}" if ruc else f"nombre:{nombre.lower()}"
-    id_empresa = _hash_id("EMP", clave)
+    id_empresa = hashed("EMP", clave)
     if id_empresa not in empresas:
         empresas[id_empresa] = {
             "id_empresa": id_empresa,
@@ -177,11 +173,7 @@ def _output(ruta: Path, tipo: str, registros: int) -> dict[str, object]:
     )
     return {
         "tipo": tipo,
-        "archivo": (
-            ruta.relative_to(ejecucion).as_posix()
-            if ejecucion
-            else ruta.name
-        ),
+        "archivo": (ruta.relative_to(ejecucion).as_posix() if ejecucion else ruta.name),
         "registros": registros,
         "bytes": ruta.stat().st_size,
         "sha256": _huella(ruta),
@@ -206,7 +198,7 @@ def _cadena_a_requerimiento(
         tipo,
     )
     return negocio, {
-        "id_req_laboral": _hash_id("REQ_LAB", *negocio),
+        "id_req_laboral": hashed("REQ_LAB", *negocio),
         "id_oferta_laboral": id_oferta,
         "id_puesto": id_puesto,
         "id_empresa": id_empresa,
@@ -333,7 +325,7 @@ def normalizar_staging(
                 continue
 
             if universo == "publicaciones":
-                id_oferta = _hash_id("LAB", str(registro.get("id_registro", "")))
+                id_oferta = hashed("LAB", str(registro.get("id_registro", "")))
                 nombre_puesto = _primer_valor(
                     datos,
                     ("posicion_a_publicar", "cargo_especifico", "cargo"),
@@ -346,7 +338,7 @@ def normalizar_staging(
                         "Se requiere una identidad de puesto para crear la relación laboral.",
                     )
                     continue
-                id_puesto = _hash_id("PUE", id_oferta, nombre_puesto)
+                id_puesto = hashed("PUE", id_oferta, nombre_puesto)
                 texto = " ".join(
                     _texto(datos.get(campo, ""))
                     for campo in (
@@ -443,7 +435,7 @@ def normalizar_staging(
             if universo == "informes":
                 evaluaciones.append(
                     {
-                        "id_eva_desempenio": _hash_id(
+                        "id_eva_desempenio": hashed(
                             "EVA",
                             str(registro.get("id_registro", "")),
                         ),

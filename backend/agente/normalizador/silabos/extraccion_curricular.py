@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 from pathlib import Path
 from typing import Any
 
 from docx import Document
 
-from agente.normalizador.empleabilidad.catalogo import clave_concepto
 from agente.normalizador.empleabilidad.entrada import normalizar_etiqueta
+from agente.normalizador.identidad import hashed
 from agente.normalizador.modelos import Hallazgo
 
 _PATRON_REFERENCIA_CURRICULAR = r"(?<![A-Z0-9])(?:L\d+|[GE]\d+|[GE]{2,4})(?![A-Z0-9])"
@@ -50,9 +49,9 @@ def _clave(valor: object) -> str:
     return normalizar_etiqueta(valor).replace(" ", "_")
 
 
-def _hash_id(prefijo: str, *partes: str) -> str:
-    payload = "|".join(clave_concepto(parte) for parte in partes).encode("utf-8")
-    return f"{prefijo}_{hashlib.sha256(payload).hexdigest()[:16]}"
+# `_hash_id` stays bound so downstream importers can still bind it from this
+# module; it is now only a name for the shared helper.
+_hash_id = hashed
 
 
 def _ids_curriculares(
@@ -65,10 +64,10 @@ def _ids_curriculares(
 
     codigo = _texto(codigo_curso)
     if codigo:
-        return _hash_id("SIL", codigo), _hash_id("CUR", codigo)
+        return hashed("SIL", codigo), hashed("CUR", codigo)
     return (
-        _hash_id("SIL", carrera, periodo, nombre),
-        _hash_id("CUR", carrera, periodo, nombre),
+        hashed("SIL", carrera, periodo, nombre),
+        hashed("CUR", carrera, periodo, nombre),
     )
 
 
@@ -277,8 +276,10 @@ def _extraer_docx(
             for valores in filas[1:]:
                 if len(valores) < 3:
                     continue
-                if _codigos(valores[-1]) and valores[0] and not re.fullmatch(
-                    r"L\d+", valores[0], re.I
+                if (
+                    _codigos(valores[-1])
+                    and valores[0]
+                    and not re.fullmatch(r"L\d+", valores[0], re.I)
                 ):
                     competencias.append(
                         {
