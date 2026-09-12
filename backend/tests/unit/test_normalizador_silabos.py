@@ -222,7 +222,7 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
         "salidas/curso.csv",
         "salidas/silabo.csv",
         "salidas/catalogo_competencias.csv",
-        "salidas/catalogo_habilidades.csv",
+        "salidas/catalogo_logros.csv",
         "salidas/catalogo_herramientas.csv",
         "salidas/cobertura_curricular.csv",
         "salidas/competencias_fuente.jsonl",
@@ -257,9 +257,9 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
             "tipo_competencia",
             "codigo_competencia",
         ],
-        "catalogo_habilidades.csv": [
-            "id_habilidad",
-            "nombre_habilidad",
+        "catalogo_logros.csv": [
+            "id_logro",
+            "nombre_logro",
             "descripcion_breve",
         ],
         "catalogo_herramientas.csv": [
@@ -272,7 +272,7 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
             "id_curso",
             "id_silabo",
             "id_competencia",
-            "id_habilidad",
+            "id_logro",
             "id_herramienta",
         ],
     }
@@ -680,7 +680,7 @@ def test_conserva_referencia_de_fuente_sin_catalogo_o_declaracion(tmp_path: Path
         (tmp_path / "ejecucion" / "salidas" / nombre).exists()
         for nombre, _ in (
             ("catalogo_competencias.csv", ()),
-            ("catalogo_habilidades.csv", ()),
+            ("catalogo_logros.csv", ()),
             ("catalogo_herramientas.csv", ()),
             ("cobertura_curricular.csv", ()),
         )
@@ -714,7 +714,7 @@ def test_no_materializa_catalogos_mientras_queda_habilidad_pendiente(tmp_path: P
 
     assert resultado.release_gate["decision"] == "BLOCK_IMPORT"
     assert "UNRESOLVED_CURRICULAR_RECORDS" in resultado.release_gate["blockers"]
-    assert not (tmp_path / "ejecucion" / "salidas" / "catalogo_habilidades.csv").exists()
+    assert not (tmp_path / "ejecucion" / "salidas" / "catalogo_logros.csv").exists()
 
 
 def test_no_publica_habilidad_canonica_sin_cadena_de_competencia(tmp_path: Path) -> None:
@@ -789,7 +789,7 @@ def test_prioriza_perfil_del_silabo_sin_exponer_referencias_alfabeticas(tmp_path
         (tmp_path / "ejecucion" / "salidas" / nombre).exists()
         for nombre in (
             "catalogo_competencias.csv",
-            "catalogo_habilidades.csv",
+            "catalogo_logros.csv",
             "catalogo_herramientas.csv",
             "cobertura_curricular.csv",
         )

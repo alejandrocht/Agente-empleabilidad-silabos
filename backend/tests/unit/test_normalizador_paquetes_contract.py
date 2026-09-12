@@ -48,7 +48,7 @@ def _relation(competency: str, skill: str, tool: str = "") -> dict[str, str]:
         "id_silabo": "SIL_1",
         "id_habilidad_fuente": "SRC_SKILL",
         "id_competencia": competency,
-        "id_habilidad": skill,
+        "id_logro": skill,
         "id_herramienta": tool,
     }
 
@@ -162,7 +162,7 @@ def test_source_relation_identity_splits_shared_skill_without_losing_nn_edges() 
             {"id_competencia": "COMP_1", "nombre_competencia": "Competencia 1"},
             {"id_competencia": "COMP_2", "nombre_competencia": "Competencia 2"},
         ],
-        "catalogo_habilidades.csv": [{"id_habilidad": "HAB_1", "nombre_habilidad": "Habilidad"}],
+        "catalogo_logros.csv": [{"id_logro": "HAB_1", "nombre_logro": "Habilidad"}],
         "catalogo_herramientas.csv": [
             {"id_herramienta": "HERR_1", "nombre_herramienta": "Herramienta 1"},
             {"id_herramienta": "HERR_2", "nombre_herramienta": "Herramienta 2"},
@@ -276,8 +276,8 @@ def test_identical_canonical_tuple_from_distinct_source_relations_stays_separate
             "catalogo_competencias.csv": [
                 {"id_competencia": "COMP_1", "nombre_competencia": "Competencia"}
             ],
-            "catalogo_habilidades.csv": [
-                {"id_habilidad": "HAB_1", "nombre_habilidad": "Habilidad"}
+            "catalogo_logros.csv": [
+                {"id_logro": "HAB_1", "nombre_logro": "Habilidad"}
             ],
             "catalogo_herramientas.csv": [
                 {"id_herramienta": "HERR_1", "nombre_herramienta": "Herramienta"}
@@ -450,7 +450,7 @@ def test_indice_de_ensamblaje_conserva_componentes_y_relaciones_por_paquete(
             "id_silabo": "SIL_1",
             "id_habilidad_fuente": "SRC_1",
             "id_competencia": "COMP_1",
-            "id_habilidad": "HAB_1",
+            "id_logro": "HAB_1",
             "id_herramienta": "",
         },
         {
@@ -459,7 +459,7 @@ def test_indice_de_ensamblaje_conserva_componentes_y_relaciones_por_paquete(
             "id_silabo": "SIL_1",
             "id_habilidad_fuente": "SRC_2",
             "id_competencia": "COMP_2",
-            "id_habilidad": "HAB_2",
+            "id_logro": "HAB_2",
             "id_herramienta": "",
         },
     ]
@@ -469,9 +469,9 @@ def test_indice_de_ensamblaje_conserva_componentes_y_relaciones_por_paquete(
             {"id_competencia": "COMP_1", "nombre_competencia": "Competencia 1"},
             {"id_competencia": "COMP_2", "nombre_competencia": "Competencia 2"},
         ],
-        "catalogo_habilidades.csv": [
-            {"id_habilidad": "HAB_1", "nombre_habilidad": "Habilidad 1"},
-            {"id_habilidad": "HAB_2", "nombre_habilidad": "Habilidad 2"},
+        "catalogo_logros.csv": [
+            {"id_logro": "HAB_1", "nombre_logro": "Habilidad 1"},
+            {"id_logro": "HAB_2", "nombre_logro": "Habilidad 2"},
         ],
         "catalogo_herramientas.csv": [],
     }
@@ -514,7 +514,7 @@ def test_indice_de_ensamblaje_conserva_componentes_y_relaciones_por_paquete(
         paquete["competencias"][0]["id_canonico"] for paquete in resultado
     ] == ["COMP_1", "COMP_2"]
     assert [
-        paquete["relaciones"][0]["id_habilidad"] for paquete in resultado
+        paquete["relaciones"][0]["id_logro"] for paquete in resultado
     ] == ["HAB_1", "HAB_2"]
     assert [len(paquete["source_relationships"]) for paquete in resultado] == [1, 1]
 
@@ -674,8 +674,8 @@ def test_unresolved_profile_proposal_is_not_merged_into_accepted_component(
             ],
         },
         archivos={
-            "catalogo_habilidades.csv": [
-                {"id_habilidad": "HAB_1", "nombre_habilidad": "Optimizar campañas"}
+            "catalogo_logros.csv": [
+                {"id_logro": "HAB_1", "nombre_logro": "Optimizar campañas"}
             ]
         },
     )[0]

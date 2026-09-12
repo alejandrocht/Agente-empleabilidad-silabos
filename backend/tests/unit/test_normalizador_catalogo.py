@@ -171,9 +171,9 @@ def test_crea_perfil_bootstrap_sin_alterar_los_esquemas_csv(tmp_path: Path) -> N
         "COMP_MARK,Gestión estratégica,Diseñar estrategias de marketing,dura,E2\n",
         encoding="utf-8-sig",
     )
-    (ejecucion / "catalogo_habilidades.csv").write_text(
-        "id_habilidad,nombre_habilidad,descripcion_breve\n"
-        "HAB_MARK,Diseñar estrategias,Diseñar estrategias de marketing\n",
+    (ejecucion / "catalogo_logros.csv").write_text(
+        "id_logro,nombre_logro,descripcion_breve\n"
+        "LOGRO_MARK,Diseñar estrategias,Diseñar estrategias de marketing\n",
         encoding="utf-8-sig",
     )
     (ejecucion / "catalogo_herramientas.csv").write_text(
@@ -182,8 +182,8 @@ def test_crea_perfil_bootstrap_sin_alterar_los_esquemas_csv(tmp_path: Path) -> N
         encoding="utf-8-sig",
     )
     (ejecucion / "cobertura_curricular.csv").write_text(
-        "id_cob_curricular,id_curso,id_silabo,id_competencia,id_habilidad,id_herramienta\n"
-        "COB_1,CUR_1,SIL_1,COMP_MARK,HAB_MARK,HERR_MARK\n",
+        "id_cob_curricular,id_curso,id_silabo,id_competencia,id_logro,id_herramienta\n"
+        "COB_1,CUR_1,SIL_1,COMP_MARK,LOGRO_MARK,HERR_MARK\n",
         encoding="utf-8-sig",
     )
     reportes = ejecucion / "reportes"

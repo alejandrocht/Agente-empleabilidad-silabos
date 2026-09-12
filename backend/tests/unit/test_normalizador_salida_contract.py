@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH
+from agente.normalizador.identidad import hashed
 from agente.normalizador.modelos import ArchivoSilabo, Hallazgo, ResultadoValidacionSilabos
 from agente.normalizador.silabos import (
     normalizacion_curricular,
@@ -25,6 +26,7 @@ from agente.normalizador.silabos.analista_llm import (
     _hash_id,
 )
 from agente.normalizador.silabos.salida import construir_salidas_curriculares
+from agente.normalizador.silabos.trazabilidad_curricular import _id_logro
 
 
 def _validacion() -> ResultadoValidacionSilabos:
@@ -42,8 +44,8 @@ def _validacion() -> ResultadoValidacionSilabos:
 def _catalogo() -> CatalogoCHH:
     return CatalogoCHH(
         competencias=(
-            ConceptoCHH("COMP_A", "Gestionar campañas", "Gestionar campañas."),
-            ConceptoCHH("COMP_B", "Analizar mercados", "Analizar mercados."),
+            ConceptoCHH("COMP_A", "Gestionar campañas", "Gestionar campañas.", "tecnica"),
+            ConceptoCHH("COMP_B", "Analizar mercados", "Analizar mercados.", "tecnica"),
         ),
         habilidades=(ConceptoCHH("HAB_A", "Analizar campañas", "Analizar campañas."),),
         herramientas=(
@@ -312,7 +314,7 @@ def test_public_seam_preserves_nn_lineage_for_each_source_mapping(tmp_path: Path
         for herramienta in source_tools
     }
     assert all(row["id_competencia"] == row["id_competencia_fuente"] for row in source_rows)
-    assert all(row["id_habilidad"] == row["id_habilidad_fuente"] for row in source_rows)
+    assert all(row["id_logro"] == row["id_logro_fuente"] for row in source_rows)
     assert all(row["id_herramienta"] == row["id_herramienta_fuente"] for row in source_rows)
     required_lineage = {
         "id_ejecucion",
@@ -320,6 +322,7 @@ def test_public_seam_preserves_nn_lineage_for_each_source_mapping(tmp_path: Path
         "id_curso",
         "id_silabo",
         "id_logro",
+        "id_logro_fuente",
         "id_competencia_fuente",
         "id_habilidad_fuente",
         "id_herramienta_fuente",
@@ -334,12 +337,15 @@ def test_public_seam_preserves_nn_lineage_for_each_source_mapping(tmp_path: Path
         for row in source_rows + canonical_rows
     )
     assert all(row["source_ref"] for row in source_rows + canonical_rows)
-    assert {row["id_logro"] for row in canonical_rows} == {
+    # El logro publicado se identifica por su nombre; su origen por sílabo y
+    # orden queda en la columna de provenance `id_logro_fuente`.
+    assert {row["id_logro"] for row in canonical_rows} == {_id_logro("Analizar campañas")}
+    assert {row["id_logro_fuente"] for row in canonical_rows} == {
         _hash_id("LOGRO_SRC", "SIL_1", "1", "Analizar campañas")
     }
     assert all(
         row["id_competencia"] == row["id_competencia_canonica"]
-        and row["id_habilidad"] == row["id_habilidad_canonica"]
+        and row["id_logro"] == row["id_habilidad_canonica"]
         and row["id_herramienta"] == row["id_herramienta_canonica"]
         for row in canonical_rows
     )
@@ -463,31 +469,28 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
         "catalogo_competencias.csv": (
             "dab33b8ba44f4dce85d2f432fae1e40caf98b350ba522b576bfaf9014d76bc40"
         ),
-        "catalogo_habilidades.csv": (
-            "0e4d58da1c6385d5d7decbc82b918a24be42b1bf7a614bfc78b8bc08ae77dc3b"
-        ),
         "catalogo_herramientas.csv": (
             "b7e8db9bb823a80d174720b9b5c606d03bb71a35fe281835c306956cf67e405a"
         ),
+        "catalogo_logros.csv": ("7b6c33e9ff3e411a3ddb88668580ff5ac2a0154f07662bae56dd137fdf99e115"),
         "cobertura_curricular.csv": (
-            "c5c4f6ef01ab1bbf81d33ec4234c6d52a2d5d90c60cfb0413d8e0f0bb080e0ff"
+            "b6cd6e53a27d1a8b7763e04c59ae22c5aaf3e013dc5157dd12547ee747393e45"
         ),
-        "curso.csv": "02bbc9fd7fc3236eec084aa6241dd1094c4b18d510c5e707201e706bbc326498",
-        "silabo.csv": "86db76a18db9aa91216c28c4758e36d48427fc2263794c291adb4c609429db64",
+        "curso.csv": ("02bbc9fd7fc3236eec084aa6241dd1094c4b18d510c5e707201e706bbc326498"),
         "reportes/candidatos_curriculares.json": (
-            "ead4233c85cf88d5b2ea90b7c98a65c3bbee8bae9ece58678c5e358e85ed5e0b"
+            "32acfe11bd659061af0e35b0479c143490ec64e17070e5b5222257e94daa411d"
         ),
         "reportes/cobertura_curricular_canonica.jsonl": (
-            "52025738b253d279fa73528a724898b11e981375ab5db36c4647aa440592d449"
+            "4150334bceb43052e202532e66fdd12e57794575003b225b353df3f444f412ba"
         ),
         "reportes/cobertura_curricular_fuente.jsonl": (
-            "f72ae3ed1ddef5ae04dca5288a027d25e8e652212b155ab3b2c4ab3b606ca449"
+            "8d5d7e2a8098edd1a758aa81c4b8f135e4ae02c1ad6b7259b667fe8aa1e02050"
         ),
         "reportes/competencias_fuente.jsonl": (
             "5d6896b52cbe40efb9303ae6ee9fd1df0afc1b63d9dedeb21c58c686c64d553d"
         ),
         "reportes/habilidades_fuente.jsonl": (
-            "f0c503d5ce3eee6aae73891b4d8e95b1a6a1486ad05a9c3866f1798aefe04995"
+            "1d091e44605d8e289203436d14dd76c153abfeec95d5451596882ef5ddd357f1"
         ),
         "reportes/herramientas_fuente.jsonl": (
             "b694b01617ea61ea2e3e49fd44ca6ea14763666a5f2097530a2e49b5a60cbb85"
@@ -498,16 +501,17 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
         "reportes/release_gate.json": (
             "8614efde2b6c89ec92823aefe9b87bf86d6a81aaca62243fe8bf80dfb1d954d2"
         ),
+        "silabo.csv": ("86db76a18db9aa91216c28c4758e36d48427fc2263794c291adb4c609429db64"),
     }
     assert _hashes_de_artefactos(tmp_path / "pending" / "NOR_TEST" / "salidas") == {
         "reportes/candidatos_curriculares.json": (
-            "d5915eb65f08813c64f63c4cf431b0c8ca5d2c06433a78622f247333cbcf6e3e"
+            "e6594f177e49a85d164a56e269a22e9bfc5af38b8702a0ad2295f2f9997c6bd6"
         ),
         "reportes/cobertura_curricular_canonica.jsonl": (
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         ),
         "reportes/cobertura_curricular_fuente.jsonl": (
-            "698c42dc9ed7c256591ca61fd7fcaae6f3673865f32ede321fd35f0594c7115e"
+            "cd37083e0c71151d796cc4b12808a6ffa9c8c5b21c4b99e78f8f54bb0c06fa35"
         ),
         "reportes/competencias_fuente.jsonl": (
             "5d6896b52cbe40efb9303ae6ee9fd1df0afc1b63d9dedeb21c58c686c64d553d"
@@ -519,7 +523,7 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
             "b694b01617ea61ea2e3e49fd44ca6ea14763666a5f2097530a2e49b5a60cbb85"
         ),
         "reportes/pendientes_curriculares.jsonl": (
-            "18531528b183c152aa4c6c9437a093761b995e7cb9e906f0c127819b985a428a"
+            "9d43d7cfca8e3ab5faff788b477243717ee560576b53abba925d110ad38030c5"
         ),
         "reportes/release_gate.json": (
             "a472113334beb01ffad496ca6be5901d0c0ae31e07121b4ea1fdd3d3ad3b47c0"
@@ -789,3 +793,172 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
     source = inspect.getsource(trazabilidad_curricular)
     assert "resolucion_curricular" not in source
     assert "silabos.salida" not in source
+
+
+def _catalogo_por_tipo() -> CatalogoCHH:
+    """Catálogo curado con una competencia de cada tipo publicado."""
+
+    return CatalogoCHH(
+        competencias=(
+            ConceptoCHH(
+                "COMP_TEC",
+                "Modelar bases de datos",
+                "Modelar bases de datos relacionales.",
+                "tecnica",
+            ),
+            ConceptoCHH(
+                "COMP_GEN", "Colaborar en equipos", "Colaborar en equipos diversos.", "generica"
+            ),
+            ConceptoCHH(
+                "COMP_ESP", "Analizar mercados", "Analizar mercados internacionales.", "especifica"
+            ),
+        ),
+        habilidades=(
+            ConceptoCHH(
+                "HAB_TEC",
+                "Modelar bases de datos relacionales",
+                "Modelar bases de datos relacionales.",
+            ),
+            ConceptoCHH(
+                "HAB_GEN", "Colaborar en equipos diversos", "Colaborar en equipos diversos."
+            ),
+            ConceptoCHH(
+                "HAB_ESP", "Analizar mercados internacionales", "Analizar mercados internacionales."
+            ),
+            ConceptoCHH(
+                "HAB_ESP2",
+                "Analizar mercados de servicios internacionales",
+                "Analizar mercados de servicios internacionales.",
+            ),
+        ),
+        herramientas=(ConceptoCHH("HERR_SQL", "SQL", "Lenguaje de consulta."),),
+        ejemplos_por_habilidad={},
+        origen=("test",),
+        version="test",
+    )
+
+
+def _registro_por_tipo(id_silabo: str, id_curso: str) -> dict[str, object]:
+    """Registro con un logro técnico, uno genérico y dos específicos."""
+
+    registro = _registro()
+    registro["id_silabo"] = id_silabo
+    registro["id_curso"] = id_curso
+    datos = registro["datos"]
+    assert isinstance(datos, dict)
+    datos["logros_especificos"] = [
+        {"orden": "1", "descripcion": "Modelar bases de datos relacionales"},
+        {"orden": "2", "descripcion": "Colaborar en equipos diversos"},
+        {"orden": "3", "descripcion": "Analizar mercados internacionales"},
+        {"orden": "4", "descripcion": "Analizar mercados de servicios internacionales"},
+    ]
+    datos["competencias_declaradas"] = [
+        {
+            "orden": "1",
+            "nombre": "Modelar bases de datos",
+            "descripcion": "Modelar bases de datos relacionales.",
+        },
+        {
+            "orden": "2",
+            "nombre": "Colaborar en equipos",
+            "descripcion": "Colaborar en equipos diversos.",
+        },
+        {
+            "orden": "3",
+            "nombre": "Analizar mercados",
+            "descripcion": "Analizar mercados internacionales.",
+        },
+    ]
+    datos["herramientas_evidencia"] = []
+    return registro
+
+
+def _filas_y_encabezado(salida: Path, nombre: str) -> tuple[list[str], list[dict[str, str]]]:
+    with (salida / nombre).open(encoding="utf-8-sig", newline="") as archivo:
+        lector = csv.DictReader(archivo)
+        return list(lector.fieldnames or []), list(lector)
+
+
+def test_catalogo_publicado_son_logros_con_descripcion_derivada(tmp_path: Path) -> None:
+    """El catálogo publicado son los logros, no las habilidades canónicas."""
+
+    salida = tmp_path / "NOR_TEST" / "salidas"
+    construir_salidas_curriculares(
+        [_registro_por_tipo("SIL_1", "CUR_1"), _registro_por_tipo("SIL_2", "CUR_2")],
+        _validacion(),
+        tmp_path / "NOR_TEST",
+        _catalogo_por_tipo(),
+    )
+
+    assert (salida / "catalogo_logros.csv").is_file()
+    assert not (salida / "catalogo_habilidades.csv").exists()
+
+    encabezado, logros = _filas_y_encabezado(salida, "catalogo_logros.csv")
+    assert encabezado == ["id_logro", "nombre_logro", "descripcion_breve"]
+
+    for fila in logros:
+        nombre = fila["nombre_logro"]
+        derivada = "Capacidad para " + nombre[0].lower() + nombre[1:]
+        if not derivada.endswith("."):
+            derivada += "."
+        assert fila["id_logro"] == hashed("LOGRO", nombre)
+        assert fila["descripcion_breve"] == derivada
+
+    # Dos sílabos que declaran el mismo logro normalizado publican UNA sola fila.
+    assert [fila["nombre_logro"] for fila in logros] == ["Modelar bases de datos relacionales"]
+    assert [fila["id_logro"] for fila in logros] == [
+        hashed("LOGRO", "Modelar bases de datos relacionales")
+    ]
+
+
+def test_cobertura_lleva_logro_solo_en_competencias_tecnicas(tmp_path: Path) -> None:
+    """La cobertura técnica lleva logro; la genérica y la específica no."""
+
+    salida = tmp_path / "NOR_TEST" / "salidas"
+    construir_salidas_curriculares(
+        [_registro_por_tipo("SIL_1", "CUR_1")],
+        _validacion(),
+        tmp_path / "NOR_TEST",
+        _catalogo_por_tipo(),
+    )
+
+    encabezado, cobertura = _filas_y_encabezado(salida, "cobertura_curricular.csv")
+    assert encabezado == [
+        "id_cob_curricular",
+        "id_curso",
+        "id_silabo",
+        "id_competencia",
+        "id_logro",
+        "id_herramienta",
+    ]
+
+    logro_tecnico = hashed("LOGRO", "Modelar bases de datos relacionales")
+    esperado_por_competencia = {
+        "COMP_TEC": logro_tecnico,
+        "COMP_GEN": "",
+        "COMP_ESP": "",
+    }
+    for fila in cobertura:
+        assert fila["id_logro"] == esperado_por_competencia[fila["id_competencia"]]
+        assert fila["id_cob_curricular"] == hashed(
+            "COB_CUR",
+            fila["id_curso"],
+            fila["id_silabo"],
+            fila["id_competencia"],
+            fila["id_logro"],
+            fila["id_herramienta"],
+        )
+
+    assert [fila["id_competencia"] for fila in cobertura if fila["id_logro"]] == ["COMP_TEC"]
+
+    # Dos logros específicos activan la misma competencia específica: sin logro, la
+    # cobertura colapsa a una sola fila por (curso, sílabo, competencia, herramienta).
+    sin_logro = [fila for fila in cobertura if not fila["id_logro"]]
+    assert len(sin_logro) == 2
+    assert {
+        (fila["id_curso"], fila["id_silabo"], fila["id_competencia"], fila["id_herramienta"])
+        for fila in sin_logro
+    } == {
+        ("CUR_1", "SIL_1", "COMP_GEN", ""),
+        ("CUR_1", "SIL_1", "COMP_ESP", ""),
+    }

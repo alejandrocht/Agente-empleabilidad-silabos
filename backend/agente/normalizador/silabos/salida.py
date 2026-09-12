@@ -305,7 +305,7 @@ def construir_salidas_curriculares(
         publicable=publicable,
         relaciones=len(filas_por_archivo["cobertura_curricular.csv"]),
         competencias=len(filas_por_archivo["catalogo_competencias.csv"]),
-        habilidades=len(filas_por_archivo["catalogo_habilidades.csv"]),
+        habilidades=len(filas_por_archivo["catalogo_logros.csv"]),
         herramientas=len(filas_por_archivo["catalogo_herramientas.csv"]),
         outputs=tuple(outputs),
         hallazgos=tuple(hallazgos),
@@ -398,7 +398,8 @@ def _filas_silabo(
             },
         )
     return [silabos[id_silabo] for id_silabo in sorted(silabos)]
-    
+
+
 def _escribir_csv(ruta: Path, columnas: tuple[str, ...], filas: list[dict[str, str]]) -> None:
     with ruta.open("w", encoding="utf-8-sig", newline="") as archivo:
         escritor = csv.DictWriter(archivo, fieldnames=columnas, extrasaction="raise")

@@ -52,7 +52,7 @@ def _preparar(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, st
     reportes = salida / "reportes"
     reportes.mkdir(parents=True)
     _csv(salida / "catalogo_competencias.csv", aprobaciones.COMPETENCIAS_SCHEMA)
-    _csv(salida / "catalogo_habilidades.csv", aprobaciones.HABILIDADES_SCHEMA)
+    _csv(salida / "catalogo_logros.csv", aprobaciones.HABILIDADES_SCHEMA)
     _csv(salida / "catalogo_herramientas.csv", aprobaciones.HERRAMIENTAS_SCHEMA)
     _csv(salida / "cobertura_curricular.csv", aprobaciones.COBERTURA_SCHEMA)
     (reportes / "pendientes_curriculares.jsonl").write_text(
@@ -771,7 +771,7 @@ def test_no_promueve_habilidad_sin_competencia_al_catalogo_ni_al_perfil(
         )
 
     assert not list(
-        csv.DictReader((directorio / "salidas/catalogo_habilidades.csv").open(encoding="utf-8-sig"))
+        csv.DictReader((directorio / "salidas/catalogo_logros.csv").open(encoding="utf-8-sig"))
     )
     perfil = tmp_path / "catalogos" / "carreras" / "MARKETING" / "2026-1"
     assert not (perfil / "catalogo_habilidades.csv").exists()
@@ -933,7 +933,7 @@ def test_aprobar_los_tres_extremos_materializa_una_cadena_chh_valida(
         .read_text(encoding="utf-8")
         .splitlines()
     ]
-    assert cobertura_lineage[0]["id_logro"] == "LOG_1"
+    assert cobertura_lineage[0]["id_logro_fuente"] == "LOG_1"
     assert cobertura_lineage[0]["source_ref"] == "curso.docx"
     assert all(
         cobertura_lineage[0][campo]
@@ -1167,7 +1167,7 @@ def test_paquetes_para_presentacion_api_conserva_revision_visible_sin_provenance
                 "id_curso": "CUR_1",
                 "id_silabo": "SIL_1",
                 "id_competencia": "COMP_1",
-                "id_habilidad": "HAB_1",
+                "id_logro": "HAB_1",
                 "source_relationships": [{"payload": "pesado"}],
             }
         ],
@@ -1303,7 +1303,7 @@ def test_relaciones_de_evidencia_no_cruzan_competencias_de_otro_source_package()
     fila = {**scope, "id_pendiente": "PEN_1"}
     archivos = {
         "catalogo_competencias.csv": [{"id_competencia": "COMP_1"}, {"id_competencia": "COMP_2"}],
-        "catalogo_habilidades.csv": [{"id_habilidad": "HAB_1"}],
+        "catalogo_logros.csv": [{"id_logro": "HAB_1"}],
         "catalogo_herramientas.csv": [],
     }
     fuentes = {
@@ -1371,7 +1371,7 @@ def test_escritura_hitl_de_relaciones_preserva_lineage_del_jsonl(
         "id_curso": "CUR_1",
         "id_silabo": "SIL_1",
         "id_competencia": "COMP_1",
-        "id_habilidad": "HAB_1",
+        "id_logro": "HAB_1",
         "id_herramienta": "HERR_1",
     }
     _csv(salida / "cobertura_curricular.csv", aprobaciones.COBERTURA_SCHEMA)
@@ -1386,7 +1386,7 @@ def test_escritura_hitl_de_relaciones_preserva_lineage_del_jsonl(
             {
                 **relacion,
                 "id_ejecucion": "NOR_0123456789abcdef",
-                "id_logro": "LOG_1",
+                "id_logro_fuente": "LOG_1",
                 "id_competencia_fuente": "COMP_SRC_1",
                 "id_habilidad_fuente": "HAB_SRC_1",
                 "id_herramienta_fuente": "HERR_SRC_1",
@@ -1407,7 +1407,7 @@ def test_escritura_hitl_de_relaciones_preserva_lineage_del_jsonl(
     persistida = json.loads(
         (reportes / "cobertura_curricular_canonica.jsonl").read_text(encoding="utf-8")
     )
-    assert persistida["id_logro"] == "LOG_1"
+    assert persistida["id_logro_fuente"] == "LOG_1"
     assert persistida["source_ref"] == "entrada/silabo.pdf#LOG_1"
 
 
@@ -1722,7 +1722,7 @@ def test_add_de_habilidad_sin_competencia_no_contamina_catalogos_ni_perfil(
         )
 
     habilidades = list(
-        csv.DictReader((directorio / "salidas/catalogo_habilidades.csv").open(encoding="utf-8-sig"))
+        csv.DictReader((directorio / "salidas/catalogo_logros.csv").open(encoding="utf-8-sig"))
     )
     assert habilidades == []
     assert not (tmp_path / "catalogos" / "carreras" / "MARKETING" / "2026-1").exists()
@@ -1824,12 +1824,12 @@ def test_add_preserva_relaciones_n_a_n_existentes_del_paquete(
         csv.DictReader((directorio / "salidas/cobertura_curricular.csv").open(encoding="utf-8-sig"))
     )
     relaciones = {
-        (fila["id_competencia"], fila["id_habilidad"], fila["id_herramienta"]) for fila in cobertura
+        (fila["id_competencia"], fila["id_logro"], fila["id_herramienta"]) for fila in cobertura
     }
     assert len(cobertura) == 4
     assert len(relaciones) == 4
     assert len({fila["id_competencia"] for fila in cobertura}) == 2
-    assert len({fila["id_habilidad"] for fila in cobertura}) == 1
+    assert len({fila["id_logro"] for fila in cobertura}) == 1
 
 
 def test_approving_literal_program_tools_materializes_catalog_and_coverage(

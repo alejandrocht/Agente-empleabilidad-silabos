@@ -12,7 +12,7 @@ import hashlib
 import json
 import re
 import unicodedata
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -39,7 +39,7 @@ ID_EJECUCION_RE = re.compile(r"NOR_[0-9a-f]{16}")
 ID_IMPORTACION_RE = re.compile(r"IMP_[0-9a-f]{16}")
 ID_PATTERNS = {
     "id_competencia": re.compile(r"COMP_[0-9a-f]{16}"),
-    "id_habilidad": re.compile(r"HAB_[0-9a-f]{16}"),
+    "id_logro": re.compile(r"LOGRO_[0-9a-f]{16}"),
     "id_herramienta": re.compile(r"HERR_[0-9a-f]{16}"),
     "id_cob_curricular": re.compile(r"COB_CUR_[0-9a-f]{16}"),
     "id_curso": re.compile(r"CUR_[0-9a-f]{16}"),
@@ -47,16 +47,46 @@ ID_PATTERNS = {
     "id_carrera": re.compile(r"CAR_[0-9a-f]{16}"),
 }
 
+# La entidad publicada es el logro, pero el grafo conserva la etiqueta `Habilidad`
+# y sus propiedades históricas `id_habilidad`/`nombre_habilidad`, que el panel y el
+# resolver de entidades siguen leyendo. Este mapa desacopla la columna del CSV de
+# la propiedad del nodo: archivo -> {columna_csv: propiedad_nodo}.
+PROPIEDADES_NODO: dict[str, dict[str, str]] = {
+    "catalogo_logros.csv": {
+        "id_logro": "id_habilidad",
+        "nombre_logro": "nombre_habilidad",
+    },
+    "cobertura_curricular.csv": {"id_logro": "id_habilidad"},
+}
+
 RECOMENDACION = "Recomendamos revisar los datos antes de subirlos a la base de datos."
 ESTADOS_CURRICULARES_PUBLICABLES = {"limpiado", "limpiado_con_advertencias"}
 MAX_FILAS_POR_ARCHIVO = 100_000
 RELEASE_GATE_DECISION = "ALLOW_IMPORT"
 # Columnas cuyo vacío es válido por contrato, por archivo: las competencias técnicas
-# no declaran código curricular y la cobertura puede no tener habilidad o herramienta.
+# no declaran código curricular y la cobertura puede no tener logro o herramienta.
 CAMPOS_OPCIONALES: dict[str, frozenset[str]] = {
-    "cobertura_curricular.csv": frozenset({"id_habilidad", "id_herramienta"}),
+    "cobertura_curricular.csv": frozenset({"id_logro", "id_herramienta"}),
     "catalogo_competencias.csv": frozenset({"codigo_competencia"}),
 }
+
+
+def _fila_nodo(archivo: str, fila: Mapping[str, str]) -> dict[str, str]:
+    """Proyecta una fila CSV a las propiedades históricas del nodo del grafo."""
+
+    reescritura = PROPIEDADES_NODO.get(archivo)
+    if not reescritura:
+        return dict(fila)
+    return {
+        reescritura[columna] if columna in reescritura else columna: valor
+        for columna, valor in fila.items()
+    }
+
+
+def _propiedad_nodo(archivo: str, columna: str) -> str:
+    """Nombre de la propiedad del nodo que corresponde a una columna del CSV."""
+
+    return PROPIEDADES_NODO.get(archivo, {}).get(columna, columna)
 
 
 class SesionNeo4j(Protocol):
@@ -524,7 +554,7 @@ class ImportadorNeo4j:
                 "id_competencia",
                 "nombre_competencia",
             ),
-            "catalogo_habilidades.csv": (HABILIDADES_SCHEMA, "id_habilidad", "nombre_habilidad"),
+            "catalogo_logros.csv": (HABILIDADES_SCHEMA, "id_logro", "nombre_logro"),
             "catalogo_herramientas.csv": (
                 HERRAMIENTAS_SCHEMA,
                 "id_herramienta",
@@ -621,7 +651,7 @@ class ImportadorNeo4j:
                     else:
                         vistos_clave[clave] = numero
                     for campo in COBERTURA_SCHEMA[1:]:
-                        if campo in {"id_habilidad", "id_herramienta"} and not fila[campo]:
+                        if campo in {"id_logro", "id_herramienta"} and not fila[campo]:
                             continue
                         patron = ID_PATTERNS[campo]
                         if not fila[campo] or patron.fullmatch(fila[campo]) is None:
@@ -782,9 +812,9 @@ class ImportadorNeo4j:
                 ("nombre_competencia", "descripcion_breve_competencia", "tipo_competencia"),
                 "Competencia",
             ),
-            "catalogo_habilidades.csv": (
+            "catalogo_logros.csv": (
                 "habilidades",
-                "id_habilidad",
+                "id_logro",
                 ("nombre_habilidad", "descripcion_breve"),
                 "Habilidad",
             ),
@@ -799,12 +829,16 @@ class ImportadorNeo4j:
             existentes_id = existentes[label]["por_id"]
             existentes_nombre = existentes[label]["por_nombre"]
             for fila in fuente.filas[archivo]:
+                fila_nodo = _fila_nodo(archivo, fila)
                 id_fila = fila[columna_id]
                 actual = existentes_id.get(id_fila)
-                nombre_norm = _normalizar_nombre(fila[campos[0]])
+                nombre_norm = _normalizar_nombre(fila_nodo[campos[0]])
                 mismo_nombre = existentes_nombre.get(nombre_norm)
                 if actual is not None:
-                    if any(_texto(actual.get(campo)) != fila[campo] for campo in campos):
+                    if any(
+                        _texto(actual.get(campo)) != _texto(fila_nodo.get(campo))
+                        for campo in campos
+                    ):
                         conflictos.append(
                             self._conflicto(
                                 "ID_EXISTENTE_CON_CONFLICTO",
@@ -815,7 +849,10 @@ class ImportadorNeo4j:
                     else:
                         resumen["sin_cambios"] += 1
                     continue
-                if mismo_nombre is not None and _texto(mismo_nombre.get(columna_id)) != id_fila:
+                if (
+                    mismo_nombre is not None
+                    and _texto(mismo_nombre.get(_propiedad_nodo(archivo, columna_id))) != id_fila
+                ):
                     conflictos.append(
                         self._conflicto(
                             "NOMBRE_EXISTENTE_CON_OTRO_ID",
@@ -866,9 +903,7 @@ class ImportadorNeo4j:
                 fila["id_competencia"] for fila in fuente.filas["catalogo_competencias.csv"]
             }
             | set(existentes["Competencia"]["por_id"]),
-            "id_habilidad": {
-                fila["id_habilidad"] for fila in fuente.filas["catalogo_habilidades.csv"]
-            }
+            "id_logro": {fila["id_logro"] for fila in fuente.filas["catalogo_logros.csv"]}
             | set(existentes["Habilidad"]["por_id"]),
             "id_herramienta": {
                 fila["id_herramienta"] for fila in fuente.filas["catalogo_herramientas.csv"]
@@ -934,13 +969,13 @@ class ImportadorNeo4j:
                         "id_competencia no existe en los catálogos disponibles.",
                     )
                 )
-            if fila["id_habilidad"] and fila["id_habilidad"] not in ids_catalogo["id_habilidad"]:
+            if fila["id_logro"] and fila["id_logro"] not in ids_catalogo["id_logro"]:
                 referencia_catalogo_valida = False
                 conflictos.append(
                     self._conflicto(
                         "REFERENCIA_CATALOGO_NO_EXISTE",
                         "cobertura_curricular.csv",
-                        "id_habilidad no existe en los catálogos disponibles.",
+                        "id_logro no existe en los catálogos disponibles.",
                     )
                 )
             if (
@@ -1028,7 +1063,7 @@ class ImportadorNeo4j:
         mapa = {
             "curso.csv": ("cursos_detalle", "id_curso"),
             "catalogo_competencias.csv": ("Competencia", "id_competencia"),
-            "catalogo_habilidades.csv": ("Habilidad", "id_habilidad"),
+            "catalogo_logros.csv": ("Habilidad", "id_logro"),
             "catalogo_herramientas.csv": ("Herramienta", "id_herramienta"),
             "cobertura_curricular.csv": ("Cobertura_Curricular", "id_cob_curricular"),
         }
@@ -1215,12 +1250,16 @@ class ImportadorNeo4j:
                     filas_nuevas["catalogo_competencias.csv"],
                     id_importacion,
                 )
+                filas_habilidad = [
+                    _fila_nodo("catalogo_logros.csv", fila)
+                    for fila in filas_nuevas["catalogo_logros.csv"]
+                ]
                 self._escribir_catalogo(
                     tx,
                     "Habilidad",
                     "id_habilidad",
                     ["nombre_habilidad", "descripcion_breve"],
-                    filas_nuevas["catalogo_habilidades.csv"],
+                    filas_habilidad,
                     id_importacion,
                 )
                 self._escribir_catalogo(
@@ -1231,7 +1270,10 @@ class ImportadorNeo4j:
                     filas_nuevas["catalogo_herramientas.csv"],
                     id_importacion,
                 )
-                filas_cobertura = filas_nuevas["cobertura_curricular.csv"]
+                filas_cobertura = [
+                    _fila_nodo("cobertura_curricular.csv", fila)
+                    for fila in filas_nuevas["cobertura_curricular.csv"]
+                ]
                 if not filas_cobertura:
                     return
                 for requiere_habilidad in (False, True):

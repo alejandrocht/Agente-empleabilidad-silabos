@@ -21,6 +21,7 @@ from agente.normalizador.silabos.paquetes import (
     ensamblar_paquetes_chh,
     validar_integridad_paquetes_chh,
 )
+from agente.normalizador.silabos.perfiles import _CATALOGO_PERFIL
 from agente.normalizador.silabos.persistencia_aprobaciones import (
     ExceptionFactory,
     _clave_ruta,
@@ -35,7 +36,6 @@ from agente.normalizador.silabos.salida import (
     ARCHIVOS_SALIDA,
     COBERTURA_SCHEMA,
     COMPETENCIAS_SCHEMA,
-    HABILIDADES_SCHEMA,
     HERRAMIENTAS_SCHEMA,
 )
 
@@ -67,8 +67,8 @@ def _recalcular_release_gate(
             "id_competencia_canonica",
         ),
         "missing_skills": _ids_sin_fuente(
-            archivos["catalogo_habilidades.csv"],
-            "id_habilidad",
+            archivos["catalogo_logros.csv"],
+            "id_logro",
             fuentes["habilidades_fuente.jsonl"],
             "id_habilidad_canonica",
         ),
@@ -89,7 +89,7 @@ def _recalcular_release_gate(
             _texto(fila.get("id_curso")),
             _texto(fila.get("id_silabo")),
             _texto(fila.get("id_competencia")),
-            _texto(fila.get("id_habilidad")),
+            _texto(fila.get("id_logro")),
             _texto(fila.get("id_herramienta")),
         )
         for fila in relaciones_reportadas
@@ -99,7 +99,7 @@ def _recalcular_release_gate(
             _texto(fila.get("id_curso")),
             _texto(fila.get("id_silabo")),
             _texto(fila.get("id_competencia")),
-            _texto(fila.get("id_habilidad")),
+            _texto(fila.get("id_logro")),
             _texto(fila.get("id_herramienta")),
         )
         for fila in cobertura
@@ -114,9 +114,7 @@ def _recalcular_release_gate(
         "id_competencia": {
             _texto(fila.get("id_competencia")) for fila in archivos["catalogo_competencias.csv"]
         },
-        "id_habilidad": {
-            _texto(fila.get("id_habilidad")) for fila in archivos["catalogo_habilidades.csv"]
-        },
+        "id_logro": {_texto(fila.get("id_logro")) for fila in archivos["catalogo_logros.csv"]},
         "id_herramienta": {
             _texto(fila.get("id_herramienta")) for fila in archivos["catalogo_herramientas.csv"]
         },
@@ -138,7 +136,7 @@ def _recalcular_release_gate(
             _texto(fila.get("id_curso")),
             _texto(fila.get("id_silabo")),
             _texto(fila.get("id_competencia")),
-            _texto(fila.get("id_habilidad")),
+            _texto(fila.get("id_logro")),
             _texto(fila.get("id_herramienta")),
         )
         for fila in cobertura
@@ -276,7 +274,7 @@ def _recalcular_release_gate(
     observability.update(
         {
             "canonical_competencies": len(archivos["catalogo_competencias.csv"]),
-            "canonical_skills": len(archivos["catalogo_habilidades.csv"]),
+            "canonical_skills": len(archivos["catalogo_logros.csv"]),
             "canonical_tools": len(archivos["catalogo_herramientas.csv"]),
             "canonical_relations": len(archivos["cobertura_curricular.csv"]),
             "pending_records": len(pendientes),
@@ -360,9 +358,14 @@ def _materializar_perfil(
     destino = catalog_root() / "carreras" / carrera / periodo
     destino.mkdir(parents=True, exist_ok=True)
     for nombre, columnas in ARCHIVOS_SALIDA:
-        actual = _leer_csv_opcional(destino / nombre, columnas, invalid_error=invalid_error)
-        fusionadas = _fusionar_csv(actual, archivos[nombre], columnas)
-        _escribir_csv_atomico(destino / nombre, columnas, fusionadas)
+        nombre_destino, columnas_destino, nuevos = _destino_catalogo(
+            nombre, list(archivos[nombre]), columnas
+        )
+        actual = _leer_csv_opcional(
+            destino / nombre_destino, columnas_destino, invalid_error=invalid_error
+        )
+        fusionadas = _fusionar_csv(actual, nuevos, columnas_destino)
+        _escribir_csv_atomico(destino / nombre_destino, columnas_destino, fusionadas)
     reportes_destino = destino / "reportes"
     reportes_destino.mkdir(parents=True, exist_ok=True)
     for reporte in reportes.iterdir():
@@ -370,6 +373,7 @@ def _materializar_perfil(
             _escribir_texto_atomico(
                 reportes_destino / reporte.name, reporte.read_text(encoding="utf-8")
             )
+    nombre_habilidades, columnas_habilidades, _ = _destino_catalogo("catalogo_logros.csv", [], ())
     conteos = {
         "competencias": len(
             _leer_csv_opcional(
@@ -380,8 +384,8 @@ def _materializar_perfil(
         ),
         "habilidades": len(
             _leer_csv_opcional(
-                destino / "catalogo_habilidades.csv",
-                HABILIDADES_SCHEMA,
+                destino / nombre_habilidades,
+                columnas_habilidades,
                 invalid_error=invalid_error,
             )
         ),
@@ -501,7 +505,7 @@ def _persistir_manifest_aprobacion(
         limpieza["release_gate"] = gate
         limpieza["pendientes"] = resumen.get("remaining_pending", 0)
         limpieza["competencias"] = len(archivos["catalogo_competencias.csv"])
-        limpieza["habilidades"] = len(archivos["catalogo_habilidades.csv"])
+        limpieza["habilidades"] = len(archivos["catalogo_logros.csv"])
         limpieza["herramientas"] = len(archivos["catalogo_herramientas.csv"])
         manifest["limpieza_silabos"] = limpieza
     _escribir_json_atomico(directorio / "manifest.json", manifest)
@@ -515,6 +519,33 @@ def _actualizar_hash_manifest(directorio: Path, item: dict[str, object]) -> None
         return
     item["bytes"] = ruta.stat().st_size
     item["sha256"] = hashlib.sha256(ruta.read_bytes()).hexdigest()
+
+
+def _destino_catalogo(
+    nombre: str,
+    filas: list[dict[str, str]],
+    columnas: tuple[str, ...],
+) -> tuple[str, tuple[str, ...], list[dict[str, str]]]:
+    """Nombra el catálogo de destino y traduce sus columnas al contrato interno.
+
+    El perfil de carrera alimenta el lector de catálogos curados, que todavía
+    espera el contrato de habilidades; el catálogo publicado son los logros.
+    """
+
+    nombre_destino, reescritura = _CATALOGO_PERFIL.get(nombre, (nombre, ()))
+    if not reescritura:
+        return nombre, columnas, filas
+    return (
+        nombre_destino,
+        tuple(destino_columna for destino_columna, _ in reescritura),
+        [
+            {
+                destino_columna: fila.get(columna_origen, "")
+                for destino_columna, columna_origen in reescritura
+            }
+            for fila in filas
+        ],
+    )
 
 
 def _fusionar_csv(

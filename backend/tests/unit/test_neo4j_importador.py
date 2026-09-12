@@ -15,7 +15,7 @@ from agente.normalizador.silabos.salida import ARCHIVOS_SALIDA
 
 IDS = {
     "id_competencia": "COMP_0123456789abcdef",
-    "id_habilidad": "HAB_0123456789abcdef",
+    "id_logro": "LOGRO_0123456789abcdef",
     "id_herramienta": "HERR_0123456789abcdef",
     "id_cob_curricular": "COB_CUR_0123456789abcdef",
     "id_curso": "CUR_0123456789abcdef",
@@ -156,10 +156,10 @@ def _filas() -> dict[str, list[dict[str, str]]]:
                 "tipo_competencia": "blanda",
             }
         ],
-        "catalogo_habilidades.csv": [
+        "catalogo_logros.csv": [
             {
-                "id_habilidad": IDS["id_habilidad"],
-                "nombre_habilidad": "Analizar datos",
+                "id_logro": IDS["id_logro"],
+                "nombre_logro": "Analizar datos",
                 "descripcion_breve": "Interpreta información estructurada.",
             }
         ],
@@ -176,7 +176,7 @@ def _filas() -> dict[str, list[dict[str, str]]]:
                 "id_curso": IDS["id_curso"],
                 "id_silabo": IDS["id_silabo"],
                 "id_competencia": IDS["id_competencia"],
-                "id_habilidad": IDS["id_habilidad"],
+                "id_logro": IDS["id_logro"],
                 "id_herramienta": IDS["id_herramienta"],
             }
         ],
@@ -223,7 +223,7 @@ def test_preview_valida_novedad_y_importa_solo_filas_nuevas(tmp_path: Path) -> N
     assert {fila["archivo"]: fila["nuevas"] for fila in preview["archivos"]} == {
         "curso.csv": 1,
         "catalogo_competencias.csv": 1,
-        "catalogo_habilidades.csv": 1,
+        "catalogo_logros.csv": 1,
         "catalogo_herramientas.csv": 1,
         "cobertura_curricular.csv": 1,
     }
@@ -462,9 +462,9 @@ def test_preview_rechaza_variante_de_id_de_cobertura(tmp_path: Path, id_cobertur
     assert any(error["codigo"] == "ID_INVALIDO" for error in preview["errores"])
 
 
-def test_importa_cobertura_sin_habilidad_ni_herramienta(tmp_path: Path) -> None:
+def test_importa_cobertura_sin_logro_ni_herramienta(tmp_path: Path) -> None:
     filas = _filas()
-    filas["cobertura_curricular.csv"][0].update({"id_habilidad": "", "id_herramienta": ""})
+    filas["cobertura_curricular.csv"][0].update({"id_logro": "", "id_herramienta": ""})
     gestor, id_ejecucion = _manifest_y_salidas(tmp_path, filas)
     driver = FakeDriver(
         {
@@ -489,9 +489,9 @@ def test_importa_cobertura_sin_habilidad_ni_herramienta(tmp_path: Path) -> None:
     assert "[rh:ENSENIA]" not in consulta
 
 
-def test_importa_cobertura_sin_habilidad_con_herramienta(tmp_path: Path) -> None:
+def test_importa_cobertura_sin_logro_con_herramienta(tmp_path: Path) -> None:
     filas = _filas()
-    filas["cobertura_curricular.csv"][0]["id_habilidad"] = ""
+    filas["cobertura_curricular.csv"][0]["id_logro"] = ""
     gestor, id_ejecucion = _manifest_y_salidas(tmp_path, filas)
     driver = FakeDriver(
         {
@@ -520,7 +520,7 @@ def test_importa_cobertura_sin_habilidad_con_herramienta(tmp_path: Path) -> None
     ("campo", "id_inexistente"),
     [
         ("id_competencia", "COMP_fedcba9876543210"),
-        ("id_habilidad", "HAB_fedcba9876543210"),
+        ("id_logro", "LOGRO_fedcba9876543210"),
         ("id_herramienta", "HERR_fedcba9876543210"),
     ],
 )
@@ -655,8 +655,8 @@ def test_reversion_restaura_propiedades_de_curso_preexistente(tmp_path: Path) ->
 def test_preview_bloquea_encabezado_fuera_del_contrato(tmp_path: Path) -> None:
     filas = _filas()
     gestor, id_ejecucion = _manifest_y_salidas(tmp_path, filas)
-    ruta = tmp_path / id_ejecucion / "salidas" / "catalogo_habilidades.csv"
-    ruta.write_text("id_habilidad,nombre\n", encoding="utf-8")
+    ruta = tmp_path / id_ejecucion / "salidas" / "catalogo_logros.csv"
+    ruta.write_text("id_logro,nombre\n", encoding="utf-8")
     importador = ImportadorNeo4j(gestor, driver_factory=lambda: FakeDriver())
 
     preview = importador.previsualizar(id_ejecucion)

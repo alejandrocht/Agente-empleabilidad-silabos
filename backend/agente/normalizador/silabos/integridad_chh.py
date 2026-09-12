@@ -14,7 +14,7 @@ from agente.normalizador.modelos import Hallazgo
 RelacionCHH = tuple[str, str, str, str, str]
 
 _COMPETENCIAS = "catalogo_competencias.csv"
-_HABILIDADES = "catalogo_habilidades.csv"
+_HABILIDADES = "catalogo_logros.csv"
 _HERRAMIENTAS = "catalogo_herramientas.csv"
 
 
@@ -26,19 +26,19 @@ def validar_integridad_chh(
 
     Una herramienta puede ser opcional en una relación, pero una herramienta
     que sí aparece en su catálogo debe participar en al menos una relación con
-    una competencia y una habilidad. Las habilidades publicadas no pueden
-    quedar huérfanas. La competencia-only se valida en el paquete fuente,
-    porque el catálogo global no conserva suficiente alcance para decidir si
-    otra habilidad pertenece a esa misma fuente.
+    una competencia y un logro. Los logros publicados no pueden quedar
+    huérfanos. La competencia-only se valida en el paquete fuente, porque el
+    catálogo global no conserva suficiente alcance para decidir si otro logro
+    pertenece a esa misma fuente.
     """
 
     ids_competencias = _ids(filas_por_archivo.get(_COMPETENCIAS, ()), "id_competencia")
-    ids_habilidades = _ids(filas_por_archivo.get(_HABILIDADES, ()), "id_habilidad")
+    ids_logros = _ids(filas_por_archivo.get(_HABILIDADES, ()), "id_logro")
     ids_herramientas = _ids(filas_por_archivo.get(_HERRAMIENTAS, ()), "id_herramienta")
 
     hallazgos: list[Hallazgo] = []
-    competencias_por_habilidad: dict[str, set[str]] = {
-        identificador: set() for identificador in ids_habilidades
+    competencias_por_logro: dict[str, set[str]] = {
+        identificador: set() for identificador in ids_logros
     }
     relaciones_por_herramienta: dict[str, set[tuple[str, str]]] = {
         identificador: set() for identificador in ids_herramientas
@@ -52,8 +52,7 @@ def validar_integridad_chh(
                     codigo="RELACION_CHH_INCOMPLETA",
                     severidad="error",
                     mensaje=(
-                        "Cada relación curricular debe conservar curso, sílabo, "
-                        "competencia y habilidad."
+                        "Cada relación curricular debe conservar curso, sílabo y competencia."
                     ),
                     hoja="cobertura_curricular.csv",
                     fila=indice,
@@ -61,15 +60,13 @@ def validar_integridad_chh(
             )
             continue
 
-        id_curso, id_silabo, id_competencia, id_habilidad, id_herramienta = valores
-        if not id_curso or not id_silabo or not id_competencia or not id_habilidad:
+        id_curso, id_silabo, id_competencia, id_logro, id_herramienta = valores
+        if not id_curso or not id_silabo or not id_competencia:
             hallazgos.append(
                 Hallazgo(
                     codigo="RELACION_CHH_INCOMPLETA",
                     severidad="error",
-                    mensaje=(
-                        "Una relación CHH no puede omitir el origen, la competencia o la habilidad."
-                    ),
+                    mensaje=("Una relación CHH no puede omitir el origen o la competencia."),
                     hoja="cobertura_curricular.csv",
                     fila=indice,
                     detalle="|".join(valores),
@@ -80,8 +77,8 @@ def validar_integridad_chh(
         referencias_invalidas = []
         if id_competencia not in ids_competencias:
             referencias_invalidas.append(f"competencia={id_competencia}")
-        if id_habilidad not in ids_habilidades:
-            referencias_invalidas.append(f"habilidad={id_habilidad}")
+        if id_logro and id_logro not in ids_logros:
+            referencias_invalidas.append(f"logro={id_logro}")
         if id_herramienta and id_herramienta not in ids_herramientas:
             referencias_invalidas.append(f"herramienta={id_herramienta}")
         if referencias_invalidas:
@@ -97,9 +94,10 @@ def validar_integridad_chh(
             )
             continue
 
-        competencias_por_habilidad[id_habilidad].add(id_competencia)
+        if id_logro:
+            competencias_por_logro[id_logro].add(id_competencia)
         if id_herramienta:
-            relaciones_por_herramienta[id_herramienta].add((id_competencia, id_habilidad))
+            relaciones_por_herramienta[id_herramienta].add((id_competencia, id_logro))
 
     # Competencies are mandatory package roots, while skills and tools are
     # optional package members.  Package-local validation owns the rule that a
@@ -107,16 +105,16 @@ def validar_integridad_chh(
     # source package a competency belongs to and must not block competency-only
     # packages because another package happens to contain a skill.
 
-    for identificador in sorted(ids_habilidades):
-        if competencias_por_habilidad[identificador]:
+    for identificador in sorted(ids_logros):
+        if competencias_por_logro[identificador]:
             continue
         hallazgos.append(
             Hallazgo(
-                codigo="HABILIDAD_SIN_COMPETENCIA",
+                codigo="LOGRO_SIN_COMPETENCIA",
                 severidad="error",
-                mensaje="Toda habilidad publicada debe relacionarse con una competencia.",
+                mensaje="Todo logro publicado debe relacionarse con una competencia.",
                 hoja=_HABILIDADES,
-                campo="id_habilidad",
+                campo="id_logro",
                 detalle=identificador,
             )
         )
@@ -129,8 +127,7 @@ def validar_integridad_chh(
                 codigo="HERRAMIENTA_SIN_CADENA_CHH",
                 severidad="error",
                 mensaje=(
-                    "Toda herramienta publicada debe relacionarse con una habilidad "
-                    "y una competencia."
+                    "Toda herramienta publicada debe relacionarse con un logro y una competencia."
                 ),
                 hoja=_HERRAMIENTAS,
                 campo="id_herramienta",

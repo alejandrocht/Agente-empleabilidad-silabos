@@ -96,13 +96,13 @@ Cada ejecución conserva exactamente cinco CSV curriculares como paquete candida
 ```text
 salidas/curso.csv
 salidas/catalogo_competencias.csv
-salidas/catalogo_habilidades.csv
+salidas/catalogo_logros.csv
 salidas/catalogo_herramientas.csv
 salidas/cobertura_curricular.csv
 ```
 
 La cobertura solo contiene `id_cob_curricular`, `id_curso`, `id_silabo`, `id_competencia`,
-`id_habilidad` e `id_herramienta`. El último campo puede estar vacío; los demás identifican la
+`id_logro` e `id_herramienta`. El logro y la herramienta pueden estar vacíos; los demás campos
 relación atómica y conectan cada resultado con el curso y el sílabo de origen. La proveniencia
 detallada se conserva en `salidas/reportes/{competencias,habilidades,herramientas}_fuente.jsonl` y
 en `cobertura_curricular_fuente.jsonl`; las propuestas no catalogadas quedan en
@@ -221,12 +221,12 @@ curso.csv:
 id_curso,nombre_curso,coordinador,creditos,nivel,tipo_curso,codigo_curso,id_carrera
 catalogo_competencias.csv:
 id_competencia,nombre_competencia,descripcion_breve_competencia,tipo_competencia
-catalogo_habilidades.csv:
-id_habilidad,nombre_habilidad,descripcion_breve
+catalogo_logros.csv:
+id_logro,nombre_logro,descripcion_breve
 catalogo_herramientas.csv:
 id_herramienta,nombre_herramienta,descripcion_breve_herramienta
 cobertura_curricular.csv:
-id_cob_curricular,id_curso,id_silabo,id_competencia,id_habilidad,id_herramienta
+id_cob_curricular,id_curso,id_silabo,id_competencia,id_logro,id_herramienta
 ```
 
 La evidencia que no puede expresarse en ese contrato se guarda como JSONL de auditoría en

@@ -83,17 +83,17 @@ def _fila_relacion(
     id_curso: str,
     id_silabo: str,
     id_competencia: str,
-    id_habilidad: str,
+    id_logro: str,
     id_herramienta: str,
 ) -> dict[str, str]:
     return {
         "id_cob_curricular": _id_canonico(
-            "COB_CUR", id_curso, id_silabo, id_competencia, id_habilidad, id_herramienta
+            "COB_CUR", id_curso, id_silabo, id_competencia, id_logro, id_herramienta
         ),
         "id_curso": id_curso,
         "id_silabo": id_silabo,
         "id_competencia": id_competencia,
-        "id_habilidad": id_habilidad,
+        "id_logro": id_logro,
         "id_herramienta": id_herramienta,
     }
 
@@ -103,7 +103,7 @@ def _clave_relacion(fila: Mapping[str, object]) -> tuple[str, str, str, str, str
         _texto(fila.get("id_curso")),
         _texto(fila.get("id_silabo")),
         _texto(fila.get("id_competencia")),
-        _texto(fila.get("id_habilidad")),
+        _texto(fila.get("id_logro")),
         _texto(fila.get("id_herramienta")),
     )
 
@@ -170,7 +170,7 @@ def _lineage_relacion(
     fuentes: Mapping[str, Sequence[Mapping[str, object]]],
     identidad: Mapping[str, str],
     id_competencia: str,
-    id_habilidad: str,
+    id_logro: str,
     id_herramienta: str,
 ) -> dict[str, str]:
     """Build stable lineage for an edge created during approval."""
@@ -215,12 +215,12 @@ def _lineage_relacion(
     return {
         "id_ejecucion": identidad["id_ejecucion"],
         "id_relacion_fuente": id_relacion_fuente,
-        "id_logro": _texto(fila.get("id_logro")),
+        "id_logro_fuente": _texto(fila.get("id_logro")),
         "id_competencia_fuente": id_fuente(
             "competencias_fuente.jsonl", "id_competencia_canonica", id_competencia
         ),
         "id_habilidad_fuente": id_fuente(
-            "habilidades_fuente.jsonl", "id_habilidad_canonica", id_habilidad
+            "habilidades_fuente.jsonl", "id_habilidad_canonica", id_logro
         )
         or identidad["id_habilidad_fuente"],
         "id_herramienta_fuente": id_fuente(
@@ -229,7 +229,7 @@ def _lineage_relacion(
         if id_herramienta
         else "",
         "id_competencia_canonica": id_competencia,
-        "id_habilidad_canonica": id_habilidad,
+        "id_habilidad_canonica": id_logro,
         "id_herramienta_canonica": id_herramienta,
         "source_ref": _texto(fila.get("source_ref"))
         or _texto(fila.get("archivo"))

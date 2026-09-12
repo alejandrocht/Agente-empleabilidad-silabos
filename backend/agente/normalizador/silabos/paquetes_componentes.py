@@ -50,7 +50,7 @@ _SOURCE_FILES = {
 }
 _CATALOGS = {
     "competencia": ("catalogo_competencias.csv", "id_competencia", "nombre_competencia"),
-    "habilidad": ("catalogo_habilidades.csv", "id_habilidad", "nombre_habilidad"),
+    "habilidad": ("catalogo_logros.csv", "id_logro", "nombre_logro"),
     "herramienta": ("catalogo_herramientas.csv", "id_herramienta", "nombre_herramienta"),
 }
 
@@ -143,7 +143,7 @@ def _relaciones_canonicas(
     for relacion in relaciones:
         ids = (
             _text(relacion.get("id_competencia")),
-            _text(relacion.get("id_habilidad")),
+            _text(relacion.get("id_logro")),
             _text(relacion.get("id_herramienta")),
         )
         if not ids[0] or not ids[1] or ids in seen:
@@ -199,9 +199,9 @@ def _add_source_components(
         source_row_matches_package = _default_source_row_matches_package
     skill_catalog_names = _catalog_names_by_id(
         archivos,
-        filename="catalogo_habilidades.csv",
-        id_key="id_habilidad",
-        name_key="nombre_habilidad",
+        filename="catalogo_logros.csv",
+        id_key="id_logro",
+        name_key="nombre_logro",
     )
     for kind, (filename, source_id_key, canonical_key, name_key) in _SOURCE_FILES.items():
         for source in (source_rows or fuentes).get(filename, ()):

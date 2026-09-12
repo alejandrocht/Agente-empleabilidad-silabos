@@ -27,7 +27,7 @@ RELATION_KEYS = (
     "id_curso",
     "id_silabo",
     "id_competencia",
-    "id_habilidad",
+    "id_logro",
     "id_herramienta",
 )
 _SOURCE_RELATIONS_FILE = "cobertura_curricular_fuente.jsonl"
@@ -332,7 +332,7 @@ def _relation_matches_scoped_ids(
     tool = _text(relation.get("id_herramienta"))
     return (
         bool(identity[5])
-        and _text(relation.get("id_habilidad")) in skills
+        and _text(relation.get("id_logro")) in skills
         and _text(relation.get("id_competencia")) in competencies
         and (not tool or tool in tools)
     )
@@ -447,7 +447,7 @@ def _relation_scope_matches(
     scoped_tools.discard("")
     return (
         bool(source_skill)
-        and _text(relation.get("id_habilidad")) in scoped_skills
+        and _text(relation.get("id_logro")) in scoped_skills
         and _text(relation.get("id_competencia")) in scoped_competencies
         and (
             not _text(relation.get("id_herramienta"))

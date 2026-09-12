@@ -928,9 +928,9 @@ def test_los_seis_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None:
             "tipo_competencia",
             "codigo_competencia",
         ],
-        "catalogo_habilidades.csv": [
-            "id_habilidad",
-            "nombre_habilidad",
+        "catalogo_logros.csv": [
+            "id_logro",
+            "nombre_logro",
             "descripcion_breve",
         ],
         "catalogo_herramientas.csv": [
@@ -943,7 +943,7 @@ def test_los_seis_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None:
             "id_curso",
             "id_silabo",
             "id_competencia",
-            "id_habilidad",
+            "id_logro",
             "id_herramienta",
         ],
     }
