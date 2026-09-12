@@ -257,6 +257,7 @@ def _declaraciones(datos: dict[str, object]) -> list[dict[str, str]]:
                     "orden": _texto(item.get("orden")) or str(indice),
                     "nombre": nombre,
                     "descripcion": _texto(item.get("descripcion")),
+                    "codigo": _texto(item.get("codigo")),
                 }
             )
     return resultado

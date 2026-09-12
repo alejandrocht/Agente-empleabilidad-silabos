@@ -248,6 +248,7 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
             "nombre_competencia",
             "descripcion_breve_competencia",
             "tipo_competencia",
+            "codigo_competencia",
         ],
         "catalogo_habilidades.csv": [
             "id_habilidad",
@@ -272,6 +273,13 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
         with (ejecucion / "salidas" / nombre).open(encoding="utf-8-sig", newline="") as archivo:
             assert next(csv.reader(archivo)) == esperado
         assert (ejecucion / "salidas" / "reportes" / "habilidades_fuente.jsonl").is_file()
+    with (ejecucion / "salidas" / "catalogo_competencias.csv").open(
+        encoding="utf-8-sig", newline=""
+    ) as archivo:
+        competencias_publicadas = list(csv.DictReader(archivo))
+    assert {
+        fila["nombre_competencia"]: fila["codigo_competencia"] for fila in competencias_publicadas
+    } == {"Diseño de bases de datos": "G1"}
 
 
 def test_orden_de_archivos_no_depende_del_empaquetado_del_zip(tmp_path: Path) -> None:
@@ -634,6 +642,13 @@ def test_resuelve_logro_por_evidencia_textual_sin_referencia_de_tabla(tmp_path: 
         and fila["metodo_vinculacion_logro"] == "COINCIDENCIA_TEXTUAL_DECLARADA"
         for fila in competencias_fuente
     )
+    with (tmp_path / "ejecucion" / "salidas" / "catalogo_competencias.csv").open(
+        encoding="utf-8-sig", newline=""
+    ) as archivo:
+        competencias_publicadas = list(csv.DictReader(archivo))
+    assert {
+        fila["nombre_competencia"]: fila["codigo_competencia"] for fila in competencias_publicadas
+    } == {"Evaluación financiera": "G7"}
 
 
 def test_conserva_referencia_de_fuente_sin_catalogo_o_declaracion(tmp_path: Path) -> None:
@@ -1343,9 +1358,7 @@ def test_competencias_pdf_reconstruye_columnas_partidas_sin_carrera() -> None:
                 "Competencias genéricas",
                 "   Pensamiento           Obtiene una visión global sobre una situación "
                 "compleja a partir",
-                "     sistémico           de la integración de sus componentes."
-                + " " * 43
-                + "G1",
+                "     sistémico           de la integración de sus componentes." + " " * 43 + "G1",
                 "                                       Competencias específicas",
                 "   Control de la         Evalúa la implementación de planes y             "
                 "Carrera de           E4",

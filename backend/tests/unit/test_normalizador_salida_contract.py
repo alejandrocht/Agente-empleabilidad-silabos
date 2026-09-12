@@ -45,9 +45,7 @@ def _catalogo() -> CatalogoCHH:
             ConceptoCHH("COMP_A", "Gestionar campañas", "Gestionar campañas."),
             ConceptoCHH("COMP_B", "Analizar mercados", "Analizar mercados."),
         ),
-        habilidades=(
-            ConceptoCHH("HAB_A", "Analizar campañas", "Analizar campañas."),
-        ),
+        habilidades=(ConceptoCHH("HAB_A", "Analizar campañas", "Analizar campañas."),),
         herramientas=(
             ConceptoCHH("HERR_BEETRACK", "Beetrack", "Gestión logística."),
             ConceptoCHH("HERR_VTEX", "VTEX", "Comercio electrónico."),
@@ -108,8 +106,14 @@ def test_course_csv_has_exact_schema_deduplicates_and_maps_execution_career(tmp_
     with ruta_curso.open(encoding="utf-8-sig", newline="") as archivo:
         lector = csv.DictReader(archivo)
         assert lector.fieldnames == [
-            "id_curso", "nombre_curso", "coordinador", "creditos", "nivel",
-            "tipo_curso", "codigo_curso", "id_carrera",
+            "id_curso",
+            "nombre_curso",
+            "coordinador",
+            "creditos",
+            "nivel",
+            "tipo_curso",
+            "codigo_curso",
+            "id_carrera",
         ]
         filas = list(lector)
     assert filas == [
@@ -124,6 +128,120 @@ def test_course_csv_has_exact_schema_deduplicates_and_maps_execution_career(tmp_
             "id_carrera": "CAR_9f09cddacdb2e0c1",
         }
     ]
+
+
+COMPETENCIAS_FIELD_NAMES = [
+    "id_competencia",
+    "nombre_competencia",
+    "descripcion_breve_competencia",
+    "tipo_competencia",
+    "codigo_competencia",
+]
+
+
+def _competencias_rows(tmp_path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    ruta = tmp_path / "NOR_TEST" / "salidas" / "catalogo_competencias.csv"
+    with ruta.open(encoding="utf-8-sig", newline="") as archivo:
+        lector = csv.DictReader(archivo)
+        return list(lector.fieldnames or []), list(lector)
+
+
+def _registro_con_declaraciones(
+    declaraciones: list[dict[str, str]],
+    id_silabo: str = "SIL_1",
+) -> dict[str, object]:
+    """Construye un registro cuyo sílabo declara las competencias indicadas."""
+
+    registro = _registro()
+    registro["id_silabo"] = id_silabo
+    registro["id_curso"] = f"CUR_{id_silabo}"
+    datos = registro["datos"]
+    assert isinstance(datos, dict)
+    datos["competencias_declaradas"] = declaraciones
+    return registro
+
+
+def test_competency_catalog_emits_declared_curriculum_codes(tmp_path: Path) -> None:
+    """Las competencias genéricas y específicas declaradas publican su código."""
+
+    registro = _registro_con_declaraciones(
+        [
+            {
+                "orden": "1",
+                "nombre": "Gestionar campañas",
+                "descripcion": "Gestionar campañas.",
+                "codigo": "G7",
+            },
+            {
+                "orden": "2",
+                "nombre": "Analizar mercados",
+                "descripcion": "Analizar mercados.",
+                "codigo": "E2",
+            },
+        ]
+    )
+
+    resultado = construir_salidas_curriculares(
+        [registro], _validacion(), tmp_path / "NOR_TEST", _catalogo()
+    )
+
+    assert resultado.publicable is True
+    encabezado, filas = _competencias_rows(tmp_path)
+    assert encabezado == COMPETENCIAS_FIELD_NAMES
+    assert {fila["nombre_competencia"]: fila["codigo_competencia"] for fila in filas} == {
+        "Gestionar campañas": "G7",
+        "Analizar mercados": "E2",
+    }
+
+
+def test_competency_catalog_leaves_code_empty_when_syllabus_declares_none(
+    tmp_path: Path,
+) -> None:
+    """Una competencia técnica inferida por el modelo no declara código curricular."""
+
+    registro = _registro_con_declaraciones(
+        [
+            {
+                "orden": "1",
+                "nombre": "Gestionar campañas",
+                "descripcion": "Gestionar campañas.",
+            }
+        ]
+    )
+
+    resultado = construir_salidas_curriculares(
+        [registro], _validacion(), tmp_path / "NOR_TEST", _catalogo()
+    )
+
+    assert resultado.publicable is True
+    encabezado, filas = _competencias_rows(tmp_path)
+    assert encabezado == COMPETENCIAS_FIELD_NAMES
+    assert [fila["codigo_competencia"] for fila in filas] == [""]
+
+
+def test_competency_catalog_keeps_first_non_empty_code_per_canonical_competency(
+    tmp_path: Path,
+) -> None:
+    """Varias declaraciones de la misma competencia canónica no pisan el primer código."""
+
+    sin_codigo = {
+        "orden": "1",
+        "nombre": "Gestionar campañas",
+        "descripcion": "Gestionar campañas.",
+    }
+    registros = [
+        _registro_con_declaraciones([sin_codigo], id_silabo="SIL_1"),
+        _registro_con_declaraciones([{**sin_codigo, "codigo": "G7"}], id_silabo="SIL_2"),
+        _registro_con_declaraciones([{**sin_codigo, "codigo": "E2"}], id_silabo="SIL_3"),
+    ]
+
+    resultado = construir_salidas_curriculares(
+        registros, _validacion(), tmp_path / "NOR_TEST", _catalogo()
+    )
+
+    assert resultado.publicable is True
+    _, filas = _competencias_rows(tmp_path)
+    assert [fila["codigo_competencia"] for fila in filas] == ["G7"]
 
 
 def test_unknown_execution_career_blocks_without_inventing_car_id(tmp_path: Path) -> None:
@@ -146,8 +264,7 @@ def test_unknown_execution_career_blocks_without_inventing_car_id(tmp_path: Path
 
     assert resultado.release_gate["decision"] == "BLOCK_IMPORT"
     assert any(
-        hallazgo.codigo == "CARRERA_AUTORITATIVA_DESCONOCIDA"
-        for hallazgo in resultado.hallazgos
+        hallazgo.codigo == "CARRERA_AUTORITATIVA_DESCONOCIDA" for hallazgo in resultado.hallazgos
     )
 
 
@@ -183,8 +300,7 @@ def test_public_seam_preserves_nn_lineage_for_each_source_mapping(tmp_path: Path
     assert len(source_rows) == 2
     assert len(canonical_rows) == 2
     source_comp_tools = {
-        (row["id_competencia_fuente"], row["id_herramienta_fuente"])
-        for row in source_rows
+        (row["id_competencia_fuente"], row["id_herramienta_fuente"]) for row in source_rows
     }
     source_competencies = {row["id_competencia_fuente"] for row in source_rows}
     source_tools = {row["id_herramienta_fuente"] for row in source_rows}
@@ -228,8 +344,7 @@ def test_public_seam_preserves_nn_lineage_for_each_source_mapping(tmp_path: Path
         for row in canonical_rows
     )
     canonical_comp_tools = {
-        (row["id_competencia_canonica"], row["id_herramienta_canonica"])
-        for row in canonical_rows
+        (row["id_competencia_canonica"], row["id_herramienta_canonica"]) for row in canonical_rows
     }
     assert canonical_comp_tools == {
         (competencia, herramienta)
@@ -282,8 +397,7 @@ def test_pending_review_units_are_split_by_source_relation_identity(tmp_path: Pa
     }
     assert len({row["id_pendiente"] for row in pending_rows}) == 2
     assert {
-        package["source_identity"]["id_cob_curricular"]
-        for package in candidates["paquetes"]
+        package["source_identity"]["id_cob_curricular"] for package in candidates["paquetes"]
     } == {row["id_cob_curricular"] for row in source_rows}
     assert all(len(package["source_relationships"]) == 1 for package in candidates["paquetes"])
 
@@ -318,9 +432,7 @@ def test_public_seam_preserves_revised_skill_proposal_without_accepting_it(
     pendiente_habilidad = next(row for row in pendientes if row["tipo"] == "habilidad")
 
     assert pendiente_habilidad["propuesta"]["nombre"] == "Optimizar campañas omnicanal"
-    assert pendiente_habilidad["propuesta"]["nombre"] != pendiente_habilidad[
-        "descripcion_fuente"
-    ]
+    assert pendiente_habilidad["propuesta"]["nombre"] != pendiente_habilidad["descripcion_fuente"]
     assert canonical_rows == []
     assert all(row["id_habilidad_canonica"] == "" for row in source_rows)
 
@@ -349,7 +461,7 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
 
     assert _hashes_de_artefactos(tmp_path / "canonical" / "NOR_TEST" / "salidas") == {
         "catalogo_competencias.csv": (
-            "f3e32c125374666980b1d2afe3d06d8179647918b5591d70e113dad36d4ae89a"
+            "dab33b8ba44f4dce85d2f432fae1e40caf98b350ba522b576bfaf9014d76bc40"
         ),
         "catalogo_habilidades.csv": (
             "0e4d58da1c6385d5d7decbc82b918a24be42b1bf7a614bfc78b8bc08ae77dc3b"
@@ -362,7 +474,7 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
         ),
         "curso.csv": "02bbc9fd7fc3236eec084aa6241dd1094c4b18d510c5e707201e706bbc326498",
         "reportes/candidatos_curriculares.json": (
-            "41f75a3a00c9fa9e681cb3b021b43b1f2b36518930f85f191decc0c5f2d948be"
+            "0645d20ffc8e96d7b8c3640c017463ca266ee38e053f146a533eb4164776f9be"
         ),
         "reportes/cobertura_curricular_canonica.jsonl": (
             "52025738b253d279fa73528a724898b11e981375ab5db36c4647aa440592d449"
@@ -388,7 +500,7 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
     }
     assert _hashes_de_artefactos(tmp_path / "pending" / "NOR_TEST" / "salidas") == {
         "reportes/candidatos_curriculares.json": (
-            "10b29953f2cdbcd1c7eefeb908f0ab8ee439439a2cf24e6af5c0cf998d7b96c6"
+            "341310f58a012ac680940e2f595816130ffa5af024d9d381a707f2c52c6d365c"
         ),
         "reportes/cobertura_curricular_canonica.jsonl": (
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -529,9 +641,7 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
     for nombre, columnas in salida.ARCHIVOS_SALIDA:
         (corrupta / nombre).write_text(",".join(columnas) + "\n", encoding="utf-8")
     (corrupta / "curso.csv").write_text("incorrecto\n", encoding="utf-8")
-    assert validacion_salida.validar_salidas_curriculares(
-        corrupta, [], {}, {}, {}, {}, set()
-    ) == (
+    assert validacion_salida.validar_salidas_curriculares(corrupta, [], {}, {}, {}, {}, set()) == (
         Hallazgo(
             codigo="CSV_ESQUEMA_INVALIDO",
             severidad="error",

@@ -23,6 +23,7 @@ COMPETENCIAS_SCHEMA: tuple[str, ...] = (
     "nombre_competencia",
     "descripcion_breve_competencia",
     "tipo_competencia",
+    "codigo_competencia",
 )
 CURSOS_SCHEMA: tuple[str, ...] = (
     "id_curso",
