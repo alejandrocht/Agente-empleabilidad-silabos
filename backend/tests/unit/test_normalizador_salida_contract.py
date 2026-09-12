@@ -69,8 +69,8 @@ def _registro() -> dict[str, object]:
             "curso": "Omnicanalidad",
             "coordinador": "Ana Pérez | Bruno Díaz",
             "creditos": "4",
-            "nivel": "Séptimo",
-            "tipo_curso": "Presencial",
+            "nivel": "7",
+            "tipo_curso": "Obligatorio",
             "codigo_curso": "MKT701",
             "logros_especificos": [
                 {
@@ -118,8 +118,8 @@ def test_course_csv_has_exact_schema_deduplicates_and_maps_execution_career(tmp_
             "nombre_curso": "Omnicanalidad",
             "coordinador": "Ana Pérez | Bruno Díaz",
             "creditos": "4",
-            "nivel": "Séptimo",
-            "tipo_curso": "Presencial",
+            "nivel": "7",
+            "tipo_curso": "Obligatorio",
             "codigo_curso": "MKT701",
             "id_carrera": "CAR_9f09cddacdb2e0c1",
         }
@@ -360,9 +360,9 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
         "cobertura_curricular.csv": (
             "c5c4f6ef01ab1bbf81d33ec4234c6d52a2d5d90c60cfb0413d8e0f0bb080e0ff"
         ),
-        "curso.csv": "b9735fa0466a8504a53083a6815b03db2a1c60eac1abfe93033e9561293817dd",
+        "curso.csv": "02bbc9fd7fc3236eec084aa6241dd1094c4b18d510c5e707201e706bbc326498",
         "reportes/candidatos_curriculares.json": (
-            "eb33bb535b1ffe0fc8b4acd93e291027ffb0cbf3ca2a03f0f705741df11d82eb"
+            "41f75a3a00c9fa9e681cb3b021b43b1f2b36518930f85f191decc0c5f2d948be"
         ),
         "reportes/cobertura_curricular_canonica.jsonl": (
             "52025738b253d279fa73528a724898b11e981375ab5db36c4647aa440592d449"
@@ -388,7 +388,7 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
     }
     assert _hashes_de_artefactos(tmp_path / "pending" / "NOR_TEST" / "salidas") == {
         "reportes/candidatos_curriculares.json": (
-            "04d99b769bddeff50af1c13b353fbee4277fad95cbb24a45939d1f9069d3fae0"
+            "10b29953f2cdbcd1c7eefeb908f0ab8ee439439a2cf24e6af5c0cf998d7b96c6"
         ),
         "reportes/cobertura_curricular_canonica.jsonl": (
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+import unicodedata
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -494,7 +495,9 @@ def _id_canonico(tipo: str, *partes: str) -> str:
 
 
 def _clave_ruta(valor: str) -> str:
-    return re.sub(r"[^A-Za-z0-9]+", "_", valor).strip("_").upper()
+    plegado = unicodedata.normalize("NFKD", valor)
+    sin_acentos = "".join(caracter for caracter in plegado if not unicodedata.combining(caracter))
+    return re.sub(r"[^A-Za-z0-9]+", "_", sin_acentos).strip("_").upper()
 
 
 def _texto(valor: Any) -> str:

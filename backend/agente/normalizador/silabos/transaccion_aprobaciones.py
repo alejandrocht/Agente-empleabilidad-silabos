@@ -25,6 +25,7 @@ from agente.normalizador.silabos.clasificacion import (
 from agente.normalizador.silabos.paquetes import (
     PACKAGE_ID_FIELD,
     IdentidadFuenteIncompleta,
+    _abrir_paquetes_por_triple,
     ensamblar_paquetes_chh,
     preparar_fila_paquete,
     revision_paquetes_chh,
@@ -33,7 +34,7 @@ from agente.normalizador.silabos.paquetes import (
 PENDIENTES_ARCHIVO = "pendientes_curriculares.jsonl"
 DECISIONES_ARCHIVO = "decisiones_curriculares.jsonl"
 DESCARTES_ARCHIVO = "descartes_paquetes_curriculares.jsonl"
-ESTADOS_APROBACION = {"limpiado", "limpiado_con_advertencias"}
+ESTADOS_APROBACION = {"limpiado", "limpiado_con_advertencias", "no_publicado"}
 _ID_EJECUCION = re.compile(r"NOR_[0-9a-f]{16}")
 
 
@@ -106,7 +107,9 @@ def _aplicar_decisiones_curriculares(
             raise _validacion.RevisionCurricularInvalida(
                 "La cola de paquetes cambió; recarga la revisión curricular antes de decidir."
             )
-        solicitudes = _validacion._expandir_decisiones_de_paquete(solicitudes, pendientes)
+        solicitudes = _validacion._expandir_decisiones_de_paquete(
+            solicitudes, pendientes, paquetes_actuales
+        )
         por_id = {str(fila.get("id_pendiente")): fila for fila in pendientes}
         decisiones_previas = hooks.get("_leer_decisiones", _leer_decisiones)(
             reportes / DECISIONES_ARCHIVO
@@ -253,6 +256,11 @@ def _aplicar_decisiones_curriculares(
             )
 
         paquetes_descartados_en_solicitud: set[str] = set()
+        paquetes_por_id = {
+            _persistencia._texto(paquete.get(PACKAGE_ID_FIELD) or paquete.get("package_id")): paquete
+            for paquete in paquetes_actuales
+            if isinstance(paquete, Mapping)
+        }
         for solicitud in solicitudes:
             if solicitud["decision"] != "DISCARD":
                 continue
@@ -263,11 +271,25 @@ def _aplicar_decisiones_curriculares(
                 and package_id not in paquetes_descartados_en_solicitud
             ):
                 paquetes_descartados_en_solicitud.add(package_id)
-                filas_paquete = [
-                    fila
-                    for fila in pendientes
-                    if _persistencia._texto(fila.get(PACKAGE_ID_FIELD)) == package_id
-                ]
+                paquete = paquetes_por_id.get(package_id)
+                ids_paquete = {
+                    _persistencia._texto(fila.get("id_pendiente"))
+                    for fila in ((paquete or {}).get("filas") or [])
+                    if isinstance(fila, Mapping)
+                }
+                ids_paquete.discard("")
+                if ids_paquete:
+                    filas_paquete = [
+                        fila
+                        for fila in pendientes
+                        if _persistencia._texto(fila.get("id_pendiente")) in ids_paquete
+                    ]
+                else:
+                    filas_paquete = [
+                        fila
+                        for fila in pendientes
+                        if _persistencia._texto(fila.get(PACKAGE_ID_FIELD)) == package_id
+                    ]
                 nuevos_descartes.append(
                     hooks.get("_auditoria_descarte_paquete", _auditoria_descarte_paquete)(
                         package_id,
@@ -403,13 +425,20 @@ def _paquetes(directorio: Path, filas: list[dict[str, object]]) -> list[dict[str
     fuentes = _cargar_fuentes(reportes)
     relaciones = _cargar_relaciones(directorio / "salidas", reportes)
     package_rows = [fila for fila in filas if not fila.get("package_identity_error")]
-    return ensamblar_paquetes_chh(
+    paquetes = ensamblar_paquetes_chh(
         package_rows,
         id_ejecucion=directorio.name,
         fuentes=fuentes,
         relaciones=relaciones,
         archivos=candidatos,
     )
+    # The approval queue only offers complete, unique CHH triples: one
+    # competencia, one habilidad and one herramienta per decidible package.
+    return [
+        fan
+        for paquete in paquetes
+        for fan in _abrir_paquetes_por_triple(paquete)
+    ]
 
 
 def _rutas_transaccionales(

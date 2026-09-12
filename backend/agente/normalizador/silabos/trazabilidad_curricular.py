@@ -44,7 +44,7 @@ def _id_carrera(carrera: str) -> str:
 
 
 def _modalidad_curso(valor: object) -> str:
-    """Publish delivery modes in curso.csv, never academic nature."""
+    """Publica modos de entrega; nunca la naturaleza académica de la asignatura."""
 
     clave = _clave_carrera(valor).replace("_", " ")
     if "PRESENCIAL" in clave:
@@ -54,6 +54,81 @@ def _modalidad_curso(valor: object) -> str:
     if "VIRTUAL" in clave:
         return "Virtual"
     return ""
+
+
+_ORDINALES_CICLO: dict[str, str] = {
+    "PRIMERO": "1",
+    "SEGUNDO": "2",
+    "TERCERO": "3",
+    "CUARTO": "4",
+    "QUINTO": "5",
+    "SEXTO": "6",
+    "SEPTIMO": "7",
+    "OCTAVO": "8",
+    "NOVENO": "9",
+    "DECIMO": "10",
+}
+_NUMEROS_CREDITOS: dict[str, str] = {
+    "UNO": "1",
+    "UNA": "1",
+    "DOS": "2",
+    "TRES": "3",
+    "CUATRO": "4",
+    "CINCO": "5",
+    "SEIS": "6",
+    "SIETE": "7",
+    "OCHO": "8",
+    "NUEVE": "9",
+    "DIEZ": "10",
+}
+
+
+def _naturaleza_curso(valor: object) -> str:
+    """Publica la naturaleza declarada de la asignatura, sin inferir modalidad."""
+
+    texto = _texto(valor)
+    if not texto:
+        return ""
+    clave = _clave_carrera(texto)
+    if "OBLIGAT" in clave:
+        return "Obligatorio"
+    if "ELECTIV" in clave:
+        return "Electivo"
+    return texto[:1].upper() + texto[1:].lower()
+
+
+def _numero_creditos(valor: object) -> str:
+    """curso.csv publica los créditos como número entero."""
+
+    texto = _texto(valor)
+    if not texto:
+        return ""
+    coincidencia = re.search(r"\d+", texto)
+    if coincidencia:
+        return coincidencia.group(0)
+    palabras = _clave_carrera(texto).split("_")
+    for palabra in palabras:
+        if palabra in _NUMEROS_CREDITOS:
+            return _NUMEROS_CREDITOS[palabra]
+    return ""
+
+
+def _numero_ciclo(valor: object) -> str:
+    """curso.csv publica el ciclo como número, tomando el primer ordinal declarado."""
+
+    texto = _texto(valor)
+    if not texto:
+        return ""
+    palabras = _clave_carrera(texto).split("_")
+    posiciones = [
+        (palabras.index(palabra), numero)
+        for palabra, numero in _ORDINALES_CICLO.items()
+        if palabra in palabras
+    ]
+    if posiciones:
+        return min(posiciones)[1]
+    coincidencia = re.search(r"\d+", texto)
+    return coincidencia.group(0) if coincidencia else ""
 
 
 def _filas_curso(
@@ -92,9 +167,9 @@ def _filas_curso(
             "id_curso": id_curso,
             "nombre_curso": _texto(datos.get("nombre_curso") or datos.get("curso")),
             "coordinador": _texto(datos.get("coordinador")),
-            "creditos": _texto(datos.get("creditos")),
-            "nivel": _texto(datos.get("nivel") or datos.get("ciclo")),
-            "tipo_curso": _modalidad_curso(datos.get("tipo_curso")),
+            "creditos": _numero_creditos(datos.get("creditos")),
+            "nivel": _numero_ciclo(datos.get("nivel") or datos.get("ciclo")),
+            "tipo_curso": _naturaleza_curso(datos.get("tipo_curso")),
             "codigo_curso": _texto(datos.get("codigo_curso")),
             "id_carrera": id_carrera,
         }

@@ -283,8 +283,10 @@ def test_contexto_analista_reexporta_helpers_y_preserva_modelos_y_prompt() -> No
         "2026-1",
     )
     assert hashlib.sha256(prompt.encode()).hexdigest() == (
-        "79b75c2df02aad1bf7a5cc31b3751b691de015fb0b8eae5b94c31b6051f8ce26"
+        "0b32b4fbc85576091aee274ab9014f29b65cfbd18330f6d06cd8a2cff1e2abdf"
     )
+    assert "Python" in prompt and "SAP" in prompt
+    assert "Ningún logro puede quedar sin habilidad ni competencia" in prompt
 
 
 def test_analista_valido_genera_propuesta_pendiente_de_revision_humana(

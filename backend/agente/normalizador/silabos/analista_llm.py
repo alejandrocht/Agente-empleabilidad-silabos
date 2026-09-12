@@ -93,6 +93,7 @@ _reporte_decision = _normalizacion_decisiones._reporte_decision
 _validar_respuesta_por_orden = _respuesta_cache_analista._validar_respuesta_por_orden
 _clave_logro_literal = _respuesta_cache_analista._clave_logro_literal
 _clave_lote = _respuesta_cache_analista._clave_lote
+_version_prompt_analista = _contexto_analista.version_prompt_analista
 _leer_cache = _respuesta_cache_analista._leer_cache
 _guardar_cache = _respuesta_cache_analista._guardar_cache
 _nombre_modelo = _respuesta_cache_analista._nombre_modelo
@@ -348,7 +349,7 @@ def analizar_registros_curriculares(
 
     for indice_lote, lote in enumerate(lotes, start=1):
         verificar_cancelacion()
-        clave_lote = _clave_lote(lote, perfil, modelo_analista)
+        clave_lote = _clave_lote(lote, perfil, modelo_analista, _version_prompt_analista())
         lote_respuesta = cache.get(clave_lote)
         if lote_respuesta is not None:
             decisiones_cacheadas.update(str(caso["id_habilidad_fuente"]) for caso in lote)
@@ -444,7 +445,7 @@ def analizar_registros_curriculares(
         ]
         if ids_omitidos:
             lote_reintento = tuple(por_id[id_habilidad] for id_habilidad in ids_omitidos)
-            clave_reintento = f"reintento:{_clave_lote(lote_reintento, perfil, modelo_analista)}"
+            clave_reintento = f"reintento:{_clave_lote(lote_reintento, perfil, modelo_analista, _version_prompt_analista())}"
             if clave_reintento not in reintentos_lanzados:
                 reintentos_lanzados.add(clave_reintento)
                 reintentos += 1

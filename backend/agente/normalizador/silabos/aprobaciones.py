@@ -80,7 +80,7 @@ ESTADOS_PENDIENTES = {
     "REQUIERE_REVISION_HUMANA",
     "MANTENIDA_PENDIENTE",
 }
-ESTADOS_APROBACION = {"limpiado", "limpiado_con_advertencias"}
+ESTADOS_APROBACION = {"limpiado", "limpiado_con_advertencias", "no_publicado"}
 _ID_EJECUCION = re.compile(r"NOR_[0-9a-f]{16}")
 _LOCK = RLock()
 

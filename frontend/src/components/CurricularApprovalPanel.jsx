@@ -24,7 +24,6 @@ import {
 } from "./curricularApprovalUtils";
 import {
   DecisionBar,
-  DiscardConfirmation,
   PackageCard,
   PackagePagination,
   ProposalCard,
@@ -43,8 +42,6 @@ export default function CurricularApprovalPanel({ idEjecucion, onSummary, onReso
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState(null);
-  const [paqueteADescartar, setPaqueteADescartar] = useState("");
-  const [motivoDescarte, setMotivoDescarte] = useState("");
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -98,10 +95,8 @@ export default function CurricularApprovalPanel({ idEjecucion, onSummary, onReso
   }, [filas, filtro, busqueda]);
   const grupos = useMemo(() => gruposDe(filasVisibles), [filasVisibles]);
   const decisionesSeleccionadas = useMemo(
-    () => modoPaquetes
-      ? (paquetes || []).filter((paquete) => decisiones[paquete.id_paquete_chh || paquete.package_id] === "ADD" || decisiones[paquete.id_paquete_chh || paquete.package_id] === "KEEP_PENDING").length
-      : (filas || []).filter((fila) => !autoDeduplicadaDe(fila) && (decisiones[fila.id_pendiente] === "ADD" || decisiones[fila.id_pendiente] === "KEEP_PENDING")).length,
-    [filas, paquetes, decisiones, modoPaquetes],
+    () => (filas || []).filter((fila) => !autoDeduplicadaDe(fila) && (decisiones[fila.id_pendiente] === "ADD" || decisiones[fila.id_pendiente] === "KEEP_PENDING")).length,
+    [filas, decisiones],
   );
   const pendientesVisibles = pendientesResumen(resumen, filas, paquetes);
   const requiereDecision = Boolean(resumen?.requiere_decision || pendientesVisibles);
@@ -117,15 +112,38 @@ export default function CurricularApprovalPanel({ idEjecucion, onSummary, onReso
     }));
   };
 
+  const decidirPaqueteInstante = async (packageId, decision, reason) => {
+    if (guardando || !packageId) return;
+    setGuardando(true);
+    setError("");
+    try {
+      const solicitud = [{ id_paquete_chh: packageId, decision, ...(reason ? { reason } : {}) }];
+      const datos = await decidirPendientesNormalizador(idEjecucion, solicitud, "ejecutor", revision);
+      setResultado(datos?.aprobacion || null);
+      onSummary?.(datos?.aprobacion || null);
+      setPaquetes((actuales) =>
+        Array.isArray(actuales)
+          ? actuales.filter((paquete) => texto(paquete?.id_paquete_chh || paquete?.package_id) !== packageId)
+          : actuales,
+      );
+      await cargar();
+      await onResolved?.(datos);
+    } catch (errorDecision) {
+      setError(errorDecision.message || "No se pudo aplicar la decisión del paquete.");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const agregarPaquete = (packageId) => decidirPaqueteInstante(packageId, "ADD");
+  const descartarPaquete = (packageId) =>
+    decidirPaqueteInstante(packageId, "DISCARD", "Descarte manual desde la revisión HITL.");
+
   const guardar = async () => {
     if (guardando) return;
-    const solicitud = modoPaquetes
-      ? (paquetes || [])
-        .filter((paquete) => decisiones[paquete.id_paquete_chh || paquete.package_id] === "ADD" || decisiones[paquete.id_paquete_chh || paquete.package_id] === "KEEP_PENDING")
-        .map((paquete) => ({ id_paquete_chh: paquete.id_paquete_chh || paquete.package_id, decision: decisiones[paquete.id_paquete_chh || paquete.package_id] }))
-      : (filas || [])
-        .filter((fila) => !autoDeduplicadaDe(fila) && (decisiones[fila.id_pendiente] === "ADD" || decisiones[fila.id_pendiente] === "KEEP_PENDING"))
-        .map((fila) => ({ id_pendiente: fila.id_pendiente, decision: decisiones[fila.id_pendiente] }));
+    const solicitud = (filas || [])
+      .filter((fila) => !autoDeduplicadaDe(fila) && (decisiones[fila.id_pendiente] === "ADD" || decisiones[fila.id_pendiente] === "KEEP_PENDING"))
+      .map((fila) => ({ id_pendiente: fila.id_pendiente, decision: decisiones[fila.id_pendiente] }));
     if (!solicitud.length) {
       setError("Selecciona una acción antes de guardar. Las propuestas sin decisión permanecerán visibles.");
       return;
@@ -133,9 +151,7 @@ export default function CurricularApprovalPanel({ idEjecucion, onSummary, onReso
     setGuardando(true);
     setError("");
     try {
-      const datos = modoPaquetes
-        ? await decidirPendientesNormalizador(idEjecucion, solicitud, "ejecutor", revision)
-        : await decidirPendientesNormalizador(idEjecucion, solicitud);
+      const datos = await decidirPendientesNormalizador(idEjecucion, solicitud);
       setResultado(datos?.aprobacion || null);
       onSummary?.(datos?.aprobacion || null);
       setDecisiones({});
@@ -143,30 +159,6 @@ export default function CurricularApprovalPanel({ idEjecucion, onSummary, onReso
       await onResolved?.(datos);
     } catch (errorGuardado) {
       setError(errorGuardado.message || "No se pudieron guardar las decisiones curriculares.");
-    } finally {
-      setGuardando(false);
-    }
-  };
-
-  const descartarPaquete = async () => {
-    if (guardando || !paqueteADescartar || !texto(motivoDescarte)) return;
-    setGuardando(true);
-    setError("");
-    try {
-      const datos = await decidirPendientesNormalizador(
-        idEjecucion,
-        [{ id_paquete_chh: paqueteADescartar, decision: "DISCARD", reason: texto(motivoDescarte) }],
-        "ejecutor",
-        revision,
-      );
-      setResultado(datos?.aprobacion || null);
-      onSummary?.(datos?.aprobacion || null);
-      setPaqueteADescartar("");
-      setMotivoDescarte("");
-      await cargar();
-      await onResolved?.(datos);
-    } catch (errorDescarte) {
-      setError(errorDescarte.message || "No se pudo descartar el paquete curricular.");
     } finally {
       setGuardando(false);
     }
@@ -223,13 +215,21 @@ export default function CurricularApprovalPanel({ idEjecucion, onSummary, onReso
             <p className="mt-2 text-xs leading-5 text-muted" aria-live="polite">Mostrando {paquetesVisibles.length} de {paquetes.length} paquetes fuente. Las filas y alias permanecen dentro del paquete para auditoría.</p>
           </div>
           {paquetesVisibles.length ? <>
-            <div className="mt-5 space-y-3 pb-28">{packagePageItems.map((paquete) => <PackageCard key={paquete.id_paquete_chh || paquete.package_id} paquete={paquete} decision={decisiones[paquete.id_paquete_chh || paquete.package_id]} onDecision={cambiarDecision} onDiscard={(packageId) => { setPaqueteADescartar(packageId); setMotivoDescarte(""); }} disabled={guardando} />)}</div>
+            <div className="mt-5 space-y-3">{packagePageItems.map((paquete) => {
+              const paqueteId = texto(paquete?.id_paquete_chh || paquete?.package_id);
+              return (
+                <PackageCard
+                  key={paqueteId}
+                  paquete={paquete}
+                  decision={decisiones[paqueteId]}
+                  onDecision={() => agregarPaquete(paqueteId)}
+                  onDiscard={descartarPaquete}
+                  disabled={guardando}
+                />
+              );
+            })}</div>
             <PackagePagination page={packagePageSegura} totalPages={totalPackagePages} total={paquetesVisibles.length} onChange={setPaginaPaquetes} />
           </> : <div className="mt-5 rounded-xl border border-dashed border-line bg-fondo px-3.5 py-4 text-sm leading-6 text-muted" role="status">No hay coincidencias para esta búsqueda.</div>}
-          <div className="pb-20">
-            <DiscardConfirmation packageId={paqueteADescartar} reason={motivoDescarte} onReasonChange={setMotivoDescarte} onCancel={() => { setPaqueteADescartar(""); setMotivoDescarte(""); }} onConfirm={descartarPaquete} disabled={guardando} />
-            <DecisionBar count={decisionesSeleccionadas} onSave={guardar} disabled={guardando} guardando={guardando} mode="packages" />
-          </div>
         </>
       ) : filas?.length ? (
         <>

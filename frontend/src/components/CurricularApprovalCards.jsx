@@ -172,13 +172,12 @@ function PackageCard({ paquete, decision, onDecision, onDiscard, disabled }) {
           </div>
           <div className="shrink-0 border-t border-line pt-4 xl:w-64 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0" aria-label={`Decisión para paquete ${packageId}`}>
             <p className="font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted">Decisión visible</p>
-            <p className="mt-1 text-xs leading-5 text-muted">Se aplica atómicamente a todas las relaciones del paquete.</p>
+            <p className="mt-1 text-xs leading-5 text-muted">Se aplica a la única triple (competencia, habilidad, herramienta) de este paquete.</p>
             <div className="mt-3 grid gap-2">
               <DecisionButton decision="ADD" activa={decision === "ADD"} nombre={`paquete ${packageId}`} onClick={() => onDecision(packageId, "ADD")} disabled={disabled} />
-              <DecisionButton decision="KEEP_PENDING" activa={decision === "KEEP_PENDING"} nombre={`paquete ${packageId}`} onClick={() => onDecision(packageId, "KEEP_PENDING")} disabled={disabled} />
               <button type="button" onClick={() => onDiscard(packageId)} disabled={disabled} className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-left text-xs font-extrabold text-red-800 transition hover:border-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:cursor-not-allowed disabled:opacity-60">Descartar paquete</button>
             </div>
-            <p className="mt-2 text-[11px] leading-4 text-muted" aria-live="polite">{decision ? `Seleccionado: ${decisionLabel(decision)}` : "Sin decisión; seguirá pendiente."}</p>
+            <p className="mt-2 text-[11px] leading-4 text-muted" aria-live="polite">{decision === "ADD" ? "Agregado al perfil." : "Sin decisión; seguirá pendiente."}</p>
           </div>
         </div>
       </div>

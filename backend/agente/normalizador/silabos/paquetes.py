@@ -519,6 +519,284 @@ def _assemble_one(
 
 
 
+def _nombre_componente(componente: Mapping[str, object]) -> str:
+    return _text(
+        componente.get("nombre")
+        or componente.get("display_name")
+        or componente.get("nombre_propuesto")
+        or componente.get("nombre_fuente")
+        or componente.get("nombre_canonico")
+    )
+
+
+def _componentes_unicos(valor: object) -> list[Mapping[str, object]]:
+    vistos: set[str] = set()
+    unicos: list[Mapping[str, object]] = []
+    for componente in valor if isinstance(valor, list) else []:
+        if not isinstance(componente, Mapping):
+            continue
+        nombre = _nombre_componente(componente)
+        if not nombre:
+            # A decidible triple needs a readable name for every component.
+            continue
+        clave = _normalized_name(nombre)
+        if not clave or clave in vistos:
+            continue
+        vistos.add(clave)
+        unicos.append(componente)
+    return unicos
+
+
+def _ids_de_componente(componente: Mapping[str, object]) -> set[str]:
+    ids: set[str] = set()
+    for campo in ("id_pendiente", "id_pendientes", "id_canonico", "id_fuente", "id_fuentes"):
+        valor = componente.get(campo)
+        for item in valor if isinstance(valor, list) else [valor]:
+            texto_item = _text(item)
+            if texto_item:
+                ids.add(texto_item)
+    return ids
+
+
+def _fila_pertenece_a_componente(
+    fila: Mapping[str, object], componente: Mapping[str, object]
+) -> bool:
+    id_fila = _text(fila.get("id_pendiente"))
+    if id_fila and id_fila in _ids_de_componente(componente):
+        return True
+    propuesta = fila.get("propuesta")
+    nombre_fila = _text(propuesta.get("nombre") if isinstance(propuesta, Mapping) else "")
+    nombre_componente = _nombre_componente(componente)
+    return bool(nombre_fila) and _normalized_name(nombre_fila) == _normalized_name(nombre_componente)
+
+
+def _referencia_coincide(referencia: object, componente: Mapping[str, object]) -> bool:
+    if isinstance(referencia, Mapping):
+        ref_id = _text(referencia.get("id"))
+        ref_nombre = _text(referencia.get("nombre"))
+    else:
+        ref_id = ""
+        ref_nombre = _text(referencia)
+    if not ref_id and not ref_nombre:
+        return True
+    ids = _ids_de_componente(componente)
+    nombre_componente = _normalized_name(_nombre_componente(componente))
+    return (bool(ref_id) and ref_id in ids) or (
+        bool(ref_nombre) and _normalized_name(ref_nombre) == nombre_componente
+    )
+
+
+def _componentes_del_triple(
+    competencia: Mapping[str, object],
+    habilidad: Mapping[str, object],
+    herramienta: Mapping[str, object],
+) -> dict[str, Mapping[str, object]]:
+    return {
+        "competencias": competencia,
+        "habilidades": habilidad,
+        "herramientas": herramienta,
+    }
+
+
+def _relaciones_filtradas(
+    relaciones: object, componentes: dict[str, Mapping[str, object]]
+) -> list[object]:
+    claves = {
+        "id_competencia": componentes["competencias"],
+        "id_habilidad": componentes["habilidades"],
+        "id_herramienta": componentes["herramientas"],
+    }
+    resultado: list[object] = []
+    for relacion in relaciones if isinstance(relaciones, list) else []:
+        if not isinstance(relacion, Mapping):
+            resultado.append(relacion)
+            continue
+        if all(
+            _referencia_coincide(_text(relacion.get(clave)), componente)
+            for clave, componente in claves.items()
+        ):
+            resultado.append(relacion)
+    return resultado
+
+
+def _canonicas_filtradas(
+    canonicas: object, componentes: dict[str, Mapping[str, object]]
+) -> list[object]:
+    pares = (
+        ("competencia", componentes["competencias"]),
+        ("habilidad", componentes["habilidades"]),
+        ("herramienta", componentes["herramientas"]),
+    )
+    resultado: list[object] = []
+    for triple in canonicas if isinstance(canonicas, list) else []:
+        if not isinstance(triple, Mapping):
+            resultado.append(triple)
+            continue
+        if all(_referencia_coincide(triple.get(tipo), componente) for tipo, componente in pares):
+            resultado.append(triple)
+    return resultado
+
+
+def _triples_de_paquete(
+    package: Mapping[str, object],
+) -> list[tuple[Mapping[str, object], Mapping[str, object], Mapping[str, object]]]:
+    grupos = {
+        "competencias": _componentes_unicos(package.get("competencias")),
+        "habilidades": _componentes_unicos(package.get("habilidades")),
+        "herramientas": _componentes_unicos(package.get("herramientas")),
+    }
+    if any(not valores for valores in grupos.values()):
+        return []
+    return [
+        (competencia, habilidad, herramienta)
+        for competencia in grupos["competencias"]
+        for habilidad in grupos["habilidades"]
+        for herramienta in grupos["herramientas"]
+    ]
+
+
+def _clave_triple(
+    competencia: Mapping[str, object],
+    habilidad: Mapping[str, object],
+    herramienta: Mapping[str, object],
+) -> str:
+    partes = "|".join(
+        _normalized_name(_nombre_componente(componente))
+        or _text(componente.get("id_canonico") or componente.get("id_pendiente"))
+        for componente in (competencia, habilidad, herramienta)
+    )
+    return hashlib.sha256(partes.encode("utf-8")).hexdigest()[:12]
+
+
+def _fan_de_triple(
+    package: Mapping[str, object],
+    competencia: Mapping[str, object],
+    habilidad: Mapping[str, object],
+    herramienta: Mapping[str, object],
+    *,
+    identidad: Mapping[str, str],
+    package_id: str,
+) -> dict[str, object] | None:
+    """One package must stay a single unique CHH triple; this projects one fan."""
+
+    filas = [
+        row
+        for row in (package.get("filas") or [])
+        if isinstance(row, Mapping)
+        and any(
+            _fila_pertenece_a_componente(row, componente)
+            for componente in (competencia, habilidad, herramienta)
+        )
+    ]
+    if not filas:
+        return None
+    ids_filas = {_text(row.get("id_pendiente")) for row in filas if _text(row.get("id_pendiente"))}
+    componentes = _componentes_del_triple(competencia, habilidad, herramienta)
+    fan = dict(package)
+    fan[PACKAGE_ID_FIELD] = package_id
+    fan["package_id"] = package_id
+    fan[PACKAGE_SOURCE_KEY_FIELD] = clave_fuente_chh(identidad)
+    fan["clave_paquete_chh"] = clave_fuente_chh(identidad)
+    fan[PACKAGE_SOURCE_IDENTITY_FIELD] = dict(identidad)
+    fan.update({key: _text(identidad.get(key)) for key in IDENTITY_FIELDS})
+    fan["componentes"] = {nombre: [componente] for nombre, componente in componentes.items()}
+    for nombre, componente in componentes.items():
+        fan[nombre] = [componente]
+    fan["filas"] = filas
+    fan["legacy_rows"] = filas
+    fan["id_pendientes"] = [row.get("id_pendiente") for row in filas]
+    fan["manual_review_rows"] = [
+        row_id
+        for row_id in (package.get("manual_review_rows") or [])
+        if _text(row_id) in ids_filas
+    ]
+    fan["aliases"] = [
+        alias
+        for alias in (package.get("aliases") or [])
+        if isinstance(alias, Mapping) and _text(alias.get("id_pendiente")) in ids_filas
+    ]
+    fan["exact_duplicate_aliases"] = fan["aliases"]
+    fan["alias_ids"] = [alias.get("id_pendiente") for alias in fan["aliases"]]
+    fan["propuestas_pendientes"] = [
+        propuesta
+        for propuesta in (package.get("propuestas_pendientes") or [])
+        if isinstance(propuesta, Mapping)
+        and _text(propuesta.get("id_pendiente")) in ids_filas
+    ]
+    fan["relaciones"] = _relaciones_filtradas(package.get("relaciones"), componentes)
+    fan["relationships"] = fan["relaciones"]
+    evidencia_fuente = dict(package.get("source_evidence") or {})
+    fan["source_relationships"] = _relaciones_filtradas(
+        evidencia_fuente.get("relationships"), componentes
+    )
+    evidencia_fuente["relationships"] = fan["source_relationships"]
+    evidencia_fuente["rows"] = filas
+    fan["source_evidence"] = evidencia_fuente
+    fan["relaciones_canonicas"] = _canonicas_filtradas(
+        package.get("relaciones_canonicas"), componentes
+    )
+    decisiones = {
+        _text(row.get("decision")).upper() for row in filas if _text(row.get("decision"))
+    }
+    decision = next(iter(decisiones)) if len(decisiones) == 1 else "MIXED" if decisiones else None
+    blockers = package.get("competency_blockers") or []
+    pendientes_fan = bool(fan["propuestas_pendientes"])
+    fan["decision"] = decision
+    fan["package_decision"] = decision
+    fan["requires_human_decision"] = bool(pendientes_fan or blockers)
+    fan["requiere_decision"] = fan["requires_human_decision"]
+    fan["decision_state"] = (
+        "PENDING"
+        if pendientes_fan or blockers or decision is None
+        else "MIXED"
+        if decision == "MIXED"
+        else "DECIDED"
+    )
+    return fan
+
+
+def _abrir_paquetes_por_triple(package: Mapping[str, object]) -> list[dict[str, object]]:
+    """Split a source package into one unique CHH triple per package.
+
+    Only complete triples survive: a package without competencia, habilidad or
+    herramienta is not actionable and stays as pending rows for HITL review.
+    """
+
+    triples = _triples_de_paquete(package)
+    if not triples:
+        return []
+    identidad_base = _mapping(package.get(PACKAGE_SOURCE_IDENTITY_FIELD)) or {
+        key: _text(package.get(key)) for key in IDENTITY_FIELDS
+    }
+    if len(triples) == 1:
+        fan = _fan_de_triple(
+            package,
+            *triples[0],
+            identidad=identidad_base,
+            package_id=_first(package, *PACKAGE_ID_ALIASES),
+        )
+        return [fan or dict(package)]
+    fans: list[dict[str, object]] = []
+    for competencia, habilidad, herramienta in triples:
+        identidad = dict(identidad_base)
+        relacion_fuente = _text(identidad.get(SOURCE_RELATION_ID_FIELD))
+        clave = _clave_triple(competencia, habilidad, herramienta)
+        identidad[SOURCE_RELATION_ID_FIELD] = (
+            f"{relacion_fuente}:{clave}" if relacion_fuente else f"TRIPLE:{clave}"
+        )
+        fan = _fan_de_triple(
+            package,
+            competencia,
+            habilidad,
+            herramienta,
+            identidad=identidad,
+            package_id=id_paquete_chh(identidad),
+        )
+        if fan:
+            fans.append(fan)
+    return fans
+
+
 def relaciones_fuente_para_paquete_chh(
     relaciones: Sequence[Mapping[str, object]],
     identity: Mapping[str, object],

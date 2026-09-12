@@ -778,3 +778,57 @@ def test_comp_ref_is_an_explicit_pending_competency_blocker() -> None:
     assert "COMPETENCY_SOURCE_MAPPING_REQUIRED" not in {
         finding.codigo for finding in validar_integridad_paquetes_chh([mapped])
     }
+
+
+def test_multi_tool_source_package_opens_into_unique_complete_triples() -> None:
+    base = _assemble(
+        [
+            _row(pending_id="PEN_COMP", kind="competencia", concept_id="Competencia A"),
+            _row(pending_id="PEN_SKILL", kind="habilidad", concept_id="Habilidad A"),
+            _row(pending_id="PEN_TOOL_A", kind="herramienta", concept_id="Herramienta A"),
+            _row(pending_id="PEN_TOOL_B", kind="herramienta", concept_id="Herramienta B"),
+        ]
+    )
+
+    fans = paquetes_modulo._abrir_paquetes_por_triple(base)
+
+    assert len(fans) == 2
+    assert len({fan["id_paquete_chh"] for fan in fans}) == 2
+    for fan in fans:
+        assert len(fan["competencias"]) == 1
+        assert len(fan["habilidades"]) == 1
+        assert len(fan["herramientas"]) == 1
+    filas_por_herramienta = {
+        fan["herramientas"][0]["nombre"]: {fila["id_pendiente"] for fila in fan["filas"]}
+        for fan in fans
+    }
+    assert filas_por_herramienta == {
+        "Herramienta A": {"PEN_COMP", "PEN_SKILL", "PEN_TOOL_A"},
+        "Herramienta B": {"PEN_COMP", "PEN_SKILL", "PEN_TOOL_B"},
+    }
+
+
+def test_source_package_without_complete_triple_is_not_offered_for_decision() -> None:
+    base = _assemble(
+        [
+            _row(pending_id="PEN_COMP", kind="competencia", concept_id="Competencia A"),
+            _row(pending_id="PEN_SKILL", kind="habilidad", concept_id="Habilidad A"),
+        ]
+    )
+
+    assert paquetes_modulo._abrir_paquetes_por_triple(base) == []
+
+
+def test_single_complete_triple_keeps_the_source_package_identity() -> None:
+    base = _assemble(
+        [
+            _row(pending_id="PEN_COMP", kind="competencia", concept_id="Competencia A"),
+            _row(pending_id="PEN_SKILL", kind="habilidad", concept_id="Habilidad A"),
+            _row(pending_id="PEN_TOOL_A", kind="herramienta", concept_id="Herramienta A"),
+        ]
+    )
+
+    [fan] = paquetes_modulo._abrir_paquetes_por_triple(base)
+
+    assert fan["id_paquete_chh"] == base["id_paquete_chh"]
+    assert [componente["nombre"] for componente in fan["herramientas"]] == ["Herramienta A"]
