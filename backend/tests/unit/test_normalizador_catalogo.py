@@ -161,6 +161,10 @@ def test_overlay_de_carrera_precede_y_conserva_fallback_global(tmp_path: Path) -
 def test_crea_perfil_bootstrap_sin_alterar_los_esquemas_csv(tmp_path: Path) -> None:
     ejecucion = tmp_path / "NOR_TEST" / "salidas"
     ejecucion.mkdir(parents=True)
+    (ejecucion / "silabo.csv").write_text(
+        "id_silabo,codigo_silabo,sumilla,id_curso\nSIL_1,MKT101,Fundamentos de marketing,CUR_1\n",
+        encoding="utf-8-sig",
+    )
     (ejecucion / "catalogo_competencias.csv").write_text(
         "id_competencia,nombre_competencia,descripcion_breve_competencia,tipo_competencia,"
         "codigo_competencia\n"

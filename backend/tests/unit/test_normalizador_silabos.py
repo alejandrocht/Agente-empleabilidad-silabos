@@ -220,6 +220,7 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
     }
     assert {output["archivo"] for output in resultado.outputs} == {
         "salidas/curso.csv",
+        "salidas/silabo.csv",
         "salidas/catalogo_competencias.csv",
         "salidas/catalogo_habilidades.csv",
         "salidas/catalogo_herramientas.csv",
@@ -242,6 +243,12 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
             "tipo_curso",
             "codigo_curso",
             "id_carrera",
+        ],
+        "silabo.csv": [
+            "id_silabo",
+            "codigo_silabo",
+            "sumilla",
+            "id_curso",
         ],
         "catalogo_competencias.csv": [
             "id_competencia",

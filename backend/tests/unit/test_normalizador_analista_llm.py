@@ -903,7 +903,7 @@ def test_alias_ms_word_se_consolida_con_microsoft_word_detectado() -> None:
     assert nuevas == ()
 
 
-def test_los_cinco_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None:
+def test_los_seis_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None:
     esperados = {
         "curso.csv": [
             "id_curso",
@@ -914,6 +914,12 @@ def test_los_cinco_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None
             "tipo_curso",
             "codigo_curso",
             "id_carrera",
+        ],
+        "silabo.csv": [
+            "id_silabo",
+            "codigo_silabo",
+            "sumilla",
+            "id_curso",
         ],
         "catalogo_competencias.csv": [
             "id_competencia",
@@ -941,6 +947,8 @@ def test_los_cinco_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None
             "id_herramienta",
         ],
     }
+
+    assert set(esperados) == {nombre for nombre, _ in salida.ARCHIVOS_SALIDA}
 
     for nombre, columnas in salida.ARCHIVOS_SALIDA:
         ruta = tmp_path / nombre

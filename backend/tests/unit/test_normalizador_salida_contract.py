@@ -473,8 +473,9 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
             "c5c4f6ef01ab1bbf81d33ec4234c6d52a2d5d90c60cfb0413d8e0f0bb080e0ff"
         ),
         "curso.csv": "02bbc9fd7fc3236eec084aa6241dd1094c4b18d510c5e707201e706bbc326498",
+        "silabo.csv": "86db76a18db9aa91216c28c4758e36d48427fc2263794c291adb4c609429db64",
         "reportes/candidatos_curriculares.json": (
-            "0645d20ffc8e96d7b8c3640c017463ca266ee38e053f146a533eb4164776f9be"
+            "ead4233c85cf88d5b2ea90b7c98a65c3bbee8bae9ece58678c5e358e85ed5e0b"
         ),
         "reportes/cobertura_curricular_canonica.jsonl": (
             "52025738b253d279fa73528a724898b11e981375ab5db36c4647aa440592d449"
@@ -500,7 +501,7 @@ def test_validation_extraction_preserves_contracts_and_facade(tmp_path: Path) ->
     }
     assert _hashes_de_artefactos(tmp_path / "pending" / "NOR_TEST" / "salidas") == {
         "reportes/candidatos_curriculares.json": (
-            "341310f58a012ac680940e2f595816130ffa5af024d9d381a707f2c52c6d365c"
+            "d5915eb65f08813c64f63c4cf431b0c8ca5d2c06433a78622f247333cbcf6e3e"
         ),
         "reportes/cobertura_curricular_canonica.jsonl": (
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"

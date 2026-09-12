@@ -6,14 +6,15 @@
       "salidas/catalogo_herramientas.csv": "b7e8db9bb823a80d174720b9b5c606d03bb71a35fe281835c306956cf67e405a",
       "salidas/cobertura_curricular.csv": "c5c4f6ef01ab1bbf81d33ec4234c6d52a2d5d90c60cfb0413d8e0f0bb080e0ff",
       "salidas/curso.csv": "02bbc9fd7fc3236eec084aa6241dd1094c4b18d510c5e707201e706bbc326498",
-      "salidas/reportes/candidatos_curriculares.json": "b244fc98e29b3b1fc81fe71c43e70d8e5512c6a95e7cfcefe38aee73b3052976",
+      "salidas/reportes/candidatos_curriculares.json": "178ada8a5f5a0cd45171c1cd4680b184694f93634665bd931b1cc52f8880fe49",
       "salidas/reportes/cobertura_curricular_canonica.jsonl": "95c5132491cafc3fc3fc7681eac10193743ebde693647092eeff4cdbd0202396",
       "salidas/reportes/cobertura_curricular_fuente.jsonl": "50b4116b8c789127cc1cafa2c0c8932851fe145a338da4ec992958a5ee7d8906",
       "salidas/reportes/competencias_fuente.jsonl": "44616562a7457eaa85044615e00f35e9cfbb326f79b5740aa4cc5340e5d8bcd3",
       "salidas/reportes/habilidades_fuente.jsonl": "03e9375bba73204169bd1eac660720f664a4dd77e24469d36771bed73b9994f4",
       "salidas/reportes/herramientas_fuente.jsonl": "fab254fc65df34166de9c313f0e3aa240735d57079a6aa1a4b99962b7572df17",
       "salidas/reportes/pendientes_curriculares.jsonl": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "salidas/reportes/release_gate.json": "745f732790048e152cc36007807191db508cd1beffdddb6d69cc6279653c2c8c"
+      "salidas/reportes/release_gate.json": "745f732790048e152cc36007807191db508cd1beffdddb6d69cc6279653c2c8c",
+      "salidas/silabo.csv": "86db76a18db9aa91216c28c4758e36d48427fc2263794c291adb4c609429db64"
     },
     "result": {
       "competencias": 1,
@@ -27,6 +28,13 @@
           "bytes": 178,
           "registros": 1,
           "sha256": "02bbc9fd7fc3236eec084aa6241dd1094c4b18d510c5e707201e706bbc326498",
+          "tipo": "csv_curricular"
+        },
+        {
+          "archivo": "salidas/silabo.csv",
+          "bytes": 66,
+          "registros": 1,
+          "sha256": "86db76a18db9aa91216c28c4758e36d48427fc2263794c291adb4c609429db64",
           "tipo": "csv_curricular"
         },
         {
@@ -179,7 +187,7 @@
   },
   "True": {
     "files": {
-      "salidas/reportes/candidatos_curriculares.json": "862fa05c8326642d208b0cf6201caa3781a27870791c6c4dc1da820ce9929e9c",
+      "salidas/reportes/candidatos_curriculares.json": "173b7702b837c8a7f6d520dbd9b63ab098fea8f47be7ff0314b5aba34709a29b",
       "salidas/reportes/cobertura_curricular_canonica.jsonl": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "salidas/reportes/cobertura_curricular_fuente.jsonl": "affe1f9e31a36210457218222a8fcbc2d13989aea2c46571344979fa34c9f156",
       "salidas/reportes/competencias_fuente.jsonl": "44616562a7457eaa85044615e00f35e9cfbb326f79b5740aa4cc5340e5d8bcd3",
@@ -256,9 +264,9 @@
         },
         {
           "archivo": "salidas/reportes/candidatos_curriculares.json",
-          "bytes": 92133,
-          "registros": 2,
-          "sha256": "341310f58a012ac680940e2f595816130ffa5af024d9d381a707f2c52c6d365c",
+          "bytes": 92292,
+          "registros": 3,
+          "sha256": "d5915eb65f08813c64f63c4cf431b0c8ca5d2c06433a78622f247333cbcf6e3e",
           "tipo": "candidatos_curriculares"
         }
       ],
