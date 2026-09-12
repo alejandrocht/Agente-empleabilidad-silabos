@@ -35,6 +35,12 @@ CURSOS_SCHEMA: tuple[str, ...] = (
     "codigo_curso",
     "id_carrera",
 )
+SILABO_SCHEMA: tuple[str, ...] = (
+    "id_silabo",
+    "codigo_silabo",
+    "sumilla",
+    "id_curso",
+)
 HABILIDADES_SCHEMA: tuple[str, ...] = (
     "id_habilidad",
     "nombre_habilidad",
@@ -56,6 +62,7 @@ COBERTURA_SCHEMA: tuple[str, ...] = (
 
 ARCHIVOS_SALIDA: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("curso.csv", CURSOS_SCHEMA),
+    ("silabo.csv", SILABO_SCHEMA),
     ("catalogo_competencias.csv", COMPETENCIAS_SCHEMA),
     ("catalogo_habilidades.csv", HABILIDADES_SCHEMA),
     ("catalogo_herramientas.csv", HERRAMIENTAS_SCHEMA),
@@ -91,7 +98,7 @@ def _filtrar_outputs_curriculares(
     *,
     hitl_completado: bool,
 ) -> list[dict[str, object]]:
-    """Expone únicamente los cinco artefactos curriculares finales tras HITL."""
+    """Expone únicamente los artefactos curriculares finales tras HITL."""
 
     publicos: list[dict[str, object]] = []
     for output in outputs:
@@ -144,11 +151,12 @@ def validar_salidas_curriculares(
     herramientas_fuente: dict[str, dict[str, object]],
     relaciones_canonicas: set[tuple[str, str, str, str, str]],
 ) -> tuple[Hallazgo, ...]:
-    """Actúa como juez determinista antes de publicar los cinco CSV."""
+    """Actúa como juez determinista antes de publicar los CSV canónicos."""
 
     hallazgos: list[Hallazgo] = []
     esquemas = {
         "curso.csv": CURSOS_SCHEMA,
+        "silabo.csv": SILABO_SCHEMA,
         "catalogo_competencias.csv": COMPETENCIAS_SCHEMA,
         "catalogo_habilidades.csv": HABILIDADES_SCHEMA,
         "catalogo_herramientas.csv": HERRAMIENTAS_SCHEMA,

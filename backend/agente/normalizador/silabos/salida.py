@@ -84,6 +84,7 @@ from agente.normalizador.silabos.validacion_salida import (  # noqa: F401
     CURSOS_SCHEMA,
     HABILIDADES_SCHEMA,
     HERRAMIENTAS_SCHEMA,
+    SILABO_SCHEMA,
     _conteo_logros_con_descripcion,
     _datos_registros,
     _filtrar_estado_publico,
@@ -123,7 +124,7 @@ def construir_salidas_curriculares(
     catalogo_carrera: CatalogoCHH | None = None,
     propuestas_llm: dict[str, DecisionCurricular] | None = None,
 ) -> ResultadoCatalogoCurricular:
-    """Normaliza los registros extraídos y escribe las cinco tablas CSV."""
+    """Normaliza los registros extraídos y escribe las tablas CSV canónicas."""
 
     resultado = normalizar_registros_curriculares(
         registros,
@@ -150,6 +151,9 @@ def construir_salidas_curriculares(
     relaciones_canonicas = set(cobertura_canonica_lineage)
     carrera_ejecucion = _texto(validacion.carrera).upper()
     periodo_ejecucion = _texto(validacion.periodo)
+    # `silabo.csv` publica la identidad resuelta de cada sílabo junto a los
+    # catálogos históricos; nunca reescribe sus filas ni sus encabezados.
+    filas_por_archivo["silabo.csv"] = _filas_silabo(registros, carrera_ejecucion)
     _escribir_jsonl(reportes / "competencias_fuente.jsonl", competencias_fuente.values())
     _escribir_jsonl(reportes / "habilidades_fuente.jsonl", habilidades_fuente.values())
     _escribir_jsonl(reportes / "herramientas_fuente.jsonl", herramientas_fuente.values())
@@ -368,6 +372,33 @@ def _retirar_csv_canónico(salida: Path) -> None:
             continue
 
 
+def _filas_silabo(
+    registros: list[dict[str, object]],
+    carrera_ejecucion: str,
+) -> list[dict[str, str]]:
+    """Materializa una fila por sílabo procesado sin inventar sumilla."""
+
+    silabos: dict[str, dict[str, str]] = {}
+    for registro in registros:
+        if _texto(registro.get("carrera")).upper() != carrera_ejecucion:
+            continue
+        datos_objeto = registro.get("datos")
+        datos = datos_objeto if isinstance(datos_objeto, dict) else {}
+        id_silabo = _texto(registro.get("id_silabo"))
+        id_curso = _texto(registro.get("id_curso"))
+        if not id_silabo or not id_curso:
+            continue
+        silabos.setdefault(
+            id_silabo,
+            {
+                "id_silabo": id_silabo,
+                "codigo_silabo": _texto(datos.get("codigo_curso")),
+                "sumilla": _texto(datos.get("sumilla")),
+                "id_curso": id_curso,
+            },
+        )
+    return [silabos[id_silabo] for id_silabo in sorted(silabos)]
+    
 def _escribir_csv(ruta: Path, columnas: tuple[str, ...], filas: list[dict[str, str]]) -> None:
     with ruta.open("w", encoding="utf-8-sig", newline="") as archivo:
         escritor = csv.DictWriter(archivo, fieldnames=columnas, extrasaction="raise")

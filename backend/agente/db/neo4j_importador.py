@@ -1034,6 +1034,11 @@ class ImportadorNeo4j:
         }
         resultado: list[dict[str, Any]] = []
         for archivo, _ in ARCHIVOS_SALIDA:
+            if archivo == "silabo.csv":
+                # silabo.csv es un artefacto del contrato público de salidas, no una
+                # fuente de nodos: los nodos Silabo se materializan desde
+                # limpios/silabos.jsonl, que es la fuente autoritativa y más rica.
+                continue
             label, campo = mapa[archivo]
             existentes_ids = (
                 set(existentes[label])
