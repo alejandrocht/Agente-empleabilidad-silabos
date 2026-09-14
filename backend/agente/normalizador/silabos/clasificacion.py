@@ -8,6 +8,7 @@ herramientas sospechosas siguen requiriendo una decisión humana.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -16,8 +17,6 @@ from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-
-from agente.normalizador.identidad import hashed
 
 FLAG_EXACT_DUPLICATE = "EXACT_DUPLICATE"
 FLAG_POSSIBLE_SEMANTIC_DUPLICATE = "POSSIBLE_SEMANTIC_DUPLICATE"
@@ -285,7 +284,7 @@ def clasificar_propuestas(
     for (_alcance, tipo, clave), indices in sorted(exact_groups.items()):
         if len(indices) < 2:
             continue
-        grupo = hashed("EXACT", tipo, clave)
+        grupo = _grupo("EXACT", tipo, clave)
         representante = _representante_exacto(indices, resultado)
         representante_id = _id_estable(resultado[representante], tipo, clave)
         for indice in indices:
@@ -322,7 +321,7 @@ def clasificar_propuestas(
             )
             for indice in indices
         )
-        grupo = hashed("SEMANTIC", *("|".join(partes) for partes in firma))
+        grupo = _grupo("SEMANTIC", *("|".join(partes) for partes in firma))
         for indice in indices:
             semantic_ids[indice] = grupo
 
@@ -527,7 +526,12 @@ def _id_estable(fila: dict[str, object], tipo: str, clave: str) -> str:
         for llave, valor in sorted(fila.items(), key=lambda item: str(item[0]))
         if llave not in {"clasificacion", "flags"}
     )
-    return hashed("ROW", tipo, clave, partes)
+    return _grupo("ROW", tipo, clave, partes)
+
+
+def _grupo(prefijo: str, *partes: str) -> str:
+    payload = "|".join(partes).encode("utf-8")
+    return f"{prefijo}_{hashlib.sha256(payload).hexdigest()[:16]}"
 
 
 def _tokens(clave: str) -> set[str]:

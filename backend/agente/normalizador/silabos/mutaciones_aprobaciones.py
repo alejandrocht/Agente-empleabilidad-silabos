@@ -14,7 +14,6 @@ from agente.normalizador.silabos.politica_curricular import (
     MOTIVO_COMPETENCIA_GENERICA,
     es_competencia_generica,
 )
-from agente.normalizador.silabos.trazabilidad_curricular import _fila_logro
 
 
 def _promover(
@@ -73,12 +72,14 @@ def _promover(
             },
         )
     elif tipo == "habilidad":
-        # El catálogo publicado son los logros: aceptar una propuesta crea el
-        # logro con el nombre aceptado y su descripción breve derivada.
         id_canonico = _upsert(
-            archivos["catalogo_logros.csv"],
-            "nombre_logro",
-            _fila_logro(nombre),
+            archivos["catalogo_habilidades.csv"],
+            "nombre_habilidad",
+            {
+                "id_habilidad": id_canonico,
+                "nombre_habilidad": nombre,
+                "descripcion_breve": descripcion,
+            },
         )
         _upsert_fuente(
             fuentes["habilidades_fuente.jsonl"],
@@ -224,7 +225,8 @@ def _añadir_relaciones_de_evidencia(
         for row in archivos["catalogo_competencias.csv"]
     }
     valid_skill = {
-        _persistencia._texto(row.get("id_logro")) for row in archivos["catalogo_logros.csv"]
+        _persistencia._texto(row.get("id_habilidad"))
+        for row in archivos["catalogo_habilidades.csv"]
     }
     valid_tool = {
         _persistencia._texto(row.get("id_herramienta"))
@@ -380,7 +382,7 @@ def _retirar_relaciones_descartadas(
         for relacion in relaciones
         if (
             _persistencia._texto(relacion.get("id_competencia")),
-            _persistencia._texto(relacion.get("id_logro")),
+            _persistencia._texto(relacion.get("id_habilidad")),
             _persistencia._texto(relacion.get("id_herramienta")),
         )
         in activas

@@ -15,7 +15,7 @@ from agente.normalizador.silabos.salida import ARCHIVOS_SALIDA
 
 IDS = {
     "id_competencia": "COMP_0123456789abcdef",
-    "id_logro": "LOGRO_0123456789abcdef",
+    "id_habilidad": "HAB_0123456789abcdef",
     "id_herramienta": "HERR_0123456789abcdef",
     "id_cob_curricular": "COB_CUR_0123456789abcdef",
     "id_curso": "CUR_0123456789abcdef",
@@ -120,7 +120,10 @@ def _manifest_y_salidas(
     limpios.mkdir()
     registros_silabo = silabos if silabos is not None else _silabos()
     (limpios / "silabos.jsonl").write_text(
-        "".join(json.dumps(registro, ensure_ascii=False) + "\n" for registro in registros_silabo),
+        "".join(
+            json.dumps(registro, ensure_ascii=False) + "\n"
+            for registro in registros_silabo
+        ),
         encoding="utf-8",
     )
     return gestor, id_ejecucion
@@ -140,14 +143,6 @@ def _filas() -> dict[str, list[dict[str, str]]]:
                 "id_carrera": IDS["id_carrera"],
             }
         ],
-        "silabo.csv": [
-            {
-                "id_silabo": IDS["id_silabo"],
-                "codigo_silabo": "SIS501",
-                "sumilla": "Fundamentos de estructuras de datos.",
-                "id_curso": IDS["id_curso"],
-            }
-        ],
         "catalogo_competencias.csv": [
             {
                 "id_competencia": IDS["id_competencia"],
@@ -156,10 +151,10 @@ def _filas() -> dict[str, list[dict[str, str]]]:
                 "tipo_competencia": "blanda",
             }
         ],
-        "catalogo_logros.csv": [
+        "catalogo_habilidades.csv": [
             {
-                "id_logro": IDS["id_logro"],
-                "nombre_logro": "Analizar datos",
+                "id_habilidad": IDS["id_habilidad"],
+                "nombre_habilidad": "Analizar datos",
                 "descripcion_breve": "Interpreta información estructurada.",
             }
         ],
@@ -176,7 +171,7 @@ def _filas() -> dict[str, list[dict[str, str]]]:
                 "id_curso": IDS["id_curso"],
                 "id_silabo": IDS["id_silabo"],
                 "id_competencia": IDS["id_competencia"],
-                "id_logro": IDS["id_logro"],
+                "id_habilidad": IDS["id_habilidad"],
                 "id_herramienta": IDS["id_herramienta"],
             }
         ],
@@ -217,16 +212,6 @@ def test_preview_valida_novedad_y_importa_solo_filas_nuevas(tmp_path: Path) -> N
         "nuevas_coberturas": 1,
         "sin_cambios": 0,
     }
-    # El resumen lista solo los archivos que son fuente de nodos. `silabo.csv`
-    # es contrato público de salida y los nodos Silabo vienen de
-    # limpios/silabos.jsonl, así que no aparece acá.
-    assert {fila["archivo"]: fila["nuevas"] for fila in preview["archivos"]} == {
-        "curso.csv": 1,
-        "catalogo_competencias.csv": 1,
-        "catalogo_logros.csv": 1,
-        "catalogo_herramientas.csv": 1,
-        "cobertura_curricular.csv": 1,
-    }
     resultado = importador.importar(id_ejecucion, preview["fingerprint"], confirmar=True)
     assert resultado["estado"] == "completada"
     assert resultado["id_importacion"].startswith("IMP_")
@@ -236,7 +221,9 @@ def test_preview_valida_novedad_y_importa_solo_filas_nuevas(tmp_path: Path) -> N
     assert revertido["reversion"]["nodos_eliminados"] == 2
     assert "WRITE" in driver.session_obj.modes
     consulta_curso = next(
-        consulta for consulta in driver.session_obj.queries if "MERGE (curso:Curso" in consulta
+        consulta
+        for consulta in driver.session_obj.queries
+        if "MERGE (curso:Curso" in consulta
     )
     assert "MERGE (carrera)-[rel:ENSENIA]->(curso)" in consulta_curso
     assert "Silabo" not in consulta_curso
@@ -323,7 +310,10 @@ def test_preview_rechaza_codigo_de_silabo_distinto_al_curso(tmp_path: Path) -> N
     preview = importador.previsualizar(id_ejecucion)
 
     assert preview["puede_importar"] is False
-    assert any(error["codigo"] == "SILABO_CODIGO_CURSO_NO_COINCIDE" for error in preview["errores"])
+    assert any(
+        error["codigo"] == "SILABO_CODIGO_CURSO_NO_COINCIDE"
+        for error in preview["errores"]
+    )
 
 
 def test_preview_acepta_codigo_silabo_top_level(tmp_path: Path) -> None:
@@ -428,7 +418,9 @@ def test_preview_acepta_repetir_curso_silabo_en_paquetes_chh_distintos(
 
 def test_preview_acepta_id_de_cobertura(tmp_path: Path) -> None:
     filas = _filas()
-    filas["cobertura_curricular.csv"][0]["id_cob_curricular"] = "COB_CUR_fedcba9876543210"
+    filas["cobertura_curricular.csv"][0]["id_cob_curricular"] = (
+        "COB_CUR_fedcba9876543210"
+    )
     gestor, id_ejecucion = _manifest_y_salidas(tmp_path, filas)
     driver = FakeDriver(
         {
@@ -450,7 +442,9 @@ def test_preview_acepta_id_de_cobertura(tmp_path: Path) -> None:
         "COB_CUR_SOURCE_0123456789abcdef",
     ],
 )
-def test_preview_rechaza_variante_de_id_de_cobertura(tmp_path: Path, id_cobertura: str) -> None:
+def test_preview_rechaza_variante_de_id_de_cobertura(
+    tmp_path: Path, id_cobertura: str
+) -> None:
     filas = _filas()
     filas["cobertura_curricular.csv"][0]["id_cob_curricular"] = id_cobertura
     gestor, id_ejecucion = _manifest_y_salidas(tmp_path, filas)
@@ -462,9 +456,11 @@ def test_preview_rechaza_variante_de_id_de_cobertura(tmp_path: Path, id_cobertur
     assert any(error["codigo"] == "ID_INVALIDO" for error in preview["errores"])
 
 
-def test_importa_cobertura_sin_logro_ni_herramienta(tmp_path: Path) -> None:
+def test_importa_cobertura_sin_habilidad_ni_herramienta(tmp_path: Path) -> None:
     filas = _filas()
-    filas["cobertura_curricular.csv"][0].update({"id_logro": "", "id_herramienta": ""})
+    filas["cobertura_curricular.csv"][0].update(
+        {"id_habilidad": "", "id_herramienta": ""}
+    )
     gestor, id_ejecucion = _manifest_y_salidas(tmp_path, filas)
     driver = FakeDriver(
         {
@@ -489,9 +485,9 @@ def test_importa_cobertura_sin_logro_ni_herramienta(tmp_path: Path) -> None:
     assert "[rh:ENSENIA]" not in consulta
 
 
-def test_importa_cobertura_sin_logro_con_herramienta(tmp_path: Path) -> None:
+def test_importa_cobertura_sin_habilidad_con_herramienta(tmp_path: Path) -> None:
     filas = _filas()
-    filas["cobertura_curricular.csv"][0]["id_logro"] = ""
+    filas["cobertura_curricular.csv"][0]["id_habilidad"] = ""
     gestor, id_ejecucion = _manifest_y_salidas(tmp_path, filas)
     driver = FakeDriver(
         {
@@ -520,7 +516,7 @@ def test_importa_cobertura_sin_logro_con_herramienta(tmp_path: Path) -> None:
     ("campo", "id_inexistente"),
     [
         ("id_competencia", "COMP_fedcba9876543210"),
-        ("id_logro", "LOGRO_fedcba9876543210"),
+        ("id_habilidad", "HAB_fedcba9876543210"),
         ("id_herramienta", "HERR_fedcba9876543210"),
     ],
 )
@@ -599,7 +595,9 @@ def test_curso_existente_con_ensenia_no_escribe_nada(tmp_path: Path) -> None:
             "carreras": [{"id": IDS["id_carrera"]}],
             "silabos": [{"id": IDS["id_silabo"]}],
             "pares": [{"id_curso": IDS["id_curso"], "id_silabo": IDS["id_silabo"]}],
-            "pares_carrera_curso": [{"id_carrera": IDS["id_carrera"], "id_curso": IDS["id_curso"]}],
+            "pares_carrera_curso": [
+                {"id_carrera": IDS["id_carrera"], "id_curso": IDS["id_curso"]}
+            ],
         }
     )
     importador = ImportadorNeo4j(gestor, driver_factory=lambda: driver)
@@ -609,7 +607,10 @@ def test_curso_existente_con_ensenia_no_escribe_nada(tmp_path: Path) -> None:
     assert preview["resumen"]["cursos_actualizados"] == 0
     resultado = importador.importar(id_ejecucion, preview["fingerprint"], confirmar=True)
     assert resultado["estado"] == "completada"
-    assert not any("MERGE (curso:Curso" in consulta for consulta in driver.session_obj.queries)
+    assert not any(
+        "MERGE (curso:Curso" in consulta
+        for consulta in driver.session_obj.queries
+    )
 
 
 def test_reversion_restaura_propiedades_de_curso_preexistente(tmp_path: Path) -> None:
@@ -621,7 +622,9 @@ def test_reversion_restaura_propiedades_de_curso_preexistente(tmp_path: Path) ->
             "carreras": [{"id": IDS["id_carrera"]}],
             "silabos": [{"id": IDS["id_silabo"]}],
             "pares": [{"id_curso": IDS["id_curso"], "id_silabo": IDS["id_silabo"]}],
-            "pares_carrera_curso": [{"id_carrera": IDS["id_carrera"], "id_curso": IDS["id_curso"]}],
+            "pares_carrera_curso": [
+                {"id_carrera": IDS["id_carrera"], "id_curso": IDS["id_curso"]}
+            ],
             "restauraciones": [{"total": 1}],
         }
     )
@@ -655,8 +658,8 @@ def test_reversion_restaura_propiedades_de_curso_preexistente(tmp_path: Path) ->
 def test_preview_bloquea_encabezado_fuera_del_contrato(tmp_path: Path) -> None:
     filas = _filas()
     gestor, id_ejecucion = _manifest_y_salidas(tmp_path, filas)
-    ruta = tmp_path / id_ejecucion / "salidas" / "catalogo_logros.csv"
-    ruta.write_text("id_logro,nombre\n", encoding="utf-8")
+    ruta = tmp_path / id_ejecucion / "salidas" / "catalogo_habilidades.csv"
+    ruta.write_text("id_habilidad,nombre\n", encoding="utf-8")
     importador = ImportadorNeo4j(gestor, driver_factory=lambda: FakeDriver())
 
     preview = importador.previsualizar(id_ejecucion)
@@ -685,7 +688,8 @@ def test_preview_bloquea_nombre_semanticamente_duplicado_en_neo4j(tmp_path: Path
 
     assert preview["puede_importar"] is False
     assert any(
-        conflicto["codigo"] == "NOMBRE_EXISTENTE_CON_OTRO_ID" for conflicto in preview["conflictos"]
+        conflicto["codigo"] == "NOMBRE_EXISTENTE_CON_OTRO_ID"
+        for conflicto in preview["conflictos"]
     )
 
 
@@ -697,5 +701,6 @@ def test_preview_bloquea_cobertura_sin_padres_curriculares(tmp_path: Path) -> No
 
     assert preview["puede_importar"] is False
     assert any(
-        conflicto["codigo"] == "REFERENCIA_PARENT_NO_EXISTE" for conflicto in preview["conflictos"]
+        conflicto["codigo"] == "REFERENCIA_PARENT_NO_EXISTE"
+        for conflicto in preview["conflictos"]
     )

@@ -161,19 +161,14 @@ def test_overlay_de_carrera_precede_y_conserva_fallback_global(tmp_path: Path) -
 def test_crea_perfil_bootstrap_sin_alterar_los_esquemas_csv(tmp_path: Path) -> None:
     ejecucion = tmp_path / "NOR_TEST" / "salidas"
     ejecucion.mkdir(parents=True)
-    (ejecucion / "silabo.csv").write_text(
-        "id_silabo,codigo_silabo,sumilla,id_curso\nSIL_1,MKT101,Fundamentos de marketing,CUR_1\n",
-        encoding="utf-8-sig",
-    )
     (ejecucion / "catalogo_competencias.csv").write_text(
-        "id_competencia,nombre_competencia,descripcion_breve_competencia,tipo_competencia,"
-        "codigo_competencia\n"
-        "COMP_MARK,Gestión estratégica,Diseñar estrategias de marketing,dura,E2\n",
+        "id_competencia,nombre_competencia,descripcion_breve_competencia,tipo_competencia\n"
+        "COMP_MARK,Gestión estratégica,Diseñar estrategias de marketing,dura\n",
         encoding="utf-8-sig",
     )
-    (ejecucion / "catalogo_logros.csv").write_text(
-        "id_logro,nombre_logro,descripcion_breve\n"
-        "LOGRO_MARK,Diseñar estrategias,Diseñar estrategias de marketing\n",
+    (ejecucion / "catalogo_habilidades.csv").write_text(
+        "id_habilidad,nombre_habilidad,descripcion_breve\n"
+        "HAB_MARK,Diseñar estrategias,Diseñar estrategias de marketing\n",
         encoding="utf-8-sig",
     )
     (ejecucion / "catalogo_herramientas.csv").write_text(
@@ -182,8 +177,8 @@ def test_crea_perfil_bootstrap_sin_alterar_los_esquemas_csv(tmp_path: Path) -> N
         encoding="utf-8-sig",
     )
     (ejecucion / "cobertura_curricular.csv").write_text(
-        "id_cob_curricular,id_curso,id_silabo,id_competencia,id_logro,id_herramienta\n"
-        "COB_1,CUR_1,SIL_1,COMP_MARK,LOGRO_MARK,HERR_MARK\n",
+        "id_cob_curricular,id_curso,id_silabo,id_competencia,id_habilidad,id_herramienta\n"
+        "COB_1,CUR_1,SIL_1,COMP_MARK,HAB_MARK,HERR_MARK\n",
         encoding="utf-8-sig",
     )
     reportes = ejecucion / "reportes"
@@ -205,10 +200,8 @@ def test_crea_perfil_bootstrap_sin_alterar_los_esquemas_csv(tmp_path: Path) -> N
     directorio = tmp_path / "catalogos" / "carreras" / "MARKETING" / "2026-1"
     assert (directorio / "perfil.json").is_file()
     assert (
-        (directorio / "reportes" / "habilidades_pendientes.jsonl")
-        .read_text(encoding="utf-8")
-        .strip()
-    )
+        directorio / "reportes" / "habilidades_pendientes.jsonl"
+    ).read_text(encoding="utf-8").strip()
     catalogo = cargar_catalogo_carrera("Marketing", "2026-1", str(tmp_path / "catalogos"))
     assert catalogo is not None
     assert catalogo.obtener("herramienta", "Google Analytics") is not None
@@ -221,7 +214,9 @@ def test_bootstrap_mantiene_borrador_si_el_release_gate_bloquea(tmp_path: Path) 
         (ejecucion / nombre).write_text(",".join(columnas) + "\n", encoding="utf-8-sig")
     reportes = ejecucion / "reportes"
     reportes.mkdir()
-    (reportes / "release_gate.json").write_text('{"decision":"BLOCK_IMPORT"}\n', encoding="utf-8")
+    (reportes / "release_gate.json").write_text(
+        '{"decision":"BLOCK_IMPORT"}\n', encoding="utf-8"
+    )
 
     crear_perfil_bootstrap(
         ejecucion.parent,
