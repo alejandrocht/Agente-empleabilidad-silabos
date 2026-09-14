@@ -104,10 +104,9 @@ def _clave_lote(
     lote: tuple[dict[str, object], ...],
     perfil: dict[str, object],
     modelo: str,
-    version_prompt: str = "",
 ) -> str:
     payload = json.dumps(
-        {"lote": lote, "perfil": perfil, "modelo": modelo, "version_prompt": version_prompt},
+        {"lote": lote, "perfil": perfil, "modelo": modelo},
         ensure_ascii=False,
         sort_keys=True,
     ).encode("utf-8")

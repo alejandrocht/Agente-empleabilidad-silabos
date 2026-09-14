@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Any
 
 from docx import Document
 
+from agente.normalizador.empleabilidad.catalogo import clave_concepto
 from agente.normalizador.empleabilidad.entrada import normalizar_etiqueta
-from agente.normalizador.identidad import hashed
 from agente.normalizador.modelos import Hallazgo
 
 _PATRON_REFERENCIA_CURRICULAR = r"(?<![A-Z0-9])(?:L\d+|[GE]\d+|[GE]{2,4})(?![A-Z0-9])"
@@ -35,22 +36,6 @@ def _normalizar_modalidad(valor: object) -> str:
     return ""
 
 
-def _normalizar_naturaleza(valor: object) -> str:
-    """Publica la naturaleza académica declarada (Obligatorio/Electivo) en curso.csv."""
-
-    clave = normalizar_etiqueta(valor).replace("_", " ").upper()
-    if "OBLIGAT" in clave:
-        return "Obligatorio"
-    if "ELECTIV" in clave:
-        return "Electivo"
-    if "ESPECIAL" in clave:
-        return "Especialidad"
-    if "GENERAL" in clave:
-        return "General"
-    texto = _texto(valor)
-    return texto[:1].upper() + texto[1:].lower() if texto else ""
-
-
 def _texto(valor: object) -> str:
     return re.sub(r"\s+", " ", str(valor or "")).strip()
 
@@ -65,9 +50,9 @@ def _clave(valor: object) -> str:
     return normalizar_etiqueta(valor).replace(" ", "_")
 
 
-# `_hash_id` stays bound so downstream importers can still bind it from this
-# module; it is now only a name for the shared helper.
-_hash_id = hashed
+def _hash_id(prefijo: str, *partes: str) -> str:
+    payload = "|".join(clave_concepto(parte) for parte in partes).encode("utf-8")
+    return f"{prefijo}_{hashlib.sha256(payload).hexdigest()[:16]}"
 
 
 def _ids_curriculares(
@@ -80,10 +65,10 @@ def _ids_curriculares(
 
     codigo = _texto(codigo_curso)
     if codigo:
-        return hashed("SIL", codigo), hashed("CUR", codigo)
+        return _hash_id("SIL", codigo), _hash_id("CUR", codigo)
     return (
-        hashed("SIL", carrera, periodo, nombre),
-        hashed("CUR", carrera, periodo, nombre),
+        _hash_id("SIL", carrera, periodo, nombre),
+        _hash_id("CUR", carrera, periodo, nombre),
     )
 
 
@@ -292,16 +277,14 @@ def _extraer_docx(
             for valores in filas[1:]:
                 if len(valores) < 3:
                     continue
-                codigos = _codigos(valores[-1])
-                if codigos and valores[0] and not re.fullmatch(r"L\d+", valores[0], re.I):
+                if _codigos(valores[-1]) and valores[0] and not re.fullmatch(
+                    r"L\d+", valores[0], re.I
+                ):
                     competencias.append(
                         {
                             "orden": str(len(competencias) + 1),
                             "nombre": _sin_referencias_curriculares(valores[0]).strip(" ."),
                             "descripcion": _sin_referencias_curriculares(valores[1]),
-                            # El código declarado viaja al catálogo final como
-                            # `codigo_competencia`.
-                            "codigo": codigos[0],
                             "texto_evidencia": _sin_referencias_curriculares(
                                 " | ".join(valores[:2])
                             ),
@@ -376,13 +359,7 @@ def _extraer_docx(
             "coordinador": _primer_metadata(metadata, ("coordinador", "coordinador_del_curso")),
             "creditos": _primer_metadata(metadata, ("creditos", "creditos_academicos")),
             "nivel": nivel,
-            "tipo_curso": _normalizar_naturaleza(
-                _primer_metadata(
-                    metadata,
-                    ("tipo_de_asignatura", "tipo_asignatura", "naturaleza"),
-                )
-            ),
-            "modalidad": _normalizar_modalidad(
+            "tipo_curso": _normalizar_modalidad(
                 _primer_metadata(
                     metadata,
                     ("modalidad", "modalidad_de_estudios", "modalidad_de_ensenanza"),

@@ -242,7 +242,7 @@ def test_inicia_y_consulta_ejecucion(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_inicia_y_consulta_ejecucion_de_silabos(monkeypatch, tmp_path: Path) -> None:
-    """La fuente curricular produce los seis CSV del contrato."""
+    """La fuente curricular produce los cinco CSV del contrato."""
 
     gestor = GestorEjecuciones(tmp_path)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
@@ -283,18 +283,11 @@ def test_inicia_y_consulta_ejecucion_de_silabos(monkeypatch, tmp_path: Path) -> 
     outputs = {output["archivo"] for output in ejecucion["outputs"]}
     assert outputs == {
         "salidas/curso.csv",
-        "salidas/silabo.csv",
         "salidas/catalogo_competencias.csv",
-        "salidas/catalogo_logros.csv",
+        "salidas/catalogo_habilidades.csv",
         "salidas/catalogo_herramientas.csv",
         "salidas/cobertura_curricular.csv",
     }
-    descarga_silabo = cliente.get(
-        f"/normalizador/ejecuciones/{id_ejecucion}/outputs/salidas/silabo.csv"
-    )
-    assert descarga_silabo.status_code == 200
-    assert "attachment" in descarga_silabo.headers["content-disposition"]
-    assert descarga_silabo.content
     descarga = cliente.get(
         f"/normalizador/ejecuciones/{id_ejecucion}/outputs/salidas/cobertura_curricular.csv"
     )
@@ -323,7 +316,7 @@ def test_silabos_bloqueado_no_expone_outputs_curriculares_y_conserva_revision(
     reportes.mkdir(parents=True)
     for nombre in (
         "catalogo_competencias.csv",
-        "catalogo_logros.csv",
+        "catalogo_habilidades.csv",
         "catalogo_herramientas.csv",
         "cobertura_curricular.csv",
     ):

@@ -40,58 +40,6 @@ from agente.normalizador.silabos.resolucion_curricular import (
     _tipo_competencia,
     _warning,
 )
-from agente.normalizador.silabos.trazabilidad_curricular import (
-    _fila_logro,
-    _id_logro,
-)
-
-
-def _codigo_competencia(
-    codigos: dict[str, str], id_competencia: str, declaracion: dict[str, str]
-) -> str:
-    """Conserva el primer código no vacío declarado para una competencia canónica.
-
-    Varias declaraciones pueden resolver a la misma competencia canónica. La primera
-    presentación con código válido gana y ningún valor vacío la sobrescribe después.
-    """
-
-    codigo = _texto(declaracion.get("codigo"))
-    if codigo and not codigos.get(id_competencia):
-        codigos[id_competencia] = codigo
-    return codigos.get(id_competencia, "")
-
-
-def _tiene_competencia_canonica(
-    competencias_fuente_logro: list[str],
-    competencias_fuente: dict[str, dict[str, object]],
-) -> bool:
-    """Indica si el logro participa de al menos una competencia canónica resuelta."""
-
-    return bool(competencias_fuente_logro) and any(
-        _texto(competencias_fuente[competencia_fuente].get("id_competencia_canonica"))
-        for competencia_fuente in competencias_fuente_logro
-    )
-
-
-def _tipo_catalogo(catalogo: CatalogoCHH, id_competencia: str) -> str:
-    """Tipo autoritativo de la competencia en el catálogo curado.
-
-    La resolución por declaración reconstruye el concepto y conserva el tipo
-    publicado del catálogo; la cobertura lo consulta para decidir si la
-    competencia técnica lleva logro. Una competencia genérica o específica cubre
-    el curso sin quedar atada a un logro concreto.
-    """
-
-    for concepto in catalogo.competencias:
-        if concepto.id == id_competencia:
-            return _texto(concepto.tipo)
-    return ""
-
-
-def _id_logro_de_cobertura(id_logro: str, tipo_competencia: object) -> str:
-    """Publica el logro en la cobertura solo cuando la competencia es técnica."""
-
-    return id_logro if _texto(tipo_competencia).casefold() == "tecnica" else ""
 
 
 def normalizar_registros_curriculares(
@@ -113,9 +61,8 @@ def normalizar_registros_curriculares(
     hallazgos: list[Hallazgo] = []
     cuarentena: list[dict[str, object]] = []
     competencias: dict[str, dict[str, str]] = {}
-    codigos_competencia: dict[str, str] = {}
     competencias_fuente: dict[str, dict[str, object]] = {}
-    nombres_logro: dict[str, str] = {}
+    habilidades: dict[str, dict[str, str]] = {}
     habilidades_fuente: dict[str, dict[str, object]] = {}
     herramientas: dict[str, dict[str, str]] = {}
     herramientas_fuente: dict[str, dict[str, object]] = {}
@@ -243,15 +190,12 @@ def normalizar_registros_curriculares(
                 "nombre_competencia": competencia.nombre,
                 "descripcion_breve_competencia": competencia.descripcion,
                 "tipo_competencia": competencia.tipo,
-                "codigo_competencia": _codigo_competencia(
-                    codigos_competencia, competencia.id, declaracion
-                ),
             }
 
         for indice_logro, logro in enumerate(outcomes, start=1):
             descripcion = _texto(logro.get("descripcion"))
             orden_logro = _texto(logro.get("orden")) or str(indice_logro)
-            id_logro_fuente = _texto(logro.get("id_logro")) or _hash_id(
+            id_logro = _texto(logro.get("id_logro")) or _hash_id(
                 "LOGRO_SRC",
                 id_silabo,
                 orden_logro,
@@ -268,12 +212,6 @@ def normalizar_registros_curriculares(
                     orden_logro,
                 )
                 continue
-
-            # La entidad publicada es el logro extraído, así que su identidad
-            # canónica se deriva del nombre del logro y no de un catálogo curado.
-            nombre_logro = descripcion
-            id_logro = _id_logro(nombre_logro)
-            nombres_logro[id_logro] = nombre_logro
 
             seleccionadas = _competencias_para_logro(
                 logro,
@@ -322,9 +260,6 @@ def normalizar_registros_curriculares(
                     "nombre_competencia": competencia.nombre,
                     "descripcion_breve_competencia": competencia.descripcion,
                     "tipo_competencia": competencia.tipo,
-                    "codigo_competencia": _codigo_competencia(
-                        codigos_competencia, competencia.id, declaracion
-                    ),
                 }
 
             id_habilidad_fuente = _hash_id(
@@ -425,7 +360,7 @@ def normalizar_registros_curriculares(
                 "archivo": archivo,
                 "orden_logro": orden_logro,
                 "descripcion_fuente": descripcion,
-                "id_habilidad_canonica": id_logro if habilidad_canonica is not None else "",
+                "id_habilidad_canonica": habilidad_canonica.id if habilidad_canonica else "",
                 "estado_resolucion": estado_habilidad,
                 "metodo_resolucion": resolucion_habilidad.metodo,
                 "puntaje_resolucion": resolucion_habilidad.puntaje,
@@ -445,10 +380,16 @@ def normalizar_registros_curriculares(
                         detalle=f"logro {orden_logro}: {descripcion}",
                     )
                 )
-            elif (
-                not _tiene_competencia_canonica(competencias_fuente_logro, competencias_fuente)
-                and not habilidad_pendiente_registrada
+            elif competencias_fuente_logro and any(
+                _texto(competencias_fuente[competencia_fuente].get("id_competencia_canonica"))
+                for competencia_fuente in competencias_fuente_logro
             ):
+                habilidades[habilidad_canonica.id] = {
+                    "id_habilidad": habilidad_canonica.id,
+                    "nombre_habilidad": habilidad_canonica.nombre,
+                    "descripcion_breve": habilidad_canonica.descripcion,
+                }
+            elif not habilidad_pendiente_registrada:
                 estado_habilidad = ESTADO_REVISION_HUMANA
                 _registrar_pendiente(
                     pendientes_curriculares,
@@ -555,10 +496,6 @@ def normalizar_registros_curriculares(
                 competencia_canonica = _texto(
                     competencias_fuente[competencia_fuente].get("id_competencia_canonica")
                 )
-                id_logro_cobertura = _id_logro_de_cobertura(
-                    id_logro,
-                    _tipo_catalogo(catalogo_curricular, competencia_canonica),
-                )
                 for herramienta_fuente, herramienta_canonica in herramientas_fuente_logro or [
                     ("", "")
                 ]:
@@ -566,7 +503,7 @@ def normalizar_registros_curriculares(
                         id_curso,
                         id_silabo,
                         competencia_fuente,
-                        id_logro_fuente,
+                        id_habilidad_fuente,
                         herramienta_fuente,
                     )
                     relaciones_fuente.add(relacion_fuente)
@@ -574,12 +511,12 @@ def normalizar_registros_curriculares(
                         relacion_fuente,
                         "COB_CUR",
                         id_ejecucion=id_ejecucion,
-                        id_logro_fuente=id_logro_fuente,
+                        id_logro=id_logro,
                         id_competencia_fuente=competencia_fuente,
                         id_habilidad_fuente=id_habilidad_fuente,
                         id_herramienta_fuente=herramienta_fuente,
                         id_competencia_canonica=competencia_canonica,
-                        id_habilidad_canonica=(id_logro if habilidad_canonica is not None else ""),
+                        id_habilidad_canonica=(habilidad_canonica.id if habilidad_canonica else ""),
                         id_herramienta_canonica=herramienta_canonica,
                         source_ref=source_ref,
                     )
@@ -591,7 +528,7 @@ def normalizar_registros_curriculares(
                         id_curso,
                         id_silabo,
                         competencia_canonica,
-                        id_logro_cobertura,
+                        habilidad_canonica.id,
                         herramienta_canonica,
                     )
                     relaciones_canonicas.add(relacion_canonica)
@@ -601,12 +538,12 @@ def normalizar_registros_curriculares(
                             relacion_canonica,
                             "COB_CUR",
                             id_ejecucion=id_ejecucion,
-                            id_logro_fuente=id_logro_fuente,
+                            id_logro=id_logro,
                             id_competencia_fuente=competencia_fuente,
                             id_habilidad_fuente=id_habilidad_fuente,
                             id_herramienta_fuente=herramienta_fuente,
                             id_competencia_canonica=competencia_canonica,
-                            id_habilidad_canonica=id_logro,
+                            id_habilidad_canonica=habilidad_canonica.id,
                             id_herramienta_canonica=herramienta_canonica,
                             source_ref=source_ref,
                         ),
@@ -636,12 +573,6 @@ def normalizar_registros_curriculares(
                 id_silabo,
                 curso,
             )
-    # El catálogo publica exactamente los logros que participan de una relación
-    # canónica: un logro sin cobertura no puede sostener una cadena CHH.
-    logros = {
-        id_logro: _fila_logro(nombres_logro[id_logro])
-        for id_logro in {relacion[3] for relacion in relaciones_canonicas if relacion[3]}
-    }
     cobertura_canonica = [
         {
             "id_cob_curricular": _hash_id(
@@ -649,16 +580,16 @@ def normalizar_registros_curriculares(
                 id_curso,
                 id_silabo,
                 id_competencia,
-                id_logro,
+                id_habilidad,
                 id_herramienta,
             ),
             "id_curso": id_curso,
             "id_silabo": id_silabo,
             "id_competencia": id_competencia,
-            "id_logro": id_logro,
+            "id_habilidad": id_habilidad,
             "id_herramienta": id_herramienta,
         }
-        for id_curso, id_silabo, id_competencia, id_logro, id_herramienta in sorted(
+        for id_curso, id_silabo, id_competencia, id_habilidad, id_herramienta in sorted(
             relaciones_canonicas
         )
     ]
@@ -670,8 +601,8 @@ def normalizar_registros_curriculares(
         "catalogo_competencias.csv": sorted(
             competencias.values(), key=lambda fila: clave_concepto(fila["nombre_competencia"])
         ),
-        "catalogo_logros.csv": sorted(
-            logros.values(), key=lambda fila: clave_concepto(fila["nombre_logro"])
+        "catalogo_habilidades.csv": sorted(
+            habilidades.values(), key=lambda fila: clave_concepto(fila["nombre_habilidad"])
         ),
         "catalogo_herramientas.csv": sorted(
             herramientas.values(), key=lambda fila: clave_concepto(fila["nombre_herramienta"])
