@@ -7,6 +7,7 @@ decisiones que puedan verificarse contra el sílabo y los candidatos detectados.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -18,9 +19,11 @@ from agente.config.settings import (
 )
 from agente.llm.fabrica import obtener_llm
 from agente.normalizador.embeddings import EmbeddingRetriever, EmbeddingScope
-from agente.normalizador.empleabilidad.catalogo import CatalogoCHH
+from agente.normalizador.empleabilidad.catalogo import (
+    CatalogoCHH,
+    clave_concepto,
+)
 from agente.normalizador.excepciones import CancelacionSolicitada
-from agente.normalizador.identidad import hashed
 from agente.normalizador.modelos import (
     EstadoReporteFinalLLM,
     FaseProgresoLLM,
@@ -93,7 +96,6 @@ _reporte_decision = _normalizacion_decisiones._reporte_decision
 _validar_respuesta_por_orden = _respuesta_cache_analista._validar_respuesta_por_orden
 _clave_logro_literal = _respuesta_cache_analista._clave_logro_literal
 _clave_lote = _respuesta_cache_analista._clave_lote
-_version_prompt_analista = _contexto_analista.version_prompt_analista
 _leer_cache = _respuesta_cache_analista._leer_cache
 _guardar_cache = _respuesta_cache_analista._guardar_cache
 _nombre_modelo = _respuesta_cache_analista._nombre_modelo
@@ -245,7 +247,7 @@ def analizar_registros_curriculares(
             limites_lexicales=limites_lexicales,
             pool_retrieval=pool_retrieval,
             limite_ejemplos=configuracion.limite_ejemplos_contexto,
-            crear_id_habilidad=hashed,
+            crear_id_habilidad=_hash_id,
         )
     )
     auditoria_contexto = _auditoria_contexto(casos, contexto_perfil)
@@ -349,7 +351,7 @@ def analizar_registros_curriculares(
 
     for indice_lote, lote in enumerate(lotes, start=1):
         verificar_cancelacion()
-        clave_lote = _clave_lote(lote, perfil, modelo_analista, _version_prompt_analista())
+        clave_lote = _clave_lote(lote, perfil, modelo_analista)
         lote_respuesta = cache.get(clave_lote)
         if lote_respuesta is not None:
             decisiones_cacheadas.update(str(caso["id_habilidad_fuente"]) for caso in lote)
@@ -445,11 +447,7 @@ def analizar_registros_curriculares(
         ]
         if ids_omitidos:
             lote_reintento = tuple(por_id[id_habilidad] for id_habilidad in ids_omitidos)
-            lote_reintento = tuple(por_id[id_habilidad] for id_habilidad in ids_omitidos)
-            clave_lote_reintento = _clave_lote(
-                lote_reintento, perfil, modelo_analista, _version_prompt_analista()
-            )
-            clave_reintento = f"reintento:{clave_lote_reintento}"
+            clave_reintento = f"reintento:{_clave_lote(lote_reintento, perfil, modelo_analista)}"
             if clave_reintento not in reintentos_lanzados:
                 reintentos_lanzados.add(clave_reintento)
                 reintentos += 1
@@ -656,10 +654,9 @@ def _cargar_perfil(carrera: str, periodo: str) -> dict[str, object]:
     return cargar_perfil_carrera(carrera, periodo)
 
 
-# `_hash_id` stays bound for the callers that reach it by name (the
-# curricular test suite and `resolucion_curricular`'s seam); it is now only a
-# name for the shared helper.
-_hash_id = hashed
+def _hash_id(prefijo: str, *partes: str) -> str:
+    payload = "|".join(clave_concepto(parte) for parte in partes).encode("utf-8")
+    return f"{prefijo}_{hashlib.sha256(payload).hexdigest()[:16]}"
 
 
 def _trocear_por_silabo(

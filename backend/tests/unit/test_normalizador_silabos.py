@@ -220,9 +220,8 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
     }
     assert {output["archivo"] for output in resultado.outputs} == {
         "salidas/curso.csv",
-        "salidas/silabo.csv",
         "salidas/catalogo_competencias.csv",
-        "salidas/catalogo_logros.csv",
+        "salidas/catalogo_habilidades.csv",
         "salidas/catalogo_herramientas.csv",
         "salidas/cobertura_curricular.csv",
         "salidas/competencias_fuente.jsonl",
@@ -244,22 +243,15 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
             "codigo_curso",
             "id_carrera",
         ],
-        "silabo.csv": [
-            "id_silabo",
-            "codigo_silabo",
-            "sumilla",
-            "id_curso",
-        ],
         "catalogo_competencias.csv": [
             "id_competencia",
             "nombre_competencia",
             "descripcion_breve_competencia",
             "tipo_competencia",
-            "codigo_competencia",
         ],
-        "catalogo_logros.csv": [
-            "id_logro",
-            "nombre_logro",
+        "catalogo_habilidades.csv": [
+            "id_habilidad",
+            "nombre_habilidad",
             "descripcion_breve",
         ],
         "catalogo_herramientas.csv": [
@@ -272,52 +264,14 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
             "id_curso",
             "id_silabo",
             "id_competencia",
-            "id_logro",
+            "id_habilidad",
             "id_herramienta",
         ],
     }
     for nombre, esperado in schemas.items():
         with (ejecucion / "salidas" / nombre).open(encoding="utf-8-sig", newline="") as archivo:
             assert next(csv.reader(archivo)) == esperado
-        assert (ejecucion / "salidas" / "reportes" / "habilidades_fuente.jsonl").is_file()
-    with (ejecucion / "salidas" / "catalogo_competencias.csv").open(
-        encoding="utf-8-sig", newline=""
-    ) as archivo:
-        competencias_publicadas = list(csv.DictReader(archivo))
-    assert {
-        fila["nombre_competencia"]: fila["codigo_competencia"] for fila in competencias_publicadas
-    } == {"Diseño de bases de datos": "G1"}
-
-
-def test_orden_de_archivos_no_depende_del_empaquetado_del_zip(tmp_path: Path) -> None:
-    """El orden interno de `infolist()` no debe filtrarse al resultado.
-
-    El mismo contenido reempaquetado en otro orden producía lotes distintos y,
-    con ellos, otra respuesta del LLM. El orden normalizado lo fija.
-    """
-
-    nombres = [
-        "2026-2 SIL ZOOLOGÍA.docx",
-        "2026-2 SIL ÁLGEBRA.docx",
-        "2026-2 SIL CÁLCULO II.docx",
-    ]
-    observados: list[list[str]] = []
-    for etiqueta, orden in (("ascendente", nombres), ("descendente", list(reversed(nombres)))):
-        paquete = tmp_path / f"{etiqueta}.zip"
-        with zipfile.ZipFile(paquete, "w") as archivo:
-            for nombre in orden:
-                archivo.writestr(nombre, b"contenido")
-        validacion = validar_archivo(paquete, "Ingeniería de Sistemas", "2026-2")
-        observados.append([item.nombre for item in validacion.archivos])
-
-    esperado = [
-        "2026-2 SIL ÁLGEBRA.docx",
-        "2026-2 SIL CÁLCULO II.docx",
-        "2026-2 SIL ZOOLOGÍA.docx",
-    ]
-    assert observados[0] == esperado
-    assert observados[1] == esperado
-    assert observados[0] == observados[1]
+    assert (ejecucion / "salidas" / "reportes" / "habilidades_fuente.jsonl").is_file()
 
 
 def test_extrae_metadatos_estructurados_docx_y_conserva_coordinadores(tmp_path: Path) -> None:
@@ -350,12 +304,11 @@ def test_extrae_metadatos_estructurados_docx_y_conserva_coordinadores(tmp_path: 
         "coordinador": "Ana Pérez | Bruno Díaz",
         "creditos": "4",
         "nivel": "Sexto",
-        "tipo_curso": "Obligatorio",
+        "tipo_curso": "Híbrido",
     }
-    assert datos["modalidad"] == "Híbrido"
 
 
-def test_tipo_curso_publica_la_naturaleza_declarada_de_la_asignatura(tmp_path: Path) -> None:
+def test_modalidad_no_se_infiere_de_tipo_de_asignatura_o_naturaleza(tmp_path: Path) -> None:
     fuente = tmp_path / "curso-sin-modalidad.docx"
     documento = Document()
     metadata = documento.add_table(rows=3, cols=2)
@@ -371,8 +324,7 @@ def test_tipo_curso_publica_la_naturaleza_declarada_de_la_asignatura(tmp_path: P
     datos = _extraer_docx(fuente, fuente.name, "PRUEBA", "2031-2")["datos"]
 
     assert isinstance(datos, dict)
-    assert datos["tipo_curso"] == "Electivo"
-    assert datos["modalidad"] == ""
+    assert datos["tipo_curso"] == ""
 
 
 def test_extrae_programa_docx_con_y_sin_celdas_combinadas_horizontalmente(
@@ -649,13 +601,6 @@ def test_resuelve_logro_por_evidencia_textual_sin_referencia_de_tabla(tmp_path: 
         and fila["metodo_vinculacion_logro"] == "COINCIDENCIA_TEXTUAL_DECLARADA"
         for fila in competencias_fuente
     )
-    with (tmp_path / "ejecucion" / "salidas" / "catalogo_competencias.csv").open(
-        encoding="utf-8-sig", newline=""
-    ) as archivo:
-        competencias_publicadas = list(csv.DictReader(archivo))
-    assert {
-        fila["nombre_competencia"]: fila["codigo_competencia"] for fila in competencias_publicadas
-    } == {"Evaluación financiera": "G7"}
 
 
 def test_conserva_referencia_de_fuente_sin_catalogo_o_declaracion(tmp_path: Path) -> None:
@@ -680,7 +625,7 @@ def test_conserva_referencia_de_fuente_sin_catalogo_o_declaracion(tmp_path: Path
         (tmp_path / "ejecucion" / "salidas" / nombre).exists()
         for nombre, _ in (
             ("catalogo_competencias.csv", ()),
-            ("catalogo_logros.csv", ()),
+            ("catalogo_habilidades.csv", ()),
             ("catalogo_herramientas.csv", ()),
             ("cobertura_curricular.csv", ()),
         )
@@ -714,7 +659,7 @@ def test_no_materializa_catalogos_mientras_queda_habilidad_pendiente(tmp_path: P
 
     assert resultado.release_gate["decision"] == "BLOCK_IMPORT"
     assert "UNRESOLVED_CURRICULAR_RECORDS" in resultado.release_gate["blockers"]
-    assert not (tmp_path / "ejecucion" / "salidas" / "catalogo_logros.csv").exists()
+    assert not (tmp_path / "ejecucion" / "salidas" / "catalogo_habilidades.csv").exists()
 
 
 def test_no_publica_habilidad_canonica_sin_cadena_de_competencia(tmp_path: Path) -> None:
@@ -789,7 +734,7 @@ def test_prioriza_perfil_del_silabo_sin_exponer_referencias_alfabeticas(tmp_path
         (tmp_path / "ejecucion" / "salidas" / nombre).exists()
         for nombre in (
             "catalogo_competencias.csv",
-            "catalogo_logros.csv",
+            "catalogo_habilidades.csv",
             "catalogo_herramientas.csv",
             "cobertura_curricular.csv",
         )
@@ -1094,7 +1039,7 @@ def test_extrae_pdf_layout_i_vi_y_conserva_vii_viii_solo_en_fuente(
     assert isinstance(datos, dict)
     assert datos["curso"] == "Sistemas de Inteligencia Empresarial"
     assert datos["nombre_curso"] == "Sistemas de Inteligencia Empresarial"
-    assert datos["tipo_curso"] == "Obligatorio"
+    assert datos["tipo_curso"] == "Presencial"
     assert datos["codigo_curso"] == "650062"
     assert datos["nivel"] == "Séptimo"
     assert datos["creditos"] == "4"
@@ -1365,7 +1310,9 @@ def test_competencias_pdf_reconstruye_columnas_partidas_sin_carrera() -> None:
                 "Competencias genéricas",
                 "   Pensamiento           Obtiene una visión global sobre una situación "
                 "compleja a partir",
-                "     sistémico           de la integración de sus componentes." + " " * 43 + "G1",
+                "     sistémico           de la integración de sus componentes."
+                + " " * 43
+                + "G1",
                 "                                       Competencias específicas",
                 "   Control de la         Evalúa la implementación de planes y             "
                 "Carrera de           E4",

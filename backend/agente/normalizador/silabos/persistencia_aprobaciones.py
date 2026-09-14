@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import re
-import unicodedata
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 from agente.normalizador.empleabilidad.catalogo import clave_concepto
-from agente.normalizador.identidad import hashed
 from agente.normalizador.silabos.salida import ARCHIVOS_SALIDA, COBERTURA_SCHEMA
 
 CANDIDATOS_ARCHIVO = "candidatos_curriculares.json"
@@ -83,17 +82,17 @@ def _fila_relacion(
     id_curso: str,
     id_silabo: str,
     id_competencia: str,
-    id_logro: str,
+    id_habilidad: str,
     id_herramienta: str,
 ) -> dict[str, str]:
     return {
         "id_cob_curricular": _id_canonico(
-            "COB_CUR", id_curso, id_silabo, id_competencia, id_logro, id_herramienta
+            "COB_CUR", id_curso, id_silabo, id_competencia, id_habilidad, id_herramienta
         ),
         "id_curso": id_curso,
         "id_silabo": id_silabo,
         "id_competencia": id_competencia,
-        "id_logro": id_logro,
+        "id_habilidad": id_habilidad,
         "id_herramienta": id_herramienta,
     }
 
@@ -103,7 +102,7 @@ def _clave_relacion(fila: Mapping[str, object]) -> tuple[str, str, str, str, str
         _texto(fila.get("id_curso")),
         _texto(fila.get("id_silabo")),
         _texto(fila.get("id_competencia")),
-        _texto(fila.get("id_logro")),
+        _texto(fila.get("id_habilidad")),
         _texto(fila.get("id_herramienta")),
     )
 
@@ -170,7 +169,7 @@ def _lineage_relacion(
     fuentes: Mapping[str, Sequence[Mapping[str, object]]],
     identidad: Mapping[str, str],
     id_competencia: str,
-    id_logro: str,
+    id_habilidad: str,
     id_herramienta: str,
 ) -> dict[str, str]:
     """Build stable lineage for an edge created during approval."""
@@ -215,12 +214,12 @@ def _lineage_relacion(
     return {
         "id_ejecucion": identidad["id_ejecucion"],
         "id_relacion_fuente": id_relacion_fuente,
-        "id_logro_fuente": _texto(fila.get("id_logro")),
+        "id_logro": _texto(fila.get("id_logro")),
         "id_competencia_fuente": id_fuente(
             "competencias_fuente.jsonl", "id_competencia_canonica", id_competencia
         ),
         "id_habilidad_fuente": id_fuente(
-            "habilidades_fuente.jsonl", "id_habilidad_canonica", id_logro
+            "habilidades_fuente.jsonl", "id_habilidad_canonica", id_habilidad
         )
         or identidad["id_habilidad_fuente"],
         "id_herramienta_fuente": id_fuente(
@@ -229,7 +228,7 @@ def _lineage_relacion(
         if id_herramienta
         else "",
         "id_competencia_canonica": id_competencia,
-        "id_habilidad_canonica": id_logro,
+        "id_habilidad_canonica": id_habilidad,
         "id_herramienta_canonica": id_herramienta,
         "source_ref": _texto(fila.get("source_ref"))
         or _texto(fila.get("archivo"))
@@ -331,7 +330,9 @@ def _escribir_archivos_curriculares(
         _escribir_csv_atomico(salida / nombre, columnas, filas)
 
 
-def _eliminar_archivos_curriculares(salida: Path, *, not_permitted_error: ExceptionFactory) -> None:
+def _eliminar_archivos_curriculares(
+    salida: Path, *, not_permitted_error: ExceptionFactory
+) -> None:
     """Remove stale canonical files while an approval batch is unresolved."""
 
     for nombre, _ in ARCHIVOS_SALIDA:
@@ -383,7 +384,9 @@ def _escribir_relaciones(
     invalid_error: ExceptionFactory,
 ) -> None:
     relaciones_enriquecidas = _preservar_relaciones_enriquecidas(
-        _leer_jsonl(reportes / "cobertura_curricular_canonica.jsonl", invalid_error=invalid_error),
+        _leer_jsonl(
+            reportes / "cobertura_curricular_canonica.jsonl", invalid_error=invalid_error
+        ),
         relaciones,
     )
     relaciones_enriquecidas.sort(
@@ -411,7 +414,9 @@ def _leer_jsonl(ruta: Path, *, invalid_error: ExceptionFactory) -> list[dict[str
     return filas
 
 
-def _leer_descartes(ruta: Path, *, invalid_error: ExceptionFactory) -> dict[str, dict[str, object]]:
+def _leer_descartes(
+    ruta: Path, *, invalid_error: ExceptionFactory
+) -> dict[str, dict[str, object]]:
     return {
         _texto(fila.get("package_id")): fila
         for fila in _leer_jsonl(ruta, invalid_error=invalid_error)
@@ -491,13 +496,12 @@ def _id_canonico(tipo: str, *partes: str) -> str:
         "COB_CUR": "COB_CUR",
     }
     prefijo = prefijos.get(tipo, tipo)
-    return hashed(prefijo, *partes)
+    payload = "|".join(clave_concepto(parte) for parte in partes).encode("utf-8")
+    return f"{prefijo}_{hashlib.sha256(payload).hexdigest()[:16]}"
 
 
 def _clave_ruta(valor: str) -> str:
-    plegado = unicodedata.normalize("NFKD", valor)
-    sin_acentos = "".join(caracter for caracter in plegado if not unicodedata.combining(caracter))
-    return re.sub(r"[^A-Za-z0-9]+", "_", sin_acentos).strip("_").upper()
+    return re.sub(r"[^A-Za-z0-9]+", "_", valor).strip("_").upper()
 
 
 def _texto(valor: Any) -> str:

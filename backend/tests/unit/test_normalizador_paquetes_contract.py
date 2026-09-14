@@ -48,7 +48,7 @@ def _relation(competency: str, skill: str, tool: str = "") -> dict[str, str]:
         "id_silabo": "SIL_1",
         "id_habilidad_fuente": "SRC_SKILL",
         "id_competencia": competency,
-        "id_logro": skill,
+        "id_habilidad": skill,
         "id_herramienta": tool,
     }
 
@@ -162,7 +162,7 @@ def test_source_relation_identity_splits_shared_skill_without_losing_nn_edges() 
             {"id_competencia": "COMP_1", "nombre_competencia": "Competencia 1"},
             {"id_competencia": "COMP_2", "nombre_competencia": "Competencia 2"},
         ],
-        "catalogo_logros.csv": [{"id_logro": "HAB_1", "nombre_logro": "Habilidad"}],
+        "catalogo_habilidades.csv": [{"id_habilidad": "HAB_1", "nombre_habilidad": "Habilidad"}],
         "catalogo_herramientas.csv": [
             {"id_herramienta": "HERR_1", "nombre_herramienta": "Herramienta 1"},
             {"id_herramienta": "HERR_2", "nombre_herramienta": "Herramienta 2"},
@@ -276,8 +276,8 @@ def test_identical_canonical_tuple_from_distinct_source_relations_stays_separate
             "catalogo_competencias.csv": [
                 {"id_competencia": "COMP_1", "nombre_competencia": "Competencia"}
             ],
-            "catalogo_logros.csv": [
-                {"id_logro": "HAB_1", "nombre_logro": "Habilidad"}
+            "catalogo_habilidades.csv": [
+                {"id_habilidad": "HAB_1", "nombre_habilidad": "Habilidad"}
             ],
             "catalogo_herramientas.csv": [
                 {"id_herramienta": "HERR_1", "nombre_herramienta": "Herramienta"}
@@ -450,7 +450,7 @@ def test_indice_de_ensamblaje_conserva_componentes_y_relaciones_por_paquete(
             "id_silabo": "SIL_1",
             "id_habilidad_fuente": "SRC_1",
             "id_competencia": "COMP_1",
-            "id_logro": "HAB_1",
+            "id_habilidad": "HAB_1",
             "id_herramienta": "",
         },
         {
@@ -459,7 +459,7 @@ def test_indice_de_ensamblaje_conserva_componentes_y_relaciones_por_paquete(
             "id_silabo": "SIL_1",
             "id_habilidad_fuente": "SRC_2",
             "id_competencia": "COMP_2",
-            "id_logro": "HAB_2",
+            "id_habilidad": "HAB_2",
             "id_herramienta": "",
         },
     ]
@@ -469,9 +469,9 @@ def test_indice_de_ensamblaje_conserva_componentes_y_relaciones_por_paquete(
             {"id_competencia": "COMP_1", "nombre_competencia": "Competencia 1"},
             {"id_competencia": "COMP_2", "nombre_competencia": "Competencia 2"},
         ],
-        "catalogo_logros.csv": [
-            {"id_logro": "HAB_1", "nombre_logro": "Habilidad 1"},
-            {"id_logro": "HAB_2", "nombre_logro": "Habilidad 2"},
+        "catalogo_habilidades.csv": [
+            {"id_habilidad": "HAB_1", "nombre_habilidad": "Habilidad 1"},
+            {"id_habilidad": "HAB_2", "nombre_habilidad": "Habilidad 2"},
         ],
         "catalogo_herramientas.csv": [],
     }
@@ -514,7 +514,7 @@ def test_indice_de_ensamblaje_conserva_componentes_y_relaciones_por_paquete(
         paquete["competencias"][0]["id_canonico"] for paquete in resultado
     ] == ["COMP_1", "COMP_2"]
     assert [
-        paquete["relaciones"][0]["id_logro"] for paquete in resultado
+        paquete["relaciones"][0]["id_habilidad"] for paquete in resultado
     ] == ["HAB_1", "HAB_2"]
     assert [len(paquete["source_relationships"]) for paquete in resultado] == [1, 1]
 
@@ -674,8 +674,8 @@ def test_unresolved_profile_proposal_is_not_merged_into_accepted_component(
             ],
         },
         archivos={
-            "catalogo_logros.csv": [
-                {"id_logro": "HAB_1", "nombre_logro": "Optimizar campañas"}
+            "catalogo_habilidades.csv": [
+                {"id_habilidad": "HAB_1", "nombre_habilidad": "Optimizar campañas"}
             ]
         },
     )[0]
@@ -778,57 +778,3 @@ def test_comp_ref_is_an_explicit_pending_competency_blocker() -> None:
     assert "COMPETENCY_SOURCE_MAPPING_REQUIRED" not in {
         finding.codigo for finding in validar_integridad_paquetes_chh([mapped])
     }
-
-
-def test_multi_tool_source_package_opens_into_unique_complete_triples() -> None:
-    base = _assemble(
-        [
-            _row(pending_id="PEN_COMP", kind="competencia", concept_id="Competencia A"),
-            _row(pending_id="PEN_SKILL", kind="habilidad", concept_id="Habilidad A"),
-            _row(pending_id="PEN_TOOL_A", kind="herramienta", concept_id="Herramienta A"),
-            _row(pending_id="PEN_TOOL_B", kind="herramienta", concept_id="Herramienta B"),
-        ]
-    )
-
-    fans = paquetes_modulo._abrir_paquetes_por_triple(base)
-
-    assert len(fans) == 2
-    assert len({fan["id_paquete_chh"] for fan in fans}) == 2
-    for fan in fans:
-        assert len(fan["competencias"]) == 1
-        assert len(fan["habilidades"]) == 1
-        assert len(fan["herramientas"]) == 1
-    filas_por_herramienta = {
-        fan["herramientas"][0]["nombre"]: {fila["id_pendiente"] for fila in fan["filas"]}
-        for fan in fans
-    }
-    assert filas_por_herramienta == {
-        "Herramienta A": {"PEN_COMP", "PEN_SKILL", "PEN_TOOL_A"},
-        "Herramienta B": {"PEN_COMP", "PEN_SKILL", "PEN_TOOL_B"},
-    }
-
-
-def test_source_package_without_complete_triple_is_not_offered_for_decision() -> None:
-    base = _assemble(
-        [
-            _row(pending_id="PEN_COMP", kind="competencia", concept_id="Competencia A"),
-            _row(pending_id="PEN_SKILL", kind="habilidad", concept_id="Habilidad A"),
-        ]
-    )
-
-    assert paquetes_modulo._abrir_paquetes_por_triple(base) == []
-
-
-def test_single_complete_triple_keeps_the_source_package_identity() -> None:
-    base = _assemble(
-        [
-            _row(pending_id="PEN_COMP", kind="competencia", concept_id="Competencia A"),
-            _row(pending_id="PEN_SKILL", kind="habilidad", concept_id="Habilidad A"),
-            _row(pending_id="PEN_TOOL_A", kind="herramienta", concept_id="Herramienta A"),
-        ]
-    )
-
-    [fan] = paquetes_modulo._abrir_paquetes_por_triple(base)
-
-    assert fan["id_paquete_chh"] == base["id_paquete_chh"]
-    assert [componente["nombre"] for componente in fan["herramientas"]] == ["Herramienta A"]

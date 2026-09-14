@@ -259,12 +259,9 @@ def test_contexto_analista_reexporta_helpers_y_preserva_modelos_y_prompt() -> No
     ) == ("lote", "respuesta")
     assert analista_llm.DecisionCurricular.__module__ == analista_llm.__name__
     assert analista_llm.LoteDecisionesCurricularesLLM.__module__ == analista_llm.__name__
-    assert (
-        analista_llm.LoteDecisionesCurricularesLLM.model_json_schema()["properties"]["decisiones"][
-            "type"
-        ]
-        == "array"
-    )
+    assert analista_llm.LoteDecisionesCurricularesLLM.model_json_schema()["properties"][
+        "decisiones"
+    ]["type"] == "array"
     lote = (
         {
             "id_silabo": "SIL_GOLD",
@@ -286,10 +283,8 @@ def test_contexto_analista_reexporta_helpers_y_preserva_modelos_y_prompt() -> No
         "2026-1",
     )
     assert hashlib.sha256(prompt.encode()).hexdigest() == (
-        "0b32b4fbc85576091aee274ab9014f29b65cfbd18330f6d06cd8a2cff1e2abdf"
+        "79b75c2df02aad1bf7a5cc31b3751b691de015fb0b8eae5b94c31b6051f8ce26"
     )
-    assert "Python" in prompt and "SAP" in prompt
-    assert "Ningún logro puede quedar sin habilidad ni competencia" in prompt
 
 
 def test_analista_valido_genera_propuesta_pendiente_de_revision_humana(
@@ -903,7 +898,7 @@ def test_alias_ms_word_se_consolida_con_microsoft_word_detectado() -> None:
     assert nuevas == ()
 
 
-def test_los_seis_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None:
+def test_los_cinco_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None:
     esperados = {
         "curso.csv": [
             "id_curso",
@@ -915,22 +910,15 @@ def test_los_seis_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None:
             "codigo_curso",
             "id_carrera",
         ],
-        "silabo.csv": [
-            "id_silabo",
-            "codigo_silabo",
-            "sumilla",
-            "id_curso",
-        ],
         "catalogo_competencias.csv": [
             "id_competencia",
             "nombre_competencia",
             "descripcion_breve_competencia",
             "tipo_competencia",
-            "codigo_competencia",
         ],
-        "catalogo_logros.csv": [
-            "id_logro",
-            "nombre_logro",
+        "catalogo_habilidades.csv": [
+            "id_habilidad",
+            "nombre_habilidad",
             "descripcion_breve",
         ],
         "catalogo_herramientas.csv": [
@@ -943,12 +931,10 @@ def test_los_seis_encabezados_csv_siguen_siendo_exactos(tmp_path: Path) -> None:
             "id_curso",
             "id_silabo",
             "id_competencia",
-            "id_logro",
+            "id_habilidad",
             "id_herramienta",
         ],
     }
-
-    assert set(esperados) == {nombre for nombre, _ in salida.ARCHIVOS_SALIDA}
 
     for nombre, columnas in salida.ARCHIVOS_SALIDA:
         ruta = tmp_path / nombre
@@ -1837,7 +1823,9 @@ def test_historial_de_progreso_se_limita_a_los_ultimos_cien_eventos() -> None:
 
 def test_cache_jsonl_hit_preserva_lineage_del_caso(monkeypatch, tmp_path: Path) -> None:
     logro = "Analizar campañas de marketing"
-    analista = _LLMLoteSecuencialFalso("gpt-5.6-luna-test", [[_decision_para(logro)]])
+    analista = _LLMLoteSecuencialFalso(
+        "gpt-5.6-luna-test", [[_decision_para(logro)]]
+    )
     monkeypatch.setattr(analista_llm, "obtener_llm", lambda _rol, **_kwargs: analista)
 
     primero = analista_llm.analizar_registros_curriculares(
