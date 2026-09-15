@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:d3fdf387a12925b3281713a1bb2a11c5b746382575e508c69d7107ab273182cb",
+  "claims": [
+    {
+      "id": "claim_b4e5a93dc0c6414a8307736fae35229f",
+      "statement": "El normalizador curricular divide los logros de aprendizaje en lotes de 8 unidades y utiliza un analista LLM para proyectar competencias hacia el catálogo canónico CHH.",
+      "evidence": [
+        {
+          "resource": "repo://CLAUDE.md#L94-L96",
+          "version": "repo-lines-v1:sha256:4cf3a81803bfefab600e21749fb9467a0c0536229ff9158bef5355f08132ce63:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWIzYjc0YTNmNzQxMDU3Njk3ZTdiOWFkYzg1M2EzMjRmNTE4NjA2N2M5ZDRmMzJlYzQwYWNiNWI3ZDg3MTBiMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDY1ZjU1ODU0NTIxOTRkNGYxMDZhNjgyNDQzY2U0M2U0Njc4Y2FjNWI3YWQ3MjhiMmU3M2I5NWM4YWNhNTM4OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOWZlNzk2ZjQwNmVjMWY1ZTQ4NTc0Mzc2MWY1YzM2MmZjZjY1MGU0MjhjZWY0OWU5NDM2MmUyZTg2MDQyZjQ4MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzk3NWQ4NDYxYjI0NTAzYTk1NTQxMTdkNjBkYzVjODFjZDJlZTM3MmM1ODg3ODFmZDY2OTk5MTY0MTdhMTY1MyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b278f55e29b84a04a3453aa185f67963",
+      "statement": "Las propuestas semánticas generadas por el analista curricular nunca se aprueban automáticamente por puntaje de confianza; quedan en estado pendiente para decisión humana en decisiones_llm.jsonl.",
+      "evidence": [
+        {
+          "resource": "repo://CLAUDE.md#L97-L98",
+          "version": "repo-lines-v1:sha256:5baad7e0335fcd3bb26713d85c51ae093a44aa39a95b3729b4d6d26faf77bd4e:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTcyMjE0Mzg2YTkzMzdlNWNmYzAyMmM1NzkyZTg3Y2Y0Yzc1ODA4YWViYzMwZDkxMWZhZmUzZjg0ZTljMDM0NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjU3NWQ5ZmMxOThlODE4YzNhOWI5MGJkNjM2N2Y4NTk2YThkZWIyODcyYmEwMjIwY2RhMGJlMzMyMjE3NTViNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGNmM2E4MTgwM2JmZWZhYjYwMGUyMTc0OWZiOTQ2N2EwYzA1MzYyMjlmZjkxNThiZWY1MzU1ZjA4MTMyY2U2MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGZkYjE5OWRjOGM2MTMzYjU1NDFjNWEzMDczNGU3YjAwNDMyYjM3ODQ0NDZmY2ViNWUwMWI2MDFkYTBlMjY0ZSJ9"
+        },
+        {
+          "resource": "repo://FICHA_TECNICA_CIAR.md#L50-L56",
+          "version": "repo-lines-v1:sha256:5407794b61e9da2b99584d2cdc2fdf9df3036331b8a148543434b7d2b7c85718:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWYxMmY0MGJmZGNmMDVkMjVlZWQyZTAwYWQ1MzRkNDExMWUzNTc2OGVkMzM3MDUyNThhYjc1YjRjZDg4ZTM3MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmM2ZjE2MGE0N2M2OWUxY2YwMjhlYTM3MDllODM5N2NjMTk1NThhYjZlNzc4MmY4OTMwZjI5MjU3Y2IyMTZiNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_9e8ad677c45c4729842d59e5a43c7d52",
+      "statement": "Las competencias transversales se excluyen antes de la proyección canónica con el motivo formal COMPETENCIA_GENERICA, protegiendo la coherencia de la taxonomía técnica.",
+      "evidence": [
+        {
+          "resource": "repo://CLAUDE.md#L98-L99",
+          "version": "repo-lines-v1:sha256:b00248009f29717cd0085e2c7350d60480fabbdc2a34be679fb9f221c4e29b30:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjU3NWQ5ZmMxOThlODE4YzNhOWI5MGJkNjM2N2Y4NTk2YThkZWIyODcyYmEwMjIwY2RhMGJlMzMyMjE3NTViNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWVjNzRhYjlhYjUyMDhkYjZiYjkxZDlmNDI0Mzk5NDc4N2ZlODlhY2EyMTYyZDczN2NjZDcyYzlkNDEzNzc4ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzYwNzdiOWMzOTQxNzE4Y2EzN2I5MzYyYzMyYWU0MTc4ZGZjNjExMzUzMjgxYzllYWVkMzRiYjBmZjE0MTU3YiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGYwODRhNzI4NzI1NjAzOWY1YWMyOWY1ZjQ2YjNlMjE5MjU5M2I0ZTA1Yjc0NTQ1NDEwOWEyNzE5MDg2MmJjYyJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.1",
+    "at": "2026-09-15T01:46:01.029Z"
+  }
+}
