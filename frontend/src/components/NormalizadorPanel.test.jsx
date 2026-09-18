@@ -7,14 +7,16 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import NormalizadorPanel from "./NormalizadorPanel";
+import NormalizadorPanel, {
+  formatearLatenciaLLM,
+  normalizarProgresoSilabos,
+} from "./NormalizadorPanel";
 import {
   cancelarEjecucionNormalizador,
   iniciarNormalizadorEmpleabilidad,
   iniciarNormalizadorSilabos,
   iniciarNormalizadorSilabosCactus,
   listarEjecucionesNormalizador,
-  decidirPendientesNormalizador,
   obtenerCuarentenaNormalizador,
   obtenerEjecucionNormalizador,
   obtenerErroresNormalizador,
@@ -813,6 +815,42 @@ describe("panel del normalizador", () => {
 describe("progreso LLM del normalizador", () => {
   afterEach(() => cleanup());
 
+  it("normaliza el avance por sílabo y formatea latencias sin inventar datos faltantes", () => {
+    const silabos = normalizarProgresoSilabos({
+      silabos: [
+        {
+          indice: 2,
+          total: 3,
+          id_silabo: "SIL_2",
+          archivo: "dos.docx",
+          estado_extraccion: "completado",
+          estado_analisis: "procesando",
+          logros_procesados: 2,
+          logros_totales: 4,
+          latencia_modelo_ms: 1250,
+        },
+        {
+          id_silabo: "SIL_3",
+          estado_analisis: "sin_propuesta",
+          logros_totales: 0,
+          latencia_modelo_ms: null,
+        },
+      ],
+    });
+
+    expect(silabos[0]).toMatchObject({
+      indice: 2,
+      porcentaje: 50,
+      logrosProcesados: 2,
+      logrosTotales: 4,
+      latenciaModeloMs: 1250,
+    });
+    expect(silabos[1].porcentaje).toBe(100);
+    expect(silabos[1].latenciaModeloMs).toBeNull();
+    expect(formatearLatenciaLLM(1250)).toBe("1.3 s");
+    expect(formatearLatenciaLLM(null)).toBe("—");
+  });
+
   it("muestra el progreso serializado por el manifest sin requerir un endpoint adicional", async () => {
     iniciarNormalizadorSilabos.mockResolvedValue({
       id_ejecucion: "NOR_progreso_llm",
@@ -919,6 +957,102 @@ describe("progreso LLM del normalizador", () => {
     expect(obtenerEjecucionNormalizador).toHaveBeenCalledWith(
       "NOR_progreso_llm",
     );
+  });
+
+  it("muestra extracción, latencia y avance individual por sílabo", async () => {
+    iniciarNormalizadorSilabos.mockResolvedValue({
+      id_ejecucion: "NOR_silabos_individuales",
+      tipo: "silabos",
+      archivo: "curriculo.zip",
+      estado: "limpiando",
+    });
+    obtenerEjecucionNormalizador.mockResolvedValue({
+      id_ejecucion: "NOR_silabos_individuales",
+      tipo: "silabos",
+      archivo: "curriculo.zip",
+      estado: "limpiando",
+      validacion_silabos: { valida: true, archivos: [] },
+      outputs: [],
+      hallazgos: [],
+      progreso_llm: {
+        fase: "analista",
+        chunks_completados: 1,
+        chunks_totales: 2,
+        logros_procesados: 2,
+        logros_totales: 4,
+        silabos_procesados: 1,
+        silabos_totales: 2,
+        silabos: [
+          {
+            indice: 1,
+            total: 2,
+            id_silabo: "SIL_1",
+            archivo: "uno.docx",
+            curso: "Arquitectura de software",
+            estado_extraccion: "completado",
+            estado_analisis: "procesando",
+            logros_procesados: 2,
+            logros_totales: 4,
+            latencia_extraccion_ms: 320,
+            latencia_modelo_ms: 1250,
+          },
+          {
+            indice: 2,
+            total: 2,
+            id_silabo: "SIL_2",
+            archivo: "dos.pdf",
+            curso: "Bases de datos",
+            estado_extraccion: "completado",
+            estado_analisis: "sin_propuesta",
+            logros_procesados: 0,
+            logros_totales: 0,
+            latencia_extraccion_ms: 410,
+            latencia_modelo_ms: 890,
+          },
+        ],
+        eventos: [],
+      },
+    });
+
+    const { container } = await renderPanelAfterRecovery();
+    fireEvent.click(screen.getByRole("tab", { name: "Sílabos" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), {
+      target: { value: "Marketing" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), {
+      target: { value: "2026-1" },
+    });
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: {
+        files: [
+          new File(["zip"], "curriculo.zip", { type: "application/zip" }),
+        ],
+      },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Iniciar limpieza curricular" }),
+    );
+
+    const individual = await screen.findByLabelText("Progreso por sílabo");
+    expect(within(individual).getByText("Análisis por sílabo")).toBeTruthy();
+    expect(within(individual).getByText("1/2 · 50%")).toBeTruthy();
+    const filasSilabos = within(individual).getAllByRole("listitem");
+    const primeraFila = within(filasSilabos[0]);
+    const segundaFila = within(filasSilabos[1]);
+    expect(primeraFila.getByText("Arquitectura de software")).toBeTruthy();
+    expect(primeraFila.getByText("Extracción: completado")).toBeTruthy();
+    expect(primeraFila.getByText("Modelo: en curso")).toBeTruthy();
+    expect(primeraFila.getByText("Latencia extracción")).toBeTruthy();
+    expect(primeraFila.getByText("320 ms")).toBeTruthy();
+    expect(primeraFila.getByText("1.3 s")).toBeTruthy();
+    expect(
+      primeraFila
+        .getByRole("progressbar", {
+          name: "Avance de análisis de Arquitectura de software",
+        })
+        .getAttribute("aria-valuenow"),
+    ).toBe("50");
+    expect(segundaFila.getByText(/sin propuesta válida/)).toBeTruthy();
   });
 
   it("mantiene visible el seguimiento mientras el manifest aún no tiene progreso LLM", async () => {

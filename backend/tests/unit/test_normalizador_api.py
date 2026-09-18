@@ -660,6 +660,7 @@ def test_persiste_progreso_llm_en_el_manifest_durante_limpieza(monkeypatch, tmp_
             "ultimo_chunk": {"fase": "analista", "logros": 4, "silabos": 1},
             "reporte_final": "disponible",
             "eventos": [],
+            "silabos": [],
         }
         return limpieza
 

@@ -248,6 +248,53 @@ class EventoProgresoLimpiezaLLM:
         }
 
 
+EstadoExtraccionSilaboLLM = Literal["pendiente", "procesando", "completado", "error"]
+EstadoAnalisisSilaboLLM = Literal[
+    "pendiente",
+    "procesando",
+    "completado",
+    "sin_propuesta",
+    "error",
+    "omitido",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class ProgresoSilaboLLM:
+    """Snapshot público y acotado del análisis de un sílabo."""
+
+    indice: int
+    total: int
+    id_silabo: str = ""
+    archivo: str = ""
+    curso: str = ""
+    estado_extraccion: EstadoExtraccionSilaboLLM = "pendiente"
+    estado_analisis: EstadoAnalisisSilaboLLM = "pendiente"
+    logros_procesados: int = 0
+    logros_totales: int = 0
+    latencia_extraccion_ms: float | None = None
+    latencia_modelo_ms: float | None = None
+    propuestas_validas: int = 0
+    error_codigo: str | None = None
+
+    def a_dict(self) -> dict[str, object]:
+        return {
+            "indice": self.indice,
+            "total": self.total,
+            "id_silabo": self.id_silabo,
+            "archivo": self.archivo,
+            "curso": self.curso,
+            "estado_extraccion": self.estado_extraccion,
+            "estado_analisis": self.estado_analisis,
+            "logros_procesados": self.logros_procesados,
+            "logros_totales": self.logros_totales,
+            "latencia_extraccion_ms": self.latencia_extraccion_ms,
+            "latencia_modelo_ms": self.latencia_modelo_ms,
+            "propuestas_validas": self.propuestas_validas,
+            "error_codigo": self.error_codigo,
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class ProgresoLimpiezaLLM:
     """Contrato incremental publicado mientras corre la limpieza curricular LLM."""
@@ -267,6 +314,7 @@ class ProgresoLimpiezaLLM:
     ultimo_chunk: UltimoChunkLimpiezaLLM | None = None
     reporte_final: EstadoReporteFinalLLM = "pendiente"
     eventos: tuple[EventoProgresoLimpiezaLLM, ...] = ()
+    silabos: tuple[ProgresoSilaboLLM, ...] = ()
 
     def con_evento(
         self,
@@ -316,6 +364,7 @@ class ProgresoLimpiezaLLM:
             "ultimo_chunk": self.ultimo_chunk.a_dict() if self.ultimo_chunk else None,
             "reporte_final": self.reporte_final,
             "eventos": [evento.a_dict() for evento in self.eventos[-100:]],
+            "silabos": [silabo.a_dict() for silabo in self.silabos],
         }
 
 

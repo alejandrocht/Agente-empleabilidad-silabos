@@ -111,9 +111,19 @@ def test_inferencia_estructurada_conserva_evidencia_y_relaciones(
             return AnalistaFalso()
 
     monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: LLMFalso())
+    trazas: list[Any] = []
 
-    resultado = analista_tecnico.inferir_competencias_tecnicas([_registro()], _configuracion())
+    resultado = analista_tecnico.inferir_competencias_tecnicas(
+        [_registro()],
+        _configuracion(),
+        al_actualizar_progreso_silabo=trazas.append,
+    )
 
+    assert [traza.estado_analisis for traza in trazas] == ["procesando", "completado"]
+    assert trazas[-1].id_silabo == "SIL_1"
+    assert trazas[-1].logros_procesados == 2
+    assert trazas[-1].latencia_modelo_ms is not None
+    assert trazas[-1].latencia_modelo_ms >= 0
     assert resultado[0]["id_curso"] == "CUR_1"
     assert resultado[0]["id_silabo"] == "SIL_1"
     evidencia = resultado[0]["evidencia"]

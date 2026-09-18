@@ -10,6 +10,7 @@ import zipfile
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from time import perf_counter
 from typing import Protocol, cast
 
 from docx import Document
@@ -21,6 +22,7 @@ from agente.normalizador.modelos import (
     ArchivoSilabo,
     Hallazgo,
     ProgresoLimpiezaLLM,
+    ProgresoSilaboLLM,
     ResultadoLimpiezaSilabos,
     ResultadoValidacionSilabos,
 )
@@ -255,6 +257,10 @@ def limpiar_archivo(
     registros: list[dict[str, object]] = []
     if usar_llm and configuracion_curricular is None:
         raise ValueError("La limpieza curricular con LLM requiere configuracion_curricular")
+    silabos_iniciales = tuple(
+        ProgresoSilaboLLM(indice=indice, total=len(validacion.archivos), archivo=archivo.nombre)
+        for indice, archivo in enumerate(validacion.archivos, start=1)
+    )
     progreso_extraccion = progreso_inicial or ProgresoLimpiezaLLM(
         fase="preparando",
         chunks_completados=0,
@@ -267,13 +273,93 @@ def limpiar_archivo(
         reintentos=0,
         silabos_detectados=0,
         mensaje="Preparando la extracción de sílabos.",
+        silabos=silabos_iniciales,
     ).con_evento("Preparando la extracción de sílabos.")
+    if not progreso_extraccion.silabos:
+        progreso_extraccion = replace(progreso_extraccion, silabos=silabos_iniciales)
 
     def publicar_progreso(progreso: ProgresoLimpiezaLLM) -> None:
         nonlocal progreso_extraccion
         progreso_extraccion = progreso
         if al_actualizar_progreso_llm is not None:
             al_actualizar_progreso_llm(progreso)
+
+    def actualizar_traza_silabo(traza: ProgresoSilaboLLM) -> None:
+        nonlocal progreso_extraccion
+        silabos = list(progreso_extraccion.silabos)
+        indice = next(
+            (
+                posicion
+                for posicion, actual in enumerate(silabos)
+                if (
+                    traza.archivo
+                    and actual.archivo == traza.archivo
+                    or traza.id_silabo
+                    and actual.id_silabo == traza.id_silabo
+                )
+            ),
+            traza.indice - 1,
+        )
+        if not 0 <= indice < len(silabos):
+            return
+        actual = silabos[indice]
+        actualizado = replace(
+            actual,
+            id_silabo=traza.id_silabo or actual.id_silabo,
+            archivo=traza.archivo or actual.archivo,
+            curso=traza.curso or actual.curso,
+            estado_extraccion=(
+                traza.estado_extraccion
+                if traza.estado_extraccion != "pendiente"
+                else actual.estado_extraccion
+            ),
+            estado_analisis=(
+                traza.estado_analisis
+                if traza.estado_analisis != "pendiente"
+                else actual.estado_analisis
+            ),
+            logros_procesados=max(actual.logros_procesados, traza.logros_procesados),
+            logros_totales=max(actual.logros_totales, traza.logros_totales),
+            latencia_extraccion_ms=(
+                traza.latencia_extraccion_ms
+                if traza.latencia_extraccion_ms is not None
+                else actual.latencia_extraccion_ms
+            ),
+            latencia_modelo_ms=(
+                traza.latencia_modelo_ms
+                if traza.latencia_modelo_ms is not None
+                else actual.latencia_modelo_ms
+            ),
+            propuestas_validas=max(actual.propuestas_validas, traza.propuestas_validas),
+            error_codigo=traza.error_codigo or actual.error_codigo,
+        )
+        silabos[indice] = actualizado
+        analizados = [
+            item
+            for item in silabos
+            if item.estado_analisis in {"completado", "sin_propuesta", "error"}
+        ]
+        progreso_extraccion = replace(
+            progreso_extraccion,
+            fase=(
+                "analista"
+                if actualizado.estado_analisis != "pendiente"
+                else progreso_extraccion.fase
+            ),
+            chunks_completados=len(analizados),
+            chunks_totales=len(silabos),
+            logros_procesados=sum(item.logros_procesados for item in silabos),
+            logros_totales=sum(item.logros_totales for item in silabos),
+            silabos_detectados=sum(item.estado_extraccion == "completado" for item in silabos),
+            silabos_procesados=len(analizados),
+            silabos_totales=len(silabos),
+            logros_detectados=sum(item.logros_totales for item in silabos),
+            silabos=tuple(silabos),
+        ).con_evento(
+            f"Sílabo {actualizado.indice}/{actualizado.total}: "
+            f"{actualizado.estado_analisis or actualizado.estado_extraccion}."
+        )
+        publicar_progreso(progreso_extraccion)
 
     def verificar_cancelacion() -> None:
         if cancelada is not None and cancelada():
@@ -289,6 +375,16 @@ def limpiar_archivo(
         ruta = materializados[archivo.nombre]
         logros_archivo = 0
         silabo_extraido = False
+        inicio_extraccion = perf_counter()
+        if usar_llm:
+            actualizar_traza_silabo(
+                ProgresoSilaboLLM(
+                    indice=indice_archivo,
+                    total=len(validacion.archivos),
+                    archivo=archivo.nombre,
+                    estado_extraccion="procesando",
+                )
+            )
         try:
             if archivo.formato == "docx":
                 registro = _extraer_docx(
@@ -325,6 +421,23 @@ def limpiar_archivo(
             silabo_extraido = True
             if isinstance(datos, dict):
                 logros_archivo = len(datos.get("logros_especificos", []))
+            if usar_llm:
+                actualizar_traza_silabo(
+                    ProgresoSilaboLLM(
+                        indice=indice_archivo,
+                        total=len(validacion.archivos),
+                        id_silabo=str(registro.get("id_silabo") or ""),
+                        archivo=archivo.nombre,
+                        curso=str(datos.get("nombre_curso") or datos.get("curso") or "")
+                        if isinstance(datos, dict)
+                        else "",
+                        estado_extraccion="completado",
+                        logros_totales=logros_archivo,
+                        latencia_extraccion_ms=round(
+                            (perf_counter() - inicio_extraccion) * 1000, 2
+                        ),
+                    )
+                )
         except Exception as exc:
             hallazgo = _hallazgo(
                 "SILABO_ILEGIBLE",
@@ -342,6 +455,20 @@ def limpiar_archivo(
                     "detalle": hallazgo.detalle,
                 }
             )
+            if usar_llm:
+                actualizar_traza_silabo(
+                    ProgresoSilaboLLM(
+                        indice=indice_archivo,
+                        total=len(validacion.archivos),
+                        archivo=archivo.nombre,
+                        estado_extraccion="error",
+                        estado_analisis="omitido",
+                        latencia_extraccion_ms=round(
+                            (perf_counter() - inicio_extraccion) * 1000, 2
+                        ),
+                        error_codigo=hallazgo.codigo,
+                    )
+                )
         if usar_llm:
             logros_detectados = 0
             for registro_extraido in registros:
@@ -403,6 +530,7 @@ def limpiar_archivo(
                     configuracion_curricular,
                     configuracion_curricular.ruta_catalogo_tecnico,
                     auditoria=auditoria_tecnica,
+                    al_actualizar_progreso_silabo=actualizar_traza_silabo,
                 )
                 for advertencia in auditoria_tecnica:
                     hallazgos.append(

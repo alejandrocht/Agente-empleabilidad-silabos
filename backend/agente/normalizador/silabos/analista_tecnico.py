@@ -7,9 +7,10 @@ import hashlib
 import json
 import re
 import unicodedata
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
+from time import perf_counter
 from typing import Literal
 
 from openpyxl import load_workbook
@@ -17,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from agente.config.settings import ConfiguracionNormalizadorCurricular
 from agente.llm.fabrica import obtener_llm
+from agente.normalizador.modelos import ProgresoSilaboLLM
 
 COLUMNAS_CATALOGO_TECNICO_XLSX = ("Carrera", "Habilidad tecnica", "Descripcion")
 COLUMNAS_CATALOGO_TECNICO_CSV = (
@@ -417,6 +419,7 @@ def inferir_competencias_tecnicas(
     catalogo_tecnico: CatalogoTecnico | Path | str | None = None,
     *,
     auditoria: list[dict[str, object]] | None = None,
+    al_actualizar_progreso_silabo: Callable[[ProgresoSilaboLLM], None] | None = None,
 ) -> list[dict[str, object]]:
     """Return pending technical proposals; Python owns IDs and relationships."""
 
@@ -430,14 +433,44 @@ def inferir_competencias_tecnicas(
     )
     resultado: list[dict[str, object]] = []
     vistos: set[tuple[str, str, tuple[str, ...]]] = set()
-    for registro in registros:
+    total_silabos = len(registros)
+    for indice, registro in enumerate(registros, start=1):
         carrera = _texto(registro.get("carrera"))
         candidatos_lista = catalogo.para_carrera(carrera) if catalogo is not None else ()
         candidatos = {candidato.referencia: candidato for candidato in candidatos_lista}
         contexto = construir_contexto_tecnico(registro, candidatos_lista)
-        respuesta = analista.invoke(construir_prompt_tecnico(contexto))
-        if not isinstance(respuesta, RespuestaCompetenciasTecnicas):
-            respuesta = RespuestaCompetenciasTecnicas.model_validate(respuesta)
+        origen = registro.get("origen")
+        archivo = _texto(origen.get("archivo")) if isinstance(origen, Mapping) else ""
+        archivo = archivo or _texto(registro.get("archivo"))
+        logros_totales = len(_lista_mapeos(contexto.get("logros")))
+        traza_base = ProgresoSilaboLLM(
+            indice=indice,
+            total=total_silabos,
+            id_silabo=_texto(contexto.get("id_silabo")),
+            archivo=archivo,
+            curso=_texto(contexto.get("nombre_curso")),
+            estado_extraccion="completado",
+            estado_analisis="procesando",
+            logros_totales=logros_totales,
+        )
+        if al_actualizar_progreso_silabo is not None:
+            al_actualizar_progreso_silabo(traza_base)
+        inicio_modelo = perf_counter()
+        try:
+            respuesta = analista.invoke(construir_prompt_tecnico(contexto))
+            if not isinstance(respuesta, RespuestaCompetenciasTecnicas):
+                respuesta = RespuestaCompetenciasTecnicas.model_validate(respuesta)
+        except Exception:
+            if al_actualizar_progreso_silabo is not None:
+                al_actualizar_progreso_silabo(
+                    replace(
+                        traza_base,
+                        estado_analisis="error",
+                        latencia_modelo_ms=round((perf_counter() - inicio_modelo) * 1000, 2),
+                        error_codigo="ANALISTA_TECNICO_ERROR",
+                    )
+                )
+            raise
         propuestas_validas = 0
         for propuesta in respuesta.competencias:
             fila = _materializar_propuesta(
@@ -459,6 +492,16 @@ def inferir_competencias_tecnicas(
                 continue
             vistos.add(clave)
             resultado.append(fila)
+        if al_actualizar_progreso_silabo is not None:
+            al_actualizar_progreso_silabo(
+                replace(
+                    traza_base,
+                    estado_analisis=("completado" if propuestas_validas else "sin_propuesta"),
+                    logros_procesados=logros_totales,
+                    latencia_modelo_ms=round((perf_counter() - inicio_modelo) * 1000, 2),
+                    propuestas_validas=propuestas_validas,
+                )
+            )
         if propuestas_validas == 0 and auditoria is not None:
             id_silabo = _texto(contexto.get("id_silabo")) or "<sin id>"
             auditoria.append(
