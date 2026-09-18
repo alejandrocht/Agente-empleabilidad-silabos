@@ -39,7 +39,6 @@ from agente.normalizador.silabos.resolucion_curricular import (  # noqa: F401
     _archivo_origen,
     _catalogo_curricular,
     _coincidencias,
-    _competencias_declaradas_por_texto,
     _competencias_para_logro,
     _competencias_por_texto,
     _concepto_decidido,
@@ -58,7 +57,6 @@ from agente.normalizador.silabos.resolucion_curricular import (  # noqa: F401
     _hash_id,
     _herramientas_explicitas,
     _herramientas_llm_nuevas,
-    _id_carrera,
     _id_competencia_fuente,
     _logros,
     _modalidad_curso,
@@ -67,7 +65,6 @@ from agente.normalizador.silabos.resolucion_curricular import (  # noqa: F401
     _propuesta_dict,
     _registrar_pendiente,
     _resolver_competencia,
-    _resolver_habilidad_canonica,
     _seleccionar_competencia_por_puntaje,
     _source_ref,
     _texto,
@@ -75,13 +72,19 @@ from agente.normalizador.silabos.resolucion_curricular import (  # noqa: F401
     _tokens_evidencia,
     _warning,
 )
+from agente.normalizador.silabos.resolucion_curricular import (
+    _competencias_declaradas_por_texto as _exported_competencias_declaradas_por_texto,
+)
+from agente.normalizador.silabos.resolucion_curricular import (
+    _id_carrera as _exported_id_carrera,
+)
+from agente.normalizador.silabos.resolucion_curricular import (
+    _resolver_habilidad_canonica as _exported_resolver_habilidad_canonica,
+)
 from agente.normalizador.silabos.validacion_salida import (  # noqa: F401
     _ARCHIVOS_CURRICULARES_FINALES,
     _REPORTES_CURRICULARES_PRE_HITL,
-    ARCHIVOS_SALIDA,
-    COBERTURA_SCHEMA,
     COMPETENCIAS_SCHEMA,
-    CURSOS_SCHEMA,
     HABILIDADES_SCHEMA,
     HERRAMIENTAS_SCHEMA,
     _conteo_logros_con_descripcion,
@@ -94,6 +97,22 @@ from agente.normalizador.silabos.validacion_salida import (  # noqa: F401
     evaluar_release_gate,
     validar_salidas_curriculares,
 )
+from agente.normalizador.silabos.validacion_salida import (
+    ARCHIVOS_SALIDA as _exported_archivos_salida,
+)
+from agente.normalizador.silabos.validacion_salida import (
+    COBERTURA_SCHEMA as _exported_cobertura_schema,
+)
+from agente.normalizador.silabos.validacion_salida import (
+    CURSOS_SCHEMA as _exported_cursos_schema,
+)
+
+ARCHIVOS_SALIDA = _exported_archivos_salida
+COBERTURA_SCHEMA = _exported_cobertura_schema
+CURSOS_SCHEMA = _exported_cursos_schema
+_competencias_declaradas_por_texto = _exported_competencias_declaradas_por_texto
+_id_carrera = _exported_id_carrera
+_resolver_habilidad_canonica = _exported_resolver_habilidad_canonica
 
 PENDIENTES_ARCHIVO = "pendientes_curriculares.jsonl"
 CANDIDATOS_ARCHIVO = "candidatos_curriculares.json"

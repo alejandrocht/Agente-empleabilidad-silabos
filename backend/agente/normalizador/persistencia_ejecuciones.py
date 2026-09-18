@@ -21,11 +21,12 @@ from agente.normalizador.modelos import (
     ResultadoValidacionEntrada,
     ResultadoValidacionSilabos,
 )
-from agente.normalizador.silabos.salida import (
-    _REPORTES_CURRICULARES_PRE_HITL,
-    _filtrar_estado_publico,
-    _filtrar_outputs_curriculares,
-    _hitl_curricular_completado,
+from agente.normalizador.silabos.contrato_salidas import (
+    es_modo_tecnico,
+    filtrar_estado_publico,
+    filtrar_outputs_curriculares,
+    hitl_curricular_completado,
+    reporte_curricular_visible,
 )
 
 _ESTADOS_TERMINALES: frozenset[str] = frozenset(
@@ -226,14 +227,22 @@ class RepositorioEjecucionesPersistidas:
 
         limpieza_silabos = limpieza_actual.a_dict() if limpieza_actual else None
         if ejecucion.tipo == "silabos":
-            hitl_completado = _hitl_curricular_completado(release_gate)
-            outputs = _filtrar_outputs_curriculares(outputs, hitl_completado=hitl_completado)
+            modo_tecnico = es_modo_tecnico(ejecucion.configuracion_curricular)
+            hitl_completado = not modo_tecnico and hitl_curricular_completado(release_gate)
+            outputs = filtrar_outputs_curriculares(
+                outputs,
+                modo_tecnico=modo_tecnico,
+                release_gate=release_gate,
+                hitl_completado=hitl_completado,
+            )
             if isinstance(limpieza_silabos, dict):
                 outputs_limpieza = limpieza_silabos.get("outputs")
                 if isinstance(outputs_limpieza, list):
                     limpieza_silabos = dict(limpieza_silabos)
-                    limpieza_silabos["outputs"] = _filtrar_outputs_curriculares(
+                    limpieza_silabos["outputs"] = filtrar_outputs_curriculares(
                         [dict(output) for output in outputs_limpieza if isinstance(output, dict)],
+                        modo_tecnico=modo_tecnico,
+                        release_gate=release_gate,
                         hitl_completado=hitl_completado,
                     )
 
@@ -315,21 +324,24 @@ class RepositorioEjecucionesPersistidas:
             datos = json.loads(manifest.read_text(encoding="utf-8"))
             if not isinstance(datos, dict):
                 raise ValueError("El manifest de la ejecución no tiene un objeto raíz.")
-            return _filtrar_estado_publico(cast(dict[str, object], datos))
+            return filtrar_estado_publico(cast(dict[str, object], datos))
 
     def obtener_reporte(self, id_ejecucion: str) -> dict[str, object]:
         estado = self.obtener(id_ejecucion)
         reportes: dict[str, object] = {}
         directorio_reportes = self.directorio_seguro(id_ejecucion) / "salidas" / "reportes"
-        hitl_completado = _hitl_curricular_completado(estado.get("release_gate"))
+        modo_tecnico = estado.get("tipo") == "silabos" and es_modo_tecnico(
+            estado.get("configuracion_curricular")
+        )
+        hitl_completado = hitl_curricular_completado(estado.get("release_gate"))
         if directorio_reportes.is_dir():
             for ruta in sorted(directorio_reportes.iterdir()):
                 if not ruta.is_file() or ruta.suffix.lower() not in {".json", ".jsonl"}:
                     continue
-                if (
-                    estado.get("tipo") == "silabos"
-                    and not hitl_completado
-                    and ruta.name not in _REPORTES_CURRICULARES_PRE_HITL
+                if estado.get("tipo") == "silabos" and not reporte_curricular_visible(
+                    ruta.name,
+                    modo_tecnico=modo_tecnico,
+                    hitl_completado=hitl_completado,
                 ):
                     continue
                 reportes[ruta.name] = self._leer_reporte(ruta)
@@ -343,7 +355,12 @@ class RepositorioEjecucionesPersistidas:
         directorio = self.directorio_seguro(id_ejecucion)
         if not directorio.is_dir():
             raise KeyError(id_ejecucion)
-        shutil.rmtree(directorio)
+        try:
+            shutil.rmtree(directorio)
+        except OSError as exc:
+            raise RuntimeError(
+                f"No se pudo eliminar la ejecución {id_ejecucion} del historial."
+            ) from exc
         return {"id_ejecucion": id_ejecucion, "eliminado": True}
 
     def directorio_seguro(self, id_ejecucion: str) -> Path:
@@ -491,7 +508,7 @@ class RepositorioEjecucionesPersistidas:
                 datos = self._obtener_activa(id_ejecucion).a_dict()
             except KeyError:
                 pass
-            resultados.append(_filtrar_estado_publico(cast(dict[str, object], datos)))
+            resultados.append(filtrar_estado_publico(cast(dict[str, object], datos)))
         return resultados
 
     @staticmethod

@@ -55,17 +55,22 @@ def _hash_id(prefijo: str, *partes: str) -> str:
     return f"{prefijo}_{hashlib.sha256(payload).hexdigest()[:16]}"
 
 
+def _tipo_competencia_codigo(codigo: str) -> str:
+    """Normaliza el tipo declarado sin pedirle al LLM que lo adivine."""
+    return "generica" if _texto(codigo).upper().startswith(("G", "C")) else "especifica"
+
+
 def _ids_curriculares(
     carrera: str,
     periodo: str,
     nombre: str,
     codigo_curso: str,
 ) -> tuple[str, str]:
-    """Construye IDs compatibles con el identificador padre de los CSV."""
+    """Construye un curso estable y un sílabo versionado por periodo."""
 
     codigo = _texto(codigo_curso)
     if codigo:
-        return _hash_id("SIL", codigo), _hash_id("CUR", codigo)
+        return _hash_id("SIL", codigo, periodo), _hash_id("CUR", codigo)
     return (
         _hash_id("SIL", carrera, periodo, nombre),
         _hash_id("CUR", carrera, periodo, nombre),
@@ -123,7 +128,7 @@ def _codigos(texto: str, aceptar_no_numericos: bool = True) -> list[str]:
     """Extrae códigos declarados, incluidos formatos curriculares no estándar."""
 
     valor = _texto(texto).upper()
-    numericos = re.findall(r"(?<![A-Z0-9])[GE]\d+(?![A-Z0-9])", valor)
+    numericos = re.findall(r"(?<![A-Z0-9])[GEC]\d+(?![A-Z0-9])", valor)
     if not aceptar_no_numericos:
         return list(dict.fromkeys(numericos))
     if numericos:
@@ -134,6 +139,8 @@ def _codigos(texto: str, aceptar_no_numericos: bool = True) -> list[str]:
         if len(valor.split()) <= 4:
             return list(dict.fromkeys(numericos + palabras_cortas))
         return list(dict.fromkeys(numericos))
+    if valor in {"G", "E", "C"}:
+        return [valor]
 
     # Algunas carreras usan referencias como ``EE``. Solo se aceptan códigos
     # alfabéticos cuando la celda es corta; así no se convierten palabras de una
@@ -266,7 +273,7 @@ def _extraer_docx(
     logros: list[dict[str, object]] = []
     competencias: list[dict[str, str]] = []
     programa: list[str] = []
-    herramientas_evidencia: list[dict[str, str]] = []
+    programa_detalle: list[dict[str, str]] = []
 
     for tabla in doc.tables:
         filas = _filas_tabla(tabla)
@@ -277,14 +284,19 @@ def _extraer_docx(
             for valores in filas[1:]:
                 if len(valores) < 3:
                     continue
-                if _codigos(valores[-1]) and valores[0] and not re.fullmatch(
-                    r"L\d+", valores[0], re.I
+                if (
+                    _codigos(valores[-1])
+                    and valores[0]
+                    and not re.fullmatch(r"L\d+", valores[0], re.I)
                 ):
+                    codigo = _codigos(valores[-1])[0]
                     competencias.append(
                         {
                             "orden": str(len(competencias) + 1),
                             "nombre": _sin_referencias_curriculares(valores[0]).strip(" ."),
                             "descripcion": _sin_referencias_curriculares(valores[1]),
+                            "codigo": codigo,
+                            "tipo": _tipo_competencia_codigo(codigo),
                             "texto_evidencia": _sin_referencias_curriculares(
                                 " | ".join(valores[:2])
                             ),
@@ -299,16 +311,24 @@ def _extraer_docx(
                         {
                             "orden": str(len(logros) + 1),
                             "descripcion": _sin_referencias_curriculares(valores[1]),
+                            "codigos_competencia": _codigos(" ".join(valores[2:])),
                             "texto_evidencia": _sin_referencias_curriculares(valores[1]),
                         }
                     )
         if "semana" in encabezado and ("tema" in encabezado or "contenido" in encabezado):
             for valores in filas[1:]:
                 if valores and re.fullmatch(r"(?:[1-9]|1[0-5])", valores[0]):
-                    programa.append(" | ".join(valor for valor in valores[1:3] if valor))
-        herramientas_evidencia.extend(_herramientas_desde_tabla(filas))
-
-    herramientas_evidencia.extend(_herramientas_desde_parrafos(doc))
+                    titulo = valores[1] if len(valores) > 1 else ""
+                    contenido = valores[2] if len(valores) > 2 else ""
+                    programa.append(" | ".join(valor for valor in (titulo, contenido) if valor))
+                    programa_detalle.append(
+                        {
+                            "semana": valores[0],
+                            "tema": titulo,
+                            "contenido": contenido,
+                            "texto": " | ".join(valor for valor in (titulo, contenido) if valor),
+                        }
+                    )
 
     if not sumilla:
         for tabla in doc.tables:
@@ -374,7 +394,7 @@ def _extraer_docx(
             "logros_especificos": logros,
             "competencias_declaradas": competencias,
             "programa_analitico": programa,
-            "herramientas_evidencia": _deduplicar_evidencias_herramientas(herramientas_evidencia),
+            "programa_analitico_detalle": programa_detalle,
             "texto_relevante": texto_relevante,
             "texto_fuente": texto_fuente,
         },

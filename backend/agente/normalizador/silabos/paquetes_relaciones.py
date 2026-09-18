@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
+from typing import cast
 
 from agente.normalizador.silabos import paquetes_componentes as _paquetes_componentes
 
@@ -160,13 +161,21 @@ def _index_package_assembly(
 
 def _identity_key(identity: Mapping[str, object]) -> _IdentityKey | None:
     values = tuple(_text(identity.get(field)) for field in IDENTITY_FIELDS)
-    return values if all(values[: len(_REQUIRED_IDENTITY_FIELDS)]) else None  # type: ignore[return-value]
+    return cast(_IdentityKey, values) if all(values[: len(_REQUIRED_IDENTITY_FIELDS)]) else None
 
 
 def _base_identity_key(identity: _IdentityKey) -> _IdentityKey:
     """Drop optional relation identity for source records that predate it."""
 
-    return (*identity[: len(_REQUIRED_IDENTITY_FIELDS)], "")
+    return (
+        identity[0],
+        identity[1],
+        identity[2],
+        identity[3],
+        identity[4],
+        identity[5],
+        "",
+    )
 
 
 def _identity_from_key(identity: _IdentityKey) -> dict[str, str]:

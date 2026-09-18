@@ -5,6 +5,16 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import Counter
+from math import inf
+from typing import TypedDict
+
+_RectanguloPdf = tuple[float, float, float, float]
+
+
+class _CeldaPdf(TypedDict):
+    rectangulo: _RectanguloPdf
+    texto: str
+
 
 _PATRON_SEMANA_PDF = re.compile(r"^\s*(\d{1,3})(?:\s+|$)")
 
@@ -42,8 +52,8 @@ def _texto_celda_pdf(fragmentos: list[tuple[float, float, float, float, str]]) -
         for x, tamano, avance, texto in fragmentos_ordenados:
             tiene_espacio_final = texto.endswith(" ")
             texto = texto.rstrip()
-            separacion_avance = x - ultimo_fin if ultimo_fin is not None else float("inf")
-            separacion_inicio = x - ultimo_x if ultimo_x is not None else float("inf")
+            separacion_avance = x - ultimo_fin if ultimo_fin is not None else inf
+            separacion_inicio = x - ultimo_x if ultimo_x is not None else inf
             primera_palabra = texto.split(maxsplit=1)[0] if texto else ""
             continua_fragmento = (
                 usa_avance
@@ -86,11 +96,7 @@ def _extraer_programa_analitico_geometrico_pdf(
     filas: list[dict[str, str]] = []
     semanas_vistas: set[str] = set()
     dentro_programa = False
-    columnas_programa: tuple[
-        tuple[float, float, float, float],
-        tuple[float, float, float, float],
-        tuple[float, float, float, float],
-    ] | None = None
+    columnas_programa: tuple[_RectanguloPdf, _RectanguloPdf, _RectanguloPdf] | None = None
     for pagina_numero, (pagina, geometria) in enumerate(zip(paginas, geometria_paginas), start=1):
         if re.search(r"^\s*VI\.\s*Programa\s+anal[ií]tico\b", pagina, re.IGNORECASE | re.MULTILINE):
             dentro_programa = True
@@ -99,7 +105,7 @@ def _extraer_programa_analitico_geometrico_pdf(
 
         fragmentos, rectangulos = geometria
 
-        def texto_rectangulo(rectangulo: tuple[float, float, float, float]) -> str:
+        def texto_rectangulo(rectangulo: _RectanguloPdf) -> str:
             min_x, min_y, max_x, max_y = rectangulo
             return _texto_celda_pdf(
                 [
@@ -109,7 +115,7 @@ def _extraer_programa_analitico_geometrico_pdf(
                 ]
             )
 
-        celdas = [
+        celdas: list[_CeldaPdf] = [
             {"rectangulo": rectangulo, "texto": texto_rectangulo(rectangulo)}
             for rectangulo in rectangulos
         ]
@@ -122,11 +128,12 @@ def _extraer_programa_analitico_geometrico_pdf(
             None,
         )
         tiene_encabezado_programa = False
+        centro_encabezado = 0.0
         if encabezado_semana is not None:
             rectangulo_semana = encabezado_semana["rectangulo"]
             centro_encabezado = (rectangulo_semana[1] + rectangulo_semana[3]) / 2
 
-            def encabezado_columna(nombre: str) -> tuple[float, float, float, float] | None:
+            def encabezado_columna(nombre: str) -> _RectanguloPdf | None:
                 for celda in celdas:
                     rectangulo = celda["rectangulo"]
                     centro = (rectangulo[1] + rectangulo[3]) / 2
@@ -148,9 +155,7 @@ def _extraer_programa_analitico_geometrico_pdf(
 
         rectangulo_semana, rectangulo_tema, rectangulo_contenido = columnas_programa
 
-        def celda_fila(
-            columna: tuple[float, float, float, float], centro_semana: float
-        ) -> dict[str, object] | None:
+        def celda_fila(columna: _RectanguloPdf, centro_semana: float) -> _CeldaPdf | None:
             candidatas = [
                 celda
                 for celda in celdas

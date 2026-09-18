@@ -14,6 +14,12 @@ from pathlib import Path
 # Desde ``agente/config`` se suben dos niveles hasta la raíz de ``backend``.
 BASE_DIR = Path(__file__).resolve().parents[2]
 
+_MODELO_ANALISTA_POR_PROVEEDOR = {
+    "ollama": ("NORMALIZADOR_CURRICULAR_OLLAMA_MODEL", "qwen3:27b"),
+    "openai": ("NORMALIZADOR_CURRICULAR_OPENAI_MODEL", "gpt-5.6-luna"),
+}
+_URL_OLLAMA_DEFAULT = "http://localhost:11434/v1"
+
 
 def cargar_entorno() -> None:
     """Carga las variables definidas en ``backend/.env`` cuando el archivo existe."""
@@ -41,12 +47,20 @@ def texto(clave: str, default: str = "") -> str:
 
 def entero(clave: str, default: int) -> int:
     """Lee un entero de configuración."""
-    return int(texto(clave, str(default)))
+    valor = texto(clave, str(default))
+    try:
+        return int(valor)
+    except ValueError as exc:
+        raise ValueError(f"{clave} debe ser un entero; se recibió {valor!r}") from exc
 
 
 def decimal(clave: str, default: float) -> float:
     """Lee un número decimal de configuración."""
-    return float(texto(clave, str(default)))
+    valor = texto(clave, str(default))
+    try:
+        return float(valor)
+    except ValueError as exc:
+        raise ValueError(f"{clave} debe ser un número; se recibió {valor!r}") from exc
 
 
 def booleano(clave: str, default: bool = False) -> bool:
@@ -79,6 +93,8 @@ class ConfiguracionNormalizadorCurricular:
     """Snapshot inmutable, sin secretos, para una ejecución curricular."""
 
     usar_llm: bool
+    proveedor_llm: str
+    base_url_llm: str
     modelo_analista: str
     esfuerzo_analista: str
     timeout_llm_seconds: float
@@ -96,6 +112,8 @@ class ConfiguracionNormalizadorCurricular:
     limite_lexical_habilidad: int
     limite_lexical_herramienta: int
     limite_ejemplos_contexto: int
+    modo_analista: str = "technical"
+    ruta_catalogo_tecnico: str = ""
 
     def a_dict(self) -> dict[str, object]:
         """Expone el snapshot operativo que acompaña a una ejecución."""
@@ -205,11 +223,13 @@ def configuracion_normalizador_curricular(
 ) -> ConfiguracionNormalizadorCurricular:
     """Carga una vez las selecciones curriculares de .env y proceso.
 
-    No hay fallbacks operacionales en Python: cada selección debe estar en
-    ``backend/.env`` (o en el proceso, que tiene precedencia). El argumento
-    ``proceso`` existe para pruebas aisladas; la entrada de producción lo omite.
+    Las selecciones operativas se leen desde ``backend/.env`` (o desde el
+    proceso, que tiene precedencia). Ollama y OpenAI conservan modelos separados
+    para que cambiar el proveedor no obligue a reconfigurar el modelo contrario.
+    El argumento ``proceso`` existe para pruebas aisladas; producción lo omite.
     """
     entorno = _entorno_curricular(proceso)
+    ruta_catalogo_tecnico = str(BASE_DIR / "catalogos" / "catalogo_competencias_tecnicas.xlsx")
     timeout = _decimal_curricular(entorno, "NORMALIZADOR_CURRICULAR_LLM_TIMEOUT_SECONDS")
     reintentos = _entero_curricular(entorno, "NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES")
     tamano_lote = _entero_curricular(entorno, "NORMALIZADOR_CURRICULAR_LLM_BATCH_SIZE")
@@ -229,15 +249,32 @@ def configuracion_normalizador_curricular(
         raise ValueError(
             "NORMALIZADOR_CURRICULAR_EMBEDDING_MIN_SIMILARITY debe estar entre 0 y menor que 1"
         )
-    modelo_analista = _requerir_texto(entorno, "NORMALIZADOR_CURRICULAR_ANALYST_MODEL")
-    dev_habilitado = (
-        _booleano_curricular(entorno, "DEV") if "DEV" in entorno else False
-    )
+    proveedor_llm = entorno.get("NORMALIZADOR_CURRICULAR_LLM_PROVIDER", "ollama").strip().lower()
+    if proveedor_llm not in {"ollama", "openai"}:
+        raise ValueError(
+            "NORMALIZADOR_CURRICULAR_LLM_PROVIDER debe ser ollama u openai; "
+            f"se recibió {proveedor_llm!r}"
+        )
+    variable_modelo, modelo_default = _MODELO_ANALISTA_POR_PROVEEDOR[proveedor_llm]
+    modelo_analista = entorno.get(variable_modelo, modelo_default).strip()
+    if not modelo_analista:
+        raise ValueError(f"{variable_modelo} no puede estar vacío")
+    dev_habilitado = _booleano_curricular(entorno, "DEV") if "DEV" in entorno else False
     if dev_habilitado:
         modelo_analista = _requerir_texto(entorno, "DEV_MODEL")
-
+    base_url_llm = (
+        entorno.get("NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL", _URL_OLLAMA_DEFAULT).strip()
+        if proveedor_llm == "ollama"
+        else ""
+    )
+    if proveedor_llm == "ollama" and not base_url_llm:
+        raise ValueError("NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL no puede estar vacía")
     return ConfiguracionNormalizadorCurricular(
         usar_llm=_booleano_curricular(entorno, "NORMALIZADOR_CURRICULAR_LLM"),
+        modo_analista="technical",
+        ruta_catalogo_tecnico=ruta_catalogo_tecnico,
+        proveedor_llm=proveedor_llm,
+        base_url_llm=base_url_llm,
         modelo_analista=modelo_analista,
         esfuerzo_analista=_esfuerzo_curricular(
             entorno, "NORMALIZADOR_CURRICULAR_ANALYST_REASONING_EFFORT"

@@ -51,6 +51,47 @@ async function renderPanelAfterRecovery() {
   return rendered;
 }
 
+async function renderTechnicalResult({ id, outputs, gate }) {
+  iniciarNormalizadorSilabos.mockResolvedValue({
+    id_ejecucion: id,
+    tipo: "silabos",
+    archivo: "curriculo.zip",
+    estado: "validando",
+  });
+  obtenerEjecucionNormalizador.mockResolvedValue({
+    id_ejecucion: id,
+    tipo: "silabos",
+    archivo: "curriculo.zip",
+    estado: "limpiado",
+    configuracion_curricular: { modo_analista: "technical" },
+    parametros: { carrera: "Marketing", periodo: "2026-1" },
+    validacion_silabos: { valida: true, archivos: [] },
+    release_gate: gate,
+    outputs,
+    hallazgos: [],
+  });
+  const rendered = await renderPanelAfterRecovery();
+  fireEvent.click(screen.getByRole("tab", { name: "Sílabos" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), {
+    target: { value: "Marketing" },
+  });
+  fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), {
+    target: { value: "2026-1" },
+  });
+  fireEvent.change(rendered.container.querySelector('input[type="file"]'), {
+    target: {
+      files: [new File(["zip"], "curriculo.zip", { type: "application/zip" })],
+    },
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Iniciar limpieza curricular" }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { name: /^CSV técnicos/ })).toBeTruthy(),
+  );
+  return rendered;
+}
+
 describe("panel del normalizador", () => {
   afterEach(() => {
     cleanup();
@@ -688,6 +729,83 @@ describe("panel del normalizador", () => {
     ).toBeTruthy();
     expect(
       screen.queryByRole("heading", { name: "Revisión curricular requerida" }),
+    ).toBeNull();
+  });
+
+  it("habilita una ejecución técnica solo con los cinco CSV y el gate técnico permitido", async () => {
+    const outputs = [
+      "curso.csv",
+      "silabo.csv",
+      "catalogo_competencias.csv",
+      "catalogo_logros.csv",
+      "cobertura_curricular.csv",
+    ].map((archivo) => ({
+      tipo: "csv_curricular",
+      archivo: `salidas/${archivo}`,
+      registros: 1,
+    }));
+
+    await renderTechnicalResult({
+      id: "NOR_TECHNICAL_ALLOW",
+      outputs,
+      gate: { decision: "ALLOW_IMPORT" },
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "CSV técnicos listos" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Subir catálogos a Neo4j" }),
+    ).toBeTruthy();
+    expect(screen.getAllByText(/CSV técnico canónico/)).toHaveLength(5);
+  });
+
+  it("mantiene bloqueada una ejecución técnica con gate bloqueado aunque declare los cinco CSV", async () => {
+    const outputs = [
+      "curso.csv",
+      "silabo.csv",
+      "catalogo_competencias.csv",
+      "catalogo_logros.csv",
+      "cobertura_curricular.csv",
+    ].map((archivo) => ({ archivo: `salidas/${archivo}`, registros: 1 }));
+
+    await renderTechnicalResult({
+      id: "NOR_TECHNICAL_BLOCKED",
+      outputs,
+      gate: { decision: "BLOCK_IMPORT" },
+    });
+
+    expect(
+      screen.getByRole("heading", {
+        name: "CSV técnicos bloqueados por el release gate",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Subir catálogos a Neo4j" }),
+    ).toBeNull();
+  });
+
+  it("mantiene bloqueada una ejecución técnica cuando falta un CSV del contrato", async () => {
+    const outputs = [
+      "curso.csv",
+      "silabo.csv",
+      "catalogo_competencias.csv",
+      "cobertura_curricular.csv",
+    ].map((archivo) => ({ archivo: `salidas/${archivo}`, registros: 1 }));
+
+    await renderTechnicalResult({
+      id: "NOR_TECHNICAL_MISSING",
+      outputs,
+      gate: { decision: "ALLOW_IMPORT" },
+    });
+
+    expect(
+      screen.getByRole("heading", {
+        name: "CSV técnicos bloqueados por el release gate",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Subir catálogos a Neo4j" }),
     ).toBeNull();
   });
 });

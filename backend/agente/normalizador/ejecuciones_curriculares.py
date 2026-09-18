@@ -42,8 +42,6 @@ class EjecutorCurricular:
         periodo: str,
         *,
         validar_entrada: Callable[..., Any],
-        cargar_catalogo: Callable[[], Any],
-        cargar_catalogo_carrera: Callable[[str, str], Any],
         configuracion_curricular: Callable[[], Any],
         contexto_ejecucion: Callable[[str, str, str], tuple[list[str], dict[str, object]]],
         ejecutar_flujo: Callable[..., Any],
@@ -84,24 +82,11 @@ class EjecutorCurricular:
             return
 
         try:
-            catalogo_global = cargar_catalogo()
-            catalogo_carrera = cargar_catalogo_carrera(resultado.carrera, resultado.periodo)
-            ejecucion.catalogo_chh = (catalogo_carrera or catalogo_global).resumen()
-            ejecucion.catalogo_chh["alcance_curricular"] = (
-                "carrera" if catalogo_carrera is not None else "perfil_del_silabo"
-            )
-            ejecucion.catalogo_chh["carrera"] = resultado.carrera
-            ejecucion.catalogo_chh["periodo"] = resultado.periodo
-        except Exception as exc:
-            ejecucion.catalogo_chh = {
-                "disponible": False,
-                "error": f"{type(exc).__name__}: {str(exc)[:200]}",
-            }
-        try:
             self._verificar_cancelacion(ejecucion)
+            configuracion = configuracion_curricular()
+            ejecucion.catalogo_chh = None
             ejecucion.estado = "limpiando"
             ejecucion.actualizada_en = self._ahora()
-            configuracion = configuracion_curricular()
             ejecucion.configuracion_curricular = configuracion.a_dict()
             usar_llm = configuracion.usar_llm
             if usar_llm:
@@ -282,7 +267,9 @@ class EjecutorCurricular:
             self._marcar_cancelado(ejecucion)
             self._finalizar(ejecucion)
         except cactus_extractor_error as exc:
-            registrar_error(ejecucion, exc.codigo, exc.mensaje)
+            codigo = str(getattr(exc, "codigo", "ERROR_INTERNO_EXTRACCION_CACTUS"))
+            mensaje = str(getattr(exc, "mensaje", str(exc)))
+            registrar_error(ejecucion, codigo, mensaje)
         except Exception as exc:
             registrar_error(
                 ejecucion,
@@ -340,7 +327,8 @@ class EjecutorCurricular:
         """Bloquea la publicación cuando Cactus entregó una fuente incompleta."""
 
         fuente = ejecucion.fuente
-        if not isinstance(fuente, dict) or fuente.get("completa") is not False:
+        completa = fuente.get("completa") if isinstance(fuente, dict) else None
+        if not isinstance(fuente, dict) or not isinstance(completa, bool) or completa:
             return limpieza
 
         gate = dict(limpieza.release_gate)

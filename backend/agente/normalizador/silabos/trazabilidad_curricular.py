@@ -6,9 +6,13 @@ import hashlib
 import re
 import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING
 
 from agente.normalizador.empleabilidad.catalogo import clave_concepto
 from agente.normalizador.modelos import Hallazgo
+
+if TYPE_CHECKING:
+    from agente.normalizador.silabos.resolucion_curricular import ResolucionConcepto
 
 ESTADO_PENDIENTE_CATALOGACION = "PENDIENTE_CATALOGACION"
 ESTADO_PENDIENTE_PERFIL = "PENDIENTE_AMPLIACION_PERFIL"
@@ -261,7 +265,7 @@ def _registrar_pendiente(
     confianza: float | None = None,
 ) -> dict[str, object]:
     nombre_propuesta = _texto((propuesta or {}).get("nombre") or (propuesta or {}).get("id"))
-    pendiente = {
+    pendiente: dict[str, object] = {
         "id_pendiente": _hash_id(
             "PEN",
             tipo,
@@ -342,7 +346,9 @@ def _pendientes_por_relacion_fuente(
         for relation_id in complete_ids:
             scoped = dict(row)
             scoped["id_pendiente_origen"] = _texto(row.get("id_pendiente"))
-            scoped["id_pendiente"] = _hash_id("PEN_REL", scoped["id_pendiente_origen"], relation_id)
+            scoped["id_pendiente"] = _hash_id(
+                "PEN_REL", _texto(scoped["id_pendiente_origen"]), relation_id
+            )
             scoped["id_cob_curricular"] = relation_id
             materialized.append(scoped)
     return materialized

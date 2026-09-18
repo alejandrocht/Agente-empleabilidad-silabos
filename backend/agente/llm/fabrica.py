@@ -1,11 +1,15 @@
-"""Fábrica OpenAI con un modelo configurable para cada rol del agente.
+"""Fábrica LLM con configuración inmutable por rol y proveedor.
 
-La cascada es: variable específica del rol, ``OPENAI_MODEL`` global y finalmente el modelo
-seguro del código. ChatOpenAI integra automáticamente las trazas configuradas en LangSmith.
+El flujo curricular usa OpenAI o el endpoint compatible de Ollama según el snapshot de la
+ejecución. Los demás roles mantienen la cascada histórica de modelos OpenAI.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
+from dotenv import dotenv_values
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
@@ -34,6 +38,17 @@ _ROLES_CURRICULARES = frozenset(
     }
 )
 
+_RUTA_ENV = Path(__file__).resolve().parents[2] / ".env"
+
+
+def _api_key_openai() -> str:
+    """Read the key from the process, then backend/.env without exposing it."""
+    api_key = texto("OPENAI_API_KEY")
+    if api_key:
+        return api_key
+    valores = dotenv_values(_RUTA_ENV)
+    return str(valores.get("OPENAI_API_KEY") or "").strip()
+
 
 def _modelo_para_rol(
     rol: str,
@@ -61,28 +76,31 @@ def obtener_llm(
     *,
     configuracion_curricular: ConfiguracionNormalizadorCurricular | None = None,
 ) -> ChatOpenAI:
-    """Crea un ChatOpenAI; los roles curriculares requieren su snapshot explícito."""
-    api_key = (
-        texto("DEV_API_KEY", "dev-not-needed")
-        if modo_dev()
-        else texto("OPENAI_API_KEY")
-    )
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY no está definida en backend/.env")
+    """Crea el cliente del proveedor configurado para el rol solicitado."""
     if rol in _ROLES_CURRICULARES and configuracion_curricular is None:
         raise ValueError(
             "Los roles curriculares requieren configuracion_curricular de la ejecución"
         )
     configuracion = configuracion_curricular if rol in _ROLES_CURRICULARES else None
+    proveedor = configuracion.proveedor_llm if configuracion is not None else "openai"
+    en_dev = modo_dev()
+    if en_dev:
+        api_key = texto("DEV_API_KEY", "dev-not-needed")
+    elif proveedor == "openai":
+        api_key = _api_key_openai()
+    else:
+        api_key = "ollama"
+    if proveedor == "openai" and not en_dev and not api_key:
+        raise ValueError("OPENAI_API_KEY no está definida en backend/.env")
 
-    kwargs: dict[str, object] = {
+    kwargs: dict[str, Any] = {
         "model": _modelo_para_rol(rol, configuracion),
         "temperature": (
             configuracion.temperatura_llm
             if configuracion is not None
             else decimal("LLM_TEMPERATURE", 0)
         ),
-        "api_key": SecretStr(api_key),
+        "api_key": SecretStr(api_key if en_dev or proveedor == "openai" else "ollama"),
         "timeout": (
             configuracion.timeout_llm_seconds
             if configuracion is not None
@@ -94,10 +112,11 @@ def obtener_llm(
             else entero("LLM_MAX_RETRIES", 2)
         ),
     }
-    if modo_dev():
-        dev_base_url = texto("DEV_BASE_URL")
-        if dev_base_url:
-            kwargs["base_url"] = dev_base_url
-    if configuracion is not None:
+    dev_base_url = texto("DEV_BASE_URL") if en_dev else ""
+    if dev_base_url:
+        kwargs["base_url"] = dev_base_url
+    elif configuracion is not None and proveedor == "ollama":
+        kwargs["base_url"] = configuracion.base_url_llm
+    if configuracion is not None and proveedor != "ollama":
         kwargs["reasoning_effort"] = configuracion.esfuerzo_para_rol(rol)
     return ChatOpenAI(**kwargs)

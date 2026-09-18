@@ -16,27 +16,65 @@ from agente.normalizador.silabos.herramientas import (
     herramienta_nueva_evidenciada,
     nombre_herramienta_canonico,
 )
-from agente.normalizador.silabos.trazabilidad_curricular import (  # noqa: F401
-    _ALIASES_CARRERA,
-    _CARRERAS_POR_NOMBRE,
-    ESTADO_PENDIENTE_CATALOGACION,
-    ESTADO_PENDIENTE_PERFIL,
-    ESTADO_REVISION_HUMANA,
-    _archivo_origen,
-    _clave_carrera,
-    _error,
-    _estado_resolucion_determinista,
-    _fila_cobertura,
-    _filas_curso,
-    _hash_id,
-    _id_carrera,
-    _modalidad_curso,
-    _pendientes_por_relacion_fuente,
-    _propuesta_dict,
-    _registrar_pendiente,
-    _source_ref,
-    _texto,
-    _warning,
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _ALIASES_CARRERA as _ALIASES_CARRERA,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _CARRERAS_POR_NOMBRE as _CARRERAS_POR_NOMBRE,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    ESTADO_PENDIENTE_CATALOGACION as ESTADO_PENDIENTE_CATALOGACION,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    ESTADO_PENDIENTE_PERFIL as ESTADO_PENDIENTE_PERFIL,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    ESTADO_REVISION_HUMANA as ESTADO_REVISION_HUMANA,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _archivo_origen as _archivo_origen,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _clave_carrera as _clave_carrera,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _error as _error,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _estado_resolucion_determinista as _estado_resolucion_determinista,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _fila_cobertura as _fila_cobertura,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _filas_curso as _filas_curso,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _hash_id as _hash_id,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _id_carrera as _id_carrera,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _modalidad_curso as _modalidad_curso,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _pendientes_por_relacion_fuente as _pendientes_por_relacion_fuente,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _propuesta_dict as _propuesta_dict,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _registrar_pendiente as _registrar_pendiente,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _source_ref as _source_ref,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _texto as _texto,
+)
+from agente.normalizador.silabos.trazabilidad_curricular import (
+    _warning as _warning,
 )
 
 

@@ -107,7 +107,7 @@ def _clave_relacion(fila: Mapping[str, object]) -> tuple[str, str, str, str, str
     )
 
 
-def _fila_canonica_relacion(fila: Mapping[str, object]) -> dict[str, str]:
+def _fila_canonica_relacion(fila: Mapping[str, object]) -> dict[str, object]:
     return {columna: _texto(fila.get(columna)) for columna in COBERTURA_SCHEMA}
 
 
@@ -330,9 +330,7 @@ def _escribir_archivos_curriculares(
         _escribir_csv_atomico(salida / nombre, columnas, filas)
 
 
-def _eliminar_archivos_curriculares(
-    salida: Path, *, not_permitted_error: ExceptionFactory
-) -> None:
+def _eliminar_archivos_curriculares(salida: Path, *, not_permitted_error: ExceptionFactory) -> None:
     """Remove stale canonical files while an approval batch is unresolved."""
 
     for nombre, _ in ARCHIVOS_SALIDA:
@@ -384,9 +382,7 @@ def _escribir_relaciones(
     invalid_error: ExceptionFactory,
 ) -> None:
     relaciones_enriquecidas = _preservar_relaciones_enriquecidas(
-        _leer_jsonl(
-            reportes / "cobertura_curricular_canonica.jsonl", invalid_error=invalid_error
-        ),
+        _leer_jsonl(reportes / "cobertura_curricular_canonica.jsonl", invalid_error=invalid_error),
         relaciones,
     )
     relaciones_enriquecidas.sort(
@@ -414,9 +410,7 @@ def _leer_jsonl(ruta: Path, *, invalid_error: ExceptionFactory) -> list[dict[str
     return filas
 
 
-def _leer_descartes(
-    ruta: Path, *, invalid_error: ExceptionFactory
-) -> dict[str, dict[str, object]]:
+def _leer_descartes(ruta: Path, *, invalid_error: ExceptionFactory) -> dict[str, dict[str, object]]:
     return {
         _texto(fila.get("package_id")): fila
         for fila in _leer_jsonl(ruta, invalid_error=invalid_error)

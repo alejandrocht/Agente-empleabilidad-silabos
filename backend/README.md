@@ -137,11 +137,18 @@ reportan para revisión. DOCX y PDF admiten códigos `E/G` numéricos y alfabét
 
 ### Analista curricular LLM por carrera
 
-En producción la ejecución curricular debe activar el analista semántico. Para ello:
+El normalizador curricular usa únicamente el contrato técnico. El catálogo canónico vive en
+`backend/catalogos/catalogo_competencias_tecnicas.xlsx`; no se configura una ruta externa ni un
+selector `legacy|technical`. En producción la ejecución curricular debe activar el analista
+semántico. Para ello:
 
 ```dotenv
 NORMALIZADOR_CURRICULAR_LLM=true
-NORMALIZADOR_CURRICULAR_ANALYST_MODEL=gpt-5.6-luna
+# Cambiar solo esta variable para alternar entre los dos proveedores configurados.
+NORMALIZADOR_CURRICULAR_LLM_PROVIDER=ollama
+NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL=http://localhost:11434/v1
+NORMALIZADOR_CURRICULAR_OLLAMA_MODEL=qwen3:27b
+NORMALIZADOR_CURRICULAR_OPENAI_MODEL=gpt-5.6-luna
 NORMALIZADOR_CURRICULAR_ANALYST_REASONING_EFFORT=medium
 NORMALIZADOR_CURRICULAR_LLM_TIMEOUT_SECONDS=120
 NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES=2
@@ -149,7 +156,10 @@ NORMALIZADOR_CURRICULAR_LLM_BATCH_SIZE=8
 NORMALIZADOR_CURRICULAR_LLM_TEMPERATURE=0
 ```
 
-El analista usa `NORMALIZADOR_CURRICULAR_ANALYST_MODEL`. No existe una segunda pasada
+El analista resuelve su modelo desde el proveedor activo. Ollama usa
+`NORMALIZADOR_CURRICULAR_OLLAMA_MODEL`; OpenAI usa
+`NORMALIZADOR_CURRICULAR_OPENAI_MODEL` y además requiere `OPENAI_API_KEY`. Los valores por defecto
+son `qwen3:27b` y `gpt-5.6-luna`, respectivamente. No existe una segunda pasada
 LLM residual: los errores de validación quedan para revisión. Se conserva el único
 reintento del mismo analista para IDs omitidos y la nominalización determinista.
 Las antiguas variables de escalamiento residual ya no se requieren ni se utilizan.
@@ -256,6 +266,7 @@ un perfil está en bootstrap, especializa el espacio de **competencias**; las ha
 contrastan contra el catálogo global para que un perfil incompleto no elimine candidatos y fuerce falsos positivos.
 
 ## Logs
+
 The current FastAPI application is `api.servidor:app`:
 
 ```powershell

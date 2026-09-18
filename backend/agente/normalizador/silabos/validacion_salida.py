@@ -9,8 +9,10 @@ from agente.normalizador.empleabilidad.catalogo import clave_concepto
 from agente.normalizador.modelos import Hallazgo
 from agente.normalizador.silabos.integridad_chh import validar_integridad_chh
 from agente.normalizador.silabos.release_gate import (  # noqa: F401
-    _validar_pendientes_fuente,
-    evaluar_release_gate,
+    _validar_pendientes_fuente as _validar_pendientes_fuente,
+)
+from agente.normalizador.silabos.release_gate import (
+    evaluar_release_gate as evaluar_release_gate,
 )
 from agente.normalizador.silabos.resolucion_curricular import (
     _declaraciones_de_registros,
@@ -80,7 +82,7 @@ def _hitl_curricular_completado(release_gate: object) -> bool:
     aprobacion = checks.get("approval")
     return (
         isinstance(aprobacion, dict)
-        and aprobacion.get("canonical_materialized") is True
+        and bool(aprobacion.get("canonical_materialized"))
         and aprobacion.get("pending_decision") == 0
     )
 

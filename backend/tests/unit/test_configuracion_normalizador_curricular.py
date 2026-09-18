@@ -1,4 +1,4 @@
-"""Regression contract for immutable curricular-normalizer runtime configuration."""
+"""Regression contract for immutable, provider-aware curricular configuration."""
 
 from __future__ import annotations
 
@@ -14,13 +14,18 @@ from agente.normalizador import ejecuciones
 from agente.normalizador.embeddings import OpenAIEmbeddingProvider
 from agente.normalizador.modelos import ResultadoLimpiezaSilabos, ResultadoValidacionSilabos
 
+# spellchecker:off
+
 
 def _entorno(**overrides: str) -> dict[str, str]:
     values = {
         "DEV": "0",
         "DEV_MODEL": "qwen3.8b",
         "NORMALIZADOR_CURRICULAR_LLM": "true",
-        "NORMALIZADOR_CURRICULAR_ANALYST_MODEL": "analyst-model",
+        "NORMALIZADOR_CURRICULAR_LLM_PROVIDER": "openai",
+        "NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL": "http://localhost:11434/v1",
+        "NORMALIZADOR_CURRICULAR_OLLAMA_MODEL": "qwen3:27b",
+        "NORMALIZADOR_CURRICULAR_OPENAI_MODEL": "gpt-5.6-luna",
         "NORMALIZADOR_CURRICULAR_ANALYST_REASONING_EFFORT": "medium",
         "NORMALIZADOR_CURRICULAR_LLM_TIMEOUT_SECONDS": "37",
         "NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES": "5",
@@ -53,7 +58,7 @@ def test_configuracion_curricular_prefiere_el_proceso_sobre_backend_dotenv(
     monkeypatch.setattr(settings, "BASE_DIR", tmp_path)
     for key in _entorno():
         monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_ANALYST_MODEL", "process-analyst")
+    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_OPENAI_MODEL", "process-analyst")
 
     configuracion = settings.configuracion_normalizador_curricular()
 
@@ -102,7 +107,7 @@ def test_fabrica_curricular_usa_exclusivamente_el_snapshot_por_rol(
     llamada: dict[str, Any] = {}
     monkeypatch.setattr(fabrica, "ChatOpenAI", lambda **kwargs: llamada.update(kwargs) or object())
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_ANALYST_MODEL", "mutated-after-snapshot")
+    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_OPENAI_MODEL", "mutated-after-snapshot")
 
     fabrica.obtener_llm(rol, configuracion_curricular=configuracion)
 
@@ -110,6 +115,103 @@ def test_fabrica_curricular_usa_exclusivamente_el_snapshot_por_rol(
     assert llamada["reasoning_effort"] == configuracion.esfuerzo_para_rol(rol)
     assert llamada["timeout"] == configuracion.timeout_llm_seconds
     assert llamada["max_retries"] == configuracion.max_reintentos_llm
+
+
+def test_fabrica_en_dev_preserva_credenciales_modelo_y_url_local(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configuracion = settings.configuracion_normalizador_curricular(
+        _entorno(DEV="1", DEV_MODEL="local-model")
+    )
+    llamada: dict[str, Any] = {}
+    monkeypatch.setattr(fabrica, "ChatOpenAI", lambda **kwargs: llamada.update(kwargs) or object())
+    monkeypatch.setenv("DEV", "1")
+    monkeypatch.setenv("DEV_MODEL", "local-model")
+    monkeypatch.setenv("DEV_API_KEY", "local-key")
+    monkeypatch.setenv("DEV_BASE_URL", "http://localhost:9000/v1")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    fabrica.obtener_llm("analista_curricular", configuracion_curricular=configuracion)
+
+    assert llamada["model"] == "local-model"
+    assert llamada["api_key"].get_secret_value() == "local-key"
+    assert llamada["base_url"] == "http://localhost:9000/v1"
+
+
+def test_fabrica_curricular_usa_ollama_sin_openai_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configuracion = settings.configuracion_normalizador_curricular(
+        _entorno(
+            NORMALIZADOR_CURRICULAR_LLM_PROVIDER="ollama",
+            NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL="http://localhost:11434/v1",
+            NORMALIZADOR_CURRICULAR_OLLAMA_MODEL="qwen3:27b",
+        )
+    )
+    llamada: dict[str, Any] = {}
+    monkeypatch.setattr(fabrica, "ChatOpenAI", lambda **kwargs: llamada.update(kwargs) or object())
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    fabrica.obtener_llm("analista_curricular", configuracion_curricular=configuracion)
+
+    assert llamada["model"] == "qwen3:27b"
+    assert llamada["base_url"] == "http://localhost:11434/v1"
+    assert llamada["api_key"].get_secret_value() == "ollama"
+    assert "reasoning_effort" not in llamada
+
+
+def test_cambiar_solo_proveedor_selecciona_el_modelo_configurado() -> None:
+    entorno = _entorno()
+
+    configuracion_ollama = settings.configuracion_normalizador_curricular(
+        {**entorno, "NORMALIZADOR_CURRICULAR_LLM_PROVIDER": "ollama"}
+    )
+    configuracion_openai = settings.configuracion_normalizador_curricular(
+        {**entorno, "NORMALIZADOR_CURRICULAR_LLM_PROVIDER": "openai"}
+    )
+
+    assert configuracion_ollama.modelo_analista == "qwen3:27b"
+    assert configuracion_openai.modelo_analista == "gpt-5.6-luna"
+
+
+def test_configuracion_curricular_usa_defaults_por_proveedor() -> None:
+    entorno = _entorno()
+    entorno.pop("NORMALIZADOR_CURRICULAR_LLM_PROVIDER")
+    entorno.pop("NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL")
+    entorno.pop("NORMALIZADOR_CURRICULAR_OLLAMA_MODEL")
+    configuracion_ollama = settings.configuracion_normalizador_curricular(entorno)
+
+    entorno_openai = _entorno(NORMALIZADOR_CURRICULAR_LLM_PROVIDER="openai")
+    entorno_openai.pop("NORMALIZADOR_CURRICULAR_OPENAI_MODEL")
+    configuracion_openai = settings.configuracion_normalizador_curricular(entorno_openai)
+
+    assert configuracion_ollama.proveedor_llm == "ollama"
+    assert configuracion_ollama.modelo_analista == "qwen3:27b"
+    assert configuracion_ollama.base_url_llm == "http://localhost:11434/v1"
+    assert configuracion_openai.proveedor_llm == "openai"
+    assert configuracion_openai.modelo_analista == "gpt-5.6-luna"
+    assert configuracion_openai.base_url_llm == ""
+
+
+def test_fabrica_curricular_lee_api_key_desde_env_del_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configuracion = settings.configuracion_normalizador_curricular(_entorno())
+    llamada: dict[str, Any] = {}
+    monkeypatch.setattr(fabrica, "ChatOpenAI", lambda **kwargs: llamada.update(kwargs) or object())
+    monkeypatch.setattr(fabrica, "dotenv_values", lambda _ruta: {"OPENAI_API_KEY": "file-key"})
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    fabrica.obtener_llm("analista_curricular", configuracion_curricular=configuracion)
+
+    assert llamada["api_key"].get_secret_value() == "file-key"
+
+
+def test_fabrica_curricular_rechaza_proveedor_desconocido() -> None:
+    with pytest.raises(ValueError, match="LLM_PROVIDER"):
+        settings.configuracion_normalizador_curricular(
+            _entorno(NORMALIZADOR_CURRICULAR_LLM_PROVIDER="unknown")
+        )
 
 
 def test_fabrica_curricular_no_relee_temperatura_despues_del_snapshot(
@@ -149,7 +251,9 @@ def test_snapshot_incluye_todas_las_selecciones_operativas_sin_secretos() -> Non
 
     assert configuracion.a_dict() == {
         "usar_llm": True,
-        "modelo_analista": "analyst-model",
+        "proveedor_llm": "openai",
+        "base_url_llm": "",
+        "modelo_analista": "gpt-5.6-luna",
         "esfuerzo_analista": "medium",
         "timeout_llm_seconds": 37.0,
         "max_reintentos_llm": 5,
@@ -166,7 +270,31 @@ def test_snapshot_incluye_todas_las_selecciones_operativas_sin_secretos() -> Non
         "limite_lexical_habilidad": 5,
         "limite_lexical_herramienta": 6,
         "limite_ejemplos_contexto": 3,
+        "modo_analista": "technical",
+        "ruta_catalogo_tecnico": str(
+            settings.BASE_DIR / "catalogos" / "catalogo_competencias_tecnicas.xlsx"
+        ),
     }
+
+
+def test_curriculum_configuration_uses_repository_catalog() -> None:
+    configuracion = settings.configuracion_normalizador_curricular(_entorno())
+
+    assert configuracion.ruta_catalogo_tecnico == str(
+        settings.BASE_DIR / "catalogos" / "catalogo_competencias_tecnicas.xlsx"
+    )
+
+
+def test_retired_mode_and_external_catalog_path_are_ignored() -> None:
+    configuracion = settings.configuracion_normalizador_curricular(
+        _entorno(
+            NORMALIZADOR_CURRICULAR_ANALYST_MODE="legacy",
+            NORMALIZADOR_CURRICULAR_TECHNICAL_CATALOG_PATH="/tmp/retired.xlsx",
+        )
+    )
+
+    assert configuracion.modo_analista == "technical"
+    assert configuracion.ruta_catalogo_tecnico != "/tmp/retired.xlsx"
 
 
 def test_configuracion_curricular_admite_lotes_mayores_que_veinte() -> None:
@@ -201,14 +329,13 @@ def test_ejecucion_persiste_y_propaga_el_mismo_snapshot_a_limpieza(
             return {"disponible": True}
 
     def limpiar_falso(*_args: object, **kwargs: object) -> ResultadoLimpiezaSilabos:
-        monkeypatch.setenv("NORMALIZADOR_CURRICULAR_ANALYST_MODEL", "changed-during-run")
+        monkeypatch.setenv("NORMALIZADOR_CURRICULAR_OPENAI_MODEL", "changed-during-run")
         llamada.update(kwargs)
         return ResultadoLimpiezaSilabos(0, (), (), publicable=True)
 
     monkeypatch.setattr(ejecuciones, "configuracion_normalizador_curricular", lambda: configuracion)
     monkeypatch.setattr(ejecuciones, "validar_silabos", lambda *_: validacion)
     monkeypatch.setattr(ejecuciones, "cargar_catalogo", CatalogoFalso)
-    monkeypatch.setattr(ejecuciones, "cargar_catalogo_carrera", lambda *_: None)
     monkeypatch.setattr(ejecuciones, "limpiar_silabos", limpiar_falso)
 
     gestor._validar_silabos(
@@ -224,12 +351,58 @@ def test_ejecucion_persiste_y_propaga_el_mismo_snapshot_a_limpieza(
     assert "changed-during-run" not in json.dumps(manifest)
 
 
+def test_ejecucion_tecnica_no_carga_catalogos_chh(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configuracion = settings.configuracion_normalizador_curricular(_entorno())
+    gestor = ejecuciones.GestorEjecuciones(tmp_path)
+    id_ejecucion, directorio = gestor.crear("silabos", "paquete.zip")
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    validacion = ResultadoValidacionSilabos(
+        archivo="paquete.zip",
+        carrera="Marketing",
+        periodo="2026-1",
+        sha256="sha256",
+        valida=True,
+        archivos=(),
+        hallazgos=(),
+    )
+    catalogo_llamadas: list[str] = []
+
+    def catalogo_no_debe_cargarse(*_args: object) -> object:
+        catalogo_llamadas.append("chh")
+        raise AssertionError("Technical executions must not load CHH catalogs")
+
+    def limpiar_falso(*_args: object, **kwargs: object) -> ResultadoLimpiezaSilabos:
+        assert kwargs["configuracion_curricular"] is configuracion
+        return ResultadoLimpiezaSilabos(0, (), (), publicable=True)
+
+    monkeypatch.setattr(ejecuciones, "configuracion_normalizador_curricular", lambda: configuracion)
+    monkeypatch.setattr(ejecuciones, "validar_silabos", lambda *_: validacion)
+    monkeypatch.setattr(ejecuciones, "cargar_catalogo", catalogo_no_debe_cargarse)
+    monkeypatch.setattr(ejecuciones, "limpiar_silabos", limpiar_falso)
+    monkeypatch.setattr(ejecuciones, "contexto_ejecucion", lambda *_: ([], {}))
+    monkeypatch.setattr(ejecuciones, "ejecutar_flujo", lambda funcion, **_kwargs: funcion())
+
+    gestor._validar_silabos(
+        ejecucion,
+        directorio / "entrada" / "paquete.zip",
+        "Marketing",
+        "2026-1",
+    )
+
+    assert catalogo_llamadas == []
+    assert ejecucion.catalogo_chh is None
+    assert ejecucion.configuracion_curricular == configuracion.a_dict()
+
+
 def test_configuracion_curricular_no_filtra_estado_entre_entornos() -> None:
     primera = settings.configuracion_normalizador_curricular(
-        _entorno(NORMALIZADOR_CURRICULAR_ANALYST_MODEL="first")
+        _entorno(NORMALIZADOR_CURRICULAR_OPENAI_MODEL="first")
     )
     segunda = settings.configuracion_normalizador_curricular(
-        _entorno(NORMALIZADOR_CURRICULAR_ANALYST_MODEL="second")
+        _entorno(NORMALIZADOR_CURRICULAR_OPENAI_MODEL="second")
     )
 
     assert primera.modelo_analista == "first"
@@ -244,5 +417,8 @@ def test_startup_without_retired_residual_configuration(
     monkeypatch.setattr(settings, "BASE_DIR", tmp_path)
     values = {key: value for key, value in _entorno().items() if "RESIDUAL" not in key}
     configuration = settings.configuracion_normalizador_curricular(values)
-    assert configuration.modelo_para_rol("analista_curricular") == "analyst-model"
+    assert configuration.modelo_para_rol("analista_curricular") == "gpt-5.6-luna"
     assert not any("residual" in key for key in configuration.a_dict())
+
+
+# spellchecker:on
