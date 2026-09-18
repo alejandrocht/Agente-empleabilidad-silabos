@@ -531,6 +531,7 @@ def limpiar_archivo(
                     configuracion_curricular.ruta_catalogo_tecnico,
                     auditoria=auditoria_tecnica,
                     al_actualizar_progreso_silabo=actualizar_traza_silabo,
+                    cancelada=cancelada,
                 )
                 for advertencia in auditoria_tecnica:
                     hallazgos.append(

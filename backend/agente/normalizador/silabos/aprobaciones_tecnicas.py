@@ -500,12 +500,15 @@ def _validar_solicitudes(
     for solicitud in decisiones:
         identificador = str(solicitud.get("id_pendiente") or "").strip()
         decision = str(solicitud.get("decision") or "").strip().upper()
+        reason = str(solicitud.get("reason") or "").strip()[:600]
         if not identificador or identificador not in ids:
             raise DecisionCurricularInvalida(
                 f"No existe la propuesta técnica {identificador!r} en esta ejecución."
             )
         if decision not in _DECISIONES_VALIDAS:
             raise DecisionCurricularInvalida(f"Decisión técnica inválida: {decision!r}.")
+        if decision == "DISCARD" and not reason:
+            raise DecisionCurricularInvalida("Descartar una propuesta técnica requiere un motivo.")
         if identificador in vistos:
             raise DecisionCurricularInvalida(f"La propuesta {identificador!r} aparece duplicada.")
         vistos.add(identificador)
@@ -515,7 +518,14 @@ def _validar_solicitudes(
             raise DecisionCurricularInvalida(
                 f"La propuesta técnica {identificador!r} ya tiene otra decisión."
             )
-        validadas.append({"id_propuesta": identificador, "decision": decision, **dict(solicitud)})
+        validadas.append(
+            {
+                **dict(solicitud),
+                "id_propuesta": identificador,
+                "decision": decision,
+                "reason": reason,
+            }
+        )
     return validadas, revision_actual
 
 
@@ -563,6 +573,7 @@ def aplicar_decisiones(
                     "actor": str(actor or "ejecutor")[:200],
                     "decidido_en": ahora,
                     "revision": revision_actual,
+                    "reason": str(solicitud.get("reason") or "")[:600],
                     "propuesta": dict(propuesta),
                     "evidencia": _evidencia_literal(propuesta),
                 }

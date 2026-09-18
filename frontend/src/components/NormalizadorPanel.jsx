@@ -976,7 +976,6 @@ export default function NormalizadorPanel() {
       const datos = await cancelarEjecucionNormalizador(ejecucion.id_ejecucion);
       setEjecucion(datos);
       setCancelacionEnviada(true);
-      setPollingDetenido(true);
     } catch (error) {
       setErrorRed(error.message || "No se pudo solicitar la cancelación.");
     } finally {
@@ -1026,14 +1025,20 @@ export default function NormalizadorPanel() {
   const ejecucionActiva =
     recuperando || cargando || Boolean(ejecucion && !esFinal);
   const aprobacion = aprobacionCurricularDe(ejecucion);
+  const modoTecnico = esModoTecnico(ejecucion);
   const procesoCurricularCompletado =
     esCurricular &&
-    ["limpiado", "limpiado_con_advertencias"].includes(estado) &&
+    (["limpiado", "limpiado_con_advertencias"].includes(estado) ||
+      (modoTecnico && estado === "no_publicado")) &&
     ejecucion?.validacion_silabos?.valida === true;
   const aprobacionPendiente =
     esCurricular &&
     (aprobacion?.requiere_decision === true ||
       Number(aprobacion?.pendientes_por_decidir ?? 0) > 0);
+  const puedeRevisarPropuestas =
+    esCurricular &&
+    esFinal &&
+    (procesoCurricularCompletado || (modoTecnico && aprobacionPendiente));
   const resultadoListo = esCurricular
     ? procesoCurricularCompletado && releaseGatePermiteImportar(ejecucion)
     : ejecucion?.normalizacion?.publicable === true;
@@ -1091,11 +1096,11 @@ export default function NormalizadorPanel() {
     ? "Recuperando ejecución"
     : esCurricular &&
         aprobacionPendiente &&
-        ["limpiado", "limpiado_con_advertencias"].includes(estado)
+        (["limpiado", "limpiado_con_advertencias"].includes(estado) ||
+          (modoTecnico && esFinal))
       ? "Revisión curricular pendiente"
       : ETIQUETAS_ESTADO[estado] || "Preparando ejecución";
   const outputs = Array.isArray(ejecucion?.outputs) ? ejecucion.outputs : [];
-  const modoTecnico = esModoTecnico(ejecucion);
   const outputsCurricularesCanonicos = outputs.filter((output) =>
     salidaCurricularCanonica(output, modoTecnico),
   );
@@ -2307,7 +2312,7 @@ export default function NormalizadorPanel() {
                 ))}
               </div>
 
-              {esCurricular && !modoTecnico && procesoCurricularCompletado ? (
+              {puedeRevisarPropuestas ? (
                 <CurricularApprovalPanel
                   idEjecucion={ejecucion.id_ejecucion}
                   onSummary={setAprobacionCurricular}

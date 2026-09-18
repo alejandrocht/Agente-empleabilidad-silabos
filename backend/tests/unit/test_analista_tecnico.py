@@ -139,6 +139,75 @@ def test_inferencia_estructurada_conserva_evidencia_y_relaciones(
     assert "No debe enviarse" not in str(llamadas["mensajes"])
 
 
+def test_inferencia_usa_logro_general_para_propuesta_minima(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class AnalistaFalso:
+        def invoke(self, _mensajes: object) -> object:
+            return {
+                "competencias": [
+                    {
+                        "nombre_competencia": "Arquitectura de software",
+                        "descripcion_breve_competencia": (
+                            "Diseña estructuras de software mantenibles."
+                        ),
+                        "evidencia": [{"fuente": "logro", "fragmento": "Diseña arquitecturas"}],
+                        "justificacion": "El logro general demuestra una decisión técnica.",
+                    }
+                ]
+            }
+
+    class LLMFalso:
+        def with_structured_output(self, schema: object, *, method: str) -> object:
+            return AnalistaFalso()
+
+    monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: LLMFalso())
+    registro = _registro()
+    datos = registro["datos"]
+    assert isinstance(datos, dict)
+    datos["logros_especificos"] = []
+
+    resultado = analista_tecnico.inferir_competencias_tecnicas([registro], _configuracion())
+
+    assert len(resultado) == 1
+    assert resultado[0]["logros"] == ["Diseña arquitecturas de software."]
+    assert resultado[0]["evidencia"] == [{"fuente": "logro", "fragmento": "Diseña arquitecturas"}]
+
+
+def test_inferencia_genera_propuesta_minima_si_llm_no_materializa_ninguna(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    llamadas = 0
+
+    class AnalistaFalso:
+        def invoke(self, _mensajes: object) -> object:
+            nonlocal llamadas
+            llamadas += 1
+            return {"competencias": []}
+
+    class LLMFalso:
+        def with_structured_output(self, schema: object, *, method: str) -> object:
+            return AnalistaFalso()
+
+    monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: LLMFalso())
+
+    resultado = analista_tecnico.inferir_competencias_tecnicas([_registro()], _configuracion())
+
+    assert llamadas == 2
+    assert len(resultado) == 1
+    assert resultado[0]["id_silabo"] == "SIL_1"
+    assert resultado[0]["nombre_competencia"] == "Competencia técnica de Arquitectura de software"
+    assert resultado[0]["logros"] == [
+        "Diseña arquitecturas de software.",
+        "Compara patrones arquitectónicos.",
+    ]
+    assert resultado[0]["evidencia"] == [
+        {"fuente": "logro", "fragmento": "Diseña arquitecturas de software."},
+        {"fuente": "logro", "fragmento": "Compara patrones arquitectónicos."},
+    ]
+    assert resultado[0]["origen_propuesta"] == "FALLBACK_EVIDENCIA"
+
+
 def test_inferencia_registra_advertencia_para_evidencia_literal_invalida(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -164,27 +233,24 @@ def test_inferencia_registra_advertencia_para_evidencia_literal_invalida(
     monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: LLMFalso())
     auditoria: list[dict[str, object]] = []
 
-    assert (
-        analista_tecnico.inferir_competencias_tecnicas(
-            [_registro()], _configuracion(), auditoria=auditoria
-        )
-        == []
+    resultado = analista_tecnico.inferir_competencias_tecnicas(
+        [_registro()], _configuracion(), auditoria=auditoria
     )
-    assert auditoria == [
-        {
-            "codigo": "SILABO_SIN_PROPUESTA_TECNICA",
-            "id_silabo": "SIL_1",
-            "mensaje": (
-                "El sílabo no produjo ninguna propuesta técnica con evidencia literal válida."
-            ),
-        }
+
+    assert len(resultado) == 1
+    assert resultado[0]["origen_propuesta"] == "FALLBACK_EVIDENCIA"
+    assert resultado[0]["evidencia"] == [
+        {"fuente": "logro", "fragmento": "Diseña arquitecturas de software."},
+        {"fuente": "logro", "fragmento": "Compara patrones arquitectónicos."},
     ]
+    assert auditoria == []
 
 
 def test_inferencia_conserva_propuestas_validas_de_otros_silabos(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     respuestas: list[dict[str, object]] = [
+        {"competencias": []},
         {"competencias": []},
         {
             "competencias": [
@@ -218,9 +284,89 @@ def test_inferencia_conserva_propuestas_validas_de_otros_silabos(
         [_registro(), segundo], _configuracion(), auditoria=auditoria
     )
 
-    assert [fila["id_silabo"] for fila in resultado] == ["SIL_2"]
-    assert auditoria[0]["codigo"] == "SILABO_SIN_PROPUESTA_TECNICA"
-    assert auditoria[0]["id_silabo"] == "SIL_1"
+    assert [fila["id_silabo"] for fila in resultado] == ["SIL_1", "SIL_2"]
+    assert resultado[0]["origen_propuesta"] == "FALLBACK_EVIDENCIA"
+    assert resultado[1]["origen_propuesta"] == "LLM_NUEVA"
+    assert auditoria == []
+
+
+def test_inferencia_sin_logros_registra_advertencia_y_no_fabrica_propuesta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class LLMFalso:
+        def with_structured_output(self, schema: object, *, method: str) -> object:
+            raise AssertionError("No debe invocarse el modelo sin resultados de aprendizaje.")
+
+    monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: LLMFalso())
+    registro = _registro()
+    datos = registro["datos"]
+    assert isinstance(datos, dict)
+    datos["logro_general"] = ""
+    datos["logros_especificos"] = []
+    auditoria: list[dict[str, object]] = []
+
+    assert analista_tecnico.inferir_competencias_tecnicas(
+        [registro], _configuracion(), auditoria=auditoria
+    ) == []
+    assert auditoria == [
+        {
+            "codigo": "SILABO_SIN_PROPUESTA_TECNICA",
+            "id_silabo": "SIL_1",
+            "mensaje": (
+                "El sílabo no produjo ninguna propuesta técnica porque no contiene "
+                "resultados de aprendizaje utilizables."
+            ),
+        }
+    ]
+
+
+def test_inferencia_se_detiene_entre_silabos_si_se_solicita_cancelacion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    respuesta = {
+        "competencias": [
+            {
+                "nombre_competencia": "Diseño técnico de arquitecturas",
+                "descripcion_breve_competencia": "Selecciona patrones técnicos.",
+                "evidencia": [
+                    {"fuente": "logro", "fragmento": "Compara patrones arquitectónicos."}
+                ],
+                "justificacion": "El logro demuestra una decisión técnica.",
+            }
+        ]
+    }
+    llamadas = 0
+    cancelada = False
+
+    class AnalistaFalso:
+        def invoke(self, _mensajes: object) -> object:
+            nonlocal llamadas
+            llamadas += 1
+            return respuesta
+
+    class LLMFalso:
+        def with_structured_output(self, schema: object, *, method: str) -> object:
+            return AnalistaFalso()
+
+    def actualizar_progreso(traza: object) -> None:
+        nonlocal cancelada
+        if getattr(traza, "estado_analisis", "") == "completado":
+            cancelada = True
+
+    monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: LLMFalso())
+    segundo = _registro()
+    segundo["id_curso"] = "CUR_2"
+    segundo["id_silabo"] = "SIL_2"
+
+    with pytest.raises(analista_tecnico.CancelacionSolicitada):
+        analista_tecnico.inferir_competencias_tecnicas(
+            [_registro(), segundo],
+            _configuracion(),
+            cancelada=lambda: cancelada,
+            al_actualizar_progreso_silabo=actualizar_progreso,
+        )
+
+    assert llamadas == 1
 
 
 def test_carga_catalogo_tecnico_normaliza_carrera_y_asigna_referencia(tmp_path: Path) -> None:

@@ -18,6 +18,8 @@ from agente.normalizador.modelos import (
     ResultadoLimpiezaSilabos,
     ResultadoNormalizacion,
 )
+from agente.normalizador.silabos import aprobaciones_tecnicas
+from agente.normalizador.silabos.validacion_aprobaciones import DecisionCurricularInvalida
 
 
 def _gestor_con_ejecucion(tmp_path: Path) -> tuple[GestorEjecuciones, str, Path]:
@@ -75,6 +77,45 @@ def _salidas_curriculares() -> tuple[dict[str, object], ...]:
             "registros": 1,
         },
     )
+
+
+def test_decision_tecnica_discard_requiere_motivo_y_normaliza_la_razon() -> None:
+    propuestas = [{"id_propuesta": "PROP_TEC_1"}]
+    revision = aprobaciones_tecnicas._revision(propuestas)
+
+    with pytest.raises(
+        DecisionCurricularInvalida,
+        match="requiere un motivo",
+    ):
+        aprobaciones_tecnicas._validar_solicitudes(
+            [{"id_pendiente": "PROP_TEC_1", "decision": "DISCARD"}],
+            propuestas,
+            [],
+            revision,
+        )
+
+    validadas, revision_actual = aprobaciones_tecnicas._validar_solicitudes(
+        [
+            {
+                "id_pendiente": "PROP_TEC_1",
+                "decision": "discard",
+                "reason": "  Fuera del alcance curricular.  ",
+            }
+        ],
+        propuestas,
+        [],
+        revision,
+    )
+
+    assert revision_actual == revision
+    assert validadas == [
+        {
+            "id_pendiente": "PROP_TEC_1",
+            "decision": "DISCARD",
+            "reason": "Fuera del alcance curricular.",
+            "id_propuesta": "PROP_TEC_1",
+        }
+    ]
 
 
 def test_iniciar_validacion_silabos_entrega_wrapper_y_argumentos_al_executor(

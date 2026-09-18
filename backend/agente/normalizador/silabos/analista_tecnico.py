@@ -11,13 +11,14 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from time import perf_counter
-from typing import Literal
+from typing import Any, Literal
 
 from openpyxl import load_workbook
 from pydantic import BaseModel, Field
 
 from agente.config.settings import ConfiguracionNormalizadorCurricular
 from agente.llm.fabrica import obtener_llm
+from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import ProgresoSilaboLLM
 
 COLUMNAS_CATALOGO_TECNICO_XLSX = ("Carrera", "Habilidad tecnica", "Descripcion")
@@ -230,13 +231,15 @@ SYSTEM_PROMPT_TECNICO = (
     "expose chain of thought. The career catalog contains candidates, not facts: choose a "
     "candidate only if the syllabus learning outcomes support it. If none applies, use "
     "catalogo_ref=null and propose a new technical competency, which will remain pending human "
-    "approval. For every proposal, include at least one specific learning outcome copied "
-    "literally and literal evidence from a learning outcome. Do not summarize or paraphrase "
-    "learning outcomes. Do not return graph IDs, institutional codes, or relationships. When "
-    "using a candidate, copy its exact catalogo_ref; Python will preserve the original name and "
-    "description from the catalog. If there is insufficient technical evidence, return "
+    "approval. For every proposal, include at least one general or specific learning outcome "
+    "copied literally and literal evidence from a learning outcome. Do not summarize or "
+    "paraphrase learning outcomes. Do not return graph IDs, institutional codes, or relationships. "
+    "When using a candidate, copy its exact catalogo_ref; Python will preserve the original name "
+    "and description from the catalog. If there are no usable learning outcomes, return "
     "competencias=[] and do not force a match; that syllabus remains auditable without a "
-    "proposal while other syllabi continue."
+    "proposal while other syllabi continue. When usable outcomes are present, return at least "
+    "one evidence-backed proposal; if the first response is empty, reconsider the syllabus once "
+    "after a semantic clarification."
 )
 
 
@@ -295,10 +298,14 @@ def _payload_prompt(contexto: Mapping[str, object]) -> dict[str, object]:
     }
 
 
-def construir_prompt_tecnico(contexto: Mapping[str, object]) -> list[tuple[str, str]]:
+def construir_prompt_tecnico(
+    contexto: Mapping[str, object],
+    *,
+    aclaracion: bool = False,
+) -> list[tuple[str, str]]:
     """Build the calibrated system/user messages without exposing graph identity."""
 
-    return [
+    mensajes = [
         ("system", SYSTEM_PROMPT_TECNICO),
         (
             "human",
@@ -306,6 +313,16 @@ def construir_prompt_tecnico(contexto: Mapping[str, object]) -> list[tuple[str, 
             + json.dumps(_payload_prompt(contexto), ensure_ascii=False, separators=(",", ":")),
         ),
     ]
+    if aclaracion:
+        mensajes.append(
+            (
+                "human",
+                "Reconsiderá el análisis: hay resultados de aprendizaje utilizables. "
+                "Devolvé al menos una competencia técnica con un logro general o específico "
+                "copiado literalmente y evidencia literal válida; no inventes relaciones.",
+            )
+        )
+    return mensajes
 
 
 def _resolver_catalogo(
@@ -328,20 +345,31 @@ def _evidencia_valida(
     )
 
 
-def _logros_especificos(
+def _logros_de_propuesta(
     contexto: Mapping[str, object],
     propuesta: CompetenciaTecnicaInferida,
 ) -> list[str] | None:
     disponibles = {
         _clave_texto(logro.get("texto")): _texto(logro.get("texto"))
         for logro in _lista_mapeos(contexto.get("logros"))
-        if _texto(logro.get("tipo")) == "especifico" and _texto(logro.get("texto"))
+        if _texto(logro.get("texto"))
     }
+    referencias = list(propuesta.logros)
+    if not referencias:
+        referencias = [
+            evidencia.fragmento for evidencia in propuesta.evidencia if evidencia.fuente == "logro"
+        ]
     encontrados: list[str] = []
-    for logro in propuesta.logros:
-        original = disponibles.get(_clave_texto(logro))
+    for logro in referencias:
+        clave = _clave_texto(logro)
+        original = disponibles.get(clave)
         if original is None:
-            return None
+            coincidencias = [
+                valor for valor in disponibles.values() if clave and clave in _clave_texto(valor)
+            ]
+            if len(coincidencias) != 1:
+                return None
+            original = coincidencias[0]
         encontrados.append(original)
     return list(dict.fromkeys(encontrados))
 
@@ -374,7 +402,7 @@ def _materializar_propuesta(
     candidato = candidatos.get(referencia) if referencia else None
     if referencia and candidato is None:
         return None
-    logros = _logros_especificos(contexto, propuesta)
+    logros = _logros_de_propuesta(contexto, propuesta)
     if exigir_logro and not logros:
         return None
     if logros is None:
@@ -413,6 +441,39 @@ def _materializar_propuesta(
     return fila
 
 
+def _propuesta_minima_desde_evidencia(
+    contexto: Mapping[str, object],
+) -> CompetenciaTecnicaInferida:
+    logros = [
+        _texto(logro.get("texto"))
+        for logro in _lista_mapeos(contexto.get("logros"))
+        if _texto(logro.get("texto"))
+    ][:8]
+    nombre_curso = _texto(contexto.get("nombre_curso"))
+    nombre = (
+        f"Competencia técnica de {nombre_curso}"
+        if nombre_curso
+        else "Competencia técnica propuesta"
+    )[:240]
+    descripcion = (
+        "Aplica capacidades técnicas evidenciadas en los resultados de aprendizaje: "
+        f"{logros[0]}"
+    )[:1200]
+    return CompetenciaTecnicaInferida(
+        nombre_competencia=nombre,
+        descripcion_breve_competencia=descripcion,
+        logros=logros,
+        evidencia=[
+            EvidenciaCompetenciaTecnica(fuente="logro", fragmento=logro)
+            for logro in logros
+        ],
+        justificacion=(
+            "Propuesta mínima generada a partir de evidencia literal del sílabo "
+            "para mantener la revisión técnica humana."
+        ),
+    )
+
+
 def inferir_competencias_tecnicas(
     registros: Sequence[Mapping[str, object]],
     configuracion: ConfiguracionNormalizadorCurricular,
@@ -420,21 +481,20 @@ def inferir_competencias_tecnicas(
     *,
     auditoria: list[dict[str, object]] | None = None,
     al_actualizar_progreso_silabo: Callable[[ProgresoSilaboLLM], None] | None = None,
+    cancelada: Callable[[], bool] | None = None,
 ) -> list[dict[str, object]]:
     """Return pending technical proposals; Python owns IDs and relationships."""
 
     if not configuracion.usar_llm:
         return []
     catalogo = _resolver_catalogo(catalogo_tecnico)
-    llm = obtener_llm("analista_curricular", configuracion_curricular=configuracion)
-    analista = llm.with_structured_output(
-        RespuestaCompetenciasTecnicas,
-        method="json_schema",
-    )
+    analista: Any | None = None
     resultado: list[dict[str, object]] = []
     vistos: set[tuple[str, str, tuple[str, ...]]] = set()
     total_silabos = len(registros)
     for indice, registro in enumerate(registros, start=1):
+        if cancelada is not None and cancelada():
+            raise CancelacionSolicitada()
         carrera = _texto(registro.get("carrera"))
         candidatos_lista = catalogo.para_carrera(carrera) if catalogo is not None else ()
         candidatos = {candidato.referencia: candidato for candidato in candidatos_lista}
@@ -455,11 +515,47 @@ def inferir_competencias_tecnicas(
         )
         if al_actualizar_progreso_silabo is not None:
             al_actualizar_progreso_silabo(traza_base)
+        if not logros_totales:
+            if al_actualizar_progreso_silabo is not None:
+                al_actualizar_progreso_silabo(
+                    replace(
+                        traza_base,
+                        estado_analisis="sin_propuesta",
+                        logros_procesados=0,
+                        propuestas_validas=0,
+                    )
+                )
+            if auditoria is not None:
+                auditoria.append(
+                    {
+                        "codigo": "SILABO_SIN_PROPUESTA_TECNICA",
+                        "id_silabo": _texto(contexto.get("id_silabo")) or "<sin id>",
+                        "mensaje": (
+                            "El sílabo no produjo ninguna propuesta técnica porque no contiene "
+                            "resultados de aprendizaje utilizables."
+                        ),
+                    }
+                )
+            continue
+
+        if analista is None:
+            llm = obtener_llm("analista_curricular", configuracion_curricular=configuracion)
+            analista = llm.with_structured_output(
+                RespuestaCompetenciasTecnicas,
+                method="json_schema",
+            )
+
         inicio_modelo = perf_counter()
         try:
+            if cancelada is not None and cancelada():
+                raise CancelacionSolicitada()
             respuesta = analista.invoke(construir_prompt_tecnico(contexto))
+            if cancelada is not None and cancelada():
+                raise CancelacionSolicitada()
             if not isinstance(respuesta, RespuestaCompetenciasTecnicas):
                 respuesta = RespuestaCompetenciasTecnicas.model_validate(respuesta)
+        except CancelacionSolicitada:
+            raise
         except Exception:
             if al_actualizar_progreso_silabo is not None:
                 al_actualizar_progreso_silabo(
@@ -471,27 +567,70 @@ def inferir_competencias_tecnicas(
                     )
                 )
             raise
-        propuestas_validas = 0
-        for propuesta in respuesta.competencias:
-            fila = _materializar_propuesta(
-                propuesta,
+
+        def materializar_respuesta(
+            respuesta_actual: RespuestaCompetenciasTecnicas,
+        ) -> list[dict[str, object]]:
+            filas: list[dict[str, object]] = []
+            for propuesta in respuesta_actual.competencias:
+                fila = _materializar_propuesta(
+                    propuesta,
+                    contexto,
+                    candidatos,
+                    exigir_logro=True,
+                    catalogo=catalogo,
+                )
+                if fila is None:
+                    continue
+                clave = (
+                    _texto(fila["id_silabo"]),
+                    _texto(fila["catalogo_ref"]) or _clave_texto(fila["nombre_competencia"]),
+                    tuple(fila["logros"]) if isinstance(fila["logros"], list) else (),
+                )
+                if clave in vistos:
+                    continue
+                vistos.add(clave)
+                filas.append(fila)
+            return filas
+
+        propuestas_validas_filas = materializar_respuesta(respuesta)
+        if not propuestas_validas_filas:
+            if cancelada is not None and cancelada():
+                raise CancelacionSolicitada()
+            respuesta_reintento = analista.invoke(
+                construir_prompt_tecnico(contexto, aclaracion=True)
+            )
+            if cancelada is not None and cancelada():
+                raise CancelacionSolicitada()
+            if not isinstance(respuesta_reintento, RespuestaCompetenciasTecnicas):
+                respuesta_reintento = RespuestaCompetenciasTecnicas.model_validate(
+                    respuesta_reintento
+                )
+            propuestas_validas_filas = materializar_respuesta(respuesta_reintento)
+
+        if not propuestas_validas_filas:
+            fallback = _materializar_propuesta(
+                _propuesta_minima_desde_evidencia(contexto),
                 contexto,
                 candidatos,
-                exigir_logro=catalogo_tecnico is not None,
+                exigir_logro=True,
                 catalogo=catalogo,
             )
-            if fila is None:
-                continue
-            propuestas_validas += 1
-            clave = (
-                _texto(fila["id_silabo"]),
-                _texto(fila["catalogo_ref"]) or _clave_texto(fila["nombre_competencia"]),
-                tuple(fila["logros"]) if isinstance(fila["logros"], list) else (),
-            )
-            if clave in vistos:
-                continue
-            vistos.add(clave)
-            resultado.append(fila)
+            if fallback is not None:
+                fallback["origen_propuesta"] = "FALLBACK_EVIDENCIA"
+                clave_fallback = (
+                    _texto(fallback["id_silabo"]),
+                    _clave_texto(fallback["nombre_competencia"]),
+                    tuple(fallback["logros"])
+                    if isinstance(fallback["logros"], list)
+                    else (),
+                )
+                if clave_fallback not in vistos:
+                    vistos.add(clave_fallback)
+                    propuestas_validas_filas = [fallback]
+
+        propuestas_validas = len(propuestas_validas_filas)
+        resultado.extend(propuestas_validas_filas)
         if al_actualizar_progreso_silabo is not None:
             al_actualizar_progreso_silabo(
                 replace(
