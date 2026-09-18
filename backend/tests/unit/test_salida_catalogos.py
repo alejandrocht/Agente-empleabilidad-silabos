@@ -151,6 +151,42 @@ def test_materializa_contrato_curricular_sin_herramientas(tmp_path: Path) -> Non
     assert inferencia["evidencia"][0]["numero_semana"] == "1"
 
 
+def test_materializa_tecnica_aprobada_sin_competencia_declarada(
+    tmp_path: Path,
+) -> None:
+    registro = _registro()
+    datos = registro["datos"]
+    assert isinstance(datos, dict)
+    datos["competencias_declaradas"] = []
+    datos["logros_especificos"] = []
+    tecnica = {
+        "id_silabo": registro["id_silabo"],
+        "estado_aprobacion": "APROBADA",
+        "nombre_competencia": "Diseño técnico de arquitecturas",
+        "descripcion_breve_competencia": (
+            "Selecciona estructuras y patrones según atributos de calidad."
+        ),
+        "logros": [datos["logro_general"]],
+    }
+
+    resultado = construir_salidas_tecnicas(
+        [registro],
+        tmp_path,
+        carrera="SISTEMAS",
+        periodo_academico="2026-2",
+        propuestas_aprobadas=[tecnica],
+        analisis_tecnico={"estado": "COMPLETADO"},
+    )
+
+    assert resultado.publicable is True
+    assert resultado.cuarentena == ()
+    assert resultado.release_gate["decision"] == "ALLOW_IMPORT"
+    competencias = _leer_csv(tmp_path / "catalogo_competencias.csv")
+    assert [fila for fila in competencias if fila["tipo_competencia"] == "tecnica"]
+    cobertura = _leer_csv(tmp_path / "cobertura_curricular.csv")
+    assert len(cobertura) == 1
+
+
 def test_rechaza_lotes_que_mezclan_carreras_o_periodos(tmp_path: Path) -> None:
     registro = _registro()
     registro["carrera"] = "INDUSTRIAL"

@@ -399,7 +399,7 @@ describe("panel del normalizador", () => {
     );
   });
 
-  it("confirma la cancelación y detiene el polling de la ejecución curricular", async () => {
+  it("confirma la cancelación y mantiene el polling hasta el estado terminal", async () => {
     const confirmacion = vi.spyOn(window, "confirm").mockReturnValue(true);
     iniciarNormalizadorSilabos.mockResolvedValue({
       id_ejecucion: "NOR_cancelar12345678",
@@ -407,7 +407,7 @@ describe("panel del normalizador", () => {
       archivo: "curriculo.zip",
       estado: "validando",
     });
-    obtenerEjecucionNormalizador.mockResolvedValue({
+    obtenerEjecucionNormalizador.mockResolvedValueOnce({
       id_ejecucion: "NOR_cancelar12345678",
       tipo: "silabos",
       archivo: "curriculo.zip",
@@ -448,20 +448,32 @@ describe("panel del normalizador", () => {
       name: "Cancelar procesamiento",
     });
     fireEvent.click(botonCancelar);
+    obtenerEjecucionNormalizador.mockResolvedValueOnce({
+      id_ejecucion: "NOR_cancelar12345678",
+      tipo: "silabos",
+      archivo: "curriculo.zip",
+      estado: "cancelado",
+      cancelacion_solicitada: true,
+      validacion_silabos: { valida: true, archivos: [] },
+      outputs: [],
+      hallazgos: [],
+    });
 
     await waitFor(() =>
       expect(cancelarEjecucionNormalizador).toHaveBeenCalledWith(
         "NOR_cancelar12345678",
       ),
     );
+    await waitFor(
+      () => expect(screen.getByText("Procesamiento cancelado")).toBeTruthy(),
+      { timeout: 1600 },
+    );
     expect(confirmacion).toHaveBeenCalledWith(
       "¿Estás seguro de que deseas cancelar el procesamiento?",
     );
     expect(
-      screen.getByText(
-        "Cancelación solicitada. Recomendamos revisar el historial cuando el worker termine de cerrar la ejecución.",
-      ),
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: "Cancelar procesamiento" }),
+    ).toBeNull();
     confirmacion.mockRestore();
   });
 
@@ -652,6 +664,77 @@ describe("panel del normalizador", () => {
     expect(
       screen.queryByRole("heading", { name: "Subir catálogos a Neo4j" }),
     ).toBeNull();
+  });
+
+  it("expone la revisión técnica cuando una ejecución termina no publicada", async () => {
+    const idEjecucion = "NOR_tecnico_no_publicado";
+    iniciarNormalizadorSilabos.mockResolvedValue({
+      id_ejecucion: idEjecucion,
+      tipo: "silabos",
+      archivo: "curriculo.zip",
+      estado: "validando",
+    });
+    obtenerEjecucionNormalizador.mockResolvedValue({
+      id_ejecucion: idEjecucion,
+      tipo: "silabos",
+      archivo: "curriculo.zip",
+      estado: "no_publicado",
+      configuracion_curricular: { modo_analista: "technical" },
+      parametros: { carrera: "Marketing", periodo: "2026-1" },
+      validacion_silabos: { valida: true, archivos: [] },
+      aprobacion_curricular: {
+        requiere_decision: true,
+        pendientes_por_decidir: 1,
+      },
+      release_gate: {
+        decision: "BLOCK_IMPORT",
+        blockers: ["PENDING_TECHNICAL_APPROVAL"],
+      },
+      outputs: [],
+      hallazgos: [],
+    });
+    obtenerPendientesNormalizador.mockResolvedValue({
+      filas: [
+        {
+          id_pendiente: "PROP_TEC_1",
+          tipo: "competencia_tecnica",
+          nombre_competencia: "Diseñar arquitecturas de software",
+          descripcion_breve_competencia: "Seleccionar patrones técnicos.",
+          evidencia: ["Diseña arquitecturas de software."],
+        },
+      ],
+      revision: "rev-technical",
+      aprobacion: { requiere_decision: true, pendientes_por_decidir: 1 },
+    });
+
+    const { container } = await renderPanelAfterRecovery();
+    fireEvent.click(screen.getByRole("tab", { name: "Sílabos" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), {
+      target: { value: "Marketing" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), {
+      target: { value: "2026-1" },
+    });
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: {
+        files: [
+          new File(["zip"], "curriculo.zip", { type: "application/zip" }),
+        ],
+      },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Iniciar limpieza curricular" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Revisión curricular requerida",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText("Diseñar arquitecturas de software")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Competencias técnicas/ }),
+    ).toBeTruthy();
   });
 
   it("habilita la publicación en Neo4j solo con CSV materializados y release gate permitido", async () => {

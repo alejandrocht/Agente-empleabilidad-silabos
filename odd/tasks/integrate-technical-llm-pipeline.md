@@ -46,7 +46,7 @@ Avoid repeated parsing and divergent data, make the technical-only behavior the 
   - [x] T4.5. Complete the technical LLM production contract.
     - [x] T4.5a. Translate the technical system prompt to English while preserving literal-evidence and catalog constraints.
     - [x] T4.5b. Load the real technical catalog with exact career matching; do not introduce career aliases.
-    - [x] T4.5c. Reject an LLM-analyzed syllabus when no technically evidenced proposal survives validation.
+    - [x] T4.5c. Retry invalid/empty LLM materialization, then create one evidence-backed pending fallback when usable learning outcomes exist; warn and quarantine only when evidence is absent.
     - [x] T4.5d. Remove `contenido_semanal.csv` and its Neo4j model from the published technical contract.
     - [x] T4.5e. Resolve strict Mypy errors in the active transitive curriculum graph and run real LLM/Neo4j smoke checks when their external services are available. *(services unavailable; probes recorded)*
 - [x] T4.6. Keep the local and hosted technical analyzers ready behind one provider switch.
@@ -189,10 +189,16 @@ Avoid repeated parsing and divergent data, make the technical-only behavior the 
 ## T4.7d Findings
 
 - Ollama defaults and documentation now match the installed `qwen3.8:27b` model.
-- The technical analyzer keeps valid proposals from other syllabi when one syllabus has no valid literal-evidence proposal; the affected syllabus is recorded in `analisis_tecnico.json` and remains auditable.
+- The technical analyzer keeps valid proposals from other syllabi and creates an evidence-backed `FALLBACK_EVIDENCIA` proposal when a syllabus has usable outcomes but both LLM attempts materialize nothing; a syllabus without usable outcomes is recorded in `analisis_tecnico.json` and remains auditable.
 - Deterministic five-file CSV output is preserved for disabled, unavailable, or incomplete LLM analysis. An incomplete active analysis remains `BLOCK_IMPORT` and valid proposals remain pending HITL approval.
 - A source learning outcome without a resolvable competency is preserved in `catalogo_logros.csv` and `cuarentena.jsonl`, omitted from coverage, and blocks import with `UNLINKED_SOURCE_OUTCOME`; no competency relation is invented.
-- Focused regression suite: 63 passed; Ruff, strict Mypy, and diff check passed. Broader legacy approval/API suite still contains pre-existing failures from the technical-only contract migration.
+- Focused regression suite: 33 backend tests passed for analyzer/package resilience plus 19 frontend approval-panel tests; Ruff, strict Mypy, frontend build/type-check, and diff check passed. Broader legacy approval/API suite still contains pre-existing failures from the technical-only contract migration.
+
+## T4.8 Findings
+
+- `_propuesta_minima_desde_evidencia` is now connected to `inferir_competencias_tecnicas` after the original response and one clarification retry produce no materializable proposal. The fallback copies only literal learning-outcome text, carries `origen_propuesta=FALLBACK_EVIDENCIA`, and remains pending HITL approval.
+- Technical package projection now resolves `nombre_competencia` and `descripcion_breve_competencia` aliases into the display `nombre`/`descripcion` fields without exposing source skill names as competency labels. Frontend package cards accept the same technical aliases defensively.
+- The analyzer lazily constructs the structured-output LLM only after a syllabus has usable learning outcomes; no-evidence syllabi record `SILABO_SIN_PROPUESTA_TECNICA` without invoking the model.
 
 ## Next Step
 

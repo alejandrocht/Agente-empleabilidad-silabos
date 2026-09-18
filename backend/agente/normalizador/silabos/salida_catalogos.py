@@ -315,6 +315,7 @@ def construir_catalogos_curriculares(
     coberturas: dict[str, dict[str, str]] = {}
     hallazgos: list[Hallazgo] = []
     cuarentena: list[dict[str, object]] = []
+    outcomes_sin_competencia: list[dict[str, object]] = []
     competencias_por_silabo_codigo: dict[tuple[str, str], str] = {}
     logros_por_silabo: dict[str, dict[str, str]] = {}
     id_carrera = _hash_id("CAR", carrera)
@@ -391,22 +392,12 @@ def construir_catalogos_curriculares(
             _agregar_unico(logros, {"id_logro": id_logro, "logro": logro_general}, "id_logro")
             logros_silabo[logro_general.casefold()] = id_logro
             if not ids_competencias_silabo:
-                hallazgo = Hallazgo(
-                    codigo="LOGRO_SIN_COMPETENCIA",
-                    severidad="warning",
-                    mensaje=(
-                        "El logro fuente no tiene una competencia resoluble; "
-                        "queda en cuarentena."
-                    ),
-                    campo="logro_general",
-                    detalle=f"{id_silabo}: {logro_general}",
-                )
-                hallazgos.append(hallazgo)
-                cuarentena.append(
+                outcomes_sin_competencia.append(
                     {
                         "id_curso": id_curso,
                         "id_silabo": id_silabo,
-                        "codigo": hallazgo.codigo,
+                        "id_logro": id_logro,
+                        "campo": "logro_general",
                         "tipo": "general",
                         "logro": logro_general,
                         "evidencia": {"logro_general": logro_general},
@@ -437,22 +428,12 @@ def construir_catalogos_curriculares(
                         if silabo == id_silabo and codigo_declarado.startswith(codigo)
                     )
             if not ids_competencia:
-                hallazgo = Hallazgo(
-                    codigo="LOGRO_SIN_COMPETENCIA",
-                    severidad="warning",
-                    mensaje=(
-                        "El logro fuente no tiene una competencia resoluble; "
-                        "queda en cuarentena."
-                    ),
-                    campo="logros_especificos",
-                    detalle=f"{id_silabo}: {texto_logro}",
-                )
-                hallazgos.append(hallazgo)
-                cuarentena.append(
+                outcomes_sin_competencia.append(
                     {
                         "id_curso": id_curso,
                         "id_silabo": id_silabo,
-                        "codigo": hallazgo.codigo,
+                        "id_logro": id_logro,
+                        "campo": "logros_especificos",
                         "tipo": "especifico",
                         "logro": texto_logro,
                         "evidencia": dict(especifico),
@@ -554,6 +535,30 @@ def construir_catalogos_curriculares(
                 "id_competencia": id_competencia,
                 "codigo_competencia": codigo,
                 "tipo_competencia": "tecnica",
+            }
+        )
+
+    ids_logros_cubiertos = {str(fila.get("id_logro") or "") for fila in coberturas.values()}
+    for outcome in outcomes_sin_competencia:
+        id_logro = str(outcome.get("id_logro") or "")
+        if id_logro in ids_logros_cubiertos:
+            continue
+        hallazgo = Hallazgo(
+            codigo="LOGRO_SIN_COMPETENCIA",
+            severidad="warning",
+            mensaje=("El logro fuente no tiene una competencia resoluble; queda en cuarentena."),
+            campo=_texto(outcome.get("campo")),
+            detalle=(f"{_texto(outcome.get('id_silabo'))}: {_texto(outcome.get('logro'))}"),
+        )
+        hallazgos.append(hallazgo)
+        cuarentena.append(
+            {
+                "id_curso": outcome.get("id_curso"),
+                "id_silabo": outcome.get("id_silabo"),
+                "codigo": hallazgo.codigo,
+                "tipo": outcome.get("tipo"),
+                "logro": outcome.get("logro"),
+                "evidencia": outcome.get("evidencia"),
             }
         )
 

@@ -1,5 +1,6 @@
 import hashlib
 import json
+from typing import Any, cast
 
 import pytest
 
@@ -11,16 +12,20 @@ from agente.normalizador.silabos import (
 )
 from agente.normalizador.silabos.paquetes import (
     IdentidadFuenteIncompleta,
-    ensamblar_paquetes_chh,
     id_paquete_chh,
     identidad_fuente_chh,
     revision_paquetes_chh,
     validar_integridad_paquetes_chh,
 )
+from agente.normalizador.silabos.paquetes import ensamblar_paquetes_chh as _ensamblar_paquetes_chh
 
 
-def _row(**overrides):
-    row = {
+def ensamblar_paquetes_chh(*args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+    return cast(list[dict[str, Any]], _ensamblar_paquetes_chh(*args, **kwargs))
+
+
+def _row(**overrides: object) -> dict[str, object]:
+    row: dict[str, object] = {
         "id_pendiente": "PEN_1",
         "tipo": "competencia",
         "id_curso": "CUR_1",
@@ -33,7 +38,7 @@ def _row(**overrides):
     return row
 
 
-def test_component_projection_reexports_preserve_canonical_bytes_and_review_hash():
+def test_component_projection_reexports_preserve_canonical_bytes_and_review_hash() -> None:
     packages = ensamblar_paquetes_chh(
         [_row()], id_ejecucion="NOR_1", carrera="MARKETING", periodo="2026-1"
     )
@@ -84,14 +89,14 @@ def test_component_projection_reexports_preserve_canonical_bytes_and_review_hash
     assert paquetes_modulo._identity_key is paquetes_relaciones._identity_key
     assert paquetes_modulo._source_relation_matches is paquetes_relaciones._source_relation_matches
     assert (
-        paquetes_modulo.relaciones_para_paquete_chh
+        cast(Any, paquetes_modulo.relaciones_para_paquete_chh)
         is not paquetes_relaciones.relaciones_para_paquete_chh
     )
-    assert paquetes_relaciones._paquetes_componentes is paquetes_componentes
+    assert getattr(paquetes_relaciones, "_paquetes_componentes") is paquetes_componentes
     assert "paquetes" not in paquetes_relaciones.__dict__
 
 
-def test_relation_wrappers_inject_facade_package_hash(monkeypatch: pytest.MonkeyPatch):
+def test_relation_wrappers_inject_facade_package_hash(monkeypatch: pytest.MonkeyPatch) -> None:
     identity = identidad_fuente_chh(
         _row(), id_ejecucion="NOR_1", carrera="MARKETING", periodo="2026-1"
     )
@@ -104,7 +109,7 @@ def test_relation_wrappers_inject_facade_package_hash(monkeypatch: pytest.Monkey
     assert selected[0]["id_paquete_chh"] == "PKG_MONKEYPATCHED"
 
 
-def test_package_identity_includes_execution_and_course_context():
+def test_package_identity_includes_execution_and_course_context() -> None:
     first = identidad_fuente_chh(
         _row(), id_ejecucion="NOR_1", carrera="MARKETING", periodo="2026-1"
     )
@@ -116,7 +121,7 @@ def test_package_identity_includes_execution_and_course_context():
     assert id_paquete_chh(first) != id_paquete_chh(second)
 
 
-def test_packages_keep_same_label_from_different_source_packages_separate():
+def test_packages_keep_same_label_from_different_source_packages_separate() -> None:
     packages = ensamblar_paquetes_chh(
         [
             _row(id_pendiente="PEN_1", id_curso="CUR_1"),
@@ -131,7 +136,7 @@ def test_packages_keep_same_label_from_different_source_packages_separate():
     assert all(package["requiere_decision"] for package in packages)
 
 
-def test_relations_for_same_course_and_syllabus_do_not_cross_source_packages():
+def test_relations_for_same_course_and_syllabus_do_not_cross_source_packages() -> None:
     rows = [
         _row(id_pendiente="PEN_1", id_habilidad_fuente="SRC_1"),
         _row(id_pendiente="PEN_2", id_habilidad_fuente="SRC_2"),
@@ -212,7 +217,7 @@ def test_relations_for_same_course_and_syllabus_do_not_cross_source_packages():
     } == {("SRC_1", "COMP_1"), ("SRC_2", "COMP_2")}
 
 
-def test_competency_only_package_is_valid_and_six_field_relation_maps_correctly():
+def test_competency_only_package_is_valid_and_six_field_relation_maps_correctly() -> None:
     competency_only = ensamblar_paquetes_chh(
         [_row()], id_ejecucion="NOR_1", carrera="MARKETING", periodo="2026-1"
     )[0]
@@ -242,7 +247,7 @@ def test_competency_only_package_is_valid_and_six_field_relation_maps_correctly(
     assert validar_integridad_paquetes_chh([package]) == ()
 
 
-def test_package_identity_fails_closed_without_source_skill():
+def test_package_identity_fails_closed_without_source_skill() -> None:
     with pytest.raises(IdentidadFuenteIncompleta, match="id_habilidad_fuente"):
         ensamblar_paquetes_chh(
             [_row(id_habilidad_fuente="")],
@@ -252,7 +257,7 @@ def test_package_identity_fails_closed_without_source_skill():
         )
 
 
-def test_competency_only_package_does_not_inherit_another_packages_skill_requirement():
+def test_competency_only_package_does_not_inherit_another_packages_skill_requirement() -> None:
     competency_only = _row(id_pendiente="PEN_COMP_ONLY", id_habilidad_fuente="SRC_ONLY")
     skill_package_competency = _row(
         id_pendiente="PEN_COMP_WITH_SKILL",
@@ -293,7 +298,7 @@ def test_competency_only_package_does_not_inherit_another_packages_skill_require
     assert validar_integridad_paquetes_chh(packages) == ()
 
 
-def test_pending_skill_package_inherits_competency_from_source_coverage():
+def test_pending_skill_package_inherits_competency_from_source_coverage() -> None:
     row = _row(
         tipo="habilidad",
         propuesta=None,
@@ -356,7 +361,7 @@ def test_pending_skill_package_inherits_competency_from_source_coverage():
     assert validar_integridad_paquetes_chh([package]) == ()
 
 
-def test_skill_source_description_stays_metadata_and_never_becomes_component_name():
+def test_skill_source_description_stays_metadata_and_never_becomes_component_name() -> None:
     source_description = "Diseña un plan de comunicación para clientes B2B."
     package = ensamblar_paquetes_chh(
         [
@@ -392,7 +397,7 @@ def test_skill_source_description_stays_metadata_and_never_becomes_component_nam
     assert package["filas"][0]["descripcion_fuente"] == source_description
 
 
-def test_skill_source_name_stays_metadata_when_no_proposal_or_catalog_name_exists():
+def test_skill_source_name_stays_metadata_when_no_proposal_or_catalog_name_exists() -> None:
     source_name = "Nombre de habilidad declarado por la fuente"
     package = ensamblar_paquetes_chh(
         [
@@ -414,7 +419,7 @@ def test_skill_source_name_stays_metadata_when_no_proposal_or_catalog_name_exist
     assert skill["row"]["nombre_habilidad"] == source_name
 
 
-def test_skill_proposal_name_remains_displayable_without_source_description():
+def test_skill_proposal_name_remains_displayable_without_source_description() -> None:
     source_description = "Diseña un plan de comunicación para clientes B2B."
     package = ensamblar_paquetes_chh(
         [
@@ -448,7 +453,7 @@ def test_skill_proposal_name_remains_displayable_without_source_description():
     assert source_description not in names
 
 
-def test_package_component_prefers_catalog_name_and_keeps_llm_proposal_metadata():
+def test_package_component_prefers_catalog_name_and_keeps_llm_proposal_metadata() -> None:
     identity = {
         "id_ejecucion": "NOR_1",
         "carrera": "MARKETING",
@@ -496,7 +501,7 @@ def test_package_component_prefers_catalog_name_and_keeps_llm_proposal_metadata(
     assert habilidades[0]["propuesta"]["nombre"] == "Nombre propuesto por el LLM"
 
 
-def test_skill_proposal_id_without_name_is_not_a_display_name():
+def test_skill_proposal_id_without_name_is_not_a_display_name() -> None:
     package = ensamblar_paquetes_chh(
         [
             _row(
@@ -514,7 +519,7 @@ def test_skill_proposal_id_without_name_is_not_a_display_name():
     assert skill["id_canonico"] == "HAB_SRC_proposal_only"
 
 
-def test_skill_catalog_name_replaces_blank_source_projection():
+def test_skill_catalog_name_replaces_blank_source_projection() -> None:
     source_description = "Diseña un plan de comunicación para clientes B2B."
     identity = {
         "id_ejecucion": "NOR_1",
@@ -565,7 +570,7 @@ def test_skill_catalog_name_replaces_blank_source_projection():
     assert source_projection["source"]["descripcion_fuente"] == source_description
 
 
-def test_skill_catalog_name_survives_without_canonical_coverage():
+def test_skill_catalog_name_survives_without_canonical_coverage() -> None:
     source_description = "Diseña un plan de comunicación para clientes B2B."
     identity = {
         "id_ejecucion": "NOR_1",
@@ -617,7 +622,7 @@ def test_skill_catalog_name_survives_without_canonical_coverage():
     assert package["source_relationships"] == []
 
 
-def test_empty_competency_references_keep_distinct_source_provenance():
+def test_empty_competency_references_keep_distinct_source_provenance() -> None:
     source_relations = [
         {
             "id_ejecucion": "NOR_1",

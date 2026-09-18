@@ -195,12 +195,54 @@ def _relaciones_canonicas(
     return triples
 
 
+def _proposal_description(
+    row: Mapping[str, object],
+    proposal: Mapping[str, object],
+) -> str:
+    return _text(
+        proposal.get("descripcion")
+        or proposal.get("descripcion_breve_competencia")
+        or proposal.get("descripcion_breve_habilidad")
+        or proposal.get("descripcion_breve_herramienta")
+        or row.get("descripcion_fuente")
+        or row.get("descripcion_breve_competencia")
+        or row.get("descripcion")
+    )
+
+
+def _proposal_display_name(
+    row: Mapping[str, object],
+    proposal: Mapping[str, object],
+    *,
+    description: str,
+) -> str:
+    name = _usable_display_name(proposal.get("nombre"), description=description)
+    if name:
+        return name
+    # Technical proposals use the canonical technical-field names rather than
+    # the legacy generic `nombre`/`descripcion` pair.
+    aliases = (
+        proposal.get("nombre_competencia"),
+        proposal.get("nombre_habilidad"),
+        proposal.get("nombre_herramienta"),
+        row.get("nombre_propuesto"),
+    )
+    return next(
+        (
+            name
+            for alias in aliases
+            if (name := _usable_display_name(alias))
+        ),
+        "",
+    )
+
+
 def _propuesta_pendiente(row: Mapping[str, object]) -> dict[str, object]:
     propuesta = _mapping(row.get("propuesta"))
-    descripcion = _text(propuesta.get("descripcion") or row.get("descripcion_fuente"))
+    descripcion = _proposal_description(row, propuesta)
     return {
         "tipo": _text(row.get("tipo")),
-        "nombre": _usable_display_name(propuesta.get("nombre"), description=descripcion),
+        "nombre": _proposal_display_name(row, propuesta, description=descripcion),
         "descripcion": descripcion,
         "id_pendiente": _text(row.get("id_pendiente")),
         "evidencia": _list_value(row.get("evidencia")),
@@ -372,8 +414,8 @@ def _component_from_row(
     is_unresolved_row: Callable[[Mapping[str, object]], bool] | None = None,
 ) -> dict[str, object]:
     proposal = _mapping(row.get("propuesta"))
-    description = _text(row.get("descripcion_fuente"))
-    proposed_name = _usable_display_name(proposal.get("nombre"), description=description)
+    description = _proposal_description(row, proposal)
+    proposed_name = _proposal_display_name(row, proposal, description=description)
     source_name = _usable_display_name(
         row.get(f"nombre_{kind}_fuente") or row.get(f"nombre_{kind}"),
         description=description,
@@ -400,7 +442,7 @@ def _component_from_row(
         "nombre_propuesto": proposed_name,
         "display_name": name,
         "estado_nombre": "" if name else "PENDIENTE_CATALOGACION",
-        "descripcion": _text(proposal.get("descripcion") or row.get("descripcion_fuente")),
+        "descripcion": description,
         "propuesta": dict(proposal),
         "estado_resolucion": _text(row.get("estado_resolucion")),
         "decision": _text(row.get("decision")),
