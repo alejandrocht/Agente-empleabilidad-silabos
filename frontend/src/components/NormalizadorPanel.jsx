@@ -585,8 +585,79 @@ const ETIQUETAS_REPORTE_LLM = {
   cancelado: "cancelado",
 };
 
+const ETIQUETAS_ESTADO_SILABO_LLM = {
+  pendiente: "pendiente",
+  procesando: "en curso",
+  completado: "completado",
+  sin_propuesta: "sin propuesta válida",
+  error: "error",
+  omitido: "omitido",
+};
+
 function numeroProgreso(valor) {
   return Number.isFinite(Number(valor)) ? Number(valor) : 0;
+}
+
+const ESTADOS_ANALISIS_SILABO_TERMINADOS = new Set([
+  "completado",
+  "sin_propuesta",
+]);
+
+function porcentajeAcotado(valor) {
+  return Math.max(0, Math.min(100, Math.round(Number(valor) || 0)));
+}
+
+function numeroOpcional(valor) {
+  if (valor === null || valor === undefined || valor === "") return null;
+  const numero = Number(valor);
+  return Number.isFinite(numero) ? numero : null;
+}
+
+export function formatearLatenciaLLM(valor) {
+  if (valor === null || valor === undefined || valor === "") return "—";
+  const milisegundos = Number(valor);
+  if (!Number.isFinite(milisegundos) || milisegundos < 0) return "—";
+  if (milisegundos < 1000) return `${Math.round(milisegundos)} ms`;
+  return `${(milisegundos / 1000).toFixed(1)} s`;
+}
+
+export function normalizarProgresoSilabos(progreso) {
+  if (!Array.isArray(progreso?.silabos)) return [];
+  return progreso.silabos
+    .filter((silabo) => silabo && typeof silabo === "object")
+    .map((silabo, indice) => {
+      const logrosTotales = Math.max(0, numeroProgreso(silabo.logros_totales));
+      const logrosProcesados = Math.min(
+        logrosTotales || Number.MAX_SAFE_INTEGER,
+        Math.max(0, numeroProgreso(silabo.logros_procesados)),
+      );
+      const estadoAnalisis = String(silabo.estado_analisis || "pendiente");
+      const porcentajeDeclarado = numeroOpcional(silabo.porcentaje_analisis);
+      const porcentaje =
+        porcentajeDeclarado === null
+          ? logrosTotales
+            ? porcentajeAcotado((logrosProcesados / logrosTotales) * 100)
+            : ESTADOS_ANALISIS_SILABO_TERMINADOS.has(estadoAnalisis)
+              ? 100
+              : 0
+          : porcentajeAcotado(porcentajeDeclarado);
+      const indiceFila = numeroProgreso(silabo.indice) || indice + 1;
+      return {
+        ...silabo,
+        indice: indiceFila,
+        total: numeroProgreso(silabo.total) || progreso.silabos.length,
+        idSilabo: String(silabo.id_silabo || ""),
+        archivo: String(silabo.archivo || ""),
+        curso: String(silabo.curso || ""),
+        estadoExtraccion: String(silabo.estado_extraccion || "pendiente"),
+        estadoAnalisis,
+        logrosProcesados,
+        logrosTotales,
+        latenciaExtraccionMs: numeroOpcional(silabo.latencia_extraccion_ms),
+        latenciaModeloMs: numeroOpcional(silabo.latencia_modelo_ms),
+        porcentaje,
+      };
+    });
 }
 
 function progresoLLM(ejecucion) {
@@ -611,6 +682,7 @@ function progresoLLM(ejecucion) {
             mensaje:
               "Preparando la extracción de sílabos. El seguimiento aparecerá aquí enseguida.",
             eventos: [],
+            silabos: [],
             reporte_final: "pendiente",
           }
         : null;
@@ -622,6 +694,10 @@ function progresoLLM(ejecucion) {
         .filter((evento) => evento && typeof evento === "object")
         .slice(-100)
     : [];
+  const silabos = normalizarProgresoSilabos(progreso);
+  const silabosAnalizados = silabos.filter(
+    (silabo) => silabo.porcentaje >= 100,
+  ).length;
   return {
     ...progreso,
     chunksCompletados,
@@ -637,6 +713,11 @@ function progresoLLM(ejecucion) {
     silabosTotales: numeroProgreso(progreso.silabos_totales),
     decisionesCacheadas: numeroProgreso(progreso.decisiones_cacheadas),
     reintentos: numeroProgreso(progreso.reintentos),
+    silabos,
+    silabosAnalizados,
+    porcentajeSilabos: silabos.length
+      ? porcentajeAcotado((silabosAnalizados / silabos.length) * 100)
+      : 0,
     eventos,
     mensaje: String(
       progreso.mensaje || "Preparando el siguiente hito de limpieza.",
@@ -1870,6 +1951,128 @@ export default function NormalizadorPanel() {
                       </dd>
                     </div>
                   </dl>
+
+                  {progresoLimpiezaLLM.silabos.length ? (
+                    <section
+                      className="mt-4 border-t border-ulima/15 pt-4"
+                      aria-label="Progreso por sílabo"
+                      aria-live="polite"
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <div>
+                          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-ulima">
+                            Seguimiento individual
+                          </p>
+                          <h4 className="mt-1 text-sm font-extrabold text-ink">
+                            Análisis por sílabo
+                          </h4>
+                        </div>
+                        <span className="rounded-full border border-ulima/20 bg-paper px-2.5 py-1 font-mono text-[10px] font-bold text-ulima">
+                          {progresoLimpiezaLLM.silabosAnalizados}/
+                          {progresoLimpiezaLLM.silabos.length} ·{" "}
+                          {progresoLimpiezaLLM.porcentajeSilabos}%
+                        </span>
+                      </div>
+                      <ul
+                        className="mt-3 space-y-2"
+                        aria-label="Sílabos procesados por el LLM"
+                      >
+                        {progresoLimpiezaLLM.silabos.map((silabo) => {
+                          const nombreSilabo =
+                            silabo.curso ||
+                            silabo.archivo ||
+                            silabo.idSilabo ||
+                            `Sílabo ${silabo.indice}`;
+                          const identificador =
+                            silabo.archivo || silabo.idSilabo;
+                          return (
+                            <li
+                              key={`${silabo.idSilabo || silabo.archivo || "silabo"}-${silabo.indice}`}
+                              className="rounded-lg border border-ulima/10 bg-paper px-3 py-3"
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-extrabold text-ink">
+                                    {nombreSilabo}
+                                  </p>
+                                  <p className="mt-0.5 truncate font-mono text-[10px] text-muted">
+                                    {identificador || `Sílabo ${silabo.indice}`}
+                                  </p>
+                                </div>
+                                <span className="font-mono text-sm font-extrabold text-ulima">
+                                  {silabo.porcentaje}%
+                                </span>
+                              </div>
+                              <div
+                                className="mt-2 h-1.5 overflow-hidden rounded-full bg-ulima/10"
+                                role="progressbar"
+                                aria-label={`Avance de análisis de ${nombreSilabo}`}
+                                aria-valuemin="0"
+                                aria-valuemax="100"
+                                aria-valuenow={silabo.porcentaje}
+                                aria-valuetext={`${silabo.porcentaje}% de análisis completado`}
+                              >
+                                <div
+                                  className="h-full rounded-full bg-ulima transition-[width] duration-500 motion-reduce:transition-none"
+                                  style={{ width: `${silabo.porcentaje}%` }}
+                                />
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-semibold text-muted">
+                                <span className="rounded-full border border-line px-2 py-0.5">
+                                  Extracción:{" "}
+                                  {ETIQUETAS_ESTADO_SILABO_LLM[
+                                    silabo.estadoExtraccion
+                                  ] || silabo.estadoExtraccion}
+                                </span>
+                                <span className="rounded-full border border-line px-2 py-0.5">
+                                  Modelo:{" "}
+                                  {ETIQUETAS_ESTADO_SILABO_LLM[
+                                    silabo.estadoAnalisis
+                                  ] || silabo.estadoAnalisis}
+                                </span>
+                              </div>
+                              <dl className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+                                <div>
+                                  <dt className="font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-muted">
+                                    Logros analizados
+                                  </dt>
+                                  <dd className="mt-0.5 font-extrabold text-ink">
+                                    {silabo.logrosProcesados}/
+                                    {silabo.logrosTotales || "—"}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-muted">
+                                    Latencia extracción
+                                  </dt>
+                                  <dd className="mt-0.5 font-extrabold text-ink">
+                                    {formatearLatenciaLLM(
+                                      silabo.latenciaExtraccionMs,
+                                    )}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-muted">
+                                    Latencia modelo
+                                  </dt>
+                                  <dd className="mt-0.5 font-extrabold text-ink">
+                                    {formatearLatenciaLLM(
+                                      silabo.latenciaModeloMs,
+                                    )}
+                                  </dd>
+                                </div>
+                              </dl>
+                              {silabo.error_codigo ? (
+                                <p className="mt-2 text-xs font-semibold text-red-700">
+                                  {silabo.error_codigo}
+                                </p>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </section>
+                  ) : null}
 
                   {progresoLimpiezaLLM.ultimo_chunk ? (
                     <p className="mt-3 border-t border-ulima/15 pt-3 text-xs leading-5 text-muted">
