@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import re
@@ -22,9 +23,11 @@ from agente.normalizador.modelos import (
     ResultadoValidacionSilabos,
 )
 from agente.normalizador.silabos.contrato_salidas import (
+    ARCHIVOS_CURRICULARES_TECNICOS,
     es_modo_tecnico,
     filtrar_estado_publico,
     filtrar_outputs_curriculares,
+    gate_permite_salidas_tecnicas,
     hitl_curricular_completado,
     reporte_curricular_visible,
 )
@@ -128,6 +131,51 @@ def _actualizar_metadatos_outputs(
             }
         )
     return resultado
+
+
+def _reconciliar_outputs_tecnicos(
+    directorio: Path,
+    estado: dict[str, object],
+) -> dict[str, object]:
+    """Expose materialized contract CSVs when HITL updated files after the active snapshot."""
+
+    gate = estado.get("release_gate")
+    if estado.get("tipo") != "silabos" or not gate_permite_salidas_tecnicas(gate):
+        return estado
+    outputs_value = estado.get("outputs")
+    outputs = (
+        [dict(item) for item in outputs_value if isinstance(item, dict)]
+        if isinstance(outputs_value, list)
+        else []
+    )
+    declarados = {str(output.get("archivo") or "") for output in outputs}
+    for archivo in sorted(ARCHIVOS_CURRICULARES_TECNICOS - declarados):
+        ruta = directorio / archivo
+        if not ruta.is_file():
+            continue
+        try:
+            with ruta.open(encoding="utf-8-sig", newline="") as contenido:
+                registros = sum(1 for _ in csv.DictReader(contenido))
+        except (OSError, UnicodeDecodeError, csv.Error):
+            continue
+        outputs.append(
+            {
+                "tipo": "csv_curricular",
+                "archivo": archivo,
+                "registros": registros,
+            }
+        )
+    reconciliados = filtrar_outputs_curriculares(
+        _actualizar_metadatos_outputs(directorio, outputs),
+        modo_tecnico=True,
+        release_gate=gate,
+    )
+    actualizado = dict(estado)
+    actualizado["outputs"] = reconciliados
+    limpieza = actualizado.get("limpieza_silabos")
+    if isinstance(limpieza, dict):
+        actualizado["limpieza_silabos"] = {**limpieza, "outputs": reconciliados}
+    return actualizado
 
 
 def _es_warning_macos_obsoleto(valor: object) -> bool:
@@ -313,10 +361,13 @@ class RepositorioEjecucionesPersistidas:
 
     def obtener(self, id_ejecucion: str) -> dict[str, object]:
         try:
-            return self._obtener_activa(id_ejecucion).a_dict()
+            activa = self._obtener_activa(id_ejecucion)
+            directorio = activa.directorio
+            estado = activa.a_dict()
         except KeyError:
             try:
-                manifest = self.directorio_seguro(id_ejecucion) / "manifest.json"
+                directorio = self.directorio_seguro(id_ejecucion)
+                manifest = directorio / "manifest.json"
             except KeyError:
                 raise KeyError(id_ejecucion) from None
             if not manifest.exists():
@@ -324,7 +375,8 @@ class RepositorioEjecucionesPersistidas:
             datos = json.loads(manifest.read_text(encoding="utf-8"))
             if not isinstance(datos, dict):
                 raise ValueError("El manifest de la ejecución no tiene un objeto raíz.")
-            return filtrar_estado_publico(cast(dict[str, object], datos))
+            estado = filtrar_estado_publico(cast(dict[str, object], datos))
+        return _reconciliar_outputs_tecnicos(directorio, estado)
 
     def obtener_reporte(self, id_ejecucion: str) -> dict[str, object]:
         estado = self.obtener(id_ejecucion)
