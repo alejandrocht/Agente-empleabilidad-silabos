@@ -147,7 +147,7 @@ NORMALIZADOR_CURRICULAR_LLM=true
 # Cambiar solo esta variable para alternar entre los dos proveedores configurados.
 NORMALIZADOR_CURRICULAR_LLM_PROVIDER=ollama
 NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL=http://localhost:11434/v1
-NORMALIZADOR_CURRICULAR_OLLAMA_MODEL=qwen3:27b
+NORMALIZADOR_CURRICULAR_OLLAMA_MODEL=qwen3.8:27b
 NORMALIZADOR_CURRICULAR_OPENAI_MODEL=gpt-5.6-luna
 NORMALIZADOR_CURRICULAR_ANALYST_REASONING_EFFORT=medium
 NORMALIZADOR_CURRICULAR_LLM_TIMEOUT_SECONDS=120
@@ -159,7 +159,7 @@ NORMALIZADOR_CURRICULAR_LLM_TEMPERATURE=0
 El analista resuelve su modelo desde el proveedor activo. Ollama usa
 `NORMALIZADOR_CURRICULAR_OLLAMA_MODEL`; OpenAI usa
 `NORMALIZADOR_CURRICULAR_OPENAI_MODEL` y además requiere `OPENAI_API_KEY`. Los valores por defecto
-son `qwen3:27b` y `gpt-5.6-luna`, respectivamente. No existe una segunda pasada
+son `qwen3.8:27b` y `gpt-5.6-luna`, respectivamente. No existe una segunda pasada
 LLM residual: los errores de validación quedan para revisión. Se conserva el único
 reintento del mismo analista para IDs omitidos y la nominalización determinista.
 Las antiguas variables de escalamiento residual ya no se requieren ni se utilizan.

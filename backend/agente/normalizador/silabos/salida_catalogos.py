@@ -13,6 +13,7 @@ import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from agente.normalizador.modelos import Hallazgo
 from agente.normalizador.silabos.extraccion_curricular import _hash_id
@@ -170,6 +171,16 @@ def construir_salidas_tecnicas(
             for propuesta in propuestas_aprobadas
         ],
     )
+    hallazgos = tuple(
+        hallazgo
+        for hallazgo in cast(Sequence[object], resumen.get("hallazgos", ()))
+        if isinstance(hallazgo, Hallazgo)
+    )
+    cuarentena = tuple(
+        dict(fila)
+        for fila in cast(Sequence[object], resumen.get("cuarentena", ()))
+        if isinstance(fila, Mapping)
+    )
     archivos_resumen = resumen.get("archivos")
     if not isinstance(archivos_resumen, Mapping):
         raise ValueError("La salida técnica no devolvió conteos de archivos")
@@ -184,16 +195,27 @@ def construir_salidas_tecnicas(
     archivos = {nombre: salida / nombre for nombre, _ in ARCHIVOS_CATALOGO}
     archivos_ok = all(ruta.is_file() for ruta in archivos.values())
     estado_analisis = "COMPLETADO"
+    advertencias_analisis: Sequence[object] = ()
     if analisis_tecnico is not None:
         estado_analisis = _texto(analisis_tecnico.get("estado")) or "DESCONOCIDO"
+        advertencias = analisis_tecnico.get("advertencias")
+        if isinstance(advertencias, Sequence) and not isinstance(advertencias, (str, bytes)):
+            advertencias_analisis = advertencias
+    analisis_completo = estado_analisis == "COMPLETADO" and not advertencias_analisis
     pendientes = len(propuestas_tecnicas)
     blockers: list[str] = []
     if not archivos_ok:
         blockers.append("DETERMINISTIC_OUTPUT_INCOMPLETE")
-    if estado_analisis != "COMPLETADO":
-        blockers.append("TECHNICAL_ANALYSIS_FAILED")
+    if not analisis_completo:
+        blockers.append(
+            "TECHNICAL_ANALYSIS_INCOMPLETE"
+            if estado_analisis == "COMPLETADO_CON_ADVERTENCIAS" or advertencias_analisis
+            else "TECHNICAL_ANALYSIS_FAILED"
+        )
     if pendientes:
         blockers.append("PENDING_TECHNICAL_APPROVAL")
+    if cuarentena:
+        blockers.append("UNLINKED_SOURCE_OUTCOME")
     gate: dict[str, object] = {
         "version": "curricular-release-gate/v1",
         "decision": "ALLOW_IMPORT" if not blockers else "BLOCK_IMPORT",
@@ -206,8 +228,9 @@ def construir_salidas_tecnicas(
                 "files": [nombre for nombre, _ in ARCHIVOS_CATALOGO],
             },
             "analysis": {
-                "ok": estado_analisis == "COMPLETADO",
+                "ok": analisis_completo,
                 "state": estado_analisis,
+                "warning_count": len(advertencias_analisis),
             },
             "approval": {
                 "ok": pendientes == 0,
@@ -216,6 +239,16 @@ def construir_salidas_tecnicas(
                     f"{pendientes} technical proposals await approval."
                     if pendientes
                     else "No technical proposals await approval."
+                ),
+            },
+            "source_outcomes": {
+                "ok": not cuarentena,
+                "quarantined_count": len(cuarentena),
+                "message": (
+                    f"{len(cuarentena)} source learning outcomes lack a resolvable "
+                    "competency relation."
+                    if cuarentena
+                    else "All source learning outcomes have a competency relation."
                 ),
             },
         },
@@ -247,6 +280,8 @@ def construir_salidas_tecnicas(
         pendientes=pendientes,
         outputs=outputs,
         release_gate=gate,
+        hallazgos=hallazgos,
+        cuarentena=cuarentena,
     )
 
 
@@ -278,6 +313,8 @@ def construir_catalogos_curriculares(
     competencias: dict[str, dict[str, str]] = {}
     logros: dict[str, dict[str, str]] = {}
     coberturas: dict[str, dict[str, str]] = {}
+    hallazgos: list[Hallazgo] = []
+    cuarentena: list[dict[str, object]] = []
     competencias_por_silabo_codigo: dict[tuple[str, str], str] = {}
     logros_por_silabo: dict[str, dict[str, str]] = {}
     id_carrera = _hash_id("CAR", carrera)
@@ -354,8 +391,26 @@ def construir_catalogos_curriculares(
             _agregar_unico(logros, {"id_logro": id_logro, "logro": logro_general}, "id_logro")
             logros_silabo[logro_general.casefold()] = id_logro
             if not ids_competencias_silabo:
-                raise ValueError(
-                    f"El logro general de {id_silabo} no tiene competencias declaradas"
+                hallazgo = Hallazgo(
+                    codigo="LOGRO_SIN_COMPETENCIA",
+                    severidad="warning",
+                    mensaje=(
+                        "El logro fuente no tiene una competencia resoluble; "
+                        "queda en cuarentena."
+                    ),
+                    campo="logro_general",
+                    detalle=f"{id_silabo}: {logro_general}",
+                )
+                hallazgos.append(hallazgo)
+                cuarentena.append(
+                    {
+                        "id_curso": id_curso,
+                        "id_silabo": id_silabo,
+                        "codigo": hallazgo.codigo,
+                        "tipo": "general",
+                        "logro": logro_general,
+                        "evidencia": {"logro_general": logro_general},
+                    }
                 )
             for id_competencia in ids_competencias_silabo:
                 fila = _cobertura(id_curso, id_silabo, id_competencia, id_logro)
@@ -382,8 +437,26 @@ def construir_catalogos_curriculares(
                         if silabo == id_silabo and codigo_declarado.startswith(codigo)
                     )
             if not ids_competencia:
-                raise ValueError(
-                    f"El logro específico de {id_silabo} no referencia una competencia"
+                hallazgo = Hallazgo(
+                    codigo="LOGRO_SIN_COMPETENCIA",
+                    severidad="warning",
+                    mensaje=(
+                        "El logro fuente no tiene una competencia resoluble; "
+                        "queda en cuarentena."
+                    ),
+                    campo="logros_especificos",
+                    detalle=f"{id_silabo}: {texto_logro}",
+                )
+                hallazgos.append(hallazgo)
+                cuarentena.append(
+                    {
+                        "id_curso": id_curso,
+                        "id_silabo": id_silabo,
+                        "codigo": hallazgo.codigo,
+                        "tipo": "especifico",
+                        "logro": texto_logro,
+                        "evidencia": dict(especifico),
+                    }
                 )
             for id_competencia in sorted(ids_competencia):
                 fila = _cobertura(id_curso, id_silabo, id_competencia, id_logro)
@@ -508,4 +581,6 @@ def construir_catalogos_curriculares(
         "inferencias_tecnicas": len(inferencias),
         "carrera": carrera,
         "periodo_academico": periodo_academico,
+        "hallazgos": tuple(hallazgos),
+        "cuarentena": tuple(cuarentena),
     }

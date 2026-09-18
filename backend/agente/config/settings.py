@@ -15,7 +15,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 _MODELO_ANALISTA_POR_PROVEEDOR = {
-    "ollama": ("NORMALIZADOR_CURRICULAR_OLLAMA_MODEL", "qwen3:27b"),
+    "ollama": ("NORMALIZADOR_CURRICULAR_OLLAMA_MODEL", "qwen3.8:27b"),
     "openai": ("NORMALIZADOR_CURRICULAR_OPENAI_MODEL", "gpt-5.6-luna"),
 }
 _URL_OLLAMA_DEFAULT = "http://localhost:11434/v1"

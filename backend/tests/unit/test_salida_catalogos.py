@@ -11,6 +11,7 @@ import pytest
 _salida_catalogos = importlib.import_module("agente.normalizador.silabos.salida_catalogos")
 ARCHIVOS_CATALOGO: tuple[tuple[str, tuple[str, ...]], ...] = _salida_catalogos.ARCHIVOS_CATALOGO
 construir_catalogos_curriculares: Any = _salida_catalogos.construir_catalogos_curriculares
+construir_salidas_tecnicas: Any = _salida_catalogos.construir_salidas_tecnicas
 
 
 def _registro() -> dict[str, object]:
@@ -233,3 +234,38 @@ def test_materializacion_rechaza_relacion_tecnica_sin_logro_valido(tmp_path: Pat
                 }
             ],
         )
+
+
+def test_unlinked_source_outcome_keeps_csv_and_quarantines_only_its_relation(
+    tmp_path: Path,
+) -> None:
+    registro = _registro()
+    datos = registro["datos"]
+    assert isinstance(datos, dict)
+    logros_especificos = datos["logros_especificos"]
+    assert isinstance(logros_especificos, list)
+    logros_especificos[0] = {
+        "descripcion": "Compara estilos arquitectónicos.",
+        "codigos_competencia": ["NO_EXISTE"],
+    }
+
+    resultado = construir_salidas_tecnicas(
+        [registro],
+        tmp_path,
+        carrera="SISTEMAS",
+        periodo_academico="2026-2",
+        analisis_tecnico={"estado": "COMPLETADO"},
+    )
+
+    assert {ruta.name for ruta in tmp_path.glob("*.csv")} == {
+        nombre for nombre, _ in ARCHIVOS_CATALOGO
+    }
+    logros = _leer_csv(tmp_path / "catalogo_logros.csv")
+    outcome = next(fila for fila in logros if fila["logro"] == "Compara estilos arquitectónicos.")
+    cobertura = _leer_csv(tmp_path / "cobertura_curricular.csv")
+    assert all(fila["id_logro"] != outcome["id_logro"] for fila in cobertura)
+    assert resultado.cuarentena[0]["codigo"] == "LOGRO_SIN_COMPETENCIA"
+    assert resultado.cuarentena[0]["logro"] == "Compara estilos arquitectónicos."
+    assert resultado.release_gate["decision"] == "BLOCK_IMPORT"
+    assert "UNLINKED_SOURCE_OUTCOME" in resultado.release_gate["blockers"]
+    assert any(hallazgo.codigo == "LOGRO_SIN_COMPETENCIA" for hallazgo in resultado.hallazgos)

@@ -233,8 +233,8 @@ SYSTEM_PROMPT_TECNICO = (
     "learning outcomes. Do not return graph IDs, institutional codes, or relationships. When "
     "using a candidate, copy its exact catalogo_ref; Python will preserve the original name and "
     "description from the catalog. If there is insufficient technical evidence, return "
-    "competencias=[] and do not force a match; the run will reject that syllabus rather than "
-    "inventing a competency."
+    "competencias=[] and do not force a match; that syllabus remains auditable without a "
+    "proposal while other syllabi continue."
 )
 
 
@@ -415,6 +415,8 @@ def inferir_competencias_tecnicas(
     registros: Sequence[Mapping[str, object]],
     configuracion: ConfiguracionNormalizadorCurricular,
     catalogo_tecnico: CatalogoTecnico | Path | str | None = None,
+    *,
+    auditoria: list[dict[str, object]] | None = None,
 ) -> list[dict[str, object]]:
     """Return pending technical proposals; Python owns IDs and relationships."""
 
@@ -457,11 +459,17 @@ def inferir_competencias_tecnicas(
                 continue
             vistos.add(clave)
             resultado.append(fila)
-        if propuestas_validas == 0:
+        if propuestas_validas == 0 and auditoria is not None:
             id_silabo = _texto(contexto.get("id_silabo")) or "<sin id>"
-            raise ValueError(
-                f"El sílabo {id_silabo} no produjo ninguna propuesta técnica "
-                "con evidencia literal válida."
+            auditoria.append(
+                {
+                    "codigo": "SILABO_SIN_PROPUESTA_TECNICA",
+                    "id_silabo": id_silabo,
+                    "mensaje": (
+                        "El sílabo no produjo ninguna propuesta técnica "
+                        "con evidencia literal válida."
+                    ),
+                }
             )
     return resultado
 
