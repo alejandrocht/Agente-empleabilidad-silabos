@@ -35,6 +35,41 @@ vi.mock("../api/neo4j", () => ({
   validarImportacionNeo4j: vi.fn(),
 }));
 
+const ARCHIVOS_TECNICOS = [
+  "curso.csv",
+  "silabo.csv",
+  "catalogo_competencias.csv",
+  "catalogo_logros.csv",
+  "cobertura_curricular.csv",
+];
+
+function salidasTecnicas(archivos = ARCHIVOS_TECNICOS) {
+  return archivos.map((archivo) => ({
+    archivo: `salidas/${archivo}`,
+    tipo: "csv_curricular",
+    registros: 1,
+  }));
+}
+
+function reporteTecnico({
+  id = "NOR_TECHNICAL",
+  outputs = salidasTecnicas(),
+  decision = "ALLOW_IMPORT",
+} = {}) {
+  return {
+    manifest: {
+      id_ejecucion: id,
+      tipo: "silabos",
+      estado: "limpiado",
+      configuracion_curricular: { modo_analista: "technical" },
+      parametros: { carrera: "Marketing", periodo: "2026-1" },
+      release_gate: { decision },
+      outputs,
+    },
+    reportes: {},
+  };
+}
+
 describe("inspección de ejecución normalizada", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -146,6 +181,25 @@ describe("inspección de ejecución normalizada", () => {
         },
       })),
     );
+  });
+
+  it("reconoce el contrato técnico de cinco CSV antes de habilitar Neo4j", async () => {
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce(reporteTecnico());
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_TECHNICAL" />);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(5));
+    expect(
+      screen.getByRole("heading", { name: "Inspección técnica curricular" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Inspección CHH" }),
+    ).toBeNull();
+    expect(screen.getByText("cursos")).toBeTruthy();
+    expect(screen.getByText("competencias técnicas")).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "Subir datos a Neo4j" }),
+    ).toBeTruthy();
   });
 
   it("muestra el checkpoint humano histórico y explica por qué no habilita Neo4j sin CSV canónicos", async () => {

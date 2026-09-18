@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pypdf import PdfReader
 
@@ -17,6 +17,7 @@ from agente.normalizador.silabos.extraccion_curricular import (
     _normalizar_modalidad,
     _sin_referencias_curriculares,
     _texto,
+    _tipo_competencia_codigo,
     _unir_metadata,
 )
 from agente.normalizador.silabos.programa_pdf import (
@@ -24,7 +25,7 @@ from agente.normalizador.silabos.programa_pdf import (
     _normalizar_linea_pdf,
 )
 
-_PATRON_CODIGO_CURRICULAR = r"(?<![A-Z0-9])(?:[GE]\d+|[GE]{2,4})(?![A-Z0-9])"
+_PATRON_CODIGO_CURRICULAR = r"(?<![A-Z0-9])(?:[GEC]\d+|[GEC]{2,4})(?![A-Z0-9])"
 _ETIQUETAS_METADATA_PDF = re.compile(
     r"^\s*(?:"
     r"Asignatura|Tipo\s+de\s+asignatura|C[oó]digo|Nivel|Cr[eé]ditos|Coordinador|"
@@ -162,19 +163,19 @@ def _competencias_pdf(texto: str) -> list[dict[str, str]]:
         if actual is None:
             return
         codigo = _texto(actual["codigo"])
-        nombre = _sin_referencias_curriculares(" ".join(actual["nombre"]))  # type: ignore[arg-type]
+        nombre = _sin_referencias_curriculares(" ".join(cast(list[str], actual["nombre"])))
         descripcion = _sin_referencias_curriculares(
-            " ".join(actual["descripcion"])
-        )  # type: ignore[arg-type]
-        fragmento = _sin_referencias_curriculares(
-            "\n".join(actual["fragmento"])
-        )  # type: ignore[arg-type]
+            " ".join(cast(list[str], actual["descripcion"]))
+        )
+        fragmento = _sin_referencias_curriculares("\n".join(cast(list[str], actual["fragmento"])))
         if codigo and nombre and descripcion:
             resultado.append(
                 {
                     "orden": str(len(resultado) + 1),
                     "nombre": nombre,
                     "descripcion": descripcion,
+                    "codigo": codigo,
+                    "tipo": _tipo_competencia_codigo(codigo),
                     "texto_evidencia": fragmento,
                 }
             )
@@ -227,10 +228,10 @@ def _competencias_pdf(texto: str) -> list[dict[str, str]]:
 
         assert actual is not None
         if nombre:
-            actual["nombre"].append(nombre)  # type: ignore[union-attr]
+            cast(list[str], actual["nombre"]).append(nombre)
         if descripcion:
-            actual["descripcion"].append(descripcion)  # type: ignore[union-attr]
-        actual["fragmento"].append(linea)  # type: ignore[union-attr]
+            cast(list[str], actual["descripcion"]).append(descripcion)
+        cast(list[str], actual["fragmento"]).append(linea)
         actual["tiene_carrera"] = bool(actual["tiene_carrera"] or tiene_carrera)
 
     cerrar_actual()
@@ -338,6 +339,8 @@ def _competencias_pdf_lineal(texto: str) -> list[dict[str, str]]:
                     "orden": str(len(resultado) + 1),
                     "nombre": nombre,
                     "descripcion": descripcion,
+                    "codigo": coincidencia.group(0).upper(),
+                    "tipo": _tipo_competencia_codigo(coincidencia.group(0)),
                     "texto_evidencia": _sin_referencias_curriculares(segmento),
                 }
             )
@@ -362,12 +365,14 @@ def _logros_pdf(texto: str) -> list[dict[str, object]]:
     for indice, marca in enumerate(marcas):
         fin = marcas[indice + 1].start() if indice + 1 < len(marcas) else len(cuerpo)
         segmento = cuerpo[marca.end() : fin]
+        codigos = _codigos_curriculares_pdf(segmento)
         descripcion = _sin_referencias_curriculares(segmento)
         if descripcion:
             resultado.append(
                 {
                     "orden": str(len(resultado) + 1),
                     "descripcion": descripcion,
+                    "codigos_competencia": codigos,
                     "texto_evidencia": descripcion,
                 }
             )
@@ -424,7 +429,10 @@ def _geometria_pdf_pagina(
     rectangulos: list[tuple[float, float, float, float]] = []
 
     def transformar(x: float, y: float, matriz: object) -> tuple[float, float]:
-        a, b, c, d, e, f = (float(valor) for valor in matriz)
+        try:
+            a, b, c, d, e, f = (float(str(valor)) for valor in cast(tuple[object, ...], matriz))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Matriz PDF inválida") from exc
         return (x * a + y * c + e, x * b + y * d + f)
 
     def visitante_texto(
@@ -439,14 +447,17 @@ def _geometria_pdf_pagina(
         if not text:
             return
         try:
-            texto_matriz = tuple(float(valor) for valor in matriz_texto)
+            texto_matriz = tuple(
+                float(str(valor)) for valor in cast(tuple[object, ...], matriz_texto)
+            )
             x, y = transformar(texto_matriz[4], texto_matriz[5], matriz_usuario)
-            source_advance = _pdf_text_advance(original_text or text, _fuente, float(tamano))
+            tamano_float = float(str(tamano))
+            source_advance = _pdf_text_advance(original_text or text, _fuente, tamano_float)
             end_x, _ = transformar(
                 texto_matriz[4] + source_advance, texto_matriz[5], matriz_usuario
             )
             advance = abs(end_x - x) or source_advance
-            fragmentos.append((x, y, float(tamano), advance, original_text or text))
+            fragmentos.append((x, y, tamano_float, advance, original_text or text))
         except (TypeError, ValueError):
             return
 
@@ -459,7 +470,7 @@ def _geometria_pdf_pagina(
         if operador != b"re":
             return
         try:
-            x, y, ancho, alto = (float(valor) for valor in operandos)
+            x, y, ancho, alto = (float(str(valor)) for valor in cast(tuple[object, ...], operandos))
             esquinas = (
                 transformar(x, y, matriz_usuario),
                 transformar(x + ancho, y, matriz_usuario),
@@ -679,7 +690,6 @@ def _extraer_pdf(
             "recursos_aprendizaje": recursos,
             "programa_analitico": programa,
             "programa_analitico_detalle": programa_detalle,
-            "herramientas_evidencia": _evidencias_herramientas_pdf(programa_detalle),
             "texto_relevante": texto_relevante,
             "texto_fuente": texto_fuente,
         },

@@ -7,8 +7,10 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime
+from importlib import import_module
 from pathlib import Path
 from threading import Event, Lock
+from typing import cast
 from uuid import uuid4
 
 from agente.config.settings import (
@@ -19,10 +21,7 @@ from agente.config.settings import (
     texto,
 )
 from agente.normalizador.ejecuciones_curriculares import EjecutorCurricular
-from agente.normalizador.empleabilidad.catalogo import (
-    cargar_catalogo,
-    cargar_catalogo_carrera,
-)
+from agente.normalizador.empleabilidad.catalogo import cargar_catalogo
 from agente.normalizador.empleabilidad.entrada import validar_archivo
 from agente.normalizador.empleabilidad.limpieza import limpiar_archivo
 from agente.normalizador.empleabilidad.pipeline import normalizar_staging
@@ -45,9 +44,6 @@ from agente.normalizador.silabos.fuente_cactus import (
     empaquetar_archivos_cactus,
 )
 from agente.normalizador.silabos.limpieza import limpiar_archivo as limpiar_silabos
-from agente.normalizador.silabos.salida import (
-    _ARCHIVOS_CURRICULARES_FINALES,  # noqa: F401
-)
 from agente.observabilidad.langsmith import contexto_ejecucion, ejecutar_flujo
 
 
@@ -57,17 +53,22 @@ def _ahora() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _empaquetar_archivos_cactus(raiz: Path, destino: Path) -> None:
+    empaquetar_archivos_cactus(raiz, destino)
+
+
 _ESTADOS_CANCELABLES: frozenset[str] = frozenset(
     {"recibido", "extrayendo", "validando", "limpiando", "normalizando"}
 )
 
 
 def _resumen_aprobacion(directorio: Path) -> dict[str, object] | None:
+    if not (directorio / "manifest.json").is_file():
+        return None
     try:
-        from agente.normalizador.silabos.aprobaciones import resumen_aprobacion_curricular
-
-        return resumen_aprobacion_curricular(directorio)
-    except (OSError, ValueError, TypeError):
+        modulo = import_module("agente.normalizador.silabos.aprobaciones_tecnicas")
+        return cast(dict[str, object], modulo.resumen_aprobacion_curricular(directorio))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
         return None
 
 
@@ -373,7 +374,9 @@ class GestorEjecuciones:
         """Elimina staging y capturas temporales, conservando la fuente curricular."""
 
         raiz = ejecucion.directorio.resolve()
-        temporales = ["fuentes_curriculares", "limpios", "cactus_chrome_profile"]
+        temporales = ["fuentes_curriculares", "cactus_chrome_profile"]
+        if ejecucion.tipo != "silabos":
+            temporales.append("limpios")
         if ejecucion.tipo != "silabos":
             temporales.append("entrada")
         for relativo in temporales:
@@ -494,8 +497,6 @@ class GestorEjecuciones:
             carrera,
             periodo,
             validar_entrada=validar_silabos,
-            cargar_catalogo=cargar_catalogo,
-            cargar_catalogo_carrera=cargar_catalogo_carrera,
             configuracion_curricular=configuracion_normalizador_curricular,
             contexto_ejecucion=contexto_ejecucion,
             ejecutar_flujo=ejecutar_flujo,
@@ -523,7 +524,7 @@ class GestorEjecuciones:
             cactus_extractor_error=CactusExtractorError,
             booleano=booleano,
             entero=entero,
-            empaquetar_archivos=empaquetar_archivos_cactus,
+            empaquetar_archivos=_empaquetar_archivos_cactus,
             validar_silabos=self._validar_silabos,
             registrar_error=self._registrar_error_fuente,
         )

@@ -6,11 +6,14 @@ import json
 import mimetypes
 import re
 import shutil
+from collections.abc import Callable, Coroutine
+from importlib import import_module
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, SecretStr
 
 from agente.config.settings import entero
@@ -20,10 +23,46 @@ from agente.normalizador.ejecuciones import (
     gestor_ejecuciones,
 )
 from agente.normalizador.modelos import Hallazgo
-from agente.normalizador.silabos import aprobaciones
 
-router = APIRouter()
+aprobaciones_tecnicas = import_module("agente.normalizador.silabos.aprobaciones_tecnicas")
+
+
 MAX_UPLOAD_BYTES = entero("NORMALIZADOR_MAX_UPLOAD_BYTES", 100 * 1024 * 1024)
+_UPLOAD_PATHS = frozenset({"/normalizador/empleabilidad", "/normalizador/silabos"})
+_GENERIC_UPLOAD_LIMIT_DETAIL = "La carga excede el límite permitido."
+
+
+def _content_length_exceeds_limit(value: str | None) -> bool:
+    """Return whether a valid decimal Content-Length proves an oversized request."""
+
+    if value is None or not value.isascii() or not value.isdecimal():
+        return False
+    try:
+        return int(value) > MAX_UPLOAD_BYTES
+    except ValueError:
+        return False
+
+
+class _EarlyUploadLimitRoute(APIRoute):
+    """Reject proven oversized multipart requests before FastAPI parses their body."""
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        handler = super().get_route_handler()
+
+        async def handle(request: Request) -> Response:
+            if request.url.path in _UPLOAD_PATHS and _content_length_exceeds_limit(
+                request.headers.get("content-length")
+            ):
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": _GENERIC_UPLOAD_LIMIT_DETAIL},
+                )
+            return await handler(request)
+
+        return handle
+
+
+router = APIRouter(route_class=_EarlyUploadLimitRoute)
 
 
 class DecisionCurricularIn(BaseModel):
@@ -317,7 +356,10 @@ def cuarentena_ejecucion(
             if not linea.strip():
                 continue
             if desde <= total < desde + limite:
-                filas.append(json.loads(linea))
+                try:
+                    filas.append(json.loads(linea))
+                except json.JSONDecodeError:
+                    continue
             total += 1
     return {
         "id_ejecucion": id_ejecucion,
@@ -337,62 +379,26 @@ def pendientes_ejecucion(
 ) -> dict[str, object]:
     """Devuelve la cola curricular explícita sin ocultar propuestas no catalogadas."""
 
-    _exigir_ejecucion_normalizador(id_ejecucion)
-    ruta = (
-        gestor_ejecuciones.base_dir
-        / id_ejecucion
-        / "salidas"
-        / "reportes"
-        / "pendientes_curriculares.jsonl"
-    )
-    directorio_ejecucion = gestor_ejecuciones.base_dir / id_ejecucion
-    filas: list[object]
-    if incluir_resueltas:
-        filas, total = _leer_ventana_jsonl(ruta, desde, limite)
-        todas_filas = aprobaciones._filas_clasificadas(directorio_ejecucion)
-    else:
-        todas_filas = aprobaciones._filas_clasificadas(directorio_ejecucion)
-        todas = [
-            fila
-            for fila in todas_filas
-            if aprobaciones.puede_recibir_decision(fila)
-            and not aprobaciones._texto(fila.get("decision"))
-        ]
-        total = len(todas)
-        filas = []
-        filas.extend(todas[desde : desde + limite])
-    paquetes_completos = aprobaciones._paquetes(
-        directorio_ejecucion,
-        todas_filas,
-    )
-    paquetes_visibles_completos = [
-        paquete
-        for paquete in paquetes_completos
-        if paquete.get("decision") != "DISCARD"
-        and (incluir_resueltas or paquete.get("requiere_decision"))
-    ]
-    filas = [
-        fila
-        for fila in filas
-        if not (isinstance(fila, dict) and fila.get("decision") == "DISCARD")
-    ]
-    revision = aprobaciones.revision_paquetes_chh(paquetes_visibles_completos)
-    paquetes = aprobaciones.paquetes_para_presentacion_api(paquetes_visibles_completos)
-    return {
-        "id_ejecucion": id_ejecucion,
-        "total": total,
-        "desde": desde,
-        "limite": limite,
-        "filas": aprobaciones.filas_para_presentacion_api(filas),
-        "paquetes": paquetes,
-        "paquetes_total": len(paquetes),
-        "revision": revision,
-        "aprobacion": aprobaciones.resumen_aprobacion_curricular(
-            directorio_ejecucion,
-            filas=todas_filas,
-            paquetes=paquetes_completos,
-        ),
-    }
+    estado = _exigir_ejecucion_normalizador(id_ejecucion)
+    if estado.get("tipo") != "silabos":
+        raise HTTPException(
+            status_code=409,
+            detail="Las propuestas técnicas solo aplican a ejecuciones de sílabos.",
+        )
+    try:
+        return cast(
+            dict[str, object],
+            aprobaciones_tecnicas.pendientes_para_api(
+                gestor_ejecuciones.base_dir / id_ejecucion,
+                desde=desde,
+                limite=limite,
+                incluir_resueltas=incluir_resueltas,
+            ),
+        )
+    except aprobaciones_tecnicas.AprobacionNoPermitida as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except aprobaciones_tecnicas.DecisionCurricularInvalida as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/ejecuciones/{id_ejecucion}/pendientes/decidir")
@@ -406,36 +412,25 @@ def decidir_pendientes_ejecucion(
     if estado.get("tipo") != "silabos":
         raise HTTPException(
             status_code=409,
-            detail="Las decisiones curriculares solo aplican a ejecuciones de sílabos.",
+            detail="Las decisiones técnicas solo aplican a ejecuciones de sílabos.",
         )
-    grupos = (
-        ("decisiones", solicitud.decisiones),
-        ("paquetes", solicitud.paquetes),
-        ("decisiones_paquetes", solicitud.decisiones_paquetes),
-    )
-    grupos_contenido = [(nombre, valores) for nombre, valores in grupos if valores]
-    if len(grupos_contenido) > 1:
-        nombres = ", ".join(nombre for nombre, _ in grupos_contenido)
+    if solicitud.paquetes or solicitud.decisiones_paquetes:
         raise HTTPException(
             status_code=422,
-            detail=(
-                "Payload ambiguo: envíe contenido en una sola lista de decisiones "
-                f"(recibidas: {nombres})."
-            ),
+            detail="El pipeline curricular solo admite decisiones de propuestas técnicas.",
         )
-    decisiones = grupos_contenido[0][1] if grupos_contenido else []
     try:
-        resultado = aprobaciones.aplicar_decisiones_curriculares(
+        resultado = aprobaciones_tecnicas.aplicar_decisiones(
             gestor_ejecuciones.base_dir / id_ejecucion,
-            [decision.model_dump() for decision in decisiones],
+            [decision.model_dump() for decision in solicitud.decisiones],
             actor=solicitud.actor,
             revision=solicitud.revision,
         )
-    except aprobaciones.AprobacionNoPermitida as exc:
+    except aprobaciones_tecnicas.AprobacionNoPermitida as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except aprobaciones.RevisionCurricularInvalida as exc:
+    except aprobaciones_tecnicas.RevisionCurricularInvalida as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except aprobaciones.DecisionCurricularInvalida as exc:
+    except aprobaciones_tecnicas.DecisionCurricularInvalida as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {
         "id_ejecucion": id_ejecucion,
@@ -499,6 +494,9 @@ def _leer_ventana_jsonl(
             if not linea.strip():
                 continue
             if desde <= total < desde + limite:
-                filas.append(json.loads(linea))
+                try:
+                    filas.append(json.loads(linea))
+                except json.JSONDecodeError:
+                    continue
             total += 1
     return filas, total

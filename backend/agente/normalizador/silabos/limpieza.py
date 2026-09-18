@@ -3,30 +3,19 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import shutil
 import zipfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from typing import Protocol, cast
 
+from docx import Document
 from pypdf import PdfReader
 
-from agente.config.settings import (
-    ConfiguracionNormalizadorCurricular,
-)
-from agente.normalizador.embeddings import (
-    DEFAULT_EMBEDDING_LIMITS,
-    EmbeddingProvider,
-    crear_retriever_curricular_opt_in,
-    normalizar_limites,
-)
-from agente.normalizador.empleabilidad.catalogo import (
-    CatalogoCHH,
-    cargar_catalogo,
-    cargar_catalogo_carrera,
-)
-from agente.normalizador.empleabilidad.entrada import normalizar_etiqueta
+from agente.config.settings import ConfiguracionNormalizadorCurricular
 from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import (
     ArchivoSilabo,
@@ -35,24 +24,162 @@ from agente.normalizador.modelos import (
     ResultadoLimpiezaSilabos,
     ResultadoValidacionSilabos,
 )
-from agente.normalizador.silabos import extraccion_curricular as _extraccion_curricular
-from agente.normalizador.silabos import extraccion_pdf as _extraccion_pdf
+from agente.normalizador.silabos import analista_tecnico, salida_catalogos
 from agente.normalizador.silabos import programa_pdf as _programa_pdf
-from agente.normalizador.silabos.analista_llm import analizar_registros_curriculares
-from agente.normalizador.silabos.entrada import PATRON_PERIODO, normalizar_periodo
-from agente.normalizador.silabos.salida import (
-    ResultadoCatalogoCurricular,
-    _catalogo_curricular,
-    construir_salidas_curriculares,
-)
+from agente.normalizador.silabos.salida_catalogos import ResultadoCatalogosTecnicos
 
-__all__ = (
-    "_texto_celda_pdf",
-    "_extraer_programa_analitico_geometrico_pdf",
-    "_extraer_programa_analitico_pdf",
-    "_reparar_fronteras_programa",
-    "_extraer_programa_analitico_pdf_layout",
-)
+construir_salidas_tecnicas = salida_catalogos.construir_salidas_tecnicas
+
+
+class _ExtraccionCurricularModule(Protocol):
+    Document: Callable[..., object]
+    _extraer_docx: Callable[..., dict[str, object]]
+    _hallazgo: Callable[..., Hallazgo]
+
+
+class _ExtraccionPdfModule(Protocol):
+    _extraer_pdf: Callable[..., dict[str, object]]
+    _geometria_pdf_pagina: Callable[..., object]
+
+
+def _cargar_modulo(nombre: str) -> object:
+    """Load a legacy module only after the selected execution mode is known."""
+
+    return importlib.import_module(nombre)
+
+
+def _modulo_extraccion_curricular() -> _ExtraccionCurricularModule:
+    return cast(
+        _ExtraccionCurricularModule,
+        _cargar_modulo("agente.normalizador.silabos.extraccion_curricular"),
+    )
+
+
+def _modulo_extraccion_pdf() -> _ExtraccionPdfModule:
+    return cast(
+        _ExtraccionPdfModule,
+        _cargar_modulo("agente.normalizador.silabos.extraccion_pdf"),
+    )
+
+
+def _hallazgo(
+    codigo: str,
+    severidad: str,
+    mensaje: str,
+    archivo: str,
+    detalle: str | None = None,
+) -> Hallazgo:
+    return _modulo_extraccion_curricular()._hallazgo(codigo, severidad, mensaje, archivo, detalle)
+
+
+def _resultado_catalogos_tecnicos_fallback() -> ResultadoCatalogosTecnicos:
+    return ResultadoCatalogosTecnicos(
+        publicable=False,
+        relaciones=0,
+        competencias=0,
+        pendientes=0,
+        outputs=(),
+        release_gate={},
+    )
+
+
+_COMPAT_EXPORTS = {
+    "_PATRON_REFERENCIA_CURRICULAR": ("extraccion_curricular", "_PATRON_REFERENCIA_CURRICULAR"),
+    "_SECCIONES_HERRAMIENTAS": ("extraccion_curricular", "_SECCIONES_HERRAMIENTAS"),
+    "_normalizar_modalidad": ("extraccion_curricular", "_normalizar_modalidad"),
+    "_texto": ("extraccion_curricular", "_texto"),
+    "_sin_referencias_curriculares": ("extraccion_curricular", "_sin_referencias_curriculares"),
+    "_clave": ("extraccion_curricular", "_clave"),
+    "_hash_id": ("extraccion_curricular", "_hash_id"),
+    "_ids_curriculares": ("extraccion_curricular", "_ids_curriculares"),
+    "_filas_tabla": ("extraccion_curricular", "_filas_tabla"),
+    "_es_continuacion_vertical": ("extraccion_curricular", "_es_continuacion_vertical"),
+    "_codigos": ("extraccion_curricular", "_codigos"),
+    "_seccion_herramientas": ("extraccion_curricular", "_seccion_herramientas"),
+    "_herramientas_desde_tabla": ("extraccion_curricular", "_herramientas_desde_tabla"),
+    "_herramientas_desde_parrafos": ("extraccion_curricular", "_herramientas_desde_parrafos"),
+    "_deduplicar_evidencias_herramientas": (
+        "extraccion_curricular",
+        "_deduplicar_evidencias_herramientas",
+    ),
+    "_primer_metadata": ("extraccion_curricular", "_primer_metadata"),
+    "_unir_metadata": ("extraccion_curricular", "_unir_metadata"),
+    "_nombre_desde_archivo": ("extraccion_curricular", "_nombre_desde_archivo"),
+    "_ciclo_desde_ruta": ("extraccion_curricular", "_ciclo_desde_ruta"),
+    "_PATRON_CODIGO_CURRICULAR": ("extraccion_pdf", "_PATRON_CODIGO_CURRICULAR"),
+    "_ETIQUETAS_METADATA_PDF": ("extraccion_pdf", "_ETIQUETAS_METADATA_PDF"),
+    "_normalizar_linea_pdf": ("extraccion_pdf", "_normalizar_linea_pdf"),
+    "_normalizar_pdf_para_matching": ("extraccion_pdf", "_normalizar_pdf_para_matching"),
+    "_seccion_pdf": ("extraccion_pdf", "_seccion_pdf"),
+    "_seccion_pdf_raw": ("extraccion_pdf", "_seccion_pdf_raw"),
+    "_campo_pdf": ("extraccion_pdf", "_campo_pdf"),
+    "_campo_pdf_metadata": ("extraccion_pdf", "_campo_pdf_metadata"),
+    "_competencias_pdf": ("extraccion_pdf", "_competencias_pdf"),
+    "_columna_carrera_pdf": ("extraccion_pdf", "_columna_carrera_pdf"),
+    "_columna_descripcion_pdf": ("extraccion_pdf", "_columna_descripcion_pdf"),
+    "_separar_fila_competencia_pdf": ("extraccion_pdf", "_separar_fila_competencia_pdf"),
+    "_inicia_siguiente_competencia_pdf": ("extraccion_pdf", "_inicia_siguiente_competencia_pdf"),
+    "_competencias_pdf_lineal": ("extraccion_pdf", "_competencias_pdf_lineal"),
+    "_logro_general_pdf": ("extraccion_pdf", "_logro_general_pdf"),
+    "_logros_pdf": ("extraccion_pdf", "_logros_pdf"),
+    "_punto_v_pdf": ("extraccion_pdf", "_punto_v_pdf"),
+    "_subseccion_pdf": ("extraccion_pdf", "_subseccion_pdf"),
+    "_pdf_text_advance": ("extraccion_pdf", "_pdf_text_advance"),
+    "_texto_relevante_pdf": ("extraccion_pdf", "_texto_relevante_pdf"),
+    "_codigos_curriculares_pdf": ("extraccion_pdf", "_codigos_curriculares_pdf"),
+    "_evidencias_herramientas_pdf": ("extraccion_pdf", "_evidencias_herramientas_pdf"),
+    "_ciclo_pdf": ("extraccion_pdf", "_ciclo_pdf"),
+    "_texto_celda_pdf": ("programa_pdf", "_texto_celda_pdf"),
+    "_extraer_programa_analitico_geometrico_pdf": (
+        "programa_pdf",
+        "_extraer_programa_analitico_geometrico_pdf",
+    ),
+    "_extraer_programa_analitico_pdf": ("programa_pdf", "_extraer_programa_analitico_pdf"),
+    "_reparar_fronteras_programa": ("programa_pdf", "_reparar_fronteras_programa"),
+    "_extraer_programa_analitico_pdf_layout": (
+        "programa_pdf",
+        "_extraer_programa_analitico_pdf_layout",
+    ),
+}
+
+
+def _resolver_funcion_compatibilidad(name: str) -> Callable[..., object]:
+    module_name, attribute_name = _COMPAT_EXPORTS[name]
+    modulo = importlib.import_module(f"agente.normalizador.silabos.{module_name}")
+    return cast(Callable[..., object], getattr(modulo, attribute_name))
+
+
+def _campo_pdf_metadata(*args: object, **kwargs: object) -> str:
+    return cast(str, _resolver_funcion_compatibilidad("_campo_pdf_metadata")(*args, **kwargs))
+
+
+def _competencias_pdf(*args: object, **kwargs: object) -> list[dict[str, str]]:
+    return cast(
+        list[dict[str, str]],
+        _resolver_funcion_compatibilidad("_competencias_pdf")(*args, **kwargs),
+    )
+
+
+def _logros_pdf(*args: object, **kwargs: object) -> list[dict[str, object]]:
+    return cast(
+        list[dict[str, object]],
+        _resolver_funcion_compatibilidad("_logros_pdf")(*args, **kwargs),
+    )
+
+
+def _ids_curriculares(
+    carrera: str,
+    periodo: str,
+    nombre: str,
+    codigo_curso: str,
+) -> tuple[str, str]:
+    return cast(
+        tuple[str, str],
+        _resolver_funcion_compatibilidad("_ids_curriculares")(
+            carrera, periodo, nombre, codigo_curso
+        ),
+    )
+
 
 _texto_celda_pdf = _programa_pdf._texto_celda_pdf
 _extraer_programa_analitico_geometrico_pdf = (
@@ -62,69 +189,15 @@ _extraer_programa_analitico_pdf = _programa_pdf._extraer_programa_analitico_pdf
 _reparar_fronteras_programa = _programa_pdf._reparar_fronteras_programa
 _extraer_programa_analitico_pdf_layout = _programa_pdf._extraer_programa_analitico_pdf_layout
 
-_PATRON_CODIGO_CURRICULAR = _extraccion_pdf._PATRON_CODIGO_CURRICULAR
-_ETIQUETAS_METADATA_PDF = _extraccion_pdf._ETIQUETAS_METADATA_PDF
-Document = _extraccion_curricular.Document
-_PATRON_REFERENCIA_CURRICULAR = _extraccion_curricular._PATRON_REFERENCIA_CURRICULAR
-_SECCIONES_HERRAMIENTAS = _extraccion_curricular._SECCIONES_HERRAMIENTAS
-_normalizar_modalidad = _extraccion_curricular._normalizar_modalidad
-_texto = _extraccion_curricular._texto
-_sin_referencias_curriculares = _extraccion_curricular._sin_referencias_curriculares
-_clave = _extraccion_curricular._clave
-_hash_id = _extraccion_curricular._hash_id
-_ids_curriculares = _extraccion_curricular._ids_curriculares
-_hallazgo = _extraccion_curricular._hallazgo
-_filas_tabla = _extraccion_curricular._filas_tabla
-_es_continuacion_vertical = _extraccion_curricular._es_continuacion_vertical
-_codigos = _extraccion_curricular._codigos
-_seccion_herramientas = _extraccion_curricular._seccion_herramientas
-_herramientas_desde_tabla = _extraccion_curricular._herramientas_desde_tabla
-_herramientas_desde_parrafos = _extraccion_curricular._herramientas_desde_parrafos
-_deduplicar_evidencias_herramientas = _extraccion_curricular._deduplicar_evidencias_herramientas
-_primer_metadata = _extraccion_curricular._primer_metadata
-_unir_metadata = _extraccion_curricular._unir_metadata
-_nombre_desde_archivo = _extraccion_curricular._nombre_desde_archivo
-_ciclo_desde_ruta = _extraccion_curricular._ciclo_desde_ruta
 
-
-def _carreras_confiables_para_embeddings(
-    configuracion_curricular: ConfiguracionNormalizadorCurricular,
-) -> frozenset[tuple[str, str]]:
-    """Lee solo parejas ``carrera@periodo`` explícitamente habilitadas."""
-
-    configuradas = configuracion_curricular.embedding_carreras
-    parejas: set[tuple[str, str]] = set()
-    for entrada in configuradas.split(","):
-        carrera, separador, periodo = entrada.partition("@")
-        carrera_normalizada = normalizar_etiqueta(carrera)
-        periodo_normalizado = normalizar_periodo(periodo)
-        if (
-            separador
-            and carrera_normalizada
-            and PATRON_PERIODO.fullmatch(periodo_normalizado) is not None
-        ):
-            parejas.add((carrera_normalizada, periodo_normalizado))
-    return frozenset(parejas)
-
-
-def _embeddings_curriculares_habilitados(
-    carrera: str,
-    periodo: str,
-    enabled: bool,
-    configuracion_curricular: ConfiguracionNormalizadorCurricular,
-) -> bool:
-    """Requiere opt-in general y una pareja carrera-periodo confiable."""
-
-    pareja = (normalizar_etiqueta(carrera), normalizar_periodo(periodo))
-    return (
-        enabled
-        and PATRON_PERIODO.fullmatch(pareja[1]) is not None
-        and pareja in _carreras_confiables_para_embeddings(configuracion_curricular)
-    )
-
-
-_normalizar_linea_pdf = _extraccion_pdf._normalizar_linea_pdf
-_normalizar_pdf_para_matching = _extraccion_pdf._normalizar_pdf_para_matching
+_PUBLIC_EXPORTS = (
+    "_texto_celda_pdf",
+    "_extraer_programa_analitico_geometrico_pdf",
+    "_extraer_programa_analitico_pdf",
+    "_reparar_fronteras_programa",
+    "_extraer_programa_analitico_pdf_layout",
+)
+__all__ = _PUBLIC_EXPORTS
 
 
 def _extraer_docx(
@@ -133,8 +206,13 @@ def _extraer_docx(
     carrera: str,
     periodo: str,
 ) -> dict[str, object]:
-    _extraccion_curricular.Document = Document
-    return _extraccion_curricular._extraer_docx(ruta, nombre, carrera, periodo)
+    modulo = _modulo_extraccion_curricular()
+    modulo.Document = Document
+    return modulo._extraer_docx(ruta, nombre, carrera, periodo)
+
+
+def _geometria_pdf_pagina(*args: object, **kwargs: object) -> object:
+    return _modulo_extraccion_pdf()._geometria_pdf_pagina(*args, **kwargs)
 
 
 def _extraer_pdf(
@@ -143,7 +221,7 @@ def _extraer_pdf(
     carrera: str,
     periodo: str,
 ) -> dict[str, object]:
-    return _extraccion_pdf._extraer_pdf(
+    return _modulo_extraccion_pdf()._extraer_pdf(
         ruta,
         nombre,
         carrera,
@@ -153,51 +231,18 @@ def _extraer_pdf(
     )
 
 
-_seccion_pdf = _extraccion_pdf._seccion_pdf
-_seccion_pdf_raw = _extraccion_pdf._seccion_pdf_raw
-_campo_pdf = _extraccion_pdf._campo_pdf
-_campo_pdf_metadata = _extraccion_pdf._campo_pdf_metadata
-_competencias_pdf = _extraccion_pdf._competencias_pdf
-_columna_carrera_pdf = _extraccion_pdf._columna_carrera_pdf
-_columna_descripcion_pdf = _extraccion_pdf._columna_descripcion_pdf
-_separar_fila_competencia_pdf = _extraccion_pdf._separar_fila_competencia_pdf
-_inicia_siguiente_competencia_pdf = _extraccion_pdf._inicia_siguiente_competencia_pdf
-_competencias_pdf_lineal = _extraccion_pdf._competencias_pdf_lineal
-_logro_general_pdf = _extraccion_pdf._logro_general_pdf
-_logros_pdf = _extraccion_pdf._logros_pdf
-_punto_v_pdf = _extraccion_pdf._punto_v_pdf
-_subseccion_pdf = _extraccion_pdf._subseccion_pdf
-_pdf_text_advance = _extraccion_pdf._pdf_text_advance
-_geometria_pdf_pagina = _extraccion_pdf._geometria_pdf_pagina
-_texto_relevante_pdf = _extraccion_pdf._texto_relevante_pdf
-_codigos_curriculares_pdf = _extraccion_pdf._codigos_curriculares_pdf
-_evidencias_herramientas_pdf = _extraccion_pdf._evidencias_herramientas_pdf
-_ciclo_pdf = _extraccion_pdf._ciclo_pdf
-
-
 def limpiar_archivo(
     ruta_entrada: Path,
     directorio_ejecucion: Path,
     validacion: ResultadoValidacionSilabos,
-    catalogo: CatalogoCHH | None = None,
     usar_llm: bool = False,
     al_actualizar_progreso_llm: Callable[[ProgresoLimpiezaLLM], None] | None = None,
     progreso_inicial: ProgresoLimpiezaLLM | None = None,
     id_ejecucion: str = "",
     cancelada: Callable[[], bool] | None = None,
-    embedding_enabled: bool | None = None,
-    embedding_provider: EmbeddingProvider | None = None,
-    embedding_limits: Mapping[str, int] | None = None,
-    embedding_pool: int | None = None,
     configuracion_curricular: ConfiguracionNormalizadorCurricular | None = None,
 ) -> ResultadoLimpiezaSilabos:
-    """Materializa la fuente y construye el paquete curricular CSV.
-
-    La entrada de producción del normalizador curricular activa ``usar_llm``;
-    el parámetro explícito se conserva para pruebas offline y seams controlados.
-    Cuando está activo, el LLM decide la normalización semántica por lotes y
-    Python conserva la evidencia, IDs, esquema y relaciones.
-    """
+    """Materializa una fuente y construye el contrato curricular técnico."""
 
     fuentes = directorio_ejecucion / "fuentes_curriculares"
     limpios = directorio_ejecucion / "limpios"
@@ -233,9 +278,6 @@ def limpiar_archivo(
     def verificar_cancelacion() -> None:
         if cancelada is not None and cancelada():
             raise CancelacionSolicitada()
-
-    if embedding_limits is not None:
-        normalizar_limites(embedding_limits, defaults=DEFAULT_EMBEDDING_LIMITS)
 
     if usar_llm and progreso_inicial is None:
         publicar_progreso(progreso_extraccion)
@@ -339,158 +381,114 @@ def limpiar_archivo(
             salida_staging.write(
                 json.dumps(registro, ensure_ascii=False, separators=(",", ":")) + "\n"
             )
+    resultado_catalogo: ResultadoCatalogosTecnicos
     try:
-        catalogo_base = catalogo or cargar_catalogo()
-        # Un catálogo inyectado representa el contexto completo de la
-        # ejecución (pruebas o ejecución controlada), por lo que no debe
-        # mezclarse silenciosamente con un perfil instalado en disco.
-        catalogo_carrera = (
-            None
-            if catalogo is not None
-            else cargar_catalogo_carrera(
-                validacion.carrera,
-                validacion.periodo,
-            )
-        )
-        propuestas_llm = {}
-        analisis_llm = None
-        if usar_llm:
+        propuestas_tecnicas: list[dict[str, object]] = []
+        propuestas_tecnicas_path = reportes / "propuestas_tecnicas.jsonl"
+        analisis_tecnico_path = reportes / "analisis_tecnico.json"
+        if not usar_llm:
+            analisis_tecnico: dict[str, object] = {
+                "estado": "COMPLETADO",
+                "modo_analista": "technical",
+                "modo_ejecucion": "DETERMINISTICO_SIN_LLM",
+                "propuestas_pendientes": 0,
+            }
+        else:
+            assert configuracion_curricular is not None
             try:
                 verificar_cancelacion()
-                catalogo_para_llm = _catalogo_curricular(
+                propuestas_tecnicas = analista_tecnico.inferir_competencias_tecnicas(
                     registros,
-                    catalogo_base,
-                    catalogo_carrera,
-                )
-                embeddings_habilitados = _embeddings_curriculares_habilitados(
-                    validacion.carrera,
-                    validacion.periodo,
-                    configuracion_curricular.embeddings_habilitados
-                    if embedding_enabled is None
-                    else embedding_enabled,
                     configuracion_curricular,
+                    configuracion_curricular.ruta_catalogo_tecnico,
                 )
-                # El catálogo para el LLM puede mezclar vocabulario global y
-                # curricular. El índice semántico solo acepta la capa específica
-                # de carrera/ciclo; sin ella, se conserva el fallback léxico.
-                retriever_embedding = (
-                    crear_retriever_curricular_opt_in(
-                        catalogo_carrera,
-                        career=validacion.carrera,
-                        period=validacion.periodo,
-                        enabled=embeddings_habilitados,
-                        provider=embedding_provider,
-                        configuracion_curricular=configuracion_curricular,
+                if not propuestas_tecnicas:
+                    raise ValueError(
+                        "El análisis técnico no produjo propuestas con evidencia literal válida."
                     )
-                    if catalogo_carrera is not None
-                    else None
-                )
-                analisis_llm = analizar_registros_curriculares(
-                    registros,
-                    catalogo_para_llm,
-                    validacion.carrera,
-                    validacion.periodo,
-                    directorio_ejecucion,
-                    al_actualizar_progreso=publicar_progreso,
-                    progreso_inicial=progreso_extraccion,
-                    id_ejecucion=id_ejecucion,
-                    cancelada=cancelada,
-                    embedding_retriever=retriever_embedding,
-                    limites_candidatos=embedding_limits,
-                    pool_retrieval=embedding_pool,
-                    configuracion_curricular=configuracion_curricular,
-                )
-                propuestas_llm = analisis_llm.propuestas
+                analisis_tecnico = {
+                    "estado": "COMPLETADO",
+                    "modo_analista": "technical",
+                    "propuestas_pendientes": len(propuestas_tecnicas),
+                }
             except CancelacionSolicitada:
                 raise
             except Exception as exc:
                 hallazgos.append(
                     _hallazgo(
-                        "ANALISTA_LLM_NO_DISPONIBLE",
+                        "ANALISTA_TECNICO_NO_DISPONIBLE",
                         "warning",
                         (
-                            "El analista curricular no estuvo disponible; se conserva "
+                            "El analista técnico no estuvo disponible; se conserva "
                             "el resultado determinista."
                         ),
                         validacion.archivo,
                         f"{type(exc).__name__}: {str(exc)[:200]}",
                     )
                 )
-                _escribir_json(
-                    reportes / "analisis_llm.json",
-                    {
-                        "estado": "FALLBACK_DETERMINISTA",
-                        "error": f"{type(exc).__name__}: {str(exc)[:300]}",
-                        "propuestas_pendientes": 0,
-                    },
+                analisis_tecnico = {
+                    "estado": "FALLBACK_DETERMINISTA",
+                    "modo_analista": "technical",
+                    "error": f"{type(exc).__name__}: {str(exc)[:300]}",
+                    "propuestas_pendientes": 0,
+                }
+
+        analista_tecnico.escribir_propuestas_tecnicas(
+            propuestas_tecnicas_path,
+            propuestas_tecnicas,
+        )
+        _escribir_json(analisis_tecnico_path, analisis_tecnico)
+        resultado_catalogo = construir_salidas_tecnicas(
+            registros,
+            directorio_ejecucion / "salidas",
+            carrera=validacion.carrera,
+            periodo_academico=validacion.periodo,
+            propuestas_tecnicas=propuestas_tecnicas,
+            analisis_tecnico=analisis_tecnico,
+        )
+        resultado_catalogo = replace(
+            resultado_catalogo,
+            outputs=tuple(
+                resultado_catalogo.outputs
+                + (
+                    _output(
+                        propuestas_tecnicas_path,
+                        "propuestas_tecnicas",
+                        len(propuestas_tecnicas),
+                    ),
+                    _output(analisis_tecnico_path, "analisis_tecnico", 1),
                 )
+            ),
+        )
+        if usar_llm:
+            if analisis_tecnico["estado"] == "COMPLETADO":
+                publicar_progreso(
+                    replace(
+                        progreso_extraccion,
+                        fase="completado",
+                        reporte_final="disponible",
+                    ).con_evento("Reporte técnico disponible.")
+                )
+            else:
                 publicar_progreso(
                     replace(
                         progreso_extraccion,
                         fase="error",
                         reporte_final="disponible",
                     ).con_evento(
-                        "El análisis LLM no estuvo disponible; continúa la salida determinista."
+                        "El análisis técnico no estuvo disponible; continúa la salida determinista."
                     )
                 )
-        resultado_catalogo = construir_salidas_curriculares(
-            registros,
-            validacion,
-            directorio_ejecucion,
-            catalogo_base,
-            catalogo_carrera,
-            propuestas_llm,
-        )
-        if analisis_llm is not None:
-            _escribir_jsonl(reportes / "decisiones_llm.jsonl", analisis_llm.reportes)
-            _escribir_json(
-                reportes / "analisis_llm.json",
-                {
-                    "estado": "COMPLETADO",
-                    "modelo_analista": analisis_llm.modelo_analista,
-                    "modelo_analista_residual": analisis_llm.modelo_analista_residual,
-                    "lotes": analisis_llm.lotes,
-                    "propuestas_pendientes": len(analisis_llm.propuestas),
-                    "decisiones_escaladas": analisis_llm.decisiones_escaladas,
-                    "decisiones_reportadas": len(analisis_llm.reportes),
-                    "auditoria_contexto": analisis_llm.auditoria_contexto,
-                },
-            )
-            if usar_llm:
-                publicar_progreso(
-                    replace(
-                        progreso_extraccion,
-                        fase="completado",
-                        reporte_final="disponible",
-                    ).con_evento("Reporte LLM disponible.")
-                )
-            report_outputs = tuple(
-                resultado_catalogo.outputs
-                + (
-                    _output(
-                        reportes / "decisiones_llm.jsonl",
-                        "auditoria_llm",
-                        len(analisis_llm.reportes),
-                    ),
-                    _output(reportes / "analisis_llm.json", "auditoria_llm", 1),
-                )
-            )
-            resultado_catalogo = replace(resultado_catalogo, outputs=report_outputs)
     except CancelacionSolicitada:
-        _escribir_jsonl(
-            reportes / "decisiones_llm.jsonl",
-            (
-                {
-                    "tipo": "sistema",
-                    "estado": "CANCELADO",
-                    "detalle": "El análisis se detuvo antes del siguiente lote LLM.",
-                },
-            ),
+        analista_tecnico.escribir_propuestas_tecnicas(
+            reportes / "propuestas_tecnicas.jsonl",
+            (),
         )
         _escribir_json(
-            reportes / "analisis_llm.json",
+            reportes / "analisis_tecnico.json",
             {
                 "estado": "CANCELADO",
+                "modo_analista": "technical",
                 "propuestas_pendientes": 0,
                 "mensaje": "La ejecución fue cancelada antes de completar el análisis.",
             },
@@ -502,7 +500,7 @@ def limpiar_archivo(
                     progreso_extraccion,
                     fase="cancelado",
                     reporte_final="cancelado",
-                ).con_evento("El análisis LLM fue cancelado por el usuario.")
+                ).con_evento("El análisis técnico fue cancelado por el usuario.")
             )
         raise
     except Exception as exc:
@@ -513,27 +511,19 @@ def limpiar_archivo(
                     fase="error",
                     reporte_final="error",
                 ).con_evento(
-                    "No se pudo completar el reporte LLM; se conservan los avances previos."
+                    "No se pudo completar el reporte técnico; se conservan los avances previos."
                 )
             )
-        hallazgo = _hallazgo(
-            "CATALOGO_CURRICULAR_NO_DISPONIBLE",
-            "error",
-            "No se pudo construir el catálogo curricular con los catálogos base.",
-            validacion.archivo,
-            f"{type(exc).__name__}: {str(exc)[:200]}",
+        hallazgos.append(
+            _hallazgo(
+                "CATALOGO_TECNICO_NO_DISPONIBLE",
+                "error",
+                "No se pudo construir el catálogo curricular técnico.",
+                validacion.archivo,
+                f"{type(exc).__name__}: {str(exc)[:200]}",
+            )
         )
-        hallazgos.append(hallazgo)
-        resultado_catalogo = ResultadoCatalogoCurricular(
-            publicable=False,
-            relaciones=0,
-            competencias=0,
-            habilidades=0,
-            herramientas=0,
-            outputs=(),
-            hallazgos=(),
-            cuarentena=(),
-        )
+        resultado_catalogo = _resultado_catalogos_tecnicos_fallback()
 
     cuarentena.extend(resultado_catalogo.cuarentena)
     cuarentena_path = reportes / "cuarentena.jsonl"

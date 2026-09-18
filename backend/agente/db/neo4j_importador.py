@@ -1,4 +1,4 @@
-"""Importación incremental y reversible de los CSV curriculares hacia Neo4j.
+"""Importación curricular incremental y reversible hacia Neo4j.
 
 Este módulo está separado del cliente del agente conversacional: la conversación
 continúa siendo de solo lectura y la escritura solo ocurre detrás de los
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import importlib
 import json
 import re
 import unicodedata
@@ -24,16 +25,18 @@ from uuid import uuid4
 from neo4j import READ_ACCESS, WRITE_ACCESS
 
 from agente.config.settings import texto
+from agente.db import neo4j_catalogos
 from agente.db.neo4j import obtener_driver
 from agente.normalizador.ejecuciones import GestorEjecuciones, gestor_ejecuciones
-from agente.normalizador.silabos.salida import (
-    ARCHIVOS_SALIDA,
-    COBERTURA_SCHEMA,
-    COMPETENCIAS_SCHEMA,
-    CURSOS_SCHEMA,
-    HABILIDADES_SCHEMA,
-    HERRAMIENTAS_SCHEMA,
-)
+
+_TECHNICAL_SCHEMAS = dict(neo4j_catalogos.ARCHIVOS_CATALOGO)
+
+
+def _cargar_salida_legacy() -> Any:
+    """Load the historical CSV contract only for legacy compatibility callers."""
+
+    return importlib.import_module("agente.normalizador.silabos.salida")
+
 
 ID_EJECUCION_RE = re.compile(r"NOR_[0-9a-f]{16}")
 ID_IMPORTACION_RE = re.compile(r"IMP_[0-9a-f]{16}")
@@ -76,7 +79,7 @@ class ImportacionNeo4jError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class FuenteCurricular:
-    """Filas validadas y fingerprint de los cinco archivos de una ejecución."""
+    """Filas validadas y fingerprint de una ejecución curricular."""
 
     filas: dict[str, list[dict[str, str]]]
     fingerprint: str
@@ -91,6 +94,7 @@ class AnalisisImportacion:
     fuente: FuenteCurricular
     filas_nuevas: dict[str, list[dict[str, str]]]
     relaciones_curso_silabo_nuevas: tuple[dict[str, str], ...] = ()
+    modo: str = "legacy"
 
 
 def _ahora() -> str:
@@ -131,7 +135,10 @@ def _resultado_count(resultado: Iterable[Any]) -> int:
     filas = _filas_registro(resultado)
     if not filas:
         return 0
-    return int(filas[0].get("total", 0) or 0)
+    try:
+        return int(filas[0].get("total", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 class ImportadorNeo4j:
@@ -195,11 +202,7 @@ class ImportadorNeo4j:
             }
             self._agregar_historial(registro)
             try:
-                self._escribir_grafo(
-                    id_importacion,
-                    analisis.filas_nuevas,
-                    analisis.relaciones_curso_silabo_nuevas,
-                )
+                self._escribir_grafo_tecnico(id_importacion, analisis.fuente.filas)
             except Exception:
                 self._actualizar_historial(
                     id_importacion,
@@ -278,7 +281,8 @@ class ImportadorNeo4j:
     def _analizar(self, id_ejecucion: str) -> AnalisisImportacion:
         gate_error = self._validar_release_gate(id_ejecucion)
         if gate_error is not None:
-            preview = self._preview_base(id_ejecucion, "")
+            filas_vacias = self._filas_vacias_tecnicas()
+            preview = self._preview_base_tecnico(id_ejecucion, "")
             preview.update(
                 {
                     "puede_importar": False,
@@ -288,51 +292,237 @@ class ImportadorNeo4j:
             )
             return AnalisisImportacion(
                 preview,
-                FuenteCurricular(self._filas_vacias(), ""),
-                self._filas_vacias(),
+                FuenteCurricular(filas_vacias, ""),
+                filas_vacias,
             )
         try:
-            fuente = self._cargar_fuente(id_ejecucion)
+            fuente = self._cargar_fuente_tecnica(id_ejecucion)
         except ImportacionNeo4jError as exc:
             if exc.status_code != 400:
                 raise
-            preview = self._preview_base(id_ejecucion, "")
+            preview = self._preview_base_tecnico(id_ejecucion, "")
             preview.update(
                 {
                     "puede_importar": False,
-                    "mensaje": "La data no cumple el formato de los catálogos.",
+                    "mensaje": "La data no cumple el formato de los catálogos técnicos.",
                     "errores": [{"codigo": "FORMATO_CSV_INVALIDO", "mensaje": exc.mensaje}],
                 }
             )
+            filas_vacias = self._filas_vacias_tecnicas()
             return AnalisisImportacion(
                 preview,
-                FuenteCurricular(self._filas_vacias(), ""),
-                self._filas_vacias(),
+                FuenteCurricular(filas_vacias, ""),
+                filas_vacias,
             )
-        errores = self._validar_formato(fuente.filas, fuente.silabos)
-        if errores:
-            preview = self._preview_base(id_ejecucion, fuente.fingerprint)
-            preview.update(
-                {
-                    "puede_importar": False,
-                    "mensaje": "La data no cumple el formato de los catálogos.",
-                    "errores": errores,
-                }
-            )
-            return AnalisisImportacion(preview, fuente, self._filas_vacias())
+        return self._comparar_con_grafo_tecnico(id_ejecucion, fuente)
 
-        analisis = self._comparar_con_grafo(id_ejecucion, fuente)
-        return analisis
+    def _leer_manifesto_tecnico(self, id_ejecucion: str) -> dict[str, Any] | None:
+        if ID_EJECUCION_RE.fullmatch(id_ejecucion) is None:
+            return None
+        ruta = (self.base_dir / id_ejecucion / "manifest.json").resolve()
+        raiz = (self.base_dir / id_ejecucion).resolve()
+        if ruta.parent != raiz or not ruta.is_file():
+            return None
+        try:
+            manifiesto = json.loads(ruta.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        if not isinstance(manifiesto, dict):
+            return None
+        if manifiesto.get("tipo") != "silabos":
+            return None
+        return manifiesto
+
+    def _cargar_fuente_tecnica(self, id_ejecucion: str) -> FuenteCurricular:
+        if ID_EJECUCION_RE.fullmatch(id_ejecucion) is None:
+            raise ImportacionNeo4jError("La ejecución solicitada no es válida.")
+        estado = self._leer_manifesto_tecnico(id_ejecucion)
+        if estado is None:
+            raise ImportacionNeo4jError(
+                "La ejecución técnica no tiene un manifiesto inmutable válido.",
+                status_code=409,
+            )
+        if (
+            estado.get("tipo") != "silabos"
+            or estado.get("estado") not in ESTADOS_CURRICULARES_PUBLICABLES
+        ):
+            raise ImportacionNeo4jError(
+                "La ejecución no tiene CSV curriculares técnicos publicables.",
+                status_code=409,
+            )
+        validacion = estado.get("validacion_silabos")
+        if (
+            not isinstance(validacion, dict)
+            or type(validacion.get("valida")) is not bool
+            or not validacion.get("valida")
+        ):
+            raise ImportacionNeo4jError(
+                "La ejecución curricular no superó la validación requerida.",
+                status_code=409,
+            )
+        gate_error = self._validar_release_gate(id_ejecucion)
+        if gate_error is not None:
+            raise ImportacionNeo4jError(gate_error["mensaje"], status_code=409)
+        directorio = (self.base_dir / id_ejecucion / "salidas").resolve()
+        raiz = (self.base_dir / id_ejecucion).resolve()
+        if raiz not in directorio.parents or not directorio.is_dir():
+            raise ImportacionNeo4jError(
+                "No se encontraron las salidas curriculares técnicas.",
+                status_code=404,
+            )
+        try:
+            filas = neo4j_catalogos.leer_catalogos(directorio)
+        except ValueError as exc:
+            raise ImportacionNeo4jError(str(exc), status_code=400) from exc
+        digest = hashlib.sha256()
+        for archivo, _ in neo4j_catalogos.ARCHIVOS_CATALOGO:
+            ruta = directorio / archivo
+            digest.update(archivo.encode("utf-8"))
+            digest.update(b"\\0")
+            digest.update(ruta.read_bytes())
+        digest.update(id_ejecucion.encode("utf-8"))
+        return FuenteCurricular(filas, digest.hexdigest())
+
+    def _leer_estado_grafo_tecnico(self) -> dict[str, dict[str, dict[str, Any]]]:
+        consultas = {
+            "Curso": (
+                "MATCH (n:Curso) RETURN n.id_curso AS id_curso, n.nombre_curso AS nombre_curso, "
+                "n.coordinador AS coordinador, n.creditos AS creditos, n.nivel AS nivel, "
+                "n.tipo_curso AS tipo_curso, n.codigo_curso AS codigo_curso, "
+                "n.id_carrera AS id_carrera"
+            ),
+            "Silabo": (
+                "MATCH (n:Silabo) RETURN n.id_silabo AS id_silabo, "
+                "n.codigo_silabo AS codigo_silabo, "
+                "n.sumilla AS sumilla, n.id_curso AS id_curso, "
+                "n.periodo_academico AS periodo_academico"
+            ),
+            "Competencia": (
+                "MATCH (n:Competencia) RETURN n.id_competencia AS id_competencia, "
+                "n.nombre_competencia AS nombre_competencia, "
+                "n.descripcion_breve_competencia AS descripcion_breve_competencia, "
+                "n.tipo_competencia AS tipo_competencia, n.codigo_competencia AS codigo_competencia"
+            ),
+            "Logro": "MATCH (n:Logro) RETURN n.id_logro AS id_logro, n.logro AS logro",
+            "CoberturaCurricular": (
+                "MATCH (n:CoberturaCurricular) RETURN n.id_cob_curricular AS id_cob_curricular, "
+                "n.id_curso AS id_curso, n.id_silabo AS id_silabo, "
+                "n.id_competencia AS id_competencia, n.id_logro AS id_logro"
+            ),
+        }
+        with self._sesion(READ_ACCESS) as sesion:
+            resultado: dict[str, dict[str, dict[str, Any]]] = {}
+            for etiqueta, consulta in consultas.items():
+                filas = _filas_registro(sesion.run(consulta))
+                campo_id = {
+                    "Curso": "id_curso",
+                    "Silabo": "id_silabo",
+                    "Competencia": "id_competencia",
+                    "Logro": "id_logro",
+                    "CoberturaCurricular": "id_cob_curricular",
+                }[etiqueta]
+                resultado[etiqueta] = {
+                    _texto(fila.get(campo_id)): fila for fila in filas if _texto(fila.get(campo_id))
+                }
+        return resultado
+
+    def _comparar_con_grafo_tecnico(
+        self,
+        id_ejecucion: str,
+        fuente: FuenteCurricular,
+    ) -> AnalisisImportacion:
+        existentes = self._leer_estado_grafo_tecnico()
+        definiciones = {
+            "curso.csv": ("Curso", "id_curso", _TECHNICAL_SCHEMAS["curso.csv"]),
+            "silabo.csv": ("Silabo", "id_silabo", _TECHNICAL_SCHEMAS["silabo.csv"]),
+            "catalogo_competencias.csv": (
+                "Competencia",
+                "id_competencia",
+                _TECHNICAL_SCHEMAS["catalogo_competencias.csv"],
+            ),
+            "catalogo_logros.csv": (
+                "Logro",
+                "id_logro",
+                _TECHNICAL_SCHEMAS["catalogo_logros.csv"],
+            ),
+            "cobertura_curricular.csv": (
+                "CoberturaCurricular",
+                "id_cob_curricular",
+                _TECHNICAL_SCHEMAS["cobertura_curricular.csv"],
+            ),
+        }
+        filas_nuevas = self._filas_vacias_tecnicas()
+        conflictos: list[dict[str, str]] = []
+        resumen = {
+            "nuevos_cursos": 0,
+            "nuevos_silabos": 0,
+            "nuevas_competencias": 0,
+            "nuevos_logros": 0,
+            "nuevas_coberturas": 0,
+            "sin_cambios": 0,
+        }
+        for archivo, (etiqueta, campo_id, esquema) in definiciones.items():
+            existentes_por_id = existentes[etiqueta]
+            for fila in fuente.filas[archivo]:
+                actual = existentes_por_id.get(fila[campo_id])
+                if actual is None:
+                    filas_nuevas[archivo].append(fila)
+                    resumen_key = {
+                        "curso.csv": "nuevos_cursos",
+                        "silabo.csv": "nuevos_silabos",
+                        "catalogo_competencias.csv": "nuevas_competencias",
+                        "catalogo_logros.csv": "nuevos_logros",
+                        "cobertura_curricular.csv": "nuevas_coberturas",
+                    }[archivo]
+                    resumen[resumen_key] += 1
+                    continue
+                diferencias = [
+                    campo
+                    for campo in esquema[1:]
+                    if actual.get(campo) is not None and _texto(actual.get(campo)) != fila[campo]
+                ]
+                if diferencias:
+                    conflictos.append(
+                        self._conflicto(
+                            "ID_EXISTENTE_CON_CONFLICTO",
+                            archivo,
+                            f"El ID {fila[campo_id]} ya existe con propiedades distintas: "
+                            f"{', '.join(diferencias)}.",
+                        )
+                    )
+                else:
+                    resumen["sin_cambios"] += 1
+        total_nuevo = sum(len(filas) for filas in filas_nuevas.values())
+        preview = self._preview_base_tecnico(id_ejecucion, fuente.fingerprint)
+        preview.update(
+            {
+                "puede_importar": not conflictos and total_nuevo > 0,
+                "mensaje": (
+                    "La data técnica está validada y lista para confirmar."
+                    if not conflictos and total_nuevo > 0
+                    else "No hay datos técnicos nuevos para importar."
+                    if not conflictos
+                    else "La data técnica requiere correcciones antes de importarse."
+                ),
+                "resumen": resumen,
+                "conflictos": conflictos,
+                "archivos": self._resumen_archivos_tecnico(fuente.filas, filas_nuevas, existentes),
+                "release_gate": {"decision": RELEASE_GATE_DECISION},
+            }
+        )
+        return AnalisisImportacion(preview, fuente, filas_nuevas)
 
     def _validar_release_gate(self, id_ejecucion: str) -> dict[str, str] | None:
         """Require the producer-owned gate before reading importable CSVs."""
 
         if ID_EJECUCION_RE.fullmatch(id_ejecucion) is None:
             return None
-        try:
-            estado = self.gestor.obtener(id_ejecucion)
-        except KeyError as exc:
-            raise ImportacionNeo4jError("La ejecución no existe.", status_code=404) from exc
+        estado = self._leer_manifesto_tecnico(id_ejecucion)
+        if estado is None:
+            try:
+                estado = self.gestor.obtener(id_ejecucion)
+            except KeyError as exc:
+                raise ImportacionNeo4jError("La ejecución no existe.", status_code=404) from exc
         gate = estado.get("release_gate")
         if not isinstance(gate, dict):
             limpieza = estado.get("limpieza_silabos")
@@ -349,9 +539,12 @@ class ImportadorNeo4j:
                 pendientes_por_decidir = int(aprobacion.get("pendientes_por_decidir", 0) or 0)
             except (TypeError, ValueError):
                 pendientes_por_decidir = 1
-        if isinstance(aprobacion, dict) and (
-            aprobacion.get("requiere_decision") is True or pendientes_por_decidir > 0
-        ):
+        requiere_decision = (
+            isinstance(aprobacion, dict)
+            and type(aprobacion.get("requiere_decision")) is bool
+            and bool(aprobacion.get("requiere_decision"))
+        )
+        if isinstance(aprobacion, dict) and (requiere_decision or pendientes_por_decidir > 0):
             return {
                 "codigo": "PENDING_DECISIONS",
                 "mensaje": (
@@ -391,7 +584,11 @@ class ImportadorNeo4j:
                 status_code=409,
             )
         validacion = estado.get("validacion_silabos")
-        if not isinstance(validacion, dict) or validacion.get("valida") is not True:
+        if (
+            not isinstance(validacion, dict)
+            or type(validacion.get("valida")) is not bool
+            or not validacion.get("valida")
+        ):
             raise ImportacionNeo4jError(
                 "La ejecución curricular no superó la validación requerida.",
                 status_code=409,
@@ -408,9 +605,10 @@ class ImportadorNeo4j:
                 status_code=404,
             )
 
+        salida = _cargar_salida_legacy()
         filas: dict[str, list[dict[str, str]]] = {}
         digest = hashlib.sha256()
-        for archivo, esquema in ARCHIVOS_SALIDA:
+        for archivo, esquema in salida.ARCHIVOS_SALIDA:
             ruta = directorio / archivo
             if not ruta.is_file() or ruta.resolve().parent != directorio:
                 raise ImportacionNeo4jError(
@@ -510,21 +708,26 @@ class ImportadorNeo4j:
         filas: dict[str, list[dict[str, str]]],
         silabos: tuple[dict[str, str], ...],
     ) -> list[dict[str, str]]:
+        salida = _cargar_salida_legacy()
         errores: list[dict[str, str]] = []
         reglas = {
-            "curso.csv": (CURSOS_SCHEMA, "id_curso", "nombre_curso"),
+            "curso.csv": (salida.CURSOS_SCHEMA, "id_curso", "nombre_curso"),
             "catalogo_competencias.csv": (
-                COMPETENCIAS_SCHEMA,
+                salida.COMPETENCIAS_SCHEMA,
                 "id_competencia",
                 "nombre_competencia",
             ),
-            "catalogo_habilidades.csv": (HABILIDADES_SCHEMA, "id_habilidad", "nombre_habilidad"),
+            "catalogo_habilidades.csv": (
+                salida.HABILIDADES_SCHEMA,
+                "id_habilidad",
+                "nombre_habilidad",
+            ),
             "catalogo_herramientas.csv": (
-                HERRAMIENTAS_SCHEMA,
+                salida.HERRAMIENTAS_SCHEMA,
                 "id_herramienta",
                 "nombre_herramienta",
             ),
-            "cobertura_curricular.csv": (COBERTURA_SCHEMA, "id_cob_curricular", ""),
+            "cobertura_curricular.csv": (salida.COBERTURA_SCHEMA, "id_cob_curricular", ""),
         }
         for archivo, (_, columna_id, columna_nombre) in reglas.items():
             vistos_id: dict[str, int] = {}
@@ -556,7 +759,9 @@ class ImportadorNeo4j:
                 campos_obligatorios = (
                     ("id_curso", "nombre_curso", "id_carrera")
                     if archivo == "curso.csv"
-                    else filas[archivo][0].keys() if filas[archivo] else ()
+                    else filas[archivo][0].keys()
+                    if filas[archivo]
+                    else ()
                 )
                 for campo in campos_obligatorios:
                     if (
@@ -602,7 +807,7 @@ class ImportadorNeo4j:
             if archivo == "cobertura_curricular.csv":
                 vistos_clave: dict[tuple[str, ...], int] = {}
                 for numero, fila in enumerate(filas[archivo], start=2):
-                    clave = tuple(fila[campo] for campo in COBERTURA_SCHEMA[1:])
+                    clave = tuple(fila[campo] for campo in salida.COBERTURA_SCHEMA[1:])
                     if clave in vistos_clave:
                         errores.append(
                             self._error(
@@ -610,12 +815,12 @@ class ImportadorNeo4j:
                                 archivo,
                                 numero,
                                 "La combinación curricular está repetida en la fila "
-                                f"{vistos_clave[clave]}."
+                                f"{vistos_clave[clave]}.",
                             )
                         )
                     else:
                         vistos_clave[clave] = numero
-                    for campo in COBERTURA_SCHEMA[1:]:
+                    for campo in salida.COBERTURA_SCHEMA[1:]:
                         if campo in {"id_habilidad", "id_herramienta"} and not fila[campo]:
                             continue
                         patron = ID_PATTERNS[campo]
@@ -707,9 +912,10 @@ class ImportadorNeo4j:
         fuente: FuenteCurricular,
     ) -> AnalisisImportacion:
         existentes = self._leer_estado_grafo(fuente.filas)
+        salida = _cargar_salida_legacy()
         conflictos: list[dict[str, str]] = []
         filas_nuevas: dict[str, list[dict[str, str]]] = {
-            archivo: [] for archivo, _ in ARCHIVOS_SALIDA
+            archivo: [] for archivo, _ in salida.ARCHIVOS_SALIDA
         }
         resumen = {
             "nuevos_cursos": 0,
@@ -740,7 +946,7 @@ class ImportadorNeo4j:
                 filas_nuevas["curso.csv"].append(fila)
                 resumen["nuevos_cursos"] += 1
                 continue
-            campos = CURSOS_SCHEMA[1:]
+            campos = salida.CURSOS_SCHEMA[1:]
             conflictos_curso = [
                 campo
                 for campo in campos
@@ -822,9 +1028,7 @@ class ImportadorNeo4j:
                 filas_nuevas[archivo].append(fila)
                 resumen[f"nuevas_{resumen_key}"] += 1
 
-        pares_silabos = {
-            (silabo["id_curso"], silabo["id_silabo"]) for silabo in fuente.silabos
-        }
+        pares_silabos = {(silabo["id_curso"], silabo["id_silabo"]) for silabo in fuente.silabos}
         relaciones_curso_silabo_nuevas: list[dict[str, str]] = []
         pares_por_silabo: dict[str, set[str]] = {}
         for id_curso_existente, id_silabo_existente in existentes["pares_curso_silabo"]:
@@ -875,10 +1079,12 @@ class ImportadorNeo4j:
         claves_cobertura: set[tuple[str, ...]] = set()
         for fila in fuente.filas["cobertura_curricular.csv"]:
             id_cobertura = fila["id_cob_curricular"]
-            clave = tuple(fila[campo] for campo in COBERTURA_SCHEMA[1:])
+            clave = tuple(fila[campo] for campo in salida.COBERTURA_SCHEMA[1:])
             actual = existentes_coberturas["por_id"].get(id_cobertura)
             if actual is not None:
-                actual_clave = tuple(_texto(actual.get(campo)) for campo in COBERTURA_SCHEMA[1:])
+                actual_clave = tuple(
+                    _texto(actual.get(campo)) for campo in salida.COBERTURA_SCHEMA[1:]
+                )
                 if actual_clave != clave:
                     conflictos.append(
                         self._conflicto(
@@ -931,10 +1137,7 @@ class ImportadorNeo4j:
                         "id_competencia no existe en los catálogos disponibles.",
                     )
                 )
-            if (
-                fila["id_habilidad"]
-                and fila["id_habilidad"] not in ids_catalogo["id_habilidad"]
-            ):
+            if fila["id_habilidad"] and fila["id_habilidad"] not in ids_catalogo["id_habilidad"]:
                 referencia_catalogo_valida = False
                 conflictos.append(
                     self._conflicto(
@@ -960,8 +1163,7 @@ class ImportadorNeo4j:
                 resumen["nuevas_coberturas"] += 1
 
         total_nuevo = sum(
-            len(filas_nuevas[archivo])
-            for archivo, _ in ARCHIVOS_SALIDA
+            len(filas_nuevas[archivo]) for archivo, _ in salida.ARCHIVOS_SALIDA
         ) + len(relaciones_curso_silabo_nuevas)
         preview = self._preview_base(id_ejecucion, fuente.fingerprint)
         preview.update(
@@ -1018,7 +1220,54 @@ class ImportadorNeo4j:
 
     @staticmethod
     def _filas_vacias() -> dict[str, list[dict[str, str]]]:
-        return {archivo: [] for archivo, _ in ARCHIVOS_SALIDA}
+        salida = _cargar_salida_legacy()
+        return {archivo: [] for archivo, _ in salida.ARCHIVOS_SALIDA}
+
+    @staticmethod
+    def _filas_vacias_tecnicas() -> dict[str, list[dict[str, str]]]:
+        return {archivo: [] for archivo, _ in neo4j_catalogos.ARCHIVOS_CATALOGO}
+
+    @staticmethod
+    def _preview_base_tecnico(id_ejecucion: str, fingerprint: str) -> dict[str, Any]:
+        preview = ImportadorNeo4j._preview_base(id_ejecucion, fingerprint)
+        preview["resumen"] = {
+            "nuevos_cursos": 0,
+            "nuevos_silabos": 0,
+            "nuevas_competencias": 0,
+            "nuevos_logros": 0,
+            "nuevas_coberturas": 0,
+            "sin_cambios": 0,
+        }
+        preview["archivos"] = []
+        return preview
+
+    @staticmethod
+    def _resumen_archivos_tecnico(
+        filas: dict[str, list[dict[str, str]]],
+        filas_nuevas: dict[str, list[dict[str, str]]],
+        existentes: dict[str, dict[str, dict[str, Any]]],
+    ) -> list[dict[str, Any]]:
+        definiciones = {
+            "curso.csv": ("Curso", "id_curso"),
+            "silabo.csv": ("Silabo", "id_silabo"),
+            "catalogo_competencias.csv": ("Competencia", "id_competencia"),
+            "catalogo_logros.csv": ("Logro", "id_logro"),
+            "cobertura_curricular.csv": ("CoberturaCurricular", "id_cob_curricular"),
+        }
+        return [
+            {
+                "archivo": archivo,
+                "filas": len(filas[archivo]),
+                "nuevas": len(filas_nuevas[archivo]),
+                "existentes": sum(
+                    1 for fila in filas[archivo] if fila[campo] in existentes[etiqueta]
+                ),
+                "sin_cambios": sum(
+                    1 for fila in filas[archivo] if fila[campo] in existentes[etiqueta]
+                ),
+            }
+            for archivo, (etiqueta, campo) in definiciones.items()
+        ]
 
     @staticmethod
     def _resumen_archivos(
@@ -1033,8 +1282,9 @@ class ImportadorNeo4j:
             "catalogo_herramientas.csv": ("Herramienta", "id_herramienta"),
             "cobertura_curricular.csv": ("Cobertura_Curricular", "id_cob_curricular"),
         }
+        salida = _cargar_salida_legacy()
         resultado: list[dict[str, Any]] = []
-        for archivo, _ in ARCHIVOS_SALIDA:
+        for archivo, _ in salida.ARCHIVOS_SALIDA:
             label, campo = mapa[archivo]
             existentes_ids = (
                 set(existentes[label])
@@ -1057,6 +1307,7 @@ class ImportadorNeo4j:
         return resultado
 
     def _leer_estado_grafo(self, filas: dict[str, list[dict[str, str]]]) -> dict[str, Any]:
+        salida = _cargar_salida_legacy()
         with self._sesion(READ_ACCESS) as sesion:
             competencias = _filas_registro(
                 sesion.run(
@@ -1154,7 +1405,7 @@ class ImportadorNeo4j:
                     _texto(registro.get("id_cob_curricular")): registro for registro in coberturas
                 },
                 "por_clave": {
-                    tuple(_texto(registro.get(campo)) for campo in COBERTURA_SCHEMA[1:])
+                    tuple(_texto(registro.get(campo)) for campo in salida.COBERTURA_SCHEMA[1:])
                     for registro in coberturas
                 },
             },
@@ -1184,6 +1435,18 @@ class ImportadorNeo4j:
         }
         return {"por_id": por_id, "por_nombre": por_nombre}
 
+    def _escribir_grafo_tecnico(
+        self,
+        id_importacion: str,
+        filas: dict[str, list[dict[str, str]]],
+    ) -> None:
+        with self._sesion(WRITE_ACCESS) as sesion:
+
+            def transaccion(tx: Any) -> None:
+                neo4j_catalogos.escribir_catalogos(tx, filas, id_importacion)
+
+            sesion.execute_write(transaccion)
+
     def _escribir_grafo(
         self,
         id_importacion: str,
@@ -1191,6 +1454,7 @@ class ImportadorNeo4j:
         relaciones_curso_silabo_nuevas: tuple[dict[str, str], ...],
     ) -> None:
         with self._sesion(WRITE_ACCESS) as sesion:
+
             def transaccion(tx: Any) -> None:
                 self._escribir_cursos(tx, filas_nuevas["curso.csv"], id_importacion)
                 self._escribir_relaciones_curso_silabo(
@@ -1241,9 +1505,7 @@ class ImportadorNeo4j:
                             continue
                         procesadas = _resultado_count(
                             tx.run(
-                                self._cypher_cobertura(
-                                    requiere_habilidad, requiere_herramienta
-                                ),
+                                self._cypher_cobertura(requiere_habilidad, requiere_herramienta),
                                 {"rows": lote, "import_id": id_importacion},
                             )
                         )
@@ -1287,7 +1549,8 @@ class ImportadorNeo4j:
     def _escribir_cursos(tx: Any, filas: list[dict[str, str]], id_importacion: str) -> None:
         if not filas:
             return
-        campos = list(CURSOS_SCHEMA[1:])
+        salida = _cargar_salida_legacy()
+        campos = list(salida.CURSOS_SCHEMA[1:])
         procesadas = _resultado_count(
             tx.run(
                 "UNWIND $rows AS row "
@@ -1400,6 +1663,7 @@ class ImportadorNeo4j:
 
     def _revertir_grafo(self, id_importacion: str) -> dict[str, int]:
         with self._sesion(WRITE_ACCESS) as sesion:
+
             def transaccion(tx: Any) -> dict[str, int]:
                 relaciones = _resultado_count(
                     tx.run(

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
+import pytest
 from fastapi.testclient import TestClient
 
 from agente.api import normalizador, servidor
@@ -25,6 +28,18 @@ def _gestor_con_ejecucion(tmp_path: Path) -> tuple[GestorEjecuciones, str, Path]
         {"carrera": "Marketing", "periodo": "2026-1"},
     )
     return gestor, id_ejecucion, directorio
+
+
+def _mapping(value: object) -> Mapping[str, object]:
+    if not isinstance(value, Mapping) or not all(isinstance(key, str) for key in value):
+        raise AssertionError("Se esperaba un objeto serializado con claves de texto.")
+    return cast(Mapping[str, object], value)
+
+
+def _mappings(value: object) -> list[Mapping[str, object]]:
+    if not isinstance(value, list):
+        raise AssertionError("Se esperaba una lista de objetos serializados.")
+    return [_mapping(item) for item in value]
 
 
 def _salidas_curriculares() -> tuple[dict[str, object], ...]:
@@ -117,10 +132,77 @@ def test_a_dict_oculta_salidas_curriculares_hasta_cerrar_hitl(tmp_path: Path) ->
 
     estado = ejecucion.a_dict()
 
-    assert estado["release_gate"]["decision"] == "BLOCK_IMPORT"
+    release_gate = _mapping(estado["release_gate"])
+    limpieza_silabos = _mapping(estado["limpieza_silabos"])
+    assert release_gate["decision"] == "BLOCK_IMPORT"
     assert estado["outputs"] == []
-    assert estado["limpieza_silabos"]["outputs"] == []
+    assert limpieza_silabos["outputs"] == []
     assert id_ejecucion.startswith("NOR_")
+
+
+def test_a_dict_filtra_salidas_y_reportes_tecnicos_por_gate(tmp_path: Path) -> None:
+    gestor, id_ejecucion, directorio = _gestor_con_ejecucion(tmp_path)
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    ejecucion.configuracion_curricular = {"modo_analista": "technical"}
+    csvs = (
+        "salidas/curso.csv",
+        "salidas/silabo.csv",
+        "salidas/catalogo_competencias.csv",
+        "salidas/catalogo_logros.csv",
+        "salidas/cobertura_curricular.csv",
+    )
+    reportes = (
+        "analisis_tecnico.json",
+        "propuestas_tecnicas.jsonl",
+        "decisiones_tecnicas.jsonl",
+        "release_gate.json",
+    )
+    outputs = tuple(
+        {"tipo": "csv_curricular", "archivo": archivo, "registros": 1} for archivo in csvs
+    ) + tuple(
+        {"tipo": "auditoria_tecnica", "archivo": f"salidas/reportes/{nombre}", "registros": 1}
+        for nombre in reportes
+        if nombre != "release_gate.json"
+    )
+    for archivo in (*csvs, *(f"salidas/reportes/{nombre}" for nombre in reportes)):
+        ruta = directorio / archivo
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        ruta.write_text("{}\n", encoding="utf-8")
+    gate: dict[str, object] = {"decision": "ALLOW_IMPORT"}
+    (directorio / "salidas/reportes/release_gate.json").write_text(
+        json.dumps(gate), encoding="utf-8"
+    )
+    ejecucion.limpieza_silabos = ResultadoLimpiezaSilabos(
+        registros=1,
+        outputs=outputs,
+        hallazgos=(),
+        release_gate=gate,
+    )
+
+    estado = ejecucion.a_dict()
+
+    limpieza_silabos = _mapping(estado["limpieza_silabos"])
+    assert [output["archivo"] for output in _mappings(estado["outputs"])] == list(csvs)
+    assert [output["archivo"] for output in _mappings(limpieza_silabos["outputs"])] == list(csvs)
+    assert set(_mapping(gestor.obtener_reporte(id_ejecucion)["reportes"])) == set(reportes)
+
+    blocked_gate: dict[str, object] = {"decision": "BLOCK_IMPORT"}
+    (directorio / "salidas/reportes/release_gate.json").write_text(
+        json.dumps(blocked_gate), encoding="utf-8"
+    )
+    ejecucion.limpieza_silabos = ResultadoLimpiezaSilabos(
+        registros=1,
+        outputs=outputs,
+        hallazgos=(),
+        release_gate=blocked_gate,
+    )
+
+    estado_bloqueado = ejecucion.a_dict()
+    limpieza_bloqueada = _mapping(estado_bloqueado["limpieza_silabos"])
+
+    assert estado_bloqueado["outputs"] == []
+    assert limpieza_bloqueada["outputs"] == []
+    assert set(_mapping(gestor.obtener_reporte(id_ejecucion)["reportes"])) == set(reportes)
 
 
 def test_a_dict_de_empleabilidad_conserva_sus_outputs(tmp_path: Path) -> None:
@@ -147,7 +229,7 @@ def test_a_dict_de_empleabilidad_conserva_sus_outputs(tmp_path: Path) -> None:
 
     estado = ejecucion.a_dict()
 
-    assert [output["archivo"] for output in estado["outputs"]] == [
+    assert [output["archivo"] for output in _mappings(estado["outputs"])] == [
         "salidas/requerimiento_laboral.csv"
     ]
 
@@ -206,8 +288,9 @@ def test_historial_usa_snapshot_activo_sobre_manifest_persistido(tmp_path: Path)
 
     historial = gestor.listar_historial()
 
-    assert historial["ejecuciones"][0]["id_ejecucion"] == id_ejecucion
-    assert historial["ejecuciones"][0]["estado"] == "normalizando"
+    ejecuciones = _mappings(historial["ejecuciones"])
+    assert ejecuciones[0]["id_ejecucion"] == id_ejecucion
+    assert ejecuciones[0]["estado"] == "normalizando"
 
 
 def test_reporte_malformado_conserva_mensajes_publicos(tmp_path: Path) -> None:
@@ -233,7 +316,7 @@ def test_reporte_malformado_conserva_mensajes_publicos(tmp_path: Path) -> None:
 
 
 def test_retencion_ttl_y_lru_solo_eliminan_ejecuciones_terminales(
-    monkeypatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("NORMALIZADOR_HISTORIAL_MAX_EJECUCIONES", "1")
     monkeypatch.setenv("NORMALIZADOR_HISTORIAL_RETENCION_DIAS", "1")
@@ -268,14 +351,14 @@ def test_retencion_ttl_y_lru_solo_eliminan_ejecuciones_terminales(
 
 
 def test_cancelar_persiste_la_solicitud_y_el_worker_cierra_como_cancelado(
-    monkeypatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     gestor, id_ejecucion, directorio = _gestor_con_ejecucion(tmp_path)
     ejecucion = gestor._obtener_objeto(id_ejecucion)
     ejecucion.estado = "limpiando"
     gestor._persistir(ejecucion)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
-    cliente = TestClient(servidor.app)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
 
     respuesta = cliente.post(f"/normalizador/ejecuciones/{id_ejecucion}/cancelar")
 
@@ -290,19 +373,22 @@ def test_cancelar_persiste_la_solicitud_y_el_worker_cierra_como_cancelado(
     assert estado["estado"] == "cancelado"
     assert estado["cancelacion_solicitada"] is True
     assert any(
-        hallazgo["codigo"] == "PROCESAMIENTO_CANCELADO" for hallazgo in estado["hallazgos"]
+        hallazgo["codigo"] == "PROCESAMIENTO_CANCELADO"
+        for hallazgo in _mappings(estado["hallazgos"])
     )
     manifest = json.loads((directorio / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["estado"] == "cancelado"
 
 
-def test_cancelar_estado_terminal_devuelve_conflicto(monkeypatch, tmp_path: Path) -> None:
+def test_cancelar_estado_terminal_devuelve_conflicto(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     gestor, id_ejecucion, _directorio = _gestor_con_ejecucion(tmp_path)
     ejecucion = gestor._obtener_objeto(id_ejecucion)
     ejecucion.estado = "limpiado"
     gestor._persistir(ejecucion)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
-    cliente = TestClient(servidor.app)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
 
     respuesta = cliente.post(f"/normalizador/ejecuciones/{id_ejecucion}/cancelar")
 
@@ -339,16 +425,18 @@ def test_historial_consolida_reportes_purga_temporales_y_conserva_fuente_curricu
     gestor._finalizar(ejecucion)
 
     listado = gestor.listar_historial(20)
-    item = next(item for item in listado["ejecuciones"] if item["id_ejecucion"] == id_ejecucion)
+    item = next(
+        item for item in _mappings(listado["ejecuciones"]) if item["id_ejecucion"] == id_ejecucion
+    )
     assert item["estado"] == "cancelado"
     assert item["resumen"] == {"advertencias": 1, "errores": 1, "outputs": 0}
     assert (directorio / "entrada" / "paquete.zip").is_file()
     assert not (directorio / "fuentes_curriculares").exists()
-    assert not (directorio / "limpios").exists()
+    assert (directorio / "limpios" / "silabos.jsonl").is_file()
     assert salida.exists()
 
     reporte = gestor.obtener_reporte(id_ejecucion)
-    assert reporte["manifest"]["estado"] == "cancelado"
+    assert _mapping(reporte["manifest"])["estado"] == "cancelado"
     assert reporte["reportes"] == {}
     assert (reportes / "decisiones_llm.jsonl").read_text(encoding="utf-8") == (
         '{"estado":"REVISAR","sugerencia":"Revisar herramienta"}\n'
@@ -393,8 +481,8 @@ def test_migra_warning_macos_en_manifests_y_reportes_sin_perder_historial_ni_csv
         "archivo": "paquete.zip",
         "parametros": {"carrera": "Marketing", "periodo": "2026-1"},
         "estado": "limpiado_con_advertencias",
-            "creada_en": timestamp_fixture,
-            "actualizada_en": timestamp_fixture,
+        "creada_en": timestamp_fixture,
+        "actualizada_en": timestamp_fixture,
         "hallazgos": [warning_macos, warning_valido, error_valido],
         "validacion_silabos": {
             "hallazgos": [warning_macos, warning_valido, error_valido],
@@ -444,11 +532,13 @@ def test_migra_warning_macos_en_manifests_y_reportes_sin_perder_historial_ni_csv
     estado = gestor.obtener(id_ejecucion)
     assert "METADATO_MACOS_IGNORADO" not in json.dumps(estado, ensure_ascii=False)
     assert estado["hallazgos"] == [warning_valido, error_valido]
-    assert estado["validacion_silabos"]["hallazgos"] == [warning_valido, error_valido]
-    assert estado["limpieza_silabos"]["hallazgos"] == [warning_valido]
+    validacion_silabos = _mapping(estado["validacion_silabos"])
+    limpieza_silabos = _mapping(estado["limpieza_silabos"])
+    assert validacion_silabos["hallazgos"] == [warning_valido, error_valido]
+    assert limpieza_silabos["hallazgos"] == [warning_valido]
     assert estado["estado"] == "limpiado_con_advertencias"
 
-    resumen = gestor.listar_historial()["ejecuciones"][0]
+    resumen = _mappings(gestor.listar_historial()["ejecuciones"])[0]
     assert resumen["resumen"] == {"advertencias": 1, "errores": 1, "outputs": 0}
     assert salida.exists()
     assert json.loads((reportes / "resumen.json").read_text(encoding="utf-8")) == {
@@ -488,10 +578,13 @@ def test_migracion_macos_recalcula_estado_si_era_el_unico_warning(tmp_path: Path
     gestor = GestorEjecuciones(tmp_path)
 
     assert gestor.obtener(id_ejecucion)["estado"] == "limpiado"
-    assert gestor.listar_historial()["ejecuciones"][0]["resumen"]["advertencias"] == 0
+    resumen = _mapping(_mappings(gestor.listar_historial()["ejecuciones"])[0]["resumen"])
+    assert resumen["advertencias"] == 0
 
 
-def test_endpoints_de_historial_listan_y_descargan_reporte(monkeypatch, tmp_path: Path) -> None:
+def test_endpoints_de_historial_listan_y_descargan_reporte(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     gestor, id_ejecucion, directorio = _gestor_con_ejecucion(tmp_path)
     reportes = directorio / "salidas" / "reportes"
     reportes.mkdir(parents=True)
@@ -500,7 +593,7 @@ def test_endpoints_de_historial_listan_y_descargan_reporte(monkeypatch, tmp_path
     ejecucion.estado = "limpiado"
     gestor._finalizar(ejecucion)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
-    cliente = TestClient(servidor.app)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
 
     listado = cliente.get("/normalizador/ejecuciones")
     reporte = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/reporte")
@@ -518,7 +611,7 @@ def test_endpoints_de_historial_listan_y_descargan_reporte(monkeypatch, tmp_path
 
 
 def test_retencion_lru_conserva_solo_la_ejecucion_terminal_mas_reciente(
-    monkeypatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("NORMALIZADOR_HISTORIAL_MAX_EJECUCIONES", "1")
     monkeypatch.setenv("NORMALIZADOR_HISTORIAL_RETENCION_DIAS", "99999")
@@ -538,4 +631,4 @@ def test_retencion_lru_conserva_solo_la_ejecucion_terminal_mas_reciente(
     assert not primer_directorio.exists()
     assert segundo_directorio.exists()
     historial = gestor.listar_historial()["ejecuciones"]
-    assert [item["id_ejecucion"] for item in historial] == [segundo_id]
+    assert [item["id_ejecucion"] for item in _mappings(historial)] == [segundo_id]

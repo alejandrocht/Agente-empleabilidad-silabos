@@ -232,14 +232,12 @@ def _recalcular_release_gate(
         blockers.add("PROVENANCE_INCOMPLETE")
     else:
         blockers.discard("PROVENANCE_INCOMPLETE")
-    if (
-        isinstance(checks.get("source_coverage"), dict)
-        and checks["source_coverage"].get("ok") is False
+    if isinstance(checks.get("source_coverage"), dict) and not bool(
+        checks["source_coverage"].get("ok")
     ):
         blockers.add("SOURCE_COVERAGE_INCOMPLETE")
-    if (
-        isinstance(checks.get("structural_errors"), dict)
-        and checks["structural_errors"].get("ok") is False
+    if isinstance(checks.get("structural_errors"), dict) and not bool(
+        checks["structural_errors"].get("ok")
     ):
         blockers.add("STRUCTURAL_ERRORS_PRESENT")
     if checks["canonical_relations"]["missing"]:
@@ -315,11 +313,14 @@ def _estado_estructural_materializable(gate: Mapping[str, object]) -> bool:
         "chh_packages",
     )
     if any(
-        not isinstance(checks.get(nombre), Mapping) or checks[nombre].get("ok") is False
+        not isinstance(checks.get(nombre), Mapping) or not bool(checks[nombre].get("ok"))
         for nombre in requeridos
     ):
         return False
-    blockers = {_texto(bloqueador) for bloqueador in gate.get("blockers", [])}
+    blockers_raw = gate.get("blockers")
+    if not isinstance(blockers_raw, list):
+        return False
+    blockers = {_texto(bloqueador) for bloqueador in blockers_raw}
     return blockers <= {"CANONICAL_MATERIALIZATION_PENDING"}
 
 
@@ -332,7 +333,7 @@ def _puede_materializar_perfil(gate: Mapping[str, object]) -> bool:
         _texto(gate.get("decision")) == "ALLOW_IMPORT"
         and _estado_estructural_materializable(gate)
         and isinstance(approval, Mapping)
-        and approval.get("ok") is True
+        and bool(approval.get("ok"))
         and not gate.get("blockers")
     )
 

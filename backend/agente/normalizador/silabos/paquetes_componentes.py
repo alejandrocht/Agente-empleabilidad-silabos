@@ -2,31 +2,67 @@
 
 from __future__ import annotations
 
+import re as _re
+import unicodedata as _unicodedata
+from collections import Counter as _Counter
 from collections.abc import Callable, Mapping, Sequence
 from typing import Protocol
 
 from agente.normalizador.silabos.paquetes_componentes_nombres import (  # noqa: F401
-    _HASH_NAME,
-    _TECHNICAL_NAME,
-    _TYPE_ORDER,
-    _UNRESOLVED_RESOLUTION_STATES,
-    PACKAGE_SOURCE_IDENTITY_FIELD,
-    Counter,
-    _component_identifier,
-    _component_key,
-    _component_name,
-    _component_provenance,
-    _component_source_key,
-    _has_structured_proposal,
-    _is_provisional_component,
-    _merge_components,
-    _normalized_name,
-    _unique_components,
-    _usable_display_name,
-    _with_component_provenance,
-    re,
-    unicodedata,
+    _HASH_NAME as _HASH_NAME,
 )
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _TECHNICAL_NAME as _TECHNICAL_NAME,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _TYPE_ORDER as _TYPE_ORDER,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _UNRESOLVED_RESOLUTION_STATES as _UNRESOLVED_RESOLUTION_STATES,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    PACKAGE_SOURCE_IDENTITY_FIELD as PACKAGE_SOURCE_IDENTITY_FIELD,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _component_identifier as _component_identifier,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _component_key as _component_key,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _component_name as _component_name,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _component_provenance as _component_provenance,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _component_source_key as _component_source_key,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _has_structured_proposal as _has_structured_proposal,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _is_provisional_component as _is_provisional_component,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _merge_components as _merge_components,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _normalized_name as _normalized_name,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _unique_components as _unique_components,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _usable_display_name as _usable_display_name,
+)
+from agente.normalizador.silabos.paquetes_componentes_nombres import (
+    _with_component_provenance as _with_component_provenance,
+)
+
+Counter = _Counter
+re = _re
+unicodedata = _unicodedata
 
 _SOURCE_FILES = {
     "competencia": (
@@ -212,7 +248,7 @@ def _add_source_components(
             canonical = _text(source.get(canonical_key))
             description = _text(source.get("descripcion_fuente") or source.get("texto_evidencia"))
             name = _usable_display_name(
-                source.get(name_key),
+                source.get(name_key) if name_key is not None else None,
                 description=description,
                 trusted_tool_name=kind == "herramienta",
             )

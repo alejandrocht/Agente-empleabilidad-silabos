@@ -56,11 +56,11 @@ def _asignar_decisiones_parciales_por_logro(
     claves_usadas: set[str] = set()
     for decision in getattr(respuesta, "decisiones"):
         clave = _clave_logro_literal(getattr(decision, "logro"))
-        caso = casos_por_logro.get(clave)
-        if caso is None or clave in claves_usadas:
+        caso_encontrado = casos_por_logro.get(clave)
+        if caso_encontrado is None or clave in claves_usadas:
             raise ValueError("La respuesta parcial contiene un logro ausente o duplicado del lote.")
         claves_usadas.add(clave)
-        materializada = materializar_decision(caso, decision)
+        materializada = materializar_decision(caso_encontrado, decision)
         if materializada is not None:
             decisiones.append(materializada)
     return decisiones

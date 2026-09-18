@@ -1,6 +1,13 @@
 "use client";
 
-import { AlertTriangle, Check, Database, LoaderCircle, RotateCcw, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Database,
+  LoaderCircle,
+  RotateCcw,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   importarEnNeo4j,
@@ -15,8 +22,27 @@ function numero(valor) {
   return new Intl.NumberFormat("es-PE").format(Number(valor || 0));
 }
 
-function resumenDe(preview) {
+function esPreviewTecnico(preview, modo) {
   const resumen = preview?.resumen || {};
+  return (
+    modo === "technical" ||
+    preview?.modo === "technical" ||
+    Object.prototype.hasOwnProperty.call(resumen, "nuevos_silabos") ||
+    Object.prototype.hasOwnProperty.call(resumen, "nuevos_logros")
+  );
+}
+
+function resumenDe(preview, modo) {
+  const resumen = preview?.resumen || {};
+  if (esPreviewTecnico(preview, modo)) {
+    return [
+      ["Cursos nuevos", resumen.nuevos_cursos],
+      ["Sílabos nuevos", resumen.nuevos_silabos],
+      ["Competencias nuevas", resumen.nuevas_competencias],
+      ["Logros nuevos", resumen.nuevos_logros],
+      ["Coberturas nuevas", resumen.nuevas_coberturas],
+    ];
+  }
   return [
     ["Competencias nuevas", resumen.nuevas_competencias],
     ["Habilidades nuevas", resumen.nuevas_habilidades],
@@ -27,10 +53,14 @@ function resumenDe(preview) {
 }
 
 function ultimaImportacionReversible(importaciones) {
-  return importaciones.find((importacion) => ESTADOS_REVERSIBLES.has(importacion.estado)) || null;
+  return (
+    importaciones.find((importacion) =>
+      ESTADOS_REVERSIBLES.has(importacion.estado),
+    ) || null
+  );
 }
 
-export default function Neo4jImportPanel({ idEjecucion }) {
+export default function Neo4jImportPanel({ idEjecucion, modo = "legacy" }) {
   const [preview, setPreview] = useState(null);
   const [importaciones, setImportaciones] = useState([]);
   const [dialogo, setDialogo] = useState(null);
@@ -41,9 +71,14 @@ export default function Neo4jImportPanel({ idEjecucion }) {
   const cargarHistorial = useCallback(async () => {
     try {
       const datos = await listarImportacionesNeo4j();
-      setImportaciones(Array.isArray(datos.importaciones) ? datos.importaciones : []);
+      setImportaciones(
+        Array.isArray(datos.importaciones) ? datos.importaciones : [],
+      );
     } catch (errorHistorial) {
-      setError(errorHistorial.message || "No se pudo consultar el historial de importaciones.");
+      setError(
+        errorHistorial.message ||
+          "No se pudo consultar el historial de importaciones.",
+      );
     }
   }, []);
 
@@ -74,7 +109,10 @@ export default function Neo4jImportPanel({ idEjecucion }) {
       setPreview(datos);
       setDialogo("confirmar");
     } catch (errorValidacion) {
-      setError(errorValidacion.message || "No se pudo validar la publicación en Neo4j.");
+      setError(
+        errorValidacion.message ||
+          "No se pudo validar la publicación en Neo4j.",
+      );
     } finally {
       setCargando(false);
     }
@@ -92,10 +130,14 @@ export default function Neo4jImportPanel({ idEjecucion }) {
       );
       setDialogo(null);
       setPreview(null);
-      setMensaje(`${datos.mensaje || "La data fue agregada a Neo4j."} ID: ${datos.id_importacion}`);
+      setMensaje(
+        `${datos.mensaje || "La data fue agregada a Neo4j."} ID: ${datos.id_importacion}`,
+      );
       await cargarHistorial();
     } catch (errorImportacion) {
-      setError(errorImportacion.message || "No se pudo agregar la data a Neo4j.");
+      setError(
+        errorImportacion.message || "No se pudo agregar la data a Neo4j.",
+      );
     } finally {
       setCargando(false);
     }
@@ -106,7 +148,10 @@ export default function Neo4jImportPanel({ idEjecucion }) {
     setCargando(true);
     setError("");
     try {
-      const datos = await revertirImportacionNeo4j(ultimaReversible.id_importacion, true);
+      const datos = await revertirImportacionNeo4j(
+        ultimaReversible.id_importacion,
+        true,
+      );
       setDialogo(null);
       setMensaje(datos.mensaje || "La importación fue revertida.");
       await cargarHistorial();
@@ -123,7 +168,10 @@ export default function Neo4jImportPanel({ idEjecucion }) {
 
   return (
     <>
-      <section className="mt-5 border-t border-line pt-5" aria-labelledby="neo4j-import-title">
+      <section
+        className="mt-5 border-t border-line pt-5"
+        aria-labelledby="neo4j-import-title"
+      >
         <div className="rounded-2xl border border-[#E6D3CB] bg-[#FFF8F5] p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-start gap-3">
@@ -134,7 +182,10 @@ export default function Neo4jImportPanel({ idEjecucion }) {
                 <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ulima">
                   05 / publicación
                 </p>
-                <h3 id="neo4j-import-title" className="mt-1 text-lg font-extrabold tracking-[-0.02em]">
+                <h3
+                  id="neo4j-import-title"
+                  className="mt-1 text-lg font-extrabold tracking-[-0.02em]"
+                >
                   Subir catálogos a Neo4j
                 </h3>
               </div>
@@ -145,8 +196,9 @@ export default function Neo4jImportPanel({ idEjecucion }) {
           </div>
 
           <p className="mt-4 max-w-3xl text-sm leading-6 text-muted">
-            Recomendamos revisar los datos antes de subirlos a la base de datos. Primero validaremos
-            el formato, las referencias y si cada fila es realmente nueva.
+            Recomendamos revisar los datos antes de subirlos a la base de datos.
+            Primero validaremos el formato, las referencias y si cada fila es
+            realmente nueva.
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -156,7 +208,15 @@ export default function Neo4jImportPanel({ idEjecucion }) {
               disabled={cargando}
               className="inline-flex items-center gap-2 rounded-xl bg-ulima px-4 py-3 text-sm font-extrabold text-white transition hover:bg-[#8f1e16] focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {cargando ? <LoaderCircle className="animate-spin" size={17} aria-hidden="true" /> : <Database size={17} aria-hidden="true" />}
+              {cargando ? (
+                <LoaderCircle
+                  className="animate-spin"
+                  size={17}
+                  aria-hidden="true"
+                />
+              ) : (
+                <Database size={17} aria-hidden="true" />
+              )}
               Subir datos a Neo4j
             </button>
             {ultimaReversible ? (
@@ -176,14 +236,24 @@ export default function Neo4jImportPanel({ idEjecucion }) {
           </div>
 
           {mensaje ? (
-            <div className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm leading-5 text-emerald-800" role="status">
+            <div
+              className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm leading-5 text-emerald-800"
+              role="status"
+            >
               <Check className="mt-0.5 shrink-0" size={17} aria-hidden="true" />
               <p>{mensaje}</p>
             </div>
           ) : null}
           {error ? (
-            <div className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-700" role="alert">
-              <AlertTriangle className="mt-0.5 shrink-0" size={17} aria-hidden="true" />
+            <div
+              className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-700"
+              role="alert"
+            >
+              <AlertTriangle
+                className="mt-0.5 shrink-0"
+                size={17}
+                aria-hidden="true"
+              />
               <p>{error}</p>
             </div>
           ) : null}
@@ -213,10 +283,17 @@ export default function Neo4jImportPanel({ idEjecucion }) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ulima">
-                  {dialogo === "revertir" ? "Reversión inmediata" : "Validación previa"}
+                  {dialogo === "revertir"
+                    ? "Reversión inmediata"
+                    : "Validación previa"}
                 </p>
-                <h2 id="neo4j-dialog-title" className="mt-2 text-xl font-extrabold tracking-[-0.025em]">
-                  {dialogo === "revertir" ? "¿Revertir la importación reciente?" : "Revisar datos antes de publicar"}
+                <h2
+                  id="neo4j-dialog-title"
+                  className="mt-2 text-xl font-extrabold tracking-[-0.025em]"
+                >
+                  {dialogo === "revertir"
+                    ? "¿Revertir la importación reciente?"
+                    : "Revisar datos antes de publicar"}
                 </h2>
               </div>
               <button
@@ -232,30 +309,63 @@ export default function Neo4jImportPanel({ idEjecucion }) {
 
             {dialogo === "revertir" ? (
               <>
-                <p id="neo4j-dialog-description" className="mt-4 text-sm leading-6 text-muted">
-                  Solo se eliminarán los nodos y relaciones creados por esta importación. Los datos
-                  existentes o conectados por otros procesos se conservarán.
+                <p
+                  id="neo4j-dialog-description"
+                  className="mt-4 text-sm leading-6 text-muted"
+                >
+                  Solo se eliminarán los nodos y relaciones creados por esta
+                  importación. Los datos existentes o conectados por otros
+                  procesos se conservarán.
                 </p>
                 <div className="mt-5 flex justify-end gap-2">
-                  <button type="button" onClick={cerrarDialogo} disabled={cargando} className="rounded-xl border border-line px-4 py-2.5 text-sm font-bold text-ink hover:bg-ash focus:outline-none focus:ring-2 focus:ring-ulima/30">
+                  <button
+                    type="button"
+                    onClick={cerrarDialogo}
+                    disabled={cargando}
+                    className="rounded-xl border border-line px-4 py-2.5 text-sm font-bold text-ink hover:bg-ash focus:outline-none focus:ring-2 focus:ring-ulima/30"
+                  >
                     Cancelar
                   </button>
-                  <button type="button" onClick={confirmarReversion} disabled={cargando} className="inline-flex items-center gap-2 rounded-xl bg-ulima px-4 py-2.5 text-sm font-extrabold text-white hover:bg-[#8f1e16] focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:opacity-60">
-                    {cargando ? <LoaderCircle className="animate-spin" size={16} aria-hidden="true" /> : <RotateCcw size={16} aria-hidden="true" />}
+                  <button
+                    type="button"
+                    onClick={confirmarReversion}
+                    disabled={cargando}
+                    className="inline-flex items-center gap-2 rounded-xl bg-ulima px-4 py-2.5 text-sm font-extrabold text-white hover:bg-[#8f1e16] focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:opacity-60"
+                  >
+                    {cargando ? (
+                      <LoaderCircle
+                        className="animate-spin"
+                        size={16}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <RotateCcw size={16} aria-hidden="true" />
+                    )}
                     Revertir importación
                   </button>
                 </div>
               </>
             ) : (
               <>
-                <p id="neo4j-dialog-description" className="mt-4 text-sm leading-6 text-muted">
-                  {preview?.mensaje || "La data fue revisada."} Recomendamos revisar los datos antes de subirlos a la base de datos.
+                <p
+                  id="neo4j-dialog-description"
+                  className="mt-4 text-sm leading-6 text-muted"
+                >
+                  {preview?.mensaje || "La data fue revisada."} Recomendamos
+                  revisar los datos antes de subirlos a la base de datos.
                 </p>
                 <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                  {resumenDe(preview).map(([etiqueta, valor]) => (
-                    <div key={etiqueta} className="rounded-xl bg-ash px-3.5 py-3">
-                      <p className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-muted">{etiqueta}</p>
-                      <p className="mt-1 text-xl font-extrabold">{numero(valor)}</p>
+                  {resumenDe(preview, modo).map(([etiqueta, valor]) => (
+                    <div
+                      key={etiqueta}
+                      className="rounded-xl bg-ash px-3.5 py-3"
+                    >
+                      <p className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-muted">
+                        {etiqueta}
+                      </p>
+                      <p className="mt-1 text-xl font-extrabold">
+                        {numero(valor)}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -264,9 +374,15 @@ export default function Neo4jImportPanel({ idEjecucion }) {
                     <p className="font-bold">Detalle de archivos</p>
                     <ul className="mt-2 space-y-1.5 text-xs leading-5 text-muted">
                       {preview.archivos.map((archivo) => (
-                        <li key={archivo.archivo} className="flex flex-wrap justify-between gap-2">
+                        <li
+                          key={archivo.archivo}
+                          className="flex flex-wrap justify-between gap-2"
+                        >
                           <span>{archivo.archivo}</span>
-                          <span className="font-mono">{numero(archivo.nuevas)} nuevas · {numero(archivo.sin_cambios)} sin cambios</span>
+                          <span className="font-mono">
+                            {numero(archivo.nuevas)} nuevas ·{" "}
+                            {numero(archivo.sin_cambios)} sin cambios
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -275,13 +391,28 @@ export default function Neo4jImportPanel({ idEjecucion }) {
                 {preview?.errores?.length || preview?.conflictos?.length ? (
                   <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-sm text-amber-900">
                     <div className="flex items-start gap-2">
-                      <AlertTriangle className="mt-0.5 shrink-0" size={17} aria-hidden="true" />
+                      <AlertTriangle
+                        className="mt-0.5 shrink-0"
+                        size={17}
+                        aria-hidden="true"
+                      />
                       <div>
-                        <p className="font-bold">No se puede publicar todavía</p>
+                        <p className="font-bold">
+                          No se puede publicar todavía
+                        </p>
                         <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">
-                          {[...(preview.errores || []), ...(preview.conflictos || [])].slice(0, 8).map((hallazgo, indice) => (
-                            <li key={`${hallazgo.codigo || "hallazgo"}-${indice}`}>{hallazgo.mensaje}</li>
-                          ))}
+                          {[
+                            ...(preview.errores || []),
+                            ...(preview.conflictos || []),
+                          ]
+                            .slice(0, 8)
+                            .map((hallazgo, indice) => (
+                              <li
+                                key={`${hallazgo.codigo || "hallazgo"}-${indice}`}
+                              >
+                                {hallazgo.mensaje}
+                              </li>
+                            ))}
                         </ul>
                       </div>
                     </div>
@@ -293,11 +424,29 @@ export default function Neo4jImportPanel({ idEjecucion }) {
                     : "Corrige o revisa los hallazgos antes de intentar la publicación."}
                 </p>
                 <div className="mt-5 flex justify-end gap-2">
-                  <button type="button" onClick={cerrarDialogo} disabled={cargando} className="rounded-xl border border-line px-4 py-2.5 text-sm font-bold text-ink hover:bg-ash focus:outline-none focus:ring-2 focus:ring-ulima/30">
+                  <button
+                    type="button"
+                    onClick={cerrarDialogo}
+                    disabled={cargando}
+                    className="rounded-xl border border-line px-4 py-2.5 text-sm font-bold text-ink hover:bg-ash focus:outline-none focus:ring-2 focus:ring-ulima/30"
+                  >
                     Cancelar
                   </button>
-                  <button type="button" onClick={confirmarImportacion} disabled={!preview?.puede_importar || cargando} className="inline-flex items-center gap-2 rounded-xl bg-ulima px-4 py-2.5 text-sm font-extrabold text-white hover:bg-[#8f1e16] focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-45">
-                    {cargando ? <LoaderCircle className="animate-spin" size={16} aria-hidden="true" /> : <Database size={16} aria-hidden="true" />}
+                  <button
+                    type="button"
+                    onClick={confirmarImportacion}
+                    disabled={!preview?.puede_importar || cargando}
+                    className="inline-flex items-center gap-2 rounded-xl bg-ulima px-4 py-2.5 text-sm font-extrabold text-white hover:bg-[#8f1e16] focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    {cargando ? (
+                      <LoaderCircle
+                        className="animate-spin"
+                        size={16}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Database size={16} aria-hidden="true" />
+                    )}
                     Agregar a Neo4j
                   </button>
                 </div>

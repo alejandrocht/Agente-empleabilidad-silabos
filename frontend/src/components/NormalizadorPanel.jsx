@@ -190,6 +190,18 @@ const TIPOS_OUTPUT_AUDITABLES = new Set([
   "decisiones_curriculares",
 ]);
 
+const ARCHIVOS_CURRICULARES_TECNICOS = new Set([
+  "salidas/curso.csv",
+  "salidas/silabo.csv",
+  "salidas/catalogo_competencias.csv",
+  "salidas/catalogo_logros.csv",
+  "salidas/cobertura_curricular.csv",
+]);
+
+function esModoTecnico(ejecucion) {
+  return ejecucion?.configuracion_curricular?.modo_analista === "technical";
+}
+
 function aprobacionCurricularDe(ejecucion) {
   return ejecucion?.aprobacion_curricular &&
     typeof ejecucion.aprobacion_curricular === "object"
@@ -199,6 +211,16 @@ function aprobacionCurricularDe(ejecucion) {
 
 function releaseGatePermiteImportar(ejecucion) {
   const gate = ejecucion?.release_gate;
+  if (esModoTecnico(ejecucion)) {
+    const outputs = Array.isArray(ejecucion?.outputs) ? ejecucion.outputs : [];
+    const archivos = new Set(outputs.map((output) => output?.archivo));
+    return (
+      gate?.decision === "ALLOW_IMPORT" &&
+      [...ARCHIVOS_CURRICULARES_TECNICOS].every((archivo) =>
+        archivos.has(archivo),
+      )
+    );
+  }
   const aprobacion = aprobacionCurricularDe(ejecucion);
   return (
     gate?.decision === "ALLOW_IMPORT" &&
@@ -208,7 +230,8 @@ function releaseGatePermiteImportar(ejecucion) {
   );
 }
 
-function salidaCurricularCanonica(output) {
+function salidaCurricularCanonica(output, modoTecnico = false) {
+  if (modoTecnico) return ARCHIVOS_CURRICULARES_TECNICOS.has(output?.archivo);
   return (
     output?.tipo === "csv_curricular" ||
     /^salidas\/catalogo_(competencias|habilidades|herramientas)\.csv$/.test(
@@ -701,7 +724,7 @@ export default function NormalizadorPanel() {
   const [errorRed, setErrorRed] = useState("");
   const [cancelando, setCancelando] = useState(false);
   const [cancelacionEnviada, setCancelacionEnviada] = useState(false);
-  const [aprobacionCurricular, setAprobacionCurricular] = useState(null);
+  const [, setAprobacionCurricular] = useState(null);
   const [pollingDetenido, setPollingDetenido] = useState(false);
   const [recuperando, setRecuperando] = useState(true);
 
@@ -953,12 +976,11 @@ export default function NormalizadorPanel() {
     () => hallazgosActividad(ejecucion),
     [ejecucion],
   );
-  const minutosInactivo = !esFinal
-    ? minutosSinActividad(ejecucion?.actualizada_en)
-    : null;
+  const minutosInactivo = esFinal
+    ? null
+    : minutosSinActividad(ejecucion?.actualizada_en);
   const ultimaActualizacion = fechaLegible(ejecucion?.actualizada_en);
   const IconoFuente = esCurricular ? BookOpen : FileSpreadsheet;
-  const pasoEnCurso = pasos.find((paso) => pasoActivo(estado, paso.id, flujo));
   const progresoManifest =
     progresoLimpiezaLLM && progresoLimpiezaLLM.chunksTotales > 0
       ? progresoLimpiezaLLM.porcentaje
@@ -966,7 +988,7 @@ export default function NormalizadorPanel() {
   const progreso = recuperando
     ? null
     : (progresoManifest ??
-      (!ejecucion ? 0 : esFinal ? progresoFlujo(estado, flujo) : null));
+      (ejecucion ? (esFinal ? progresoFlujo(estado, flujo) : null) : 0));
   const detalleSeguimiento = recuperando
     ? "Comprobando si existe una ejecución activa para recuperar su seguimiento."
     : !ejecucion && !cargando
@@ -992,21 +1014,28 @@ export default function NormalizadorPanel() {
       ? "Revisión curricular pendiente"
       : ETIQUETAS_ESTADO[estado] || "Preparando ejecución";
   const outputs = Array.isArray(ejecucion?.outputs) ? ejecucion.outputs : [];
-  const outputsCurricularesCanonicos = outputs.filter(salidaCurricularCanonica);
+  const modoTecnico = esModoTecnico(ejecucion);
+  const outputsCurricularesCanonicos = outputs.filter((output) =>
+    salidaCurricularCanonica(output, modoTecnico),
+  );
   const outputsCurricularesAuditables = outputs.filter(
     salidaCurricularAuditable,
   );
-  const tituloResultado = !esCurricular
+  const tituloResultado = esCurricular
     ? resultadoListo
-      ? "Paquete listo para la siguiente etapa"
-      : "La fuente no se publica todavía"
-    : resultadoListo
-      ? "CSV curriculares listos"
+      ? modoTecnico
+        ? "CSV técnicos listos"
+        : "CSV curriculares listos"
       : aprobacionPendiente
         ? "Revisión requerida antes de generar CSV"
         : procesoCurricularCompletado
-          ? "CSV curriculares bloqueados por el release gate"
-          : "La fuente curricular requiere corrección";
+          ? modoTecnico
+            ? "CSV técnicos bloqueados por el release gate"
+            : "CSV curriculares bloqueados por el release gate"
+          : "La fuente curricular requiere corrección"
+    : resultadoListo
+      ? "Paquete listo para la siguiente etapa"
+      : "La fuente no se publica todavía";
 
   return (
     <main className="h-[100dvh] w-full overflow-y-auto overscroll-contain bg-fondo text-ink">
@@ -1452,7 +1481,7 @@ export default function NormalizadorPanel() {
                     ? "Recuperando la ejecución activa"
                     : progreso === null
                       ? "Procesamiento en curso; porcentaje pendiente de datos del manifest"
-                      : `${progreso}% completado${progresoManifest !== null ? " según el manifest" : ""}`
+                      : `${progreso}% completado${progresoManifest === null ? "" : " según el manifest"}`
                 }
               >
                 <div className="mb-2.5 flex items-center justify-between font-body text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
@@ -2075,7 +2104,7 @@ export default function NormalizadorPanel() {
                 ))}
               </div>
 
-              {esCurricular && procesoCurricularCompletado ? (
+              {esCurricular && !modoTecnico && procesoCurricularCompletado ? (
                 <CurricularApprovalPanel
                   idEjecucion={ejecucion.id_ejecucion}
                   onSummary={setAprobacionCurricular}
@@ -2120,9 +2149,9 @@ export default function NormalizadorPanel() {
                           </span>
                           <span className="mt-1 block text-xs text-muted">
                             {output.tipo || "archivo"}
-                            {output.registros !== undefined
-                              ? ` · ${output.registros} registros`
-                              : ""}
+                            {output.registros === undefined
+                              ? ""
+                              : ` · ${output.registros} registros`}
                           </span>
                         </span>
                         <Download
@@ -2143,9 +2172,9 @@ export default function NormalizadorPanel() {
                       <div>
                         <h3 className="font-bold">Auditoría y proveniencia</h3>
                         <p className="mt-1 text-sm leading-5 text-muted">
-                          Estos artefactos conservan fuentes, propuestas,
-                          decisiones y release gate para revisión; no son CSV
-                          canónicos.
+                          {modoTecnico
+                            ? "Estos artefactos conservan el análisis técnico, decisiones y release gate; no son CSV canónicos."
+                            : "Estos artefactos conservan fuentes, propuestas, decisiones y release gate para revisión; no son CSV canónicos."}
                         </p>
                       </div>
                       <span className="font-mono text-xs text-muted">
@@ -2171,9 +2200,9 @@ export default function NormalizadorPanel() {
                               </span>
                               <span className="mt-1 block text-xs text-sky-900/75">
                                 {output.tipo || "auditoría"}
-                                {output.registros !== undefined
-                                  ? ` · ${output.registros} registros`
-                                  : ""}
+                                {output.registros === undefined
+                                  ? ""
+                                  : ` · ${output.registros} registros`}
                               </span>
                             </span>
                             <Download
@@ -2197,8 +2226,9 @@ export default function NormalizadorPanel() {
                       <div>
                         <h3 className="font-bold">CSV canónicos</h3>
                         <p className="mt-1 text-sm leading-5 text-muted">
-                          Solo aparecen cuando todas las decisiones están
-                          registradas y el release gate permite importar.
+                          {modoTecnico
+                            ? "Solo aparecen los cinco CSV técnicos declarados cuando el release gate permite importar."
+                            : "Solo aparecen cuando todas las decisiones están registradas y el release gate permite importar."}
                         </p>
                       </div>
                       <span className="font-mono text-xs text-muted">
@@ -2223,10 +2253,12 @@ export default function NormalizadorPanel() {
                                 {nombreOutput(output.archivo)}
                               </span>
                               <span className="mt-1 block text-xs text-emerald-900/75">
-                                CSV curricular canónico
-                                {output.registros !== undefined
-                                  ? ` · ${output.registros} registros`
-                                  : ""}
+                                {modoTecnico
+                                  ? "CSV técnico canónico"
+                                  : "CSV curricular canónico"}
+                                {output.registros === undefined
+                                  ? ""
+                                  : ` · ${output.registros} registros`}
                               </span>
                             </span>
                             <Download
@@ -2242,8 +2274,9 @@ export default function NormalizadorPanel() {
                         role="status"
                         className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm leading-5 text-amber-900"
                       >
-                        Los CSV canónicos no están disponibles hasta completar
-                        las decisiones curriculares.
+                        {modoTecnico
+                          ? "Los CSV técnicos no están disponibles hasta que el release gate permita importar."
+                          : "Los CSV canónicos no están disponibles hasta completar las decisiones curriculares."}
                       </p>
                     )}
                   </section>
@@ -2310,15 +2343,20 @@ export default function NormalizadorPanel() {
 
               {resultadoListo && ejecucion.catalogo_chh ? (
                 <p className="mt-5 border-t border-line pt-4 font-mono text-[11px] leading-5 text-muted">
-                  {esCurricular
-                    ? "Contexto CHH disponible para la siguiente extracción"
-                    : `Catálogo ${ejecucion.catalogo_chh.version} · ${ejecucion.catalogo_chh.competencias} competencias · ${ejecucion.catalogo_chh.habilidades} habilidades · ${ejecucion.catalogo_chh.herramientas} herramientas`}
+                  {modoTecnico
+                    ? "Catálogos técnicos disponibles para importar"
+                    : esCurricular
+                      ? "Contexto CHH disponible para la siguiente extracción"
+                      : `Catálogo ${ejecucion.catalogo_chh.version} · ${ejecucion.catalogo_chh.competencias} competencias · ${ejecucion.catalogo_chh.habilidades} habilidades · ${ejecucion.catalogo_chh.herramientas} herramientas`}
                 </p>
               ) : null}
               {esCurricular &&
               resultadoListo &&
               releaseGatePermiteImportar(ejecucion) ? (
-                <Neo4jImportPanel idEjecucion={ejecucion.id_ejecucion} />
+                <Neo4jImportPanel
+                  idEjecucion={ejecucion.id_ejecucion}
+                  modo={modoTecnico ? "technical" : "legacy"}
+                />
               ) : null}
             </section>
           ) : null}

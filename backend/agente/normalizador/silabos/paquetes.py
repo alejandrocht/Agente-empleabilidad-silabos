@@ -372,7 +372,6 @@ assemble_chh_packages = ensamblar_paquetes_chh
 validate_chh_packages = validar_integridad_paquetes_chh
 
 
-
 def _assemble_one(
     package_id: str,
     rows: Sequence[Mapping[str, object]],
@@ -386,9 +385,21 @@ def _assemble_one(
     identity = _mapping(ordered[0].get(PACKAGE_SOURCE_IDENTITY_FIELD))
     identity_text = {key: _text(identity.get(key)) for key in IDENTITY_FIELDS}
     identity_key = _identity_key(identity)
-    indexed_source_relations = index.source_relations.get(identity_key, ()) if index else ()
+    if index is not None and identity_key is not None:
+        indexed_source_relations = index.source_relations.get(identity_key, ())
+        indexed_sources = index.sources.get(identity_key)
+        indexed_coverage = index.coverage_relations.get(identity_key)
+        indexed_package_relations = index.package_relations.get(identity_key, ())
+    else:
+        indexed_source_relations = ()
+        indexed_sources = None
+        indexed_coverage = None
+        indexed_package_relations = ()
+    preselected = index is not None and identity_key is not None
     source_package_relations = relaciones_fuente_para_paquete_chh(
-        indexed_source_relations if index else (fuentes or {}).get(_SOURCE_RELATIONS_FILE, ()),
+        indexed_source_relations
+        if preselected
+        else (fuentes or {}).get(_SOURCE_RELATIONS_FILE, ()),
         identity,
         package_id=package_id,
     )
@@ -398,9 +409,9 @@ def _assemble_one(
         fuentes=fuentes,
         archivos=archivos,
         source_relations=source_package_relations,
-        source_rows=index.sources.get(identity_key) if index else None,
-        scoped_relations=index.coverage_relations.get(identity_key) if index else None,
-        preselected=bool(index),
+        source_rows=indexed_sources,
+        scoped_relations=indexed_coverage,
+        preselected=preselected,
         is_unresolved_row=_is_unresolved_row,
         source_row_matches_package=_source_row_matches_package,
         relation_scope_matches=_relation_scope_matches,
@@ -437,12 +448,12 @@ def _assemble_one(
     }
     decision = next(iter(decisions)) if len(decisions) == 1 else "MIXED" if decisions else None
     package_relations = relaciones_para_paquete_chh(
-        index.package_relations.get(identity_key, ()) if index else relaciones or (),
+        indexed_package_relations if preselected else relaciones or (),
         identity,
         fuentes=fuentes,
         package_id=package_id,
         source_relations=source_package_relations,
-        preselected=bool(index),
+        preselected=preselected,
     )
     package_relations.sort(key=lambda row: tuple(_text(row.get(key)) for key in RELATION_KEYS))
     components = {
@@ -518,7 +529,6 @@ def _assemble_one(
     }
 
 
-
 def relaciones_fuente_para_paquete_chh(
     relaciones: Sequence[Mapping[str, object]],
     identity: Mapping[str, object],
@@ -584,7 +594,6 @@ def _relation_values(value: Mapping[str, object] | Sequence[object]) -> tuple[st
     return values if any(values) else None
 
 
-
 def relaciones_para_paquete_chh(
     relaciones: Sequence[Mapping[str, object]],
     identity: Mapping[str, object],
@@ -641,7 +650,6 @@ def _row_sort_key(row: Mapping[str, object]) -> tuple[object, ...]:
         _text(proposal.get("nombre") or proposal.get("id")).casefold(),
         _text(row.get("id_pendiente")),
     )
-
 
 
 def _list_value(value: object) -> list[object]:
