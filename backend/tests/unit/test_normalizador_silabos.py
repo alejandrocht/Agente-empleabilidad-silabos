@@ -450,7 +450,7 @@ def test_technical_mode_without_llm_builds_deterministic_contract_without_propos
     assert approval["ok"] is True
 
 
-def test_technical_analyzer_without_valid_proposals_blocks_release(
+def test_technical_analyzer_without_valid_proposals_records_warning(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     fuente = tmp_path / "Ciclo_03" / "DISENO_DE_BASES_DE_DATOS.docx"
@@ -462,7 +462,16 @@ def test_technical_analyzer_without_valid_proposals_blocks_release(
         ruta_catalogo_tecnico="catalogo-tecnico.xlsx",
     )
 
-    def without_valid_proposals(*_args: object, **_kwargs: object) -> list[dict[str, object]]:
+    def without_valid_proposals(*_args: object, **kwargs: object) -> list[dict[str, object]]:
+        auditoria = kwargs["auditoria"]
+        assert isinstance(auditoria, list)
+        auditoria.append(
+            {
+                "codigo": "SILABO_SIN_PROPUESTA_TECNICA",
+                "id_silabo": "SIL_TEST",
+                "mensaje": "El sílabo no produjo ninguna propuesta técnica válida.",
+            }
+        )
         return []
 
     monkeypatch.setattr(
@@ -492,7 +501,7 @@ def test_technical_analyzer_without_valid_proposals_blocks_release(
     )
     assert not (ejecucion / "salidas" / "contenido_semanal.csv").exists()
     assert any(
-        hallazgo.codigo == "ANALISTA_TECNICO_NO_DISPONIBLE" and hallazgo.severidad == "warning"
+        hallazgo.codigo == "SILABO_SIN_PROPUESTA_TECNICA" and hallazgo.severidad == "warning"
         for hallazgo in resultado.hallazgos
     )
     assert (
@@ -501,13 +510,18 @@ def test_technical_analyzer_without_valid_proposals_blocks_release(
                 encoding="utf-8"
             )
         )["estado"]
-        == "FALLBACK_DETERMINISTA"
+        == "COMPLETADO_CON_ADVERTENCIAS"
     )
     gate = json.loads(
         (ejecucion / "salidas" / "reportes" / "release_gate.json").read_text(encoding="utf-8")
     )
     assert gate["decision"] == "BLOCK_IMPORT"
     assert gate["checks"]["analysis"]["ok"] is False
+    assert "TECHNICAL_ANALYSIS_INCOMPLETE" in gate["blockers"]
+    analisis = json.loads(
+        (ejecucion / "salidas" / "reportes" / "analisis_tecnico.json").read_text(encoding="utf-8")
+    )
+    assert analisis["advertencias"][0]["codigo"] == "SILABO_SIN_PROPUESTA_TECNICA"
 
 
 def test_extrae_una_sola_fila_logica_para_logro_con_vmerge(tmp_path: Path) -> None:

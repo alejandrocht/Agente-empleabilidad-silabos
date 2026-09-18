@@ -24,7 +24,7 @@ def _entorno(**overrides: str) -> dict[str, str]:
         "NORMALIZADOR_CURRICULAR_LLM": "true",
         "NORMALIZADOR_CURRICULAR_LLM_PROVIDER": "openai",
         "NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL": "http://localhost:11434/v1",
-        "NORMALIZADOR_CURRICULAR_OLLAMA_MODEL": "qwen3:27b",
+        "NORMALIZADOR_CURRICULAR_OLLAMA_MODEL": "qwen3.8:27b",
         "NORMALIZADOR_CURRICULAR_OPENAI_MODEL": "gpt-5.6-luna",
         "NORMALIZADOR_CURRICULAR_ANALYST_REASONING_EFFORT": "medium",
         "NORMALIZADOR_CURRICULAR_LLM_TIMEOUT_SECONDS": "37",
@@ -145,7 +145,7 @@ def test_fabrica_curricular_usa_ollama_sin_openai_api_key(
         _entorno(
             NORMALIZADOR_CURRICULAR_LLM_PROVIDER="ollama",
             NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL="http://localhost:11434/v1",
-            NORMALIZADOR_CURRICULAR_OLLAMA_MODEL="qwen3:27b",
+            NORMALIZADOR_CURRICULAR_OLLAMA_MODEL="qwen3.8:27b",
         )
     )
     llamada: dict[str, Any] = {}
@@ -154,7 +154,7 @@ def test_fabrica_curricular_usa_ollama_sin_openai_api_key(
 
     fabrica.obtener_llm("analista_curricular", configuracion_curricular=configuracion)
 
-    assert llamada["model"] == "qwen3:27b"
+    assert llamada["model"] == "qwen3.8:27b"
     assert llamada["base_url"] == "http://localhost:11434/v1"
     assert llamada["api_key"].get_secret_value() == "ollama"
     assert "reasoning_effort" not in llamada
@@ -170,7 +170,7 @@ def test_cambiar_solo_proveedor_selecciona_el_modelo_configurado() -> None:
         {**entorno, "NORMALIZADOR_CURRICULAR_LLM_PROVIDER": "openai"}
     )
 
-    assert configuracion_ollama.modelo_analista == "qwen3:27b"
+    assert configuracion_ollama.modelo_analista == "qwen3.8:27b"
     assert configuracion_openai.modelo_analista == "gpt-5.6-luna"
 
 

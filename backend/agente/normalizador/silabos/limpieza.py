@@ -384,6 +384,7 @@ def limpiar_archivo(
     resultado_catalogo: ResultadoCatalogosTecnicos
     try:
         propuestas_tecnicas: list[dict[str, object]] = []
+        auditoria_tecnica: list[dict[str, object]] = []
         propuestas_tecnicas_path = reportes / "propuestas_tecnicas.jsonl"
         analisis_tecnico_path = reportes / "analisis_tecnico.json"
         if not usar_llm:
@@ -401,16 +402,30 @@ def limpiar_archivo(
                     registros,
                     configuracion_curricular,
                     configuracion_curricular.ruta_catalogo_tecnico,
+                    auditoria=auditoria_tecnica,
                 )
-                if not propuestas_tecnicas:
-                    raise ValueError(
-                        "El análisis técnico no produjo propuestas con evidencia literal válida."
+                for advertencia in auditoria_tecnica:
+                    hallazgos.append(
+                        _hallazgo(
+                            str(advertencia.get("codigo") or "SILABO_SIN_PROPUESTA_TECNICA"),
+                            "warning",
+                            str(
+                                advertencia.get("mensaje")
+                                or "El sílabo no produjo una propuesta técnica válida."
+                            ),
+                            validacion.archivo,
+                            str(advertencia.get("id_silabo") or ""),
+                        )
                     )
                 analisis_tecnico = {
-                    "estado": "COMPLETADO",
+                    "estado": (
+                        "COMPLETADO_CON_ADVERTENCIAS" if auditoria_tecnica else "COMPLETADO"
+                    ),
                     "modo_analista": "technical",
                     "propuestas_pendientes": len(propuestas_tecnicas),
                 }
+                if auditoria_tecnica:
+                    analisis_tecnico["advertencias"] = auditoria_tecnica
             except CancelacionSolicitada:
                 raise
             except Exception as exc:
@@ -461,13 +476,21 @@ def limpiar_archivo(
             ),
         )
         if usar_llm:
-            if analisis_tecnico["estado"] == "COMPLETADO":
+            if analisis_tecnico["estado"] in {
+                "COMPLETADO",
+                "COMPLETADO_CON_ADVERTENCIAS",
+            }:
+                mensaje_reporte = (
+                    "Reporte técnico disponible con advertencias; requiere revisión HITL."
+                    if analisis_tecnico["estado"] == "COMPLETADO_CON_ADVERTENCIAS"
+                    else "Reporte técnico disponible."
+                )
                 publicar_progreso(
                     replace(
                         progreso_extraccion,
                         fase="completado",
                         reporte_final="disponible",
-                    ).con_evento("Reporte técnico disponible.")
+                    ).con_evento(mensaje_reporte)
                 )
             else:
                 publicar_progreso(

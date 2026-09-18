@@ -21,7 +21,7 @@ def _configuracion() -> ConfiguracionNormalizadorCurricular:
             "NORMALIZADOR_CURRICULAR_LLM": "true",
             "NORMALIZADOR_CURRICULAR_LLM_PROVIDER": "ollama",
             "NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL": "http://localhost:11434/v1",
-            "NORMALIZADOR_CURRICULAR_OLLAMA_MODEL": "qwen3:27b",
+            "NORMALIZADOR_CURRICULAR_OLLAMA_MODEL": "qwen3.8:27b",
             "NORMALIZADOR_CURRICULAR_OPENAI_MODEL": "gpt-5.6-luna",
             "NORMALIZADOR_CURRICULAR_ANALYST_REASONING_EFFORT": "medium",
             "NORMALIZADOR_CURRICULAR_LLM_TIMEOUT_SECONDS": "120",
@@ -129,7 +129,7 @@ def test_inferencia_estructurada_conserva_evidencia_y_relaciones(
     assert "No debe enviarse" not in str(llamadas["mensajes"])
 
 
-def test_inferencia_rechaza_evidencia_de_logro_ausente(
+def test_inferencia_registra_advertencia_para_evidencia_literal_invalida(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class AnalistaFalso:
@@ -152,26 +152,65 @@ def test_inferencia_rechaza_evidencia_de_logro_ausente(
             return AnalistaFalso()
 
     monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: LLMFalso())
+    auditoria: list[dict[str, object]] = []
 
-    with pytest.raises(ValueError, match="ninguna propuesta técnica con evidencia literal válida"):
-        analista_tecnico.inferir_competencias_tecnicas([_registro()], _configuracion())
+    assert (
+        analista_tecnico.inferir_competencias_tecnicas(
+            [_registro()], _configuracion(), auditoria=auditoria
+        )
+        == []
+    )
+    assert auditoria == [
+        {
+            "codigo": "SILABO_SIN_PROPUESTA_TECNICA",
+            "id_silabo": "SIL_1",
+            "mensaje": (
+                "El sílabo no produjo ninguna propuesta técnica con evidencia literal válida."
+            ),
+        }
+    ]
 
 
-def test_inferencia_rechaza_respuesta_sin_propuestas(
+def test_inferencia_conserva_propuestas_validas_de_otros_silabos(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    respuestas: list[dict[str, object]] = [
+        {"competencias": []},
+        {
+            "competencias": [
+                {
+                    "nombre_competencia": "Diseño técnico de arquitecturas",
+                    "descripcion_breve_competencia": "Selecciona patrones técnicos.",
+                    "evidencia": [
+                        {"fuente": "logro", "fragmento": "Compara patrones arquitectónicos."}
+                    ],
+                    "justificacion": "El logro demuestra una decisión técnica.",
+                }
+            ]
+        },
+    ]
+
     class AnalistaFalso:
         def invoke(self, mensajes: object) -> object:
-            return {"competencias": []}
+            return respuestas.pop(0)
 
     class LLMFalso:
         def with_structured_output(self, schema: object, *, method: str) -> object:
             return AnalistaFalso()
 
     monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: LLMFalso())
+    segundo = _registro()
+    segundo["id_curso"] = "CUR_2"
+    segundo["id_silabo"] = "SIL_2"
+    auditoria: list[dict[str, object]] = []
 
-    with pytest.raises(ValueError, match="SIL_1"):
-        analista_tecnico.inferir_competencias_tecnicas([_registro()], _configuracion())
+    resultado = analista_tecnico.inferir_competencias_tecnicas(
+        [_registro(), segundo], _configuracion(), auditoria=auditoria
+    )
+
+    assert [fila["id_silabo"] for fila in resultado] == ["SIL_2"]
+    assert auditoria[0]["codigo"] == "SILABO_SIN_PROPUESTA_TECNICA"
+    assert auditoria[0]["id_silabo"] == "SIL_1"
 
 
 def test_carga_catalogo_tecnico_normaliza_carrera_y_asigna_referencia(tmp_path: Path) -> None:

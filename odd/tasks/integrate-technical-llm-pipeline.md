@@ -57,6 +57,7 @@ Avoid repeated parsing and divergent data, make the technical-only behavior the 
   - [x] T4.7a. Copy the canonical 277-row XLSX into the backend catalog directory.
   - [x] T4.7b. Remove the `legacy|technical` configuration choice and default every curriculum execution to the repository XLSX.
   - [x] T4.7c. Verify the canonical XLSX, configuration snapshot, and technical execution path.
+  - [x] T4.7d. Preserve deterministic CSV outputs when technical LLM analysis is unavailable or incomplete, retain valid proposals for HITL, and quarantine unlinked source outcomes without inventing relations.
 - [ ] T5. Re-audit every normalizer module and remove only proven dead/retired curriculum modules; keep employability CHH and a deletion ledger.
   - [ ] T5a. Remove runtime/API/persistence/Neo4j mode branches and make the technical contract unconditional for syllabus executions.
   - [ ] T5b. Remove legacy curricular analyzer/output/approval seams proven unreachable after T5a.
@@ -179,12 +180,20 @@ Avoid repeated parsing and divergent data, make the technical-only behavior the 
 - The canonical source catalog was `/Users/alejandromcht/Downloads/catalogo_competencias_tecnicas.xlsx` and is now vendored at `backend/catalogos/catalogo_competencias_tecnicas.xlsx` with the same SHA-256. It contains sheet `Catalogo`, exact columns `Carrera`, `Habilidad tecnica`, `Descripcion`, 277 rows, and 14 exact frontend career labels; it supersedes the previously inspected CSV.
 - Curriculum runtime now ignores the retired `NORMALIZADOR_CURRICULAR_ANALYST_MODE` and external catalog-path settings, always snapshots `modo_analista=technical`, and resolves the vendored XLSX from `BASE_DIR`. T4.7 verification: 80 focused tests passed; focused Ruff, strict Mypy, diff check, and LSP passed; the runtime smoke loaded 277 rows and 26 exact `Ingeniería de Sistemas` candidates.
 - T4.7 deletion ledger: removed three legacy-only LLM tests that intentionally exercised the retired CHH analyzer and became invalid once the only runtime mode became technical. The remaining legacy branches are now being removed under T5; employability CHH remains out of scope.
-- T4.6 selected models: Ollama `qwen3:27b`; OpenAI `gpt-5.6-luna`. Both are now resolved independently, with `NORMALIZADOR_CURRICULAR_LLM_PROVIDER` as the only provider switch; Ollama also owns its provider-specific local base URL.
+- T4.6 selected models: Ollama `qwen3.8:27b`; OpenAI `gpt-5.6-luna`. Both are now resolved independently, with `NORMALIZADOR_CURRICULAR_LLM_PROVIDER` as the only provider switch; Ollama also owns its provider-specific local base URL.
 - T4.6a verification: provider/configuration and technical-analyzer tests → 30 passed; focused Ruff and strict Mypy passed; diff check passed; LSP reported only pre-existing Spanish spellchecker informational notices.
 - T4.6a native review inspection selected the two relevant untracked files, but the selection operation failed with native `schema-incompatible`; no lineage was created and no review verdict is claimed.
-- Current branch: `test/local-llm-technical-harness`.
+- Current branch: `test/local-llm-technical-pipeline`.
 - Working tree contains substantial pre-existing and unrelated changes; preserve them.
+
+## T4.7d Findings
+
+- Ollama defaults and documentation now match the installed `qwen3.8:27b` model.
+- The technical analyzer keeps valid proposals from other syllabi when one syllabus has no valid literal-evidence proposal; the affected syllabus is recorded in `analisis_tecnico.json` and remains auditable.
+- Deterministic five-file CSV output is preserved for disabled, unavailable, or incomplete LLM analysis. An incomplete active analysis remains `BLOCK_IMPORT` and valid proposals remain pending HITL approval.
+- A source learning outcome without a resolvable competency is preserved in `catalogo_logros.csv` and `cuarentena.jsonl`, omitted from coverage, and blocks import with `UNLINKED_SOURCE_OUTCOME`; no competency relation is invented.
+- Focused regression suite: 63 passed; Ruff, strict Mypy, and diff check passed. Broader legacy approval/API suite still contains pre-existing failures from the technical-only contract migration.
 
 ## Next Step
 
-Complete T4.7 by vendoring the canonical XLSX and making technical analysis the only curricular configuration. Then start T5 with a fresh caller/entrypoint audit before deleting dead curriculum-only CHH modules; preserve employability CHH. Run the broader T6 suite afterward and repeat live Ollama/Neo4j smoke checks when those services are available.
+Complete T5 with a fresh caller/entrypoint audit before deleting dead curriculum-only CHH modules; preserve employability CHH. Run the broader T6 suite afterward and repeat live Ollama/Neo4j smoke checks when those services are available.
