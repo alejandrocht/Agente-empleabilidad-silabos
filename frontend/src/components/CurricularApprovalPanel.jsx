@@ -16,12 +16,10 @@ import {
   DESCRIPCIONES,
   ETIQUETAS,
   FILTROS,
-  PACKAGE_PAGE_SIZE,
   autoDeduplicadaDe,
   claveBusqueda,
   coincideFiltro,
   conteosDe,
-  evidenciaDe,
   gruposDe,
   pendientesResumen,
   plural,
@@ -32,8 +30,6 @@ import {
 import {
   DecisionBar,
   DiscardConfirmation,
-  PackageCard,
-  PackagePagination,
   ProposalCard,
 } from "./CurricularApprovalCards";
 
@@ -43,18 +39,15 @@ export default function CurricularApprovalPanel({
   onResolved,
 }) {
   const [filas, setFilas] = useState(null);
-  const [paquetes, setPaquetes] = useState(null);
   const [resumen, setResumen] = useState(null);
   const [revision, setRevision] = useState(null);
   const [decisiones, setDecisiones] = useState({});
   const [filtro, setFiltro] = useState("all");
   const [busqueda, setBusqueda] = useState("");
-  const [packagePage, setPaginaPaquetes] = useState(1);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState(null);
-  const [paqueteADescartar, setPaqueteADescartar] = useState("");
   const [propuestaADescartar, setPropuestaADescartar] = useState("");
   const [motivoDescarte, setMotivoDescarte] = useState("");
 
@@ -70,8 +63,6 @@ export default function CurricularApprovalPanel({
       });
       const siguientes = Array.isArray(datos?.filas) ? datos.filas : [];
       setFilas(siguientes);
-      setPaquetes(Array.isArray(datos?.paquetes) ? datos.paquetes : null);
-      setPaginaPaquetes(1);
       setRevision(texto(datos?.revision) || null);
       setResumen(datos?.aprobacion || null);
       onSummary?.(datos?.aprobacion || null);
@@ -91,31 +82,6 @@ export default function CurricularApprovalPanel({
   }, [cargar]);
 
   const conteos = useMemo(() => conteosDe(filas || []), [filas]);
-  const modoPaquetes = Array.isArray(paquetes) && paquetes.length > 0;
-  const paquetesVisibles = useMemo(() => {
-    const query = claveBusqueda(busqueda);
-    return (paquetes || []).filter(
-      (paquete) =>
-        !query ||
-        textoBuscable({
-          ...paquete,
-          propuesta: { nombre: paquete?.id_paquete_chh },
-          evidencia: (paquete?.filas || []).flatMap((fila) =>
-            evidenciaDe(fila),
-          ),
-          id_pendiente: paquete?.id_paquete_chh,
-        }).includes(query),
-    );
-  }, [paquetes, busqueda]);
-  const totalPackagePages = Math.max(
-    1,
-    Math.ceil(paquetesVisibles.length / PACKAGE_PAGE_SIZE),
-  );
-  const packagePageSegura = Math.min(packagePage, totalPackagePages);
-  const packagePageItems = useMemo(() => {
-    const inicio = (packagePageSegura - 1) * PACKAGE_PAGE_SIZE;
-    return paquetesVisibles.slice(inicio, inicio + PACKAGE_PAGE_SIZE);
-  }, [packagePageSegura, paquetesVisibles]);
   const filasVisibles = useMemo(() => {
     const query = claveBusqueda(busqueda);
     return (filas || []).filter(
@@ -127,30 +93,18 @@ export default function CurricularApprovalPanel({
   const grupos = useMemo(() => gruposDe(filasVisibles), [filasVisibles]);
   const decisionesSeleccionadas = useMemo(
     () =>
-      modoPaquetes
-        ? (paquetes || []).filter(
-            (paquete) =>
-              decisiones[paquete.id_paquete_chh || paquete.package_id] ===
-                "ADD" ||
-              decisiones[paquete.id_paquete_chh || paquete.package_id] ===
-                "KEEP_PENDING",
-          ).length
-        : (filas || []).filter(
-            (fila) =>
-              !autoDeduplicadaDe(fila) &&
-              (decisiones[fila.id_pendiente] === "ADD" ||
-                decisiones[fila.id_pendiente] === "KEEP_PENDING"),
-          ).length,
-    [filas, paquetes, decisiones, modoPaquetes],
+      (filas || []).filter(
+        (fila) =>
+          !autoDeduplicadaDe(fila) &&
+          (decisiones[fila.id_pendiente] === "ADD" ||
+            decisiones[fila.id_pendiente] === "KEEP_PENDING"),
+      ).length,
+    [filas, decisiones],
   );
-  const pendientesVisibles = pendientesResumen(resumen, filas, paquetes);
+  const pendientesVisibles = pendientesResumen(resumen, filas);
   const requiereDecision = Boolean(
     resumen?.requiere_decision || pendientesVisibles,
   );
-
-  useEffect(() => {
-    setPaginaPaquetes(1);
-  }, [busqueda, filtro, modoPaquetes]);
 
   const cambiarDecision = (idPendiente, decision) => {
     setDecisiones((actuales) => ({
@@ -161,30 +115,17 @@ export default function CurricularApprovalPanel({
 
   const guardar = async () => {
     if (guardando) return;
-    const solicitud = modoPaquetes
-      ? (paquetes || [])
-          .filter(
-            (paquete) =>
-              decisiones[paquete.id_paquete_chh || paquete.package_id] ===
-                "ADD" ||
-              decisiones[paquete.id_paquete_chh || paquete.package_id] ===
-                "KEEP_PENDING",
-          )
-          .map((paquete) => ({
-            id_paquete_chh: paquete.id_paquete_chh || paquete.package_id,
-            decision: decisiones[paquete.id_paquete_chh || paquete.package_id],
-          }))
-      : (filas || [])
-          .filter(
-            (fila) =>
-              !autoDeduplicadaDe(fila) &&
-              (decisiones[fila.id_pendiente] === "ADD" ||
-                decisiones[fila.id_pendiente] === "KEEP_PENDING"),
-          )
-          .map((fila) => ({
-            id_pendiente: fila.id_pendiente,
-            decision: decisiones[fila.id_pendiente],
-          }));
+    const solicitud = (filas || [])
+      .filter(
+        (fila) =>
+          !autoDeduplicadaDe(fila) &&
+          (decisiones[fila.id_pendiente] === "ADD" ||
+            decisiones[fila.id_pendiente] === "KEEP_PENDING"),
+      )
+      .map((fila) => ({
+        id_pendiente: fila.id_pendiente,
+        decision: decisiones[fila.id_pendiente],
+      }));
     if (!solicitud.length) {
       setError(
         "Selecciona una acción antes de guardar. Las propuestas sin decisión permanecerán visibles.",
@@ -273,38 +214,6 @@ export default function CurricularApprovalPanel({
     setMotivoDescarte("");
   };
 
-  const descartarPaquete = async () => {
-    if (guardando || !paqueteADescartar || !texto(motivoDescarte)) return;
-    setGuardando(true);
-    setError("");
-    try {
-      const datos = await decidirPendientesNormalizador(
-        idEjecucion,
-        [
-          {
-            id_paquete_chh: paqueteADescartar,
-            decision: "DISCARD",
-            reason: texto(motivoDescarte),
-          },
-        ],
-        "ejecutor",
-        revision,
-      );
-      setResultado(datos?.aprobacion || null);
-      onSummary?.(datos?.aprobacion || null);
-      setPaqueteADescartar("");
-      setMotivoDescarte("");
-      await cargar();
-      await onResolved?.(datos);
-    } catch (errorDescarte) {
-      setError(
-        errorDescarte.message || "No se pudo descartar el paquete curricular.",
-      );
-    } finally {
-      setGuardando(false);
-    }
-  };
-
   if (cargando && !filas) {
     return (
       <section
@@ -325,7 +234,6 @@ export default function CurricularApprovalPanel({
 
   if (
     !filas?.length &&
-    !paquetes?.length &&
     !resultado &&
     !error &&
     !requiereDecision &&
@@ -344,13 +252,13 @@ export default function CurricularApprovalPanel({
             Checkpoint antes de CSV
           </p>
           <h2 className="mt-2 text-xl font-extrabold tracking-[-0.025em]">
-            Revisión curricular requerida
+            Revisión técnica requerida
           </h2>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">
             Las coincidencias exactas se deduplican automáticamente conservando
             un representante determinista y todas sus filas fuente. Los posibles
-            duplicados semánticos y las herramientas sospechosas siguen
-            requiriendo revisión humana antes de materializar los CSV canónicos.
+            duplicados semánticos siguen requiriendo revisión humana antes de
+            materializar los CSV canónicos.
           </p>
         </div>
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-ulima/20 bg-ulima/5 text-ulima">
@@ -378,102 +286,9 @@ export default function CurricularApprovalPanel({
             {conteos.exact} / {conteos.semantic}
           </p>
         </div>
-        <div className="rounded-xl border border-line bg-fondo px-3.5 py-3">
-          <p className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-muted">
-            Herramientas sospechosas
-          </p>
-          <p className="mt-1 text-2xl font-extrabold text-ink">
-            {conteos.suspicious}
-          </p>
-        </div>
       </div>
 
-      {modoPaquetes ? (
-        <>
-          <div className="mt-5 rounded-xl border border-line bg-fondo p-3.5">
-            <label
-              className="block text-xs font-bold text-ink"
-              htmlFor={`buscar-paquetes-${idEjecucion}`}
-            >
-              Buscar en paquetes, evidencia y origen
-            </label>
-            <div className="relative mt-2">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-                size={16}
-                aria-hidden="true"
-              />
-              <input
-                id={`buscar-paquetes-${idEjecucion}`}
-                aria-label="Buscar paquetes curriculares"
-                type="search"
-                value={busqueda}
-                onChange={(event) => setBusqueda(event.target.value)}
-                className="w-full rounded-lg border border-line bg-paper py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-ulima focus:ring-2 focus:ring-ulima/20"
-              />
-            </div>
-            <p className="mt-2 text-xs leading-5 text-muted" aria-live="polite">
-              Mostrando {paquetesVisibles.length} de {paquetes.length} paquetes
-              fuente. Las filas y alias permanecen dentro del paquete para
-              auditoría.
-            </p>
-          </div>
-          {paquetesVisibles.length ? (
-            <>
-              <div className="mt-5 space-y-3 pb-28">
-                {packagePageItems.map((paquete) => (
-                  <PackageCard
-                    key={paquete.id_paquete_chh || paquete.package_id}
-                    paquete={paquete}
-                    decision={
-                      decisiones[paquete.id_paquete_chh || paquete.package_id]
-                    }
-                    onDecision={cambiarDecision}
-                    onDiscard={(packageId) => {
-                      setPaqueteADescartar(packageId);
-                      setMotivoDescarte("");
-                    }}
-                    disabled={guardando}
-                  />
-                ))}
-              </div>
-              <PackagePagination
-                page={packagePageSegura}
-                totalPages={totalPackagePages}
-                total={paquetesVisibles.length}
-                onChange={setPaginaPaquetes}
-              />
-            </>
-          ) : (
-            <div
-              className="mt-5 rounded-xl border border-dashed border-line bg-fondo px-3.5 py-4 text-sm leading-6 text-muted"
-              role="status"
-            >
-              No hay coincidencias para esta búsqueda.
-            </div>
-          )}
-          <div className="pb-20">
-            <DiscardConfirmation
-              packageId={paqueteADescartar}
-              reason={motivoDescarte}
-              onReasonChange={setMotivoDescarte}
-              onCancel={() => {
-                setPaqueteADescartar("");
-                setMotivoDescarte("");
-              }}
-              onConfirm={descartarPaquete}
-              disabled={guardando}
-            />
-            <DecisionBar
-              count={decisionesSeleccionadas}
-              onSave={guardar}
-              disabled={guardando}
-              guardando={guardando}
-              mode="packages"
-            />
-          </div>
-        </>
-      ) : filas?.length ? (
+      {filas?.length ? (
         <>
           <div className="mt-5 rounded-xl border border-line bg-fondo p-3.5">
             <label
@@ -606,7 +421,7 @@ export default function CurricularApprovalPanel({
               onSave={guardar}
               disabled={guardando}
               guardando={guardando}
-              mode="legacy"
+              mode="technical"
             />
           </div>
         </>

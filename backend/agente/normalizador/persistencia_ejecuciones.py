@@ -16,19 +16,14 @@ from agente.normalizador.modelos import (
     EstadoEjecucion,
     Hallazgo,
     ProgresoLimpiezaLLM,
-    ResultadoLimpieza,
     ResultadoLimpiezaSilabos,
-    ResultadoNormalizacion,
-    ResultadoValidacionEntrada,
     ResultadoValidacionSilabos,
 )
 from agente.normalizador.silabos.contrato_salidas import (
     ARCHIVOS_CURRICULARES_TECNICOS,
-    es_modo_tecnico,
     filtrar_estado_publico,
     filtrar_outputs_curriculares,
     gate_permite_salidas_tecnicas,
-    hitl_curricular_completado,
     reporte_curricular_visible,
 )
 
@@ -67,12 +62,8 @@ class EjecucionPersistible(Protocol):
     actualizada_en: str
     cancelacion_solicitada: bool
     cancelada_en: str | None
-    validacion: ResultadoValidacionEntrada | None
     validacion_silabos: ResultadoValidacionSilabos | None
-    limpieza: ResultadoLimpieza | None
     limpieza_silabos: ResultadoLimpiezaSilabos | None
-    normalizacion: ResultadoNormalizacion | None
-    catalogo_chh: dict[str, object] | None
     hallazgos: list[Hallazgo]
     progreso_llm: ProgresoLimpiezaLLM | None
     fuente: dict[str, object] | None
@@ -93,14 +84,12 @@ def _actualizar_metadatos_outputs(
     """Recalcula hashes cuando una aprobación cambia un CSV ya publicado."""
 
     resultado: list[dict[str, object]] = []
-    vistos: set[str] = set()
     for output in outputs:
         if not isinstance(output, dict):
             continue
         archivo = output.get("archivo")
         if not isinstance(archivo, str) or not archivo:
             continue
-        vistos.add(archivo)
         actualizado = dict(output)
         ruta = (directorio / archivo).resolve()
         raiz = directorio.resolve()
@@ -113,23 +102,6 @@ def _actualizar_metadatos_outputs(
             actualizado["sha256"] = digest.hexdigest()
         resultado.append(actualizado)
 
-    decisiones = directorio / "salidas" / "reportes" / "decisiones_curriculares.jsonl"
-    relativo = "salidas/reportes/decisiones_curriculares.jsonl"
-    if relativo not in vistos and decisiones.is_file():
-        decision_digest = hashlib.sha256(decisiones.read_bytes()).hexdigest()
-        resultado.append(
-            {
-                "tipo": "decisiones_curriculares",
-                "archivo": relativo,
-                "registros": sum(
-                    1
-                    for linea in decisiones.read_text(encoding="utf-8").splitlines()
-                    if linea.strip()
-                ),
-                "bytes": decisiones.stat().st_size,
-                "sha256": decision_digest,
-            }
-        )
     return resultado
 
 
@@ -167,7 +139,6 @@ def _reconciliar_outputs_tecnicos(
         )
     reconciliados = filtrar_outputs_curriculares(
         _actualizar_metadatos_outputs(directorio, outputs),
-        modo_tecnico=True,
         release_gate=gate,
     )
     actualizado = dict(estado)
@@ -258,15 +229,7 @@ class RepositorioEjecucionesPersistidas:
             if isinstance(contenido_gate, dict):
                 release_gate = contenido_gate
 
-        outputs_procesamiento = (
-            list(ejecucion.normalizacion.outputs)
-            if ejecucion.normalizacion
-            else list(ejecucion.limpieza.outputs)
-            if ejecucion.limpieza
-            else list(limpieza_actual.outputs)
-            if limpieza_actual
-            else []
-        )
+        outputs_procesamiento = list(limpieza_actual.outputs) if limpieza_actual else []
         outputs = [*ejecucion.outputs_fuente, *outputs_procesamiento]
         outputs = _actualizar_metadatos_outputs(ejecucion.directorio, outputs)
         aprobacion_curricular = (
@@ -275,23 +238,14 @@ class RepositorioEjecucionesPersistidas:
 
         limpieza_silabos = limpieza_actual.a_dict() if limpieza_actual else None
         if ejecucion.tipo == "silabos":
-            modo_tecnico = es_modo_tecnico(ejecucion.configuracion_curricular)
-            hitl_completado = not modo_tecnico and hitl_curricular_completado(release_gate)
-            outputs = filtrar_outputs_curriculares(
-                outputs,
-                modo_tecnico=modo_tecnico,
-                release_gate=release_gate,
-                hitl_completado=hitl_completado,
-            )
+            outputs = filtrar_outputs_curriculares(outputs, release_gate=release_gate)
             if isinstance(limpieza_silabos, dict):
                 outputs_limpieza = limpieza_silabos.get("outputs")
                 if isinstance(outputs_limpieza, list):
                     limpieza_silabos = dict(limpieza_silabos)
                     limpieza_silabos["outputs"] = filtrar_outputs_curriculares(
                         [dict(output) for output in outputs_limpieza if isinstance(output, dict)],
-                        modo_tecnico=modo_tecnico,
                         release_gate=release_gate,
-                        hitl_completado=hitl_completado,
                     )
 
         return {
@@ -305,16 +259,12 @@ class RepositorioEjecucionesPersistidas:
             "actualizada_en": ejecucion.actualizada_en,
             "cancelacion_solicitada": ejecucion.cancelacion_solicitada,
             "cancelada_en": ejecucion.cancelada_en,
-            "validacion": ejecucion.validacion.a_dict() if ejecucion.validacion else None,
             "validacion_silabos": (
                 ejecucion.validacion_silabos.a_dict() if ejecucion.validacion_silabos else None
             ),
-            "limpieza": ejecucion.limpieza.a_dict() if ejecucion.limpieza else None,
             "limpieza_silabos": limpieza_silabos,
-            "normalizacion": ejecucion.normalizacion.a_dict() if ejecucion.normalizacion else None,
             "release_gate": release_gate,
             "aprobacion_curricular": aprobacion_curricular,
-            "catalogo_chh": ejecucion.catalogo_chh,
             "fuente": ejecucion.fuente,
             "progreso_fuente": ejecucion.progreso_fuente,
             "progreso_llm": ejecucion.progreso_llm.a_dict() if ejecucion.progreso_llm else None,
@@ -382,19 +332,11 @@ class RepositorioEjecucionesPersistidas:
         estado = self.obtener(id_ejecucion)
         reportes: dict[str, object] = {}
         directorio_reportes = self.directorio_seguro(id_ejecucion) / "salidas" / "reportes"
-        modo_tecnico = estado.get("tipo") == "silabos" and es_modo_tecnico(
-            estado.get("configuracion_curricular")
-        )
-        hitl_completado = hitl_curricular_completado(estado.get("release_gate"))
         if directorio_reportes.is_dir():
             for ruta in sorted(directorio_reportes.iterdir()):
                 if not ruta.is_file() or ruta.suffix.lower() not in {".json", ".jsonl"}:
                     continue
-                if estado.get("tipo") == "silabos" and not reporte_curricular_visible(
-                    ruta.name,
-                    modo_tecnico=modo_tecnico,
-                    hitl_completado=hitl_completado,
-                ):
+                if estado.get("tipo") == "silabos" and not reporte_curricular_visible(ruta.name):
                     continue
                 reportes[ruta.name] = self._leer_reporte(ruta)
         return {

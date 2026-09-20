@@ -13,7 +13,6 @@ import NormalizadorPanel, {
 } from "./NormalizadorPanel";
 import {
   cancelarEjecucionNormalizador,
-  iniciarNormalizadorEmpleabilidad,
   iniciarNormalizadorSilabos,
   iniciarNormalizadorSilabosCactus,
   listarEjecucionesNormalizador,
@@ -23,9 +22,17 @@ import {
   obtenerPendientesNormalizador,
 } from "../api/normalizador";
 
+const navigation = vi.hoisted(() => ({
+  push: vi.fn(),
+  replace: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => navigation,
+}));
+
 vi.mock("../api/normalizador", () => ({
   cancelarEjecucionNormalizador: vi.fn(),
-  iniciarNormalizadorEmpleabilidad: vi.fn(),
   iniciarNormalizadorSilabos: vi.fn(),
   iniciarNormalizadorSilabosCactus: vi.fn(),
   listarEjecucionesNormalizador: vi.fn(),
@@ -106,11 +113,6 @@ describe("panel del normalizador", () => {
       ejecuciones: [],
       retencion: null,
     });
-    iniciarNormalizadorEmpleabilidad.mockResolvedValue({
-      id_ejecucion: "NOR_0123456789abcdef",
-      archivo: "fuente.xlsx",
-      estado: "validando",
-    });
     obtenerEjecucionNormalizador.mockResolvedValue({
       id_ejecucion: "NOR_0123456789abcdef",
       archivo: "fuente.xlsx",
@@ -120,12 +122,6 @@ describe("panel del normalizador", () => {
         registros_procesados: { publicaciones: 1, informes: 0 },
         relaciones: 1,
         cuarentena: 0,
-      },
-      catalogo_chh: {
-        version: "demo",
-        competencias: 1,
-        habilidades: 1,
-        herramientas: 1,
       },
       outputs: [
         {
@@ -193,6 +189,7 @@ describe("panel del normalizador", () => {
         "secreto",
       ),
     );
+    expect(navigation.push).toHaveBeenCalledWith("/NOR_cactus12345678");
     expect(screen.getByText("Extrayendo desde Cactus")).toBeTruthy();
     expect(screen.getByLabelText("Progreso de extracción Cactus")).toBeTruthy();
   });
@@ -225,6 +222,7 @@ describe("panel del normalizador", () => {
     await waitFor(() =>
       expect(obtenerEjecucionNormalizador).toHaveBeenCalledWith(idEjecucion),
     );
+    expect(navigation.replace).toHaveBeenCalledWith(`/${idEjecucion}`);
 
     resolverDetalle({
       id_ejecucion: idEjecucion,
@@ -310,32 +308,15 @@ describe("panel del normalizador", () => {
     );
   });
 
-  it("permite seleccionar una fuente y muestra el estado final", async () => {
-    const { container } = await renderPanelAfterRecovery();
-    const archivo = new File(["xlsx"], "fuente.xlsx", {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    fireEvent.change(container.querySelector('input[type="file"]'), {
-      target: { files: [archivo] },
-    });
+  it("expone únicamente la carga técnica de sílabos", async () => {
+    await renderPanelAfterRecovery();
 
-    expect(screen.getByText("fuente.xlsx")).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Iniciar normalización" }),
-    );
-
-    await waitFor(() =>
-      expect(screen.getByText("Listo para publicar")).toBeTruthy(),
-    );
-    expect(iniciarNormalizadorEmpleabilidad).toHaveBeenCalledWith(archivo);
-    expect(screen.getByText(/Catálogo demo/)).toBeTruthy();
-    const descarga = screen.getByRole("link", {
-      name: /requerimiento_laboral\.csv/,
-    });
-    expect(descarga.getAttribute("download")).toBe("");
-    expect(descarga.getAttribute("href")).toContain(
-      "/outputs/salidas/requerimiento_laboral.csv",
-    );
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+    expect(screen.getByRole("tab", { name: "Sílabos" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Empleabilidad" })).toBeNull();
+    expect(
+      screen.getByText("Cactus automático o archivo curricular"),
+    ).toBeTruthy();
   });
 
   it("bloquea los controles mientras la ejecución curricular está activa", async () => {
@@ -374,9 +355,6 @@ describe("panel del normalizador", () => {
 
     await waitFor(() =>
       expect(screen.getByText("Limpiando datos")).toBeTruthy(),
-    );
-    expect(screen.getByRole("tab", { name: "Empleabilidad" }).disabled).toBe(
-      true,
     );
     expect(screen.getByRole("tab", { name: "Sílabos" }).disabled).toBe(true);
     expect(screen.getByRole("combobox", { name: "Carrera" }).disabled).toBe(
@@ -539,7 +517,7 @@ describe("panel del normalizador", () => {
     expect(within(registro).getByText(/Falta una competencia/)).toBeTruthy();
   });
 
-  it("muestra la revisión curricular antes de los CSV y mantiene separados los artefactos de auditoría", async () => {
+  it("muestra la revisión técnica antes de los CSV y mantiene separados los artefactos de auditoría", async () => {
     const idEjecucion = "NOR_pre_csv12345678";
     const aprobacionPendiente = {
       requiere_decision: true,
@@ -562,6 +540,7 @@ describe("panel del normalizador", () => {
       tipo: "silabos",
       archivo: "curriculo.zip",
       estado: "limpiado",
+      configuracion_curricular: { modo_analista: "technical" },
       parametros: { carrera: "Marketing", periodo: "2026-1" },
       validacion_silabos: { valida: true, archivos: [] },
       limpieza_silabos: { registros: 1, relaciones: 1 },
@@ -574,18 +553,18 @@ describe("panel del normalizador", () => {
       aprobacion_curricular: aprobacionPendiente,
       outputs: [
         {
-          tipo: "provenance",
-          archivo: "salidas/reportes/competencias_fuente.jsonl",
+          tipo: "propuestas_tecnicas",
+          archivo: "salidas/reportes/propuestas_tecnicas.jsonl",
           registros: 1,
         },
         {
-          tipo: "pendientes_curriculares",
-          archivo: "salidas/reportes/pendientes_curriculares.jsonl",
+          tipo: "analisis_tecnico",
+          archivo: "salidas/reportes/analisis_tecnico.json",
           registros: 1,
         },
         {
-          tipo: "candidatos_curriculares",
-          archivo: "salidas/reportes/candidatos_curriculares.json",
+          tipo: "decisiones_tecnicas",
+          archivo: "salidas/reportes/decisiones_tecnicas.jsonl",
           registros: 1,
         },
         {
@@ -600,17 +579,16 @@ describe("panel del normalizador", () => {
       filas: [
         {
           id_pendiente: "PEND_1",
-          tipo: "herramienta",
+          tipo: "competencia_tecnica",
           archivo: "marketing.pdf",
           id_curso: "MKT-101",
           id_silabo: "SIL-1",
           propuesta: {
-            nombre: "Google Analytics",
-            descripcion: "Métrica de campañas",
+            nombre: "Diseñar arquitecturas de software",
+            descripcion: "Seleccionar patrones técnicos.",
           },
           evidencia: ["Analiza campañas con Google Analytics"],
-          flags: ["SUSPICIOUS_UNRELATED_TOOL"],
-          relevancia_herramienta: "SUSPICIOUS_UNRELATED",
+          flags: [],
         },
       ],
       aprobacion: aprobacionPendiente,
@@ -637,29 +615,26 @@ describe("panel del normalizador", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText("Revisión requerida antes de generar CSV"),
+        screen.getByText("Revisión técnica requerida antes de generar CSV"),
       ).toBeTruthy(),
     );
     await waitFor(() =>
       expect(
-        screen.getByRole("heading", { name: "Revisión curricular requerida" }),
+        screen.getByRole("heading", { name: "Revisión técnica requerida" }),
       ).toBeTruthy(),
     );
     expect(
       screen.getByRole("heading", { name: "Auditoría y proveniencia" }),
     ).toBeTruthy();
-    expect(screen.getByText("competencias_fuente.jsonl")).toBeTruthy();
-    expect(screen.getByText("Google Analytics")).toBeTruthy();
-    expect(
-      screen.getByText("Herramienta sospechosa / no relacionada"),
-    ).toBeTruthy();
+    expect(screen.getByText("propuestas_tecnicas.jsonl")).toBeTruthy();
+    expect(screen.getByText("Diseñar arquitecturas de software")).toBeTruthy();
     expect(
       screen.getByText(
-        "Los CSV canónicos no están disponibles hasta completar las decisiones curriculares.",
+        "Los CSV técnicos no están disponibles hasta que el release gate permita importar.",
       ),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("heading", { name: "CSV curriculares listos" }),
+      screen.queryByRole("heading", { name: "CSV técnicos listos" }),
     ).toBeNull();
     expect(
       screen.queryByRole("heading", { name: "Subir catálogos a Neo4j" }),
@@ -728,7 +703,7 @@ describe("panel del normalizador", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Revisión curricular requerida",
+        name: "Revisión técnica requerida",
       }),
     ).toBeTruthy();
     expect(screen.getByText("Diseñar arquitecturas de software")).toBeTruthy();
@@ -750,6 +725,7 @@ describe("panel del normalizador", () => {
       tipo: "silabos",
       archivo: "curriculo.zip",
       estado: "limpiado",
+      configuracion_curricular: { modo_analista: "technical" },
       parametros: { carrera: "Marketing", periodo: "2026-1" },
       validacion_silabos: { valida: true, archivos: [] },
       release_gate: {
@@ -764,17 +740,16 @@ describe("panel del normalizador", () => {
         materializacion: { csv_canonicos_disponibles: true },
       },
       outputs: [
-        {
-          tipo: "csv_curricular",
-          archivo: "salidas/catalogo_competencias.csv",
-          registros: 1,
-        },
-        {
-          tipo: "provenance",
-          archivo: "salidas/reportes/provenance.jsonl",
-          registros: 1,
-        },
-      ],
+        "curso.csv",
+        "silabo.csv",
+        "catalogo_competencias.csv",
+        "catalogo_logros.csv",
+        "cobertura_curricular.csv",
+      ].map((archivo) => ({
+        tipo: "csv_curricular",
+        archivo: `salidas/${archivo}`,
+        registros: 1,
+      })),
       hallazgos: [],
     });
     obtenerPendientesNormalizador.mockResolvedValue({
@@ -803,7 +778,7 @@ describe("panel del normalizador", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole("heading", { name: "CSV curriculares listos" }),
+        screen.getByRole("heading", { name: "CSV técnicos listos" }),
       ).toBeTruthy(),
     );
     expect(
@@ -813,7 +788,7 @@ describe("panel del normalizador", () => {
       screen.getByRole("link", { name: /catalogo_competencias\.csv/ }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("heading", { name: "Revisión curricular requerida" }),
+      screen.queryByRole("heading", { name: "Revisión técnica requerida" }),
     ).toBeNull();
   });
 

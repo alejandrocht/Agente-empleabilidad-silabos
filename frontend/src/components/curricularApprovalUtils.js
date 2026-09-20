@@ -6,47 +6,29 @@
  * canonical relationships.
  */
 
-export const TIPOS = [
-  "competencia",
-  "competencia_tecnica",
-  "habilidad",
-  "herramienta",
-];
+export const TIPOS = ["competencia_tecnica"];
 
 export const ETIQUETAS = {
-  competencia: "Competencias",
   competencia_tecnica: "Competencias técnicas",
-  habilidad: "Habilidades",
-  herramienta: "Herramientas",
   otro: "Otros pendientes",
 };
 
 export const DESCRIPCIONES = {
-  competencia:
-    "Capacidades que el LLM considera propias del perfil curricular.",
   competencia_tecnica:
     "Competencias técnicas inferidas desde los resultados de aprendizaje.",
-  habilidad: "Habilidades detectadas en los logros de los sílabos.",
-  herramienta: "Herramientas mencionadas en la evidencia curricular.",
-  otro: "Propuestas que el backend no pudo clasificar en un tipo conocido.",
+  otro: "Propuestas que el backend no pudo clasificar en un tipo técnico.",
 };
 
 export const FILTROS = [
   { id: "all", label: "Todas" },
-  { id: "competencia", label: "Competencias" },
   { id: "competencia_tecnica", label: "Competencias técnicas" },
-  { id: "habilidad", label: "Habilidades" },
-  { id: "herramienta", label: "Herramientas" },
   { id: "exact", label: "Duplicados exactos" },
   { id: "semantic", label: "Posibles semánticos" },
-  { id: "suspicious", label: "Herramientas sospechosas" },
 ];
 
 export const FLAG_EXACT = "EXACT_DUPLICATE";
 export const FLAG_SEMANTIC = "POSSIBLE_SEMANTIC_DUPLICATE";
-export const FLAG_SUSPICIOUS = "SUSPICIOUS_UNRELATED_TOOL";
-export const PACKAGE_PAGE_SIZE = 15;
-export const PENDING_SKILL_LABEL = "Pendiente de catalogación";
+export const PENDING_PROPOSAL_LABEL = "Competencia técnica pendiente";
 
 export function texto(valor) {
   return String(valor ?? "").trim();
@@ -59,15 +41,15 @@ export function claveBusqueda(valor) {
     .toLocaleLowerCase();
 }
 
-export const NOMBRE_TECNICO =
-  /^(?:HAB|COMP|HERR|PROP|PROPOSAL|PEN|PKG)(?:[_-][A-Za-z0-9:-]+)+$/i;
+export const NOMBRE_INTERNO =
+  /^(?:COMP|PROP|PROPOSAL|PEN)(?:[_-][A-Za-z0-9:-]+)+$/i;
 export const NOMBRE_HASH = /^(?:sha256:)?[0-9a-f]{16,}$/i;
 
 export function nombreLegible(valor, descripciones = []) {
   const candidato = texto(valor);
   if (
     !candidato ||
-    NOMBRE_TECNICO.test(candidato) ||
+    NOMBRE_INTERNO.test(candidato) ||
     NOMBRE_HASH.test(candidato)
   )
     return "";
@@ -95,14 +77,12 @@ export function nombrePropuesto(fila) {
     fila?.propuesta?.nombre,
     fila?.propuesta?.nombre_competencia,
     fila?.nombre_competencia_fuente,
-    fila?.nombre_habilidad_fuente,
-    fila?.nombre_herramienta_fuente,
     fila?.nombre_fuente,
   ];
   return (
     candidatos
       .map((candidato) => nombreLegible(candidato, descripciones))
-      .find(Boolean) || PENDING_SKILL_LABEL
+      .find(Boolean) || PENDING_PROPOSAL_LABEL
   );
 }
 
@@ -137,8 +117,6 @@ export function flagsDe(fila) {
   if (fila?.duplicado_exacto || fila?.exact_duplicate) flags.add(FLAG_EXACT);
   if (fila?.posible_duplicado_semantico || fila?.semantic_duplicate)
     flags.add(FLAG_SEMANTIC);
-  if (fila?.herramienta_no_relacionada || fila?.suspicious_tool)
-    flags.add(FLAG_SUSPICIOUS);
   return flags;
 }
 
@@ -193,24 +171,18 @@ export function conteosDe(filas) {
     const flags = flagsDe(fila);
     if (flags.has(FLAG_EXACT)) conteos.exact += 1;
     if (flags.has(FLAG_SEMANTIC)) conteos.semantic += 1;
-    if (flags.has(FLAG_SUSPICIOUS)) conteos.suspicious += 1;
   });
   return conteos;
 }
 
 export function coincideFiltro(fila, filtro) {
   if (filtro === "all") return true;
-  if (
-    ["competencia", "competencia_tecnica", "habilidad", "herramienta"].includes(
-      filtro,
-    )
-  ) {
+  if (filtro === "competencia_tecnica") {
     return tipoDe(fila) === filtro;
   }
   const flags = flagsDe(fila);
   if (filtro === "exact") return flags.has(FLAG_EXACT);
   if (filtro === "semantic") return flags.has(FLAG_SEMANTIC);
-  if (filtro === "suspicious") return flags.has(FLAG_SUSPICIOUS);
   return true;
 }
 
@@ -254,14 +226,6 @@ export function etiquetasDeSeñal(fila) {
       explanation: `Comparte señales de equivalencia con otra propuesta del mismo tipo${texto(fila?.grupo_duplicado_semantico || fila?.semantic_duplicate_group) ? ` (${fila.grupo_duplicado_semantico || fila.semantic_duplicate_group})` : ""}. Requiere revisión humana; no se fusionó automáticamente.`,
     });
   }
-  if (flags.has(FLAG_SUSPICIOUS)) {
-    etiquetas.push({
-      id: "suspicious",
-      label: "Herramienta sospechosa / no relacionada",
-      className: "border-ulima/35 bg-ulima/5 text-ink",
-      explanation: `La evidencia no relaciona claramente la herramienta con el contenido curricular (relevancia: ${texto(fila?.relevancia_herramienta || fila?.tool_relevance) || "SUSPICIOUS_UNRELATED"}). No se eliminó automáticamente.`,
-    });
-  }
   return etiquetas;
 }
 
@@ -270,8 +234,7 @@ export function camposDeProveniencia(fila) {
     ["Archivo fuente", fila?.archivo],
     ["Carrera", fila?.carrera || fila?.career],
     ["Periodo", fila?.periodo || fila?.period],
-    ["Curso", fila?.id_curso],
-    ["Sílabo", fila?.id_silabo],
+    ["Curso", fila?.nombre_curso],
     ["Logro", fila?.etiqueta_logro],
     ["Descripción fuente", fila?.descripcion_fuente],
   ].filter(([, valor]) => texto(valor));
@@ -281,134 +244,14 @@ export function plural(cantidad, singular, pluralizado = `${singular}s`) {
   return `${cantidad} ${cantidad === 1 ? singular : pluralizado}`;
 }
 
-export function pendientesResumen(resumen, filas, paquetes) {
-  const pendientesDePaquetes = Number(
-    resumen?.paquetes?.pendientes_por_decidir,
-  );
-  if (Number.isFinite(pendientesDePaquetes) && pendientesDePaquetes > 0)
-    return pendientesDePaquetes;
+export function pendientesResumen(resumen, filas) {
   const pendientesDirectos = Number(resumen?.pendientes_por_decidir);
   if (Number.isFinite(pendientesDirectos)) return pendientesDirectos;
-  if (Array.isArray(paquetes) && paquetes.length) return paquetes.length;
   return Array.isArray(filas) ? filas.length : 0;
 }
 
 export function decisionLabel(decision) {
-  if (decision === "ADD") return "Agregar al perfil";
+  if (decision === "ADD") return "Agregar al catálogo";
   if (decision === "KEEP_PENDING") return "Mantener pendiente";
   return decision ? "Decisión registrada" : "Sin decisión";
-}
-
-export function componentesDe(paquete, tipo) {
-  const componentes = paquete?.componentes;
-  const directos = paquete?.[tipo];
-  const valores = Array.isArray(directos) ? directos : componentes?.[tipo];
-  return Array.isArray(valores) ? valores : [];
-}
-
-export function descripcionesFuente(componente) {
-  return [
-    componente?.descripcion_fuente,
-    componente?.descripcion,
-    componente?.description,
-    componente?.source?.descripcion_fuente,
-    componente?.source?.descripcion,
-    componente?.source?.description,
-  ];
-}
-
-export function nombreComponente(componente, tipo) {
-  const esHabilidad =
-    tipo === "habilidades" ||
-    texto(componente?.tipo).toLocaleLowerCase() === "habilidad";
-  const esHerramienta =
-    tipo === "herramientas" ||
-    texto(componente?.tipo).toLocaleLowerCase() === "herramienta";
-  const esProyeccionFuenteDeHabilidad =
-    esHabilidad &&
-    (componente?.source ||
-      texto(componente?.nombre_habilidad_fuente) ||
-      texto(componente?.nombre_fuente) ||
-      (texto(componente?.id_fuente) &&
-        !texto(componente?.id_pendiente) &&
-        !texto(componente?.nombre_propuesto) &&
-        !texto(componente?.propuesta?.nombre) &&
-        !componente?.canonical));
-  const descripciones = descripcionesFuente(componente);
-  const candidatosCanonicos = [
-    componente?.nombre_catalogo,
-    componente?.catalog_name,
-    componente?.nombre_canonico,
-    componente?.canonical_name,
-    componente?.canonical ? componente?.nombre : "",
-  ];
-  const candidatosPropuestos = [
-    componente?.nombre_propuesto,
-    componente?.propuesta?.nombre,
-    componente?.propuesta?.nombre_competencia,
-    componente?.nombre_competencia,
-    esProyeccionFuenteDeHabilidad ? "" : componente?.display_name,
-    esProyeccionFuenteDeHabilidad || componente?.canonical
-      ? ""
-      : componente?.nombre,
-  ];
-  const candidatosFuente = esHabilidad
-    ? []
-    : [
-        componente?.nombre_competencia_fuente,
-        componente?.nombre_habilidad_fuente,
-        componente?.nombre_herramienta_fuente,
-        componente?.nombre_fuente,
-        componente?.canonical ? "" : componente?.nombre,
-      ];
-  const nombreConDescripcionDistinta = [
-    ...candidatosCanonicos,
-    ...candidatosPropuestos,
-    ...candidatosFuente,
-  ]
-    .map((candidato) => nombreLegible(candidato, descripciones))
-    .find(Boolean);
-  if (nombreConDescripcionDistinta) return nombreConDescripcionDistinta;
-
-  // Tool names are an explicit package field, not free-form source prose.
-  // Keep them visible even when a backend serializes the same short name as
-  // its description (for example, { nombre: "Excel", descripcion: "Excel" }).
-  const candidatosHerramientaConfiables = esHerramienta
-    ? [
-        componente?.nombre_herramienta,
-        componente?.source?.nombre_herramienta,
-        componente?.nombre,
-      ]
-    : [];
-  return (
-    candidatosHerramientaConfiables
-      .map((candidato) => nombreLegible(candidato))
-      .find(Boolean) || ""
-  );
-}
-
-export function descripcionComponente(componente) {
-  return (
-    texto(
-      componente?.descripcion ||
-        componente?.description ||
-        componente?.descripcion_fuente ||
-        componente?.source?.descripcion ||
-        componente?.source?.description ||
-        componente?.source?.descripcion_fuente,
-    ) || "Sin descripción disponible."
-  );
-}
-
-export function componentesLegibles(values, tipo) {
-  const nombresVistos = new Set();
-  return values
-    .map((value) => {
-      const nombre = nombreComponente(value, tipo);
-      const clave = claveBusqueda(nombre);
-      if (!nombre || nombresVistos.has(clave)) return null;
-      nombresVistos.add(clave);
-      return { nombre, descripcion: descripcionComponente(value) };
-    })
-    .filter(Boolean);
 }

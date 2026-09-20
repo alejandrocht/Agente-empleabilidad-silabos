@@ -87,7 +87,6 @@ def _resultado_catalogos_tecnicos_fallback() -> ResultadoCatalogosTecnicos:
 
 _COMPAT_EXPORTS = {
     "_PATRON_REFERENCIA_CURRICULAR": ("extraccion_curricular", "_PATRON_REFERENCIA_CURRICULAR"),
-    "_SECCIONES_HERRAMIENTAS": ("extraccion_curricular", "_SECCIONES_HERRAMIENTAS"),
     "_normalizar_modalidad": ("extraccion_curricular", "_normalizar_modalidad"),
     "_texto": ("extraccion_curricular", "_texto"),
     "_sin_referencias_curriculares": ("extraccion_curricular", "_sin_referencias_curriculares"),
@@ -97,13 +96,6 @@ _COMPAT_EXPORTS = {
     "_filas_tabla": ("extraccion_curricular", "_filas_tabla"),
     "_es_continuacion_vertical": ("extraccion_curricular", "_es_continuacion_vertical"),
     "_codigos": ("extraccion_curricular", "_codigos"),
-    "_seccion_herramientas": ("extraccion_curricular", "_seccion_herramientas"),
-    "_herramientas_desde_tabla": ("extraccion_curricular", "_herramientas_desde_tabla"),
-    "_herramientas_desde_parrafos": ("extraccion_curricular", "_herramientas_desde_parrafos"),
-    "_deduplicar_evidencias_herramientas": (
-        "extraccion_curricular",
-        "_deduplicar_evidencias_herramientas",
-    ),
     "_primer_metadata": ("extraccion_curricular", "_primer_metadata"),
     "_unir_metadata": ("extraccion_curricular", "_unir_metadata"),
     "_nombre_desde_archivo": ("extraccion_curricular", "_nombre_desde_archivo"),
@@ -129,7 +121,6 @@ _COMPAT_EXPORTS = {
     "_pdf_text_advance": ("extraccion_pdf", "_pdf_text_advance"),
     "_texto_relevante_pdf": ("extraccion_pdf", "_texto_relevante_pdf"),
     "_codigos_curriculares_pdf": ("extraccion_pdf", "_codigos_curriculares_pdf"),
-    "_evidencias_herramientas_pdf": ("extraccion_pdf", "_evidencias_herramientas_pdf"),
     "_ciclo_pdf": ("extraccion_pdf", "_ciclo_pdf"),
     "_texto_celda_pdf": ("programa_pdf", "_texto_celda_pdf"),
     "_extraer_programa_analitico_geometrico_pdf": (
@@ -693,8 +684,6 @@ def limpiar_archivo(
         publicable=resultado_catalogo.publicable,
         relaciones=resultado_catalogo.relaciones,
         competencias=resultado_catalogo.competencias,
-        habilidades=resultado_catalogo.habilidades,
-        herramientas=resultado_catalogo.herramientas,
         pendientes=resultado_catalogo.pendientes,
         release_gate=resultado_catalogo.release_gate,
     )

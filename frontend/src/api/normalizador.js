@@ -1,18 +1,3 @@
-export async function iniciarNormalizadorEmpleabilidad(archivo) {
-  const formulario = new FormData();
-  formulario.append("archivo", archivo);
-
-  const respuesta = await fetch("/api/normalizador/empleabilidad", {
-    method: "POST",
-    body: formulario,
-  });
-  const datos = await respuesta.json().catch(() => ({}));
-  if (!respuesta.ok) {
-    throw new Error(datos.detail || "No se pudo iniciar la normalización.");
-  }
-  return datos;
-}
-
 export async function iniciarNormalizadorSilabos(archivo, carrera, periodo) {
   const formulario = new FormData();
   formulario.append("archivo", archivo);
@@ -25,12 +10,19 @@ export async function iniciarNormalizadorSilabos(archivo, carrera, periodo) {
   });
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok) {
-    throw new Error(datos.detail || "No se pudo iniciar la limpieza curricular.");
+    throw new Error(
+      datos.detail || "No se pudo iniciar la limpieza curricular.",
+    );
   }
   return datos;
 }
 
-export async function iniciarNormalizadorSilabosCactus(carrera, periodo, usuario, contrasena) {
+export async function iniciarNormalizadorSilabosCactus(
+  carrera,
+  periodo,
+  usuario,
+  contrasena,
+) {
   const respuesta = await fetch("/api/normalizador/silabos/cactus", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -38,7 +30,9 @@ export async function iniciarNormalizadorSilabosCactus(carrera, periodo, usuario
   });
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok) {
-    throw new Error(datos.detail || "No se pudo iniciar la extracción desde Cactus.");
+    throw new Error(
+      datos.detail || "No se pudo iniciar la extracción desde Cactus.",
+    );
   }
   return datos;
 }
@@ -53,7 +47,9 @@ export async function obtenerEjecucionNormalizador(idEjecucion) {
 }
 
 export async function obtenerErroresNormalizador(idEjecucion) {
-  const respuesta = await fetch(`/api/normalizador/ejecuciones/${idEjecucion}/errores`);
+  const respuesta = await fetch(
+    `/api/normalizador/ejecuciones/${idEjecucion}/errores`,
+  );
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok) {
     throw new Error(datos.detail || "No se pudieron consultar los errores.");
@@ -61,7 +57,10 @@ export async function obtenerErroresNormalizador(idEjecucion) {
   return datos;
 }
 
-export async function obtenerCuarentenaNormalizador(idEjecucion, opciones = {}) {
+export async function obtenerCuarentenaNormalizador(
+  idEjecucion,
+  opciones = {},
+) {
   const parametros = new URLSearchParams({
     desde: String(opciones.desde ?? 0),
     limite: String(opciones.limite ?? 50),
@@ -76,7 +75,10 @@ export async function obtenerCuarentenaNormalizador(idEjecucion, opciones = {}) 
   return datos;
 }
 
-export async function obtenerPendientesNormalizador(idEjecucion, opciones = {}) {
+export async function obtenerPendientesNormalizador(
+  idEjecucion,
+  opciones = {},
+) {
   const parametros = new URLSearchParams({
     desde: String(opciones.desde ?? 0),
     limite: String(opciones.limite ?? 200),
@@ -87,23 +89,36 @@ export async function obtenerPendientesNormalizador(idEjecucion, opciones = {}) 
   );
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok) {
-    throw new Error(datos.detail || "No se pudieron consultar las propuestas curriculares.");
+    throw new Error(
+      datos.detail || "No se pudieron consultar las propuestas curriculares.",
+    );
   }
   return datos;
 }
 
-export async function decidirPendientesNormalizador(idEjecucion, decisiones, actor = "ejecutor", revision = null) {
+export async function decidirPendientesNormalizador(
+  idEjecucion,
+  decisiones,
+  actor = "ejecutor",
+  revision = null,
+) {
   const respuesta = await fetch(
     `/api/normalizador/ejecuciones/${encodeURIComponent(idEjecucion)}/pendientes/decidir`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decisiones, actor, ...(revision ? { revision } : {}) }),
+      body: JSON.stringify({
+        decisiones,
+        actor,
+        ...(revision ? { revision } : {}),
+      }),
     },
   );
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok) {
-    throw new Error(datos.detail || "No se pudieron guardar las decisiones curriculares.");
+    throw new Error(
+      datos.detail || "No se pudieron guardar las decisiones curriculares.",
+    );
   }
   return datos;
 }
@@ -122,7 +137,9 @@ export async function cancelarEjecucionNormalizador(idEjecucion) {
 
 export async function listarEjecucionesNormalizador(limite = 20) {
   const parametros = new URLSearchParams({ limite: String(limite) });
-  const respuesta = await fetch(`/api/normalizador/ejecuciones?${parametros.toString()}`);
+  const respuesta = await fetch(
+    `/api/normalizador/ejecuciones?${parametros.toString()}`,
+  );
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok) {
     throw new Error(datos.detail || "No se pudo cargar el historial.");
@@ -136,7 +153,9 @@ export async function obtenerReporteEjecucionNormalizador(idEjecucion) {
   );
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok) {
-    throw new Error(datos.detail || "No se pudo cargar el reporte de la ejecución.");
+    throw new Error(
+      datos.detail || "No se pudo cargar el reporte de la ejecución.",
+    );
   }
   return datos;
 }
@@ -152,7 +171,9 @@ export async function eliminarEjecucionHistorialNormalizador(idEjecucion) {
   );
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok) {
-    throw new Error(datos.detail || "No se pudo eliminar la ejecución del historial.");
+    throw new Error(
+      datos.detail || "No se pudo eliminar la ejecución del historial.",
+    );
   }
   return datos;
 }

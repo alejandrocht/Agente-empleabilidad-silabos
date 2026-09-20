@@ -12,12 +12,13 @@ from datetime import date
 from typing import Any, TypeVar, cast
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
 from agente import responder
+from agente.api.acceso_administrativo import require_local_administrator
 from agente.api.neo4j_importacion import router as neo4j_importacion_router
 from agente.api.normalizador import router as normalizador_router
 from agente.dashboard import servicio as dashboard
@@ -33,9 +34,7 @@ from agente.utils.logger import (
 )
 from agente.utils.validacion import EntradaInvalida, validar_pregunta
 
-USER_FACING_STREAM_NODES: frozenset[str] = frozenset(
-    {"redacta_respuesta", "responder_directo"}
-)
+USER_FACING_STREAM_NODES: frozenset[str] = frozenset({"redacta_respuesta", "responder_directo"})
 DEFAULT_GRAPH_TIMEOUT_SECONDS = 90.0
 GRAPH_TIMEOUT_RESPONSE = (
     "La consulta tardó más de lo esperado y fue detenida de forma segura. "
@@ -104,8 +103,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Agente CIAR", lifespan=lifespan)
-app.include_router(normalizador_router, prefix="/normalizador", tags=["normalizador"])
-app.include_router(neo4j_importacion_router, prefix="/neo4j", tags=["neo4j-importacion"])
+app.include_router(
+    normalizador_router,
+    prefix="/normalizador",
+    tags=["normalizador"],
+    dependencies=[Depends(require_local_administrator)],
+)
+app.include_router(
+    neo4j_importacion_router,
+    prefix="/neo4j",
+    tags=["neo4j-importacion"],
+    dependencies=[Depends(require_local_administrator)],
+)
 
 
 class Pregunta(BaseModel):
@@ -544,6 +553,8 @@ async def chat(body: PreguntaChat, request: Request) -> JSONResponse:
             output_size=len(resultado),
         )
         return response
+
+
 @app.post("/chat/stream")
 async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingResponse:
     with trace_context() as active_trace, attempt_context(1):
@@ -592,9 +603,7 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                 def emit_progress(node: str, *, from_model: bool = False) -> str | None:
                     nonlocal last_progress
                     progress_map = (
-                        STREAM_TOKEN_PROGRESS_BY_NODE
-                        if from_model
-                        else STREAM_PROGRESS_BY_NODE
+                        STREAM_TOKEN_PROGRESS_BY_NODE if from_model else STREAM_PROGRESS_BY_NODE
                     )
                     progress = progress_map.get(node)
                     if not progress or progress == last_progress:
@@ -697,7 +706,7 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
                     )
                     stream_status = "degraded"
                     log_event("api", "stream_emission", route="chat_stream", emission="error")
-                    yield "event: error\ndata: {\"error\": \"Error interno del servidor\"}\n\n"
+                    yield 'event: error\ndata: {"error": "Error interno del servidor"}\n\n'
                 else:
                     log_event(
                         "api",

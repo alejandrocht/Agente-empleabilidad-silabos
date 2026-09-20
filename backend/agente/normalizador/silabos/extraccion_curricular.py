@@ -9,18 +9,10 @@ from typing import Any
 
 from docx import Document
 
-from agente.normalizador.empleabilidad.catalogo import clave_concepto
-from agente.normalizador.empleabilidad.entrada import normalizar_etiqueta
 from agente.normalizador.modelos import Hallazgo
+from agente.normalizador.silabos.entrada import clave_concepto, normalizar_etiqueta
 
 _PATRON_REFERENCIA_CURRICULAR = r"(?<![A-Z0-9])(?:L\d+|[GE]\d+|[GE]{2,4})(?![A-Z0-9])"
-_SECCIONES_HERRAMIENTAS = (
-    "recursos de aprendizaje",
-    "recursos tecnologicos",
-    "recursos tecnológicos",
-    "software",
-    "herramientas digitales",
-)
 
 
 def _normalizar_modalidad(valor: object) -> str:
@@ -149,62 +141,6 @@ def _codigos(texto: str, aceptar_no_numericos: bool = True) -> list[str]:
     if len(valor.split()) <= 4:
         return list(dict.fromkeys(palabras))
     return []
-
-
-def _seccion_herramientas(encabezado: str) -> str:
-    normalizado = encabezado.replace("_", " ")
-    return next(
-        (seccion for seccion in _SECCIONES_HERRAMIENTAS if seccion == normalizado),
-        "",
-    )
-
-
-def _herramientas_desde_tabla(filas: list[list[str]]) -> list[dict[str, str]]:
-    """Toma solo la fila que sigue a un encabezado estructurado exacto."""
-
-    resultado: list[dict[str, str]] = []
-    for indice, fila in enumerate(filas[:-1]):
-        seccion = _seccion_herramientas(_clave(" ".join(fila)))
-        if not seccion:
-            continue
-        evidencia = _texto(" ".join(filas[indice + 1]))
-        if evidencia:
-            resultado.append({"seccion": seccion, "texto": evidencia})
-    return resultado
-
-
-def _herramientas_desde_parrafos(doc: Any) -> list[dict[str, str]]:
-    """Extrae solo el contenido inmediatamente posterior a un encabezado confiable."""
-
-    resultado: list[dict[str, str]] = []
-    parrafos = [_texto(parrafo.text) for parrafo in doc.paragraphs]
-    for indice, parrafo in enumerate(parrafos):
-        seccion = _seccion_herramientas(_clave(parrafo))
-        if not seccion:
-            continue
-        for candidato in parrafos[indice + 1 : indice + 3]:
-            if not candidato or _seccion_herramientas(_clave(candidato)):
-                break
-            if re.match(r"^(?:[IVXLC]+|\d+)\s*[.)]", candidato, flags=re.IGNORECASE):
-                break
-            resultado.append({"seccion": seccion, "texto": candidato})
-            break
-    return resultado
-
-
-def _deduplicar_evidencias_herramientas(
-    evidencias: list[dict[str, str]],
-) -> list[dict[str, str]]:
-    resultado: list[dict[str, str]] = []
-    vistos: set[tuple[str, str]] = set()
-    for evidencia in evidencias:
-        seccion = _texto(evidencia.get("seccion"))
-        texto = _texto(evidencia.get("texto"))
-        clave = (seccion.lower(), texto.lower())
-        if seccion and texto and clave not in vistos:
-            vistos.add(clave)
-            resultado.append({"seccion": seccion, "texto": texto})
-    return resultado
 
 
 def _primer_metadata(metadata: dict[str, str], claves: tuple[str, ...]) -> str:

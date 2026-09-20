@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -11,7 +12,6 @@ import {
   Database,
   BookOpen,
   Download,
-  FileSpreadsheet,
   LoaderCircle,
   RefreshCw,
   Upload,
@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  iniciarNormalizadorEmpleabilidad,
   iniciarNormalizadorSilabos,
   iniciarNormalizadorSilabosCactus,
   cancelarEjecucionNormalizador,
@@ -118,9 +117,9 @@ const ETIQUETAS_ESTADO = {
   validado: "Estructura validada",
   validado_con_advertencias: "Validada con advertencias",
   limpiando: "Limpiando datos",
-  limpiado: "CSV curriculares listos",
-  limpiado_con_advertencias: "CSV con advertencias",
-  normalizando: "Extrayendo CHH",
+  limpiado: "CSV técnicos listos",
+  limpiado_con_advertencias: "CSV técnicos con advertencias",
+  normalizando: "Procesando resultados técnicos",
   normalizado: "Listo para publicar",
   normalizado_con_advertencias: "Listo con advertencias",
   no_publicado: "No publicado",
@@ -129,21 +128,13 @@ const ETIQUETAS_ESTADO = {
   cancelado: "Procesamiento cancelado",
 };
 
-const PASOS_POR_TIPO = {
-  empleabilidad: [
-    { id: "entrada", label: "Entrada" },
-    { id: "limpieza", label: "Limpieza" },
-    { id: "chh", label: "CHH" },
-    { id: "gate", label: "Gate" },
-  ],
-  silabos: [
-    { id: "entrada", label: "Fuente" },
-    { id: "extraccion", label: "Extracción" },
-    { id: "validacion", label: "Validación" },
-    { id: "limpieza", label: "Limpieza" },
-    { id: "resultado", label: "CSV curriculares" },
-  ],
-};
+const PASOS_SILABOS = [
+  { id: "entrada", label: "Fuente" },
+  { id: "extraccion", label: "Extracción" },
+  { id: "validacion", label: "Validación" },
+  { id: "limpieza", label: "Limpieza" },
+  { id: "resultado", label: "CSV técnicos" },
+];
 
 const CARRERAS_ULIMA = [
   "Administración",
@@ -183,11 +174,10 @@ const ETIQUETAS_SEVERIDAD = {
 };
 
 const TIPOS_OUTPUT_AUDITABLES = new Set([
-  "provenance",
-  "pendientes_curriculares",
-  "candidatos_curriculares",
+  "analisis_tecnico",
+  "propuestas_tecnicas",
+  "decisiones_tecnicas",
   "release_gate",
-  "decisiones_curriculares",
 ]);
 
 const ARCHIVOS_CURRICULARES_TECNICOS = new Set([
@@ -198,10 +188,6 @@ const ARCHIVOS_CURRICULARES_TECNICOS = new Set([
   "salidas/cobertura_curricular.csv",
 ]);
 
-function esModoTecnico(ejecucion) {
-  return ejecucion?.configuracion_curricular?.modo_analista === "technical";
-}
-
 function aprobacionCurricularDe(ejecucion) {
   return ejecucion?.aprobacion_curricular &&
     typeof ejecucion.aprobacion_curricular === "object"
@@ -211,34 +197,18 @@ function aprobacionCurricularDe(ejecucion) {
 
 function releaseGatePermiteImportar(ejecucion) {
   const gate = ejecucion?.release_gate;
-  if (esModoTecnico(ejecucion)) {
-    const outputs = Array.isArray(ejecucion?.outputs) ? ejecucion.outputs : [];
-    const archivos = new Set(outputs.map((output) => output?.archivo));
-    return (
-      gate?.decision === "ALLOW_IMPORT" &&
-      [...ARCHIVOS_CURRICULARES_TECNICOS].every((archivo) =>
-        archivos.has(archivo),
-      )
-    );
-  }
-  const aprobacion = aprobacionCurricularDe(ejecucion);
+  const outputs = Array.isArray(ejecucion?.outputs) ? ejecucion.outputs : [];
+  const archivos = new Set(outputs.map((output) => output?.archivo));
   return (
     gate?.decision === "ALLOW_IMPORT" &&
-    gate?.checks?.approval?.canonical_materialized === true &&
-    Number(gate?.checks?.approval?.pending_decision ?? 0) === 0 &&
-    aprobacion?.materializacion?.csv_canonicos_disponibles === true
+    [...ARCHIVOS_CURRICULARES_TECNICOS].every((archivo) =>
+      archivos.has(archivo),
+    )
   );
 }
 
-function salidaCurricularCanonica(output, modoTecnico = false) {
-  if (modoTecnico) return ARCHIVOS_CURRICULARES_TECNICOS.has(output?.archivo);
-  return (
-    output?.tipo === "csv_curricular" ||
-    /^salidas\/catalogo_(competencias|habilidades|herramientas)\.csv$/.test(
-      String(output?.archivo || ""),
-    ) ||
-    output?.archivo === "salidas/cobertura_curricular.csv"
-  );
+function salidaCurricularCanonica(output) {
+  return ARCHIVOS_CURRICULARES_TECNICOS.has(output?.archivo);
 }
 
 function salidaCurricularAuditable(output) {
@@ -248,79 +218,45 @@ function salidaCurricularAuditable(output) {
   );
 }
 
-function tipoFlujo(ejecucion, modo) {
-  return ejecucion?.tipo === "silabos" || modo === "silabos"
-    ? "silabos"
-    : "empleabilidad";
+function tipoFlujo() {
+  return "silabos";
 }
 
-function pasosPara(ejecucion, modo) {
-  return PASOS_POR_TIPO[tipoFlujo(ejecucion, modo)];
+function pasosPara() {
+  return PASOS_SILABOS;
 }
 
-function pasoActivo(estado, paso, tipo) {
-  if (tipo === "silabos") {
-    if (["recibido", "rechazado"].includes(estado)) return paso === "entrada";
-    if (estado === "extrayendo") return paso === "extraccion";
-    if (["validando", "validado", "validado_con_advertencias"].includes(estado))
-      return paso === "validacion";
-    if (estado === "limpiando") return paso === "limpieza";
-    return false;
-  }
-  if (["recibido", "validando", "rechazado"].includes(estado))
-    return paso === "entrada";
-  if (["validado", "validado_con_advertencias", "limpiando"].includes(estado)) {
-    return paso === "limpieza";
-  }
-  if (
-    ["limpiado", "limpiado_con_advertencias", "normalizando"].includes(estado)
-  ) {
-    return paso === "chh";
-  }
+function pasoActivo(estado, paso) {
+  if (["recibido", "rechazado"].includes(estado)) return paso === "entrada";
+  if (estado === "extrayendo") return paso === "extraccion";
+  if (["validando", "validado", "validado_con_advertencias"].includes(estado))
+    return paso === "validacion";
+  if (estado === "limpiando") return paso === "limpieza";
   return false;
 }
 
-function pasoCompletado(estado, indice, tipo) {
-  const orden =
-    tipo === "silabos"
-      ? {
-          recibido: 0,
-          extrayendo: 1,
-          validando: 2,
-          validado: 2,
-          validado_con_advertencias: 2,
-          limpiando: 3,
-          limpiado: 5,
-          limpiado_con_advertencias: 5,
-          no_publicado: 5,
-          rechazado: 0,
-          error: 0,
-          cancelado: 0,
-        }
-      : {
-          recibido: 0,
-          validando: 0,
-          validado: 1,
-          validado_con_advertencias: 1,
-          limpiando: 1,
-          limpiado: 2,
-          limpiado_con_advertencias: 2,
-          normalizando: 2,
-          normalizado: 4,
-          normalizado_con_advertencias: 4,
-          no_publicado: 4,
-          rechazado: 0,
-          error: 0,
-          cancelado: 0,
-        };
+function pasoCompletado(estado, indice) {
+  const orden = {
+    recibido: 0,
+    extrayendo: 1,
+    validando: 2,
+    validado: 2,
+    validado_con_advertencias: 2,
+    limpiando: 3,
+    limpiado: 5,
+    limpiado_con_advertencias: 5,
+    no_publicado: 5,
+    rechazado: 0,
+    error: 0,
+    cancelado: 0,
+  };
   return (orden[estado] ?? 0) > indice;
 }
 
-function progresoFlujo(estado, tipo) {
-  const pasos = PASOS_POR_TIPO[tipo];
+function progresoFlujo(estado) {
+  const pasos = PASOS_SILABOS;
   const completados = pasos.reduce(
-    (total, _, indice) =>
-      total + (pasoCompletado(estado, indice, tipo) ? 1 : 0),
+    (total, _, indice) => total + (pasoCompletado(estado, indice) ? 1 : 0),
     0,
   );
   return Math.min(100, Math.round((completados / (pasos.length - 1)) * 100));
@@ -376,19 +312,15 @@ function estadoActividad({ completada, activa, requiereAtencion = false }) {
 
 function actividadPorEtapas(ejecucion) {
   if (!ejecucion) return [];
-  const esSilabo = ejecucion.tipo === "silabos";
   const estado = ejecucion.estado;
-  const validacion = esSilabo
-    ? ejecucion.validacion_silabos
-    : ejecucion.validacion;
-  const limpieza = esSilabo ? ejecucion.limpieza_silabos : ejecucion.limpieza;
+  const validacion = ejecucion.validacion_silabos;
+  const limpieza = ejecucion.limpieza_silabos;
   const tieneSalida =
     Array.isArray(ejecucion.outputs) && ejecucion.outputs.length > 0;
   const fuenteCactus = ejecucion.fuente?.tipo === "cactus";
-  const estadoFuente = String(ejecucion.fuente?.estado || "").toLowerCase();
-  const fallida = ["rechazado", "error", "no_publicado", "cancelado"].includes(
-    estado,
-  );
+  const extraccionCompletada = fuenteCactus
+    ? Boolean(ejecucion.fuente?.completa) || validacion
+    : estado !== "recibido";
   const validacionCompletada =
     Boolean(validacion) ||
     [
@@ -398,8 +330,6 @@ function actividadPorEtapas(ejecucion) {
       "limpiado",
       "limpiado_con_advertencias",
       "normalizando",
-      "normalizado",
-      "normalizado_con_advertencias",
       "no_publicado",
     ].includes(estado);
   const limpiezaCompletada =
@@ -408,21 +338,11 @@ function actividadPorEtapas(ejecucion) {
       "limpiado",
       "limpiado_con_advertencias",
       "normalizando",
-      "normalizado",
-      "normalizado_con_advertencias",
       "no_publicado",
     ].includes(estado);
-  const normalizacionCompletada =
-    Boolean(ejecucion.normalizacion) ||
-    ["normalizado", "normalizado_con_advertencias", "no_publicado"].includes(
-      estado,
-    );
-  const extraccionCompletada = fuenteCactus
-    ? Boolean(ejecucion.fuente?.completa) ||
-      ["completada", "parcial", "rechazada"].includes(estadoFuente) ||
-      validacionCompletada
-    : estado !== "recibido";
-
+  const fallida = ["rechazado", "error", "no_publicado", "cancelado"].includes(
+    estado,
+  );
   const etapas = [
     {
       id: "recepcion",
@@ -435,34 +355,29 @@ function actividadPorEtapas(ejecucion) {
         requiereAtencion: estado === "rechazado",
       }),
     },
-    ...(esSilabo
-      ? [
-          {
-            id: "extraccion",
-            titulo: "Extracción",
-            detalle: fuenteCactus
-              ? estado === "extrayendo"
-                ? "Descargando los sílabos desde Cactus y registrando su cobertura."
-                : extraccionCompletada
-                  ? ejecucion.fuente?.completa === false
-                    ? "La extracción terminó con cobertura incompleta; el resultado queda bloqueado para publicación."
-                    : "La extracción desde Cactus terminó."
-                  : "Pendiente de extracción desde Cactus."
-              : extraccionCompletada
-                ? "Carga manual lista; no se ejecutó extracción automática."
-                : "Pendiente de carga.",
-            estado: estadoActividad({
-              completada: extraccionCompletada,
-              activa: estado === "extrayendo",
-              requiereAtencion:
-                fuenteCactus &&
-                (estado === "error" ||
-                  (extraccionCompletada &&
-                    ejecucion.fuente?.completa === false)),
-            }),
-          },
-        ]
-      : []),
+    {
+      id: "extraccion",
+      titulo: "Extracción",
+      detalle: fuenteCactus
+        ? estado === "extrayendo"
+          ? "Descargando los sílabos desde Cactus y registrando su cobertura."
+          : extraccionCompletada
+            ? ejecucion.fuente?.completa === false
+              ? "La extracción terminó con cobertura incompleta; el resultado queda bloqueado para publicación."
+              : "La extracción desde Cactus terminó."
+            : "Pendiente de extracción desde Cactus."
+        : extraccionCompletada
+          ? "Carga manual lista; no se ejecutó extracción automática."
+          : "Pendiente de carga.",
+      estado: estadoActividad({
+        completada: Boolean(extraccionCompletada),
+        activa: estado === "extrayendo",
+        requiereAtencion:
+          fuenteCactus &&
+          (estado === "error" ||
+            (extraccionCompletada && ejecucion.fuente?.completa === false)),
+      }),
+    },
     {
       id: "validacion",
       titulo: "Validación",
@@ -488,9 +403,7 @@ function actividadPorEtapas(ejecucion) {
         estado === "cancelado"
           ? "El procesamiento fue cancelado antes de completar la limpieza."
           : limpiezaCompletada
-            ? esSilabo
-              ? `${limpieza?.registros ?? 0} sílabos extraídos para el resultado curricular.`
-              : "Staging de la fuente preparado."
+            ? `${limpieza?.registros ?? 0} sílabos extraídos para el resultado técnico.`
             : estado === "limpiando"
               ? "Limpiando y estructurando los datos."
               : "Pendiente de limpieza.",
@@ -500,48 +413,23 @@ function actividadPorEtapas(ejecucion) {
         requiereAtencion: fallida && !limpiezaCompletada,
       }),
     },
-  ];
-
-  if (!esSilabo) {
-    etapas.push({
-      id: "normalizacion",
-      titulo: "Normalización",
-      detalle: normalizacionCompletada
-        ? ejecucion.normalizacion?.publicable === false
-          ? "La normalización terminó con observaciones que impiden publicar."
-          : "Relaciones CHH normalizadas."
-        : estado === "normalizando"
-          ? "Extrayendo y normalizando relaciones CHH."
-          : "Pendiente de normalización.",
+    {
+      id: "publicacion",
+      titulo: "Publicación curricular",
+      detalle: tieneSalida
+        ? `${ejecucion.outputs.length} archivo${ejecucion.outputs.length === 1 ? "" : "s"} registrado${ejecucion.outputs.length === 1 ? "" : "s"} como salida.`
+        : estado === "no_publicado"
+          ? "No se publicaron salidas hasta corregir los hallazgos."
+          : "Pendiente de publicar las salidas.",
       estado: estadoActividad({
-        completada:
-          normalizacionCompletada &&
-          ejecucion.normalizacion?.publicable !== false,
-        activa: estado === "normalizando",
+        completada: tieneSalida,
         requiereAtencion:
-          ejecucion.normalizacion?.publicable === false ||
-          estado === "no_publicado",
+          estado === "no_publicado" ||
+          estado === "cancelado" ||
+          (esEstadoTerminal(ejecucion) && !tieneSalida),
       }),
-    });
-  }
-
-  etapas.push({
-    id: "publicacion",
-    titulo: esSilabo ? "Publicación curricular" : "Publicación",
-    detalle: tieneSalida
-      ? `${ejecucion.outputs.length} archivo${ejecucion.outputs.length === 1 ? "" : "s"} registrado${ejecucion.outputs.length === 1 ? "" : "s"} como salida.`
-      : estado === "no_publicado"
-        ? "No se publicaron salidas hasta corregir los hallazgos."
-        : "Pendiente de publicar las salidas.",
-    estado: estadoActividad({
-      completada: tieneSalida,
-      requiereAtencion:
-        estado === "no_publicado" ||
-        estado === "cancelado" ||
-        (esEstadoTerminal(ejecucion) && !tieneSalida),
-    }),
-  });
-
+    },
+  ];
   return etapas;
 }
 
@@ -550,7 +438,6 @@ function hallazgosActividad(ejecucion) {
     ...(ejecucion?.hallazgos || []),
     ...(ejecucion?.validacion_silabos?.hallazgos || []),
     ...(ejecucion?.limpieza_silabos?.hallazgos || []),
-    ...(ejecucion?.normalizacion?.hallazgos || []),
   ];
   const vistos = new Set();
   return fuentes.filter((hallazgo) => {
@@ -753,45 +640,24 @@ function progresoFuenteCactus(ejecucion) {
 }
 
 function metricas(ejecucion, cuarentena) {
-  if (ejecucion?.tipo === "silabos") {
-    return [
-      {
-        label: "Sílabos extraídos",
-        value: ejecucion.limpieza_silabos?.registros ?? "—",
-      },
-      {
-        label: "Relaciones curriculares",
-        value: ejecucion.limpieza_silabos?.relaciones ?? "—",
-      },
-      { label: "En cuarentena", value: cuarentena?.total ?? "—" },
-    ];
-  }
-  const normalizacion = ejecucion?.normalizacion;
-  const limpieza = ejecucion?.limpieza;
   return [
     {
-      label: "Registros procesados",
-      value: normalizacion
-        ? Object.values(normalizacion.registros_procesados || {}).reduce(
-            (a, b) => a + b,
-            0,
-          )
-        : limpieza
-          ? Object.values(limpieza.registros_por_universo || {}).reduce(
-              (a, b) => a + b,
-              0,
-            )
-          : "—",
+      label: "Sílabos extraídos",
+      value: ejecucion?.limpieza_silabos?.registros ?? "—",
     },
-    { label: "Relaciones CHH", value: normalizacion?.relaciones ?? "—" },
-    { label: "En cuarentena", value: normalizacion?.cuarentena ?? "—" },
+    {
+      label: "Relaciones curriculares",
+      value: ejecucion?.limpieza_silabos?.relaciones ?? "—",
+    },
+    { label: "En cuarentena", value: cuarentena?.total ?? "—" },
   ];
 }
 
 export default function NormalizadorPanel() {
+  const router = useRouter();
   const inputRef = useRef(null);
   const restauracionRef = useRef(0);
-  const [modo, setModo] = useState("empleabilidad");
+  const [modo, setModo] = useState("silabos");
   const [archivo, setArchivo] = useState(null);
   const [fuenteSilabos, setFuenteSilabos] = useState("cactus");
   const [carrera, setCarrera] = useState("");
@@ -842,40 +708,24 @@ export default function NormalizadorPanel() {
         );
         if (!ejecucionActiva) return;
 
-        const tipo =
-          ejecucionActiva.tipo === "silabos" ? "silabos" : "empleabilidad";
+        router.replace(`/${encodeURIComponent(ejecucionActiva.id_ejecucion)}`);
         const parametros = ejecucionActiva.parametros || {};
-        setModo(tipo);
-        setFuenteSilabos(
-          tipo === "silabos" && parametros.fuente === "cactus"
-            ? "cactus"
-            : "manual",
-        );
-        setCarrera(tipo === "silabos" ? String(parametros.carrera || "") : "");
-        setPeriodo(tipo === "silabos" ? String(parametros.periodo || "") : "");
+        setModo("silabos");
+        setFuenteSilabos(parametros.fuente === "cactus" ? "cactus" : "manual");
+        setCarrera(String(parametros.carrera || ""));
+        setPeriodo(String(parametros.periodo || ""));
         const detalle = await consultar(
           ejecucionActiva.id_ejecucion,
           puedeAplicar,
         );
         if (puedeAplicar()) {
-          const tipoDetalle = detalle?.tipo === "silabos" ? "silabos" : tipo;
           const parametrosDetalle = detalle?.parametros || parametros;
-          setModo(tipoDetalle);
+          setModo("silabos");
           setFuenteSilabos(
-            tipoDetalle === "silabos" && parametrosDetalle.fuente === "cactus"
-              ? "cactus"
-              : "manual",
+            parametrosDetalle.fuente === "cactus" ? "cactus" : "manual",
           );
-          setCarrera(
-            tipoDetalle === "silabos"
-              ? String(parametrosDetalle.carrera || "")
-              : "",
-          );
-          setPeriodo(
-            tipoDetalle === "silabos"
-              ? String(parametrosDetalle.periodo || "")
-              : "",
-          );
+          setCarrera(String(parametrosDetalle.carrera || ""));
+          setPeriodo(String(parametrosDetalle.periodo || ""));
         }
       } catch (error) {
         if (puedeAplicar())
@@ -891,7 +741,7 @@ export default function NormalizadorPanel() {
     return () => {
       desmontado = true;
     };
-  }, [consultar]);
+  }, [consultar, router]);
 
   useEffect(() => {
     if (
@@ -909,9 +759,7 @@ export default function NormalizadorPanel() {
   }, [consultar, ejecucion, pollingDetenido]);
 
   const iniciar = async () => {
-    const requiereArchivo =
-      modo === "empleabilidad" ||
-      (modo === "silabos" && fuenteSilabos === "manual");
+    const requiereArchivo = fuenteSilabos === "manual";
     if (requiereArchivo && !archivo) return;
     restauracionRef.current += 1;
     setRecuperando(false);
@@ -940,22 +788,21 @@ export default function NormalizadorPanel() {
         return;
       }
       const datos =
-        modo === "silabos"
-          ? fuenteSilabos === "cactus"
-            ? await iniciarNormalizadorSilabosCactus(
-                carrera.trim(),
-                periodo.trim(),
-                usuario.trim(),
-                contrasena,
-              )
-            : await iniciarNormalizadorSilabos(
-                archivo,
-                carrera.trim(),
-                periodo.trim(),
-              )
-          : await iniciarNormalizadorEmpleabilidad(archivo);
-      if (modo === "silabos" && fuenteSilabos === "cactus") setContrasena("");
+        fuenteSilabos === "cactus"
+          ? await iniciarNormalizadorSilabosCactus(
+              carrera.trim(),
+              periodo.trim(),
+              usuario.trim(),
+              contrasena,
+            )
+          : await iniciarNormalizadorSilabos(
+              archivo,
+              carrera.trim(),
+              periodo.trim(),
+            );
+      if (fuenteSilabos === "cactus") setContrasena("");
       setEjecucion(datos);
+      router.push(`/${encodeURIComponent(datos.id_ejecucion)}`);
       await consultar(datos.id_ejecucion);
     } catch (error) {
       setErrorRed(error.message || "No se pudo iniciar la ejecución.");
@@ -1009,39 +856,30 @@ export default function NormalizadorPanel() {
   };
 
   const estado = recuperando ? "recuperando" : ejecucion?.estado || "recibido";
-  const esCurricular = ejecucion?.tipo === "silabos" || modo === "silabos";
   const esFinal = esEstadoTerminal(ejecucion);
-  const flujo = tipoFlujo(ejecucion, modo);
-  const pasos = pasosPara(ejecucion, modo);
+  const flujo = tipoFlujo();
+  const pasos = pasosPara();
   const controlesBloqueados = recuperando || cargando || Boolean(ejecucion);
   const fuenteLista =
-    modo === "empleabilidad"
-      ? Boolean(archivo)
-      : fuenteSilabos === "cactus"
-        ? Boolean(
-            carrera.trim() && periodo.trim() && usuario.trim() && contrasena,
-          )
-        : Boolean(archivo && carrera.trim() && periodo.trim());
+    fuenteSilabos === "cactus"
+      ? Boolean(
+          carrera.trim() && periodo.trim() && usuario.trim() && contrasena,
+        )
+      : Boolean(archivo && carrera.trim() && periodo.trim());
   const ejecucionActiva =
     recuperando || cargando || Boolean(ejecucion && !esFinal);
   const aprobacion = aprobacionCurricularDe(ejecucion);
-  const modoTecnico = esModoTecnico(ejecucion);
   const procesoCurricularCompletado =
-    esCurricular &&
     (["limpiado", "limpiado_con_advertencias"].includes(estado) ||
-      (modoTecnico && estado === "no_publicado")) &&
+      estado === "no_publicado") &&
     ejecucion?.validacion_silabos?.valida === true;
   const aprobacionPendiente =
-    esCurricular &&
-    (aprobacion?.requiere_decision === true ||
-      Number(aprobacion?.pendientes_por_decidir ?? 0) > 0);
+    aprobacion?.requiere_decision === true ||
+    Number(aprobacion?.pendientes_por_decidir ?? 0) > 0;
   const puedeRevisarPropuestas =
-    esCurricular &&
-    esFinal &&
-    (procesoCurricularCompletado || (modoTecnico && aprobacionPendiente));
-  const resultadoListo = esCurricular
-    ? procesoCurricularCompletado && releaseGatePermiteImportar(ejecucion)
-    : ejecucion?.normalizacion?.publicable === true;
+    esFinal && (procesoCurricularCompletado || aprobacionPendiente);
+  const resultadoListo =
+    procesoCurricularCompletado && releaseGatePermiteImportar(ejecucion);
   const resumenMetricas = useMemo(
     () => metricas(ejecucion, cuarentena),
     [ejecucion, cuarentena],
@@ -1066,7 +904,7 @@ export default function NormalizadorPanel() {
     ? null
     : minutosSinActividad(ejecucion?.actualizada_en);
   const ultimaActualizacion = fechaLegible(ejecucion?.actualizada_en);
-  const IconoFuente = esCurricular ? BookOpen : FileSpreadsheet;
+  const IconoFuente = BookOpen;
   const progresoManifest =
     progresoLimpiezaLLM && progresoLimpiezaLLM.chunksTotales > 0
       ? progresoLimpiezaLLM.porcentaje
@@ -1074,54 +912,38 @@ export default function NormalizadorPanel() {
   const progreso = recuperando
     ? null
     : (progresoManifest ??
-      (ejecucion ? (esFinal ? progresoFlujo(estado, flujo) : null) : 0));
+      (ejecucion ? (esFinal ? progresoFlujo(estado) : null) : 0));
   const detalleSeguimiento = recuperando
     ? "Comprobando si existe una ejecución activa para recuperar su seguimiento."
     : !ejecucion && !cargando
       ? "Selecciona una fuente y presiona el botón de inicio para comenzar."
       : esFinal
-        ? esCurricular
-          ? "La estructura quedó registrada y ya puedes revisar sus hallazgos."
-          : "La ejecución terminó y el gate dejó su resultado registrado."
+        ? "La estructura quedó registrada y ya puedes revisar sus hallazgos."
         : cancelacionEnviada
           ? estado === "extrayendo"
             ? "Cancelación solicitada. La navegación o descarga actual puede terminar antes de cerrar la ejecución."
             : "Cancelación solicitada. El lote actual puede terminar, pero no se enviarán nuevos lotes al LLM."
-          : esCurricular
-            ? estado === "extrayendo"
-              ? "Cactus está navegando el periodo seleccionado y descargando los sílabos de la carrera."
-              : "Procesamos los sílabos por lotes, conservamos las evidencias y hallazgos de cada etapa, y habilitaremos los CSV y la inspección al completar el ETL."
-            : "Procesamos la fuente por etapas y conservamos las evidencias y hallazgos de cada etapa; los resultados y la inspección se habilitarán al completar el ETL.";
+          : estado === "extrayendo"
+            ? "Cactus está navegando el periodo seleccionado y descargando los sílabos de la carrera."
+            : "Procesamos los sílabos por lotes, conservamos las evidencias y hallazgos de cada etapa, y habilitaremos los CSV y la inspección al completar el ETL.";
   const tituloEstado = recuperando
     ? "Recuperando ejecución"
-    : esCurricular &&
-        aprobacionPendiente &&
-        (["limpiado", "limpiado_con_advertencias"].includes(estado) ||
-          (modoTecnico && esFinal))
-      ? "Revisión curricular pendiente"
+    : aprobacionPendiente &&
+        (["limpiado", "limpiado_con_advertencias"].includes(estado) || esFinal)
+      ? "Revisión técnica pendiente"
       : ETIQUETAS_ESTADO[estado] || "Preparando ejecución";
   const outputs = Array.isArray(ejecucion?.outputs) ? ejecucion.outputs : [];
-  const outputsCurricularesCanonicos = outputs.filter((output) =>
-    salidaCurricularCanonica(output, modoTecnico),
-  );
+  const outputsCurricularesCanonicos = outputs.filter(salidaCurricularCanonica);
   const outputsCurricularesAuditables = outputs.filter(
     salidaCurricularAuditable,
   );
-  const tituloResultado = esCurricular
-    ? resultadoListo
-      ? modoTecnico
-        ? "CSV técnicos listos"
-        : "CSV curriculares listos"
-      : aprobacionPendiente
-        ? "Revisión requerida antes de generar CSV"
-        : procesoCurricularCompletado
-          ? modoTecnico
-            ? "CSV técnicos bloqueados por el release gate"
-            : "CSV curriculares bloqueados por el release gate"
-          : "La fuente curricular requiere corrección"
-    : resultadoListo
-      ? "Paquete listo para la siguiente etapa"
-      : "La fuente no se publica todavía";
+  const tituloResultado = resultadoListo
+    ? "CSV técnicos listos"
+    : aprobacionPendiente
+      ? "Revisión técnica requerida antes de generar CSV"
+      : procesoCurricularCompletado
+        ? "CSV técnicos bloqueados por el release gate"
+        : "La fuente técnica requiere corrección";
 
   return (
     <main className="h-[100dvh] w-full overflow-y-auto overscroll-contain bg-fondo text-ink">
@@ -1210,44 +1032,10 @@ export default function NormalizadorPanel() {
               ) : null}
             </div>
             <div
-              className="mt-3 grid gap-3 sm:grid-cols-2"
+              className="mt-3 grid gap-3"
               role="tablist"
               aria-label="Selecciona el tipo de fuente"
             >
-              <button
-                type="button"
-                role="tab"
-                aria-label="Empleabilidad"
-                aria-selected={modo === "empleabilidad"}
-                aria-controls="panel-fuente"
-                disabled={controlesBloqueados}
-                onClick={() => {
-                  setModo("empleabilidad");
-                  setArchivo(null);
-                  setUsuario("");
-                  setContrasena("");
-                  if (inputRef.current) inputRef.current.value = "";
-                }}
-                className={`group flex items-center gap-3 rounded-xl border px-4 py-2.5 text-left transition focus:outline-none focus:ring-2 focus:ring-ulima/30 disabled:cursor-not-allowed disabled:opacity-50 ${modo === "empleabilidad" ? "border-ulima bg-[#FFF5F1]" : "border-line bg-paper hover:border-ulima/50 hover:bg-fondo"}`}
-              >
-                <span
-                  className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg transition ${modo === "empleabilidad" ? "bg-ulima text-white" : "bg-ash text-muted group-hover:text-ulima"}`}
-                >
-                  <FileSpreadsheet size={19} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-extrabold text-ink">
-                    Empleabilidad
-                  </span>
-                  <span className="mt-0.5 block text-xs leading-5 text-muted">
-                    Fuente XLSX y relaciones CHH
-                  </span>
-                </span>
-                <span
-                  className={`ml-auto h-2.5 w-2.5 shrink-0 rounded-full border transition ${modo === "empleabilidad" ? "border-ulima bg-ulima" : "border-line bg-paper"}`}
-                  aria-hidden="true"
-                />
-              </button>
               <button
                 type="button"
                 role="tab"
@@ -1299,12 +1087,10 @@ export default function NormalizadorPanel() {
                     Carga de fuente
                   </p>
                   <h2 className="mt-1.5 text-xl font-extrabold tracking-[-0.025em]">
-                    {esCurricular ? "Paquete curricular" : "Archivo operativo"}
+                    Paquete curricular
                   </h2>
                   <p className="mt-1 text-sm leading-5 text-muted">
-                    {esCurricular
-                      ? "Valida y limpia la estructura de tus sílabos."
-                      : "Valida, limpia y normaliza tus relaciones de empleabilidad."}
+                    Valida y limpia la estructura de tus sílabos.
                   </p>
                 </div>
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#FFF5F1] text-ulima">
@@ -1464,28 +1250,20 @@ export default function NormalizadorPanel() {
                 <span className="mt-3 max-w-full truncate text-sm font-extrabold">
                   {archivo
                     ? archivo.name
-                    : modo === "silabos" && fuenteSilabos === "cactus"
+                    : fuenteSilabos === "cactus"
                       ? "Cargar un paquete manual (opcional)"
-                      : esCurricular
-                        ? "Seleccionar ZIP, DOCX o PDF"
-                        : "Seleccionar archivo XLSX"}
+                      : "Seleccionar ZIP, DOCX o PDF"}
                 </span>
                 <span className="mt-1 text-xs leading-5 text-muted">
-                  {modo === "silabos" && fuenteSilabos === "cactus"
+                  {fuenteSilabos === "cactus"
                     ? "Si eliges un archivo, cambiaremos al modo manual."
-                    : esCurricular
-                      ? "Puedes cargar un archivo o un paquete de sílabos."
-                      : "Los años de las hojas pueden variar."}
+                    : "Puedes cargar un archivo o un paquete de sílabos."}
                 </span>
                 <input
                   disabled={controlesBloqueados}
                   ref={inputRef}
                   type="file"
-                  accept={
-                    esCurricular
-                      ? ".zip,.docx,.pdf,application/zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                      : ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  }
+                  accept=".zip,.docx,.pdf,application/zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   className="sr-only"
                   onChange={seleccionarArchivo}
                 />
@@ -1503,11 +1281,9 @@ export default function NormalizadorPanel() {
                   ) : (
                     <Database size={16} />
                   )}
-                  {esCurricular
-                    ? fuenteSilabos === "cactus"
-                      ? "Extraer y normalizar sílabos"
-                      : "Iniciar limpieza curricular"
-                    : "Iniciar normalización"}
+                  {fuenteSilabos === "cactus"
+                    ? "Extraer y normalizar sílabos"
+                    : "Iniciar limpieza curricular"}
                 </button>
                 {archivo || ejecucion ? (
                   <button
@@ -1571,11 +1347,7 @@ export default function NormalizadorPanel() {
                 }
               >
                 <div className="mb-2.5 flex items-center justify-between font-body text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                  <span>
-                    {esCurricular
-                      ? "Flujo curricular"
-                      : "Flujo de empleabilidad"}
-                  </span>
+                  <span>Flujo curricular</span>
                   <span className="text-ulima">
                     {recuperando
                       ? "Recuperando…"
@@ -1592,11 +1364,12 @@ export default function NormalizadorPanel() {
                 </div>
               </div>
 
-              {esCurricular &&
-              ["extrayendo", "validando", "limpiando", "normalizando"].includes(
-                estado,
-              ) &&
-              !cancelacionEnviada ? (
+              {[
+                "extrayendo",
+                "validando",
+                "limpiando",
+                "normalizando",
+              ].includes(estado) && !cancelacionEnviada ? (
                 <div className="mt-3 flex justify-end">
                   <button
                     type="button"
@@ -1619,11 +1392,11 @@ export default function NormalizadorPanel() {
                 aria-label="Etapas del flujo"
               >
                 {pasos.map((paso, indice) => {
-                  const completado = pasoCompletado(estado, indice, flujo);
-                  const activo = pasoActivo(estado, paso.id, flujo);
+                  const completado = pasoCompletado(estado, indice);
+                  const activo = pasoActivo(estado, paso.id);
                   const siguienteCompletado =
                     indice < pasos.length - 1 &&
-                    pasoCompletado(estado, indice + 1, flujo);
+                    pasoCompletado(estado, indice + 1);
                   return (
                     <div
                       key={paso.id}
@@ -2327,169 +2100,116 @@ export default function NormalizadorPanel() {
                 />
               ) : null}
 
-              {!esCurricular && outputs.length ? (
-                <div className="mt-5 border-t border-line pt-5">
+              <div className="mt-5 space-y-5 border-t border-line pt-5">
+                <section aria-label="Artefactos de auditoría y proveniencia">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <div>
-                      <h3 className="font-bold">Archivos disponibles</h3>
+                      <h3 className="font-bold">Auditoría y proveniencia</h3>
                       <p className="mt-1 text-sm leading-5 text-muted">
-                        Descarga los resultados registrados por esta ejecución.
+                        Estos artefactos conservan el análisis técnico,
+                        decisiones y release gate; no son CSV canónicos.
                       </p>
                     </div>
                     <span className="font-mono text-xs text-muted">
-                      {outputs.length} archivo{outputs.length === 1 ? "" : "s"}
+                      {outputsCurricularesAuditables.length} artefacto
+                      {outputsCurricularesAuditables.length === 1 ? "" : "s"}
                     </span>
                   </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {outputs.map((output) => (
-                      <a
-                        key={output.archivo}
-                        href={obtenerUrlOutputNormalizador(
-                          ejecucion.id_ejecucion,
-                          output.archivo,
-                        )}
-                        download
-                        className="group flex items-center justify-between gap-3 rounded-xl border border-line bg-fondo px-3.5 py-3 transition hover:border-ulima hover:bg-[#FFF5F1] focus:outline-none focus:ring-2 focus:ring-ulima/30"
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-extrabold text-ink">
-                            {nombreOutput(output.archivo)}
+                  {outputsCurricularesAuditables.length ? (
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {outputsCurricularesAuditables.map((output) => (
+                        <a
+                          key={output.archivo}
+                          href={obtenerUrlOutputNormalizador(
+                            ejecucion.id_ejecucion,
+                            output.archivo,
+                          )}
+                          download
+                          className="group flex items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/60 px-3.5 py-3 transition hover:border-sky-400 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-300/50"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-extrabold text-ink">
+                              {nombreOutput(output.archivo)}
+                            </span>
+                            <span className="mt-1 block text-xs text-sky-900/75">
+                              {output.tipo || "auditoría"}
+                              {output.registros === undefined
+                                ? ""
+                                : ` · ${output.registros} registros`}
+                            </span>
                           </span>
-                          <span className="mt-1 block text-xs text-muted">
-                            {output.tipo || "archivo"}
-                            {output.registros === undefined
-                              ? ""
-                              : ` · ${output.registros} registros`}
-                          </span>
-                        </span>
-                        <Download
-                          className="shrink-0 text-ulima transition group-hover:translate-y-0.5"
-                          size={17}
-                          aria-hidden="true"
-                        />
-                      </a>
-                    ))}
+                          <Download
+                            className="shrink-0 text-sky-700 transition group-hover:translate-y-0.5"
+                            size={17}
+                            aria-hidden="true"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 rounded-xl border border-dashed border-line bg-fondo px-3.5 py-3 text-sm leading-5 text-muted">
+                      La ejecución no reportó artefactos de auditoría
+                      descargables.
+                    </p>
+                  )}
+                </section>
+
+                <section aria-label="CSV canónicos">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <div>
+                      <h3 className="font-bold">CSV canónicos</h3>
+                      <p className="mt-1 text-sm leading-5 text-muted">
+                        Solo aparecen los cinco CSV técnicos declarados cuando
+                        el release gate permite importar.
+                      </p>
+                    </div>
+                    <span className="font-mono text-xs text-muted">
+                      {outputsCurricularesCanonicos.length} archivo
+                      {outputsCurricularesCanonicos.length === 1 ? "" : "s"}
+                    </span>
                   </div>
-                </div>
-              ) : null}
-
-              {esCurricular ? (
-                <div className="mt-5 space-y-5 border-t border-line pt-5">
-                  <section aria-label="Artefactos de auditoría y proveniencia">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <div>
-                        <h3 className="font-bold">Auditoría y proveniencia</h3>
-                        <p className="mt-1 text-sm leading-5 text-muted">
-                          {modoTecnico
-                            ? "Estos artefactos conservan el análisis técnico, decisiones y release gate; no son CSV canónicos."
-                            : "Estos artefactos conservan fuentes, propuestas, decisiones y release gate para revisión; no son CSV canónicos."}
-                        </p>
-                      </div>
-                      <span className="font-mono text-xs text-muted">
-                        {outputsCurricularesAuditables.length} artefacto
-                        {outputsCurricularesAuditables.length === 1 ? "" : "s"}
-                      </span>
-                    </div>
-                    {outputsCurricularesAuditables.length ? (
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {outputsCurricularesAuditables.map((output) => (
-                          <a
-                            key={output.archivo}
-                            href={obtenerUrlOutputNormalizador(
-                              ejecucion.id_ejecucion,
-                              output.archivo,
-                            )}
-                            download
-                            className="group flex items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/60 px-3.5 py-3 transition hover:border-sky-400 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-300/50"
-                          >
-                            <span className="min-w-0">
-                              <span className="block truncate text-sm font-extrabold text-ink">
-                                {nombreOutput(output.archivo)}
-                              </span>
-                              <span className="mt-1 block text-xs text-sky-900/75">
-                                {output.tipo || "auditoría"}
-                                {output.registros === undefined
-                                  ? ""
-                                  : ` · ${output.registros} registros`}
-                              </span>
+                  {outputsCurricularesCanonicos.length ? (
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {outputsCurricularesCanonicos.map((output) => (
+                        <a
+                          key={output.archivo}
+                          href={obtenerUrlOutputNormalizador(
+                            ejecucion.id_ejecucion,
+                            output.archivo,
+                          )}
+                          download
+                          className="group flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3.5 py-3 transition hover:border-emerald-400 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-300/50"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-extrabold text-ink">
+                              {nombreOutput(output.archivo)}
                             </span>
-                            <Download
-                              className="shrink-0 text-sky-700 transition group-hover:translate-y-0.5"
-                              size={17}
-                              aria-hidden="true"
-                            />
-                          </a>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-3 rounded-xl border border-dashed border-line bg-fondo px-3.5 py-3 text-sm leading-5 text-muted">
-                        La ejecución no reportó artefactos de auditoría
-                        descargables.
-                      </p>
-                    )}
-                  </section>
-
-                  <section aria-label="CSV canónicos">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <div>
-                        <h3 className="font-bold">CSV canónicos</h3>
-                        <p className="mt-1 text-sm leading-5 text-muted">
-                          {modoTecnico
-                            ? "Solo aparecen los cinco CSV técnicos declarados cuando el release gate permite importar."
-                            : "Solo aparecen cuando todas las decisiones están registradas y el release gate permite importar."}
-                        </p>
-                      </div>
-                      <span className="font-mono text-xs text-muted">
-                        {outputsCurricularesCanonicos.length} archivo
-                        {outputsCurricularesCanonicos.length === 1 ? "" : "s"}
-                      </span>
-                    </div>
-                    {outputsCurricularesCanonicos.length ? (
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {outputsCurricularesCanonicos.map((output) => (
-                          <a
-                            key={output.archivo}
-                            href={obtenerUrlOutputNormalizador(
-                              ejecucion.id_ejecucion,
-                              output.archivo,
-                            )}
-                            download
-                            className="group flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3.5 py-3 transition hover:border-emerald-400 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-300/50"
-                          >
-                            <span className="min-w-0">
-                              <span className="block truncate text-sm font-extrabold text-ink">
-                                {nombreOutput(output.archivo)}
-                              </span>
-                              <span className="mt-1 block text-xs text-emerald-900/75">
-                                {modoTecnico
-                                  ? "CSV técnico canónico"
-                                  : "CSV curricular canónico"}
-                                {output.registros === undefined
-                                  ? ""
-                                  : ` · ${output.registros} registros`}
-                              </span>
+                            <span className="mt-1 block text-xs text-emerald-900/75">
+                              CSV técnico canónico
+                              {output.registros === undefined
+                                ? ""
+                                : ` · ${output.registros} registros`}
                             </span>
-                            <Download
-                              className="shrink-0 text-emerald-700 transition group-hover:translate-y-0.5"
-                              size={17}
-                              aria-hidden="true"
-                            />
-                          </a>
-                        ))}
-                      </div>
-                    ) : (
-                      <p
-                        role="status"
-                        className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm leading-5 text-amber-900"
-                      >
-                        {modoTecnico
-                          ? "Los CSV técnicos no están disponibles hasta que el release gate permita importar."
-                          : "Los CSV canónicos no están disponibles hasta completar las decisiones curriculares."}
-                      </p>
-                    )}
-                  </section>
-                </div>
-              ) : null}
+                          </span>
+                          <Download
+                            className="shrink-0 text-emerald-700 transition group-hover:translate-y-0.5"
+                            size={17}
+                            aria-hidden="true"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p
+                      role="status"
+                      className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm leading-5 text-amber-900"
+                    >
+                      Los CSV técnicos no están disponibles hasta que el release
+                      gate permita importar.
+                    </p>
+                  )}
+                </section>
+              </div>
 
               {!resultadoListo && esFinal && !aprobacionPendiente ? (
                 <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
@@ -2500,9 +2220,7 @@ export default function NormalizadorPanel() {
                     />
                     <div className="min-w-0">
                       <p className="font-bold text-red-800">
-                        {esCurricular
-                          ? "Corrige estos hallazgos antes de continuar"
-                          : "Corrige estos hallazgos antes de publicar"}
+                        Corrige estos hallazgos antes de continuar
                       </p>
                       <div className="mt-2 space-y-2 text-sm leading-5 text-red-700">
                         {(errores.length ? errores : ejecucion.hallazgos || [])
@@ -2549,21 +2267,10 @@ export default function NormalizadorPanel() {
                 </div>
               ) : null}
 
-              {resultadoListo && ejecucion.catalogo_chh ? (
-                <p className="mt-5 border-t border-line pt-4 font-mono text-[11px] leading-5 text-muted">
-                  {modoTecnico
-                    ? "Catálogos técnicos disponibles para importar"
-                    : esCurricular
-                      ? "Contexto CHH disponible para la siguiente extracción"
-                      : `Catálogo ${ejecucion.catalogo_chh.version} · ${ejecucion.catalogo_chh.competencias} competencias · ${ejecucion.catalogo_chh.habilidades} habilidades · ${ejecucion.catalogo_chh.herramientas} herramientas`}
-                </p>
-              ) : null}
-              {esCurricular &&
-              resultadoListo &&
-              releaseGatePermiteImportar(ejecucion) ? (
+              {resultadoListo && releaseGatePermiteImportar(ejecucion) ? (
                 <Neo4jImportPanel
                   idEjecucion={ejecucion.id_ejecucion}
-                  modo={modoTecnico ? "technical" : "legacy"}
+                  modo="technical"
                 />
               ) : null}
             </section>

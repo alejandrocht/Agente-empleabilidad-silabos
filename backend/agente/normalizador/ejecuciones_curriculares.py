@@ -84,7 +84,6 @@ class EjecutorCurricular:
         try:
             self._verificar_cancelacion(ejecucion)
             configuracion = configuracion_curricular()
-            ejecucion.catalogo_chh = None
             ejecucion.estado = "limpiando"
             ejecucion.actualizada_en = self._ahora()
             ejecucion.configuracion_curricular = configuracion.a_dict()

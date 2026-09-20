@@ -119,7 +119,7 @@ class ResultadoLimpieza:
 
 @dataclass(frozen=True, slots=True)
 class ResultadoNormalizacion:
-    """Resultado de la extracción CHH antes de publicar el paquete."""
+    """Resultado técnico antes de publicar los CSV canónicos."""
 
     publicable: bool
     registros_procesados: dict[str, int]
@@ -378,8 +378,6 @@ class ResultadoLimpiezaSilabos:
     publicable: bool = False
     relaciones: int = 0
     competencias: int = 0
-    habilidades: int = 0
-    herramientas: int = 0
     pendientes: int = 0
     release_gate: dict[str, object] = field(default_factory=dict)
 
@@ -389,8 +387,6 @@ class ResultadoLimpiezaSilabos:
             "publicable": self.publicable,
             "relaciones": self.relaciones,
             "competencias": self.competencias,
-            "habilidades": self.habilidades,
-            "herramientas": self.herramientas,
             "pendientes": self.pendientes,
             "release_gate": dict(self.release_gate),
             "outputs": list(self.outputs),

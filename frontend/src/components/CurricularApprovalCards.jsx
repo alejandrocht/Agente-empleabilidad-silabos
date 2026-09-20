@@ -1,19 +1,14 @@
 "use client";
 
-import { Check, ChevronLeft, ChevronRight, LoaderCircle } from "lucide-react";
+import { Check, LoaderCircle } from "lucide-react";
 import {
   ETIQUETAS,
-  PACKAGE_PAGE_SIZE,
-  PENDING_SKILL_LABEL,
   autoDeduplicadaDe,
   camposDeProveniencia,
-  componentesDe,
-  componentesLegibles,
   decisionLabel,
   descripcionPropuesta,
   evidenciaDe,
   etiquetasDeSeñal,
-  nombreLegible,
   nombrePropuesto,
   representanteDe,
   texto,
@@ -39,435 +34,9 @@ function DecisionButton({ decision, activa, nombre, onClick, disabled }) {
       }`}
     >
       <span className="mt-0.5 block font-body font-bold">
-        {esAdd ? "Agregar al perfil" : "Mantener pendiente"}
+        {esAdd ? "Agregar al catálogo" : "Mantener pendiente"}
       </span>
     </button>
-  );
-}
-
-function ComponentDetails({ niveles, packageId }) {
-  const secciones = niveles
-    .map(([label, tipo, values]) => ({
-      label,
-      tipo,
-      componentes: componentesLegibles(values, tipo),
-    }))
-    .filter(({ componentes }) => componentes.length);
-  if (!secciones.length) return null;
-  return (
-    <section aria-label={`Detalles de componentes del paquete ${packageId}`}>
-      <h4 className="text-sm font-extrabold text-ink">
-        Detalle de componentes
-      </h4>
-      <div className="mt-3 grid gap-4 lg:grid-cols-3">
-        {secciones.map(({ label, tipo, componentes }) => (
-          <section key={tipo} aria-label={`${label} del paquete ${packageId}`}>
-            <h5 className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted">
-              {label}
-            </h5>
-            <dl className="mt-2 space-y-3 text-xs leading-5">
-              {componentes.map(({ nombre, descripcion }, indice) => (
-                <div key={`${tipo}-${indice}-${nombre}`}>
-                  <dt className="break-words font-bold text-ink">{nombre}</dt>
-                  <dd className="mt-0.5 break-words text-muted">
-                    {descripcion}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function CanonicalTripleRows({ relaciones }) {
-  if (!Array.isArray(relaciones) || !relaciones.length) {
-    return (
-      <p className="mt-1 text-xs leading-5 text-muted">
-        No hay una triple canónica publicada para este paquete.
-      </p>
-    );
-  }
-  return (
-    <ul className="mt-2 space-y-2" aria-label="Triples canónicas del paquete">
-      {relaciones.map((relacion, indice) => {
-        const nombres = ["competencia", "habilidad", "herramienta"]
-          .map(
-            (tipo) =>
-              nombreLegible(relacion?.[tipo]?.nombre) ||
-              "Sin nombre catalogado",
-          )
-          .filter(
-            (nombre, posicion) =>
-              posicion < 2 || nombre !== "Sin nombre catalogado",
-          );
-        return (
-          <li
-            key={`triple-${indice}`}
-            className="rounded-lg border border-line bg-paper px-3 py-2 text-xs leading-5 text-ink [overflow-wrap:anywhere]"
-          >
-            {nombres.join(" → ")}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function PendingPackageProposals({ propuestas }) {
-  if (!Array.isArray(propuestas) || !propuestas.length) return null;
-  return (
-    <section aria-label="Propuestas pendientes del paquete">
-      <h4 className="text-sm font-extrabold text-ink">Propuestas pendientes</h4>
-      <ul className="mt-2 space-y-2 text-xs leading-5 text-muted">
-        {propuestas.map((propuesta, indice) => (
-          <li
-            key={`${propuesta?.id_pendiente || "proposal"}-${indice}`}
-            className="rounded-lg border border-line bg-paper p-3"
-          >
-            <p className="break-words font-bold text-ink">
-              {nombreLegible(
-                propuesta?.nombre ||
-                  propuesta?.nombre_competencia ||
-                  propuesta?.propuesta?.nombre_competencia,
-              ) || PENDING_SKILL_LABEL}
-            </p>
-            <p className="mt-1 break-words">
-              {texto(propuesta?.descripcion) || "Sin descripción adicional."}
-            </p>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function PackageComponentsSummary({ niveles, packageId }) {
-  const secciones = niveles.map(([label, tipo, values]) => ({
-    label,
-    tipo,
-    componentes: componentesLegibles(values, tipo),
-  }));
-
-  return (
-    <section
-      className="mt-5"
-      aria-label={`Componentes curriculares del paquete ${packageId}`}
-    >
-      <h4 className="text-sm font-extrabold text-ink">
-        Componentes del paquete
-      </h4>
-      <p className="mt-1 text-xs leading-5 text-muted">
-        Entidades recibidas desde la fuente curricular, separadas de las triples
-        canónicas.
-      </p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        {secciones.map(({ label, tipo, componentes }) => (
-          <div
-            key={tipo}
-            className="min-w-0 rounded-lg border border-line bg-fondo px-3 py-2"
-          >
-            <p className="font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-muted">
-              {label}
-            </p>
-            {componentes.length ? (
-              <ul className="mt-1 space-y-1 text-sm font-bold text-ink">
-                {componentes.map(({ nombre }, indice) => (
-                  <li
-                    key={`${tipo}-${indice}-${nombre}`}
-                    className="break-words [overflow-wrap:anywhere]"
-                  >
-                    {nombre}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-1 text-sm font-semibold text-muted">
-                No presente
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function PackageCard({ paquete, decision, onDecision, onDiscard, disabled }) {
-  const competencias = componentesDe(paquete, "competencias");
-  const habilidades = componentesDe(paquete, "habilidades");
-  const herramientas = componentesDe(paquete, "herramientas");
-  const filas = Array.isArray(paquete?.filas) ? paquete.filas : [];
-  const identidad = paquete?.source_identity || {};
-  const evidenciaFuente = paquete?.source_evidence || {};
-  const filasFuente = Array.isArray(evidenciaFuente?.rows)
-    ? evidenciaFuente.rows
-    : filas;
-  const evidencia = filasFuente.flatMap((fila) => evidenciaDe(fila));
-  const packageId = texto(paquete?.id_paquete_chh || paquete?.package_id);
-  const señales = [
-    ...new Map(
-      filas
-        .flatMap((fila) => etiquetasDeSeñal(fila))
-        .map((señal) => [señal.id, señal]),
-    ).values(),
-  ];
-  const niveles = [
-    ["Competencia", "competencias", competencias],
-    ["Habilidad", "habilidades", habilidades],
-    ["Herramienta", "herramientas", herramientas],
-  ];
-  return (
-    <article
-      className="rounded-2xl border border-line bg-paper shadow-sm transition-colors hover:border-ulima/40"
-      data-testid="curricular-package-card"
-      data-package-id={packageId}
-    >
-      <div className="p-4 sm:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-ulima">
-                Paquete CHH
-              </p>
-              <span
-                className={`rounded-lg border px-2 py-1 font-mono text-[9px] font-bold ${decision === "ADD" ? "border-ulima/40 bg-ulima/5 text-ink" : decision === "KEEP_PENDING" ? "border-institucional-negro/40 bg-ash text-ink" : "border-line bg-fondo text-muted"}`}
-              >
-                {decisionLabel(decision)}
-              </span>
-            </div>
-            <h3 className="mt-2 text-base font-extrabold text-ink">
-              Componentes curriculares
-            </h3>
-            <p className="mt-2 text-xs leading-5 text-muted">
-              {texto(identidad.carrera || paquete?.career) ||
-                "Carrera no reportada"}{" "}
-              ·{" "}
-              {texto(identidad.periodo || paquete?.period) ||
-                "Periodo no reportado"}{" "}
-              · curso{" "}
-              {texto(identidad.id_curso || paquete?.id_curso) || "no reportado"}
-            </p>
-            <PackageComponentsSummary niveles={niveles} packageId={packageId} />
-            <section
-              className="mt-5"
-              aria-label={`Relaciones canónicas del paquete ${packageId}`}
-            >
-              <h4 className="text-sm font-extrabold text-ink">
-                Triples canónicas
-              </h4>
-              <p className="mt-1 text-xs leading-5 text-muted">
-                Cada fila representa una relación explícita; no se combinan las
-                listas de componentes.
-              </p>
-              <CanonicalTripleRows relaciones={paquete?.relaciones_canonicas} />
-            </section>
-            <div className="mt-5">
-              <PendingPackageProposals
-                propuestas={paquete?.propuestas_pendientes}
-              />
-            </div>
-          </div>
-          <div
-            className="shrink-0 border-t border-line pt-4 xl:w-64 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0"
-            aria-label={`Decisión para paquete ${packageId}`}
-          >
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted">
-              Decisión visible
-            </p>
-            <p className="mt-1 text-xs leading-5 text-muted">
-              Se aplica atómicamente a todas las relaciones del paquete.
-            </p>
-            <div className="mt-3 grid gap-2">
-              <DecisionButton
-                decision="ADD"
-                activa={decision === "ADD"}
-                nombre={`paquete ${packageId}`}
-                onClick={() => onDecision(packageId, "ADD")}
-                disabled={disabled}
-              />
-              <DecisionButton
-                decision="KEEP_PENDING"
-                activa={decision === "KEEP_PENDING"}
-                nombre={`paquete ${packageId}`}
-                onClick={() => onDecision(packageId, "KEEP_PENDING")}
-                disabled={disabled}
-              />
-              <button
-                type="button"
-                onClick={() => onDiscard(packageId)}
-                disabled={disabled}
-                className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-left text-xs font-extrabold text-red-800 transition hover:border-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Descartar paquete
-              </button>
-            </div>
-            <p
-              className="mt-2 text-[11px] leading-4 text-muted"
-              aria-live="polite"
-            >
-              {decision
-                ? `Seleccionado: ${decisionLabel(decision)}`
-                : "Sin decisión; seguirá pendiente."}
-            </p>
-          </div>
-        </div>
-      </div>
-      <details className="border-t border-line">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-ink transition hover:bg-fondo focus:outline-none focus-visible:ring-2 focus-visible:ring-ulima/40 focus-visible:ring-inset sm:px-5">
-          <span>Ver evidencia, proveniencia y relaciones</span>
-          <span className="font-mono text-[10px] font-medium text-muted">
-            {filas.length} {filas.length === 1 ? "fila fuente" : "filas fuente"}
-          </span>
-        </summary>
-        <div className="space-y-5 border-t border-line bg-fondo px-4 py-4 sm:px-5">
-          <section
-            aria-label={`Proveniencia y evidencia del paquete ${packageId}`}
-          >
-            <h4 className="text-sm font-extrabold text-ink">
-              Proveniencia y evidencia de fuente
-            </h4>
-            <p className="mt-1 text-xs leading-5 text-muted">
-              Fuentes, extractos y evidencias que sustentan las entidades del
-              paquete.
-            </p>
-            <dl className="mt-3 grid gap-x-5 gap-y-2 text-xs sm:grid-cols-2">
-              <div>
-                <dt className="font-bold text-muted">Carrera</dt>
-                <dd className="mt-0.5 break-words text-ink">
-                  {texto(identidad.carrera || paquete?.career) ||
-                    "Carrera no reportada"}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-bold text-muted">Periodo</dt>
-                <dd className="mt-0.5 break-words text-ink">
-                  {texto(identidad.periodo || paquete?.period) ||
-                    "Periodo no reportado"}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-bold text-muted">Curso</dt>
-                <dd className="mt-0.5 break-words text-ink">
-                  {texto(identidad.id_curso || paquete?.id_curso) ||
-                    "Curso no reportado"}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-bold text-muted">Sílabo</dt>
-                <dd className="mt-0.5 break-words text-ink">
-                  {texto(identidad.id_silabo || paquete?.id_silabo) ||
-                    "Sílabo no reportado"}
-                </dd>
-              </div>
-            </dl>
-            <div className="mt-3 border-t border-line pt-3">
-              <p className="text-xs font-bold text-ink">Evidencia textual</p>
-              {evidencia.length ? (
-                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-muted">
-                  {evidencia.map((item, index) => (
-                    <li key={`${packageId}-evidence-${index}`}>{item}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-1 text-xs leading-5 text-muted">
-                  No se adjuntó evidencia textual.
-                </p>
-              )}
-            </div>
-          </section>
-
-          <ComponentDetails niveles={niveles} packageId={packageId} />
-
-          {señales.length ? (
-            <section aria-label={`Señales del paquete ${packageId}`}>
-              <h4 className="text-sm font-extrabold text-ink">
-                Señales de revisión
-              </h4>
-              <ul className="mt-2 space-y-2 text-xs leading-5 text-muted">
-                {señales.map((señal) => (
-                  <li key={señal.id}>
-                    <span className="font-bold text-ink">{señal.label}.</span>{" "}
-                    {señal.explanation}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-
-          <section
-            aria-label={`Relaciones fuente auditables del paquete ${packageId}`}
-          >
-            <h4 className="text-sm font-extrabold text-ink">
-              Relaciones fuente auditables
-            </h4>
-            {Array.isArray(evidenciaFuente?.relationships) &&
-            evidenciaFuente.relationships.length ? (
-              <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs leading-5 text-muted">
-                {evidenciaFuente.relationships.map((relacion, indice) => (
-                  <li
-                    key={`${packageId}-source-relation-${indice}`}
-                    className="font-mono"
-                  >
-                    {JSON.stringify(relacion)}
-                  </li>
-                ))}
-              </ul>
-            ) : Array.isArray(paquete?.relaciones) &&
-              paquete.relaciones.length ? (
-              <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs leading-5 text-muted">
-                {paquete.relaciones.map((relacion, indice) => (
-                  <li
-                    key={`${packageId}-legacy-relation-${indice}`}
-                    className="font-mono"
-                  >
-                    {JSON.stringify(relacion)}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-1 text-xs leading-5 text-muted">
-                No se reportaron relaciones fuente adicionales.
-              </p>
-            )}
-          </section>
-
-          <section aria-label={`Datos técnicos del paquete ${packageId}`}>
-            <h4 className="text-sm font-extrabold text-ink">
-              Datos técnicos (IDs y metadatos)
-            </h4>
-            <dl className="mt-2 grid gap-x-5 gap-y-2 text-xs sm:grid-cols-2">
-              <div>
-                <dt className="font-bold text-muted">ID del paquete</dt>
-                <dd className="mt-0.5 break-all font-mono text-ink">
-                  {packageId || "No reportado"}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-bold text-muted">Alias auditables</dt>
-                <dd className="mt-0.5 font-mono text-ink">
-                  {Array.isArray(paquete?.aliases) ? paquete.aliases.length : 0}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-bold text-muted">Filas fuente</dt>
-                <dd className="mt-0.5 font-mono text-ink">{filas.length}</dd>
-              </div>
-              <div>
-                <dt className="font-bold text-muted">Estado de decisión</dt>
-                <dd className="mt-0.5 text-ink">
-                  {decisionLabel(
-                    decision === undefined ? "KEEP_PENDING" : decision,
-                  )}
-                </dd>
-              </div>
-            </dl>
-          </section>
-        </div>
-      </details>
-    </article>
   );
 }
 
@@ -601,8 +170,8 @@ function ProposalCard({
               Decisión explícita
             </p>
             <p className="mt-1 text-xs leading-5 text-muted">
-              Elige una acción para esta propuesta. Las señales semánticas y las
-              herramientas sospechosas siguen requiriendo revisión humana.
+              Elige una acción para esta propuesta. Las señales semánticas
+              siguen requiriendo revisión humana.
             </p>
             <div className="mt-3 grid gap-2">
               <DecisionButton
@@ -649,52 +218,8 @@ function ProposalCard({
   );
 }
 
-function PackagePagination({ page, totalPages, total, onChange }) {
-  const start = total ? (page - 1) * PACKAGE_PAGE_SIZE + 1 : 0;
-  const end = total ? Math.min(page * PACKAGE_PAGE_SIZE, total) : 0;
-  return (
-    <div className="flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-xs font-semibold text-muted" aria-live="polite">
-        Paquetes {start}–{end} de {total} · Página {page} de {totalPages}
-      </p>
-      <nav
-        className="flex items-center gap-2"
-        aria-label="Paginación de paquetes curriculares"
-      >
-        <button
-          type="button"
-          onClick={() => onChange(Math.max(1, page - 1))}
-          disabled={page <= 1}
-          aria-label="Página anterior de paquetes"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-paper px-3 py-2 text-xs font-bold text-ink transition hover:border-ulima hover:text-ulima focus:outline-none focus-visible:ring-2 focus-visible:ring-ulima/30 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <ChevronLeft size={14} aria-hidden="true" /> Anterior
-        </button>
-        <span
-          className="min-w-16 text-center font-mono text-xs font-bold text-ink"
-          aria-current="page"
-        >
-          {page} / {totalPages}
-        </span>
-        <button
-          type="button"
-          onClick={() => onChange(Math.min(totalPages, page + 1))}
-          disabled={page >= totalPages}
-          aria-label="Página siguiente de paquetes"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-paper px-3 py-2 text-xs font-bold text-ink transition hover:border-ulima hover:text-ulima focus:outline-none focus-visible:ring-2 focus-visible:ring-ulima/30 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Siguiente <ChevronRight size={14} aria-hidden="true" />
-        </button>
-      </nav>
-    </div>
-  );
-}
-
-function DecisionBar({ count, onSave, disabled, guardando, mode }) {
-  const selectedLabel =
-    mode === "packages"
-      ? `${count} ${count === 1 ? "paquete seleccionado" : "paquetes seleccionados"}`
-      : `${count} ${count === 1 ? "decisión seleccionada" : "decisiones seleccionadas"}`;
+function DecisionBar({ count, onSave, disabled, guardando }) {
+  const selectedLabel = `${count} ${count === 1 ? "decisión seleccionada" : "decisiones seleccionadas"}`;
   return (
     <div
       className="sticky bottom-3 z-20 -mx-5 mt-7 rounded-xl border border-line bg-paper px-5 py-4 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] sm:-mx-6 sm:px-6"
@@ -732,7 +257,6 @@ function DecisionBar({ count, onSave, disabled, guardando, mode }) {
 }
 
 function DiscardConfirmation({
-  packageId,
   proposalId,
   reason,
   onReasonChange,
@@ -740,36 +264,32 @@ function DiscardConfirmation({
   onConfirm,
   disabled,
 }) {
-  const esPropuesta = Boolean(proposalId);
-  const identificador = proposalId || packageId;
-  if (!identificador) return null;
-  const sufijo = esPropuesta ? "proposal" : "package";
+  if (!proposalId) return null;
   return (
     <section
       className="mt-5 rounded-xl border border-red-300 bg-red-50 p-4"
       role="dialog"
       aria-modal="false"
-      aria-labelledby={`discard-${sufijo}-title`}
+      aria-labelledby="discard-proposal-title"
     >
       <h3
-        id={`discard-${sufijo}-title`}
+        id="discard-proposal-title"
         className="text-sm font-extrabold text-red-900"
       >
-        {esPropuesta ? "Descartar propuesta técnica" : "Descartar paquete"}
+        Descartar propuesta técnica
       </h3>
       <p className="mt-1 text-xs leading-5 text-red-800">
-        {esPropuesta
-          ? "Esta acción retira la propuesta técnica de la cola de aprobación. La evidencia y el motivo permanecen auditables."
-          : "Esta acción retira el paquete de la cola y de la publicación canónica de esta ejecución. La evidencia y el motivo permanecen auditables."}
+        Esta acción retira la propuesta técnica de la cola de aprobación. La
+        evidencia y el motivo permanecen auditables.
       </p>
       <label
         className="mt-3 block text-xs font-bold text-red-900"
-        htmlFor={`discard-${sufijo}-reason`}
+        htmlFor="discard-proposal-reason"
       >
         Motivo del descarte
       </label>
       <textarea
-        id={`discard-${sufijo}-reason`}
+        id="discard-proposal-reason"
         value={reason}
         onChange={(event) => onReasonChange(event.target.value)}
         rows={3}
@@ -798,10 +318,4 @@ function DiscardConfirmation({
   );
 }
 
-export {
-  DecisionBar,
-  DiscardConfirmation,
-  PackageCard,
-  PackagePagination,
-  ProposalCard,
-};
+export { DecisionBar, DiscardConfirmation, ProposalCard };

@@ -7,16 +7,17 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from importlib import import_module
 from pathlib import Path
 from threading import RLock
 
 from agente.normalizador.silabos import salida_catalogos
 from agente.normalizador.silabos.salida_catalogos import construir_salidas_tecnicas
-from agente.normalizador.silabos.validacion_aprobaciones import (
-    AprobacionNoPermitida,
-    DecisionCurricularInvalida,
-    RevisionCurricularInvalida,
-)
+
+errores_tecnicos = import_module("agente.normalizador.silabos.errores_tecnicos")
+AprobacionNoPermitida = errores_tecnicos.AprobacionNoPermitida
+DecisionCurricularInvalida = errores_tecnicos.DecisionCurricularInvalida
+RevisionCurricularInvalida = errores_tecnicos.RevisionCurricularInvalida
 
 PROPUESTAS_ARCHIVO = "propuestas_tecnicas.jsonl"
 DECISIONES_ARCHIVO = "decisiones_tecnicas.jsonl"
@@ -248,12 +249,6 @@ def _resumen(
             }
         },
         "revision": _revision(propuestas, journal),
-        "paquetes": {
-            "total": 0,
-            "pendientes_por_decidir": 0,
-            "accepted": 0,
-            "remaining_pending": 0,
-        },
         "materializacion": {
             "csv_canonicos_disponibles": all(
                 (directorio / "salidas" / nombre).is_file()
@@ -289,8 +284,6 @@ def pendientes_para_api(
         "desde": desde,
         "limite": limite,
         "filas": visibles[desde : desde + limite],
-        "paquetes": [],
-        "paquetes_total": 0,
         "revision": resumen["revision"],
         "aprobacion": resumen,
     }
@@ -550,7 +543,6 @@ def aplicar_decisiones(
             return {
                 "aprobacion": resumen,
                 "filas": _filas_actuales(propuestas, journal),
-                "paquetes": [],
                 "revision": revision_actual,
             }
 
@@ -597,7 +589,6 @@ def aplicar_decisiones(
         return {
             "aprobacion": resumen,
             "filas": _filas_actuales(propuestas, journal_candidato),
-            "paquetes": [],
             "revision": _revision(propuestas, journal_candidato),
         }
 
@@ -613,9 +604,3 @@ def filas_para_presentacion_api(
     filas: Sequence[Mapping[str, object]],
 ) -> list[Mapping[str, object]]:
     return list(filas)
-
-
-def paquetes_para_presentacion_api(
-    _paquetes: Sequence[Mapping[str, object]],
-) -> list[dict[str, object]]:
-    return []

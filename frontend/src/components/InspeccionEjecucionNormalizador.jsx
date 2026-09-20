@@ -20,11 +20,6 @@ import Neo4jImportPanel from "./Neo4jImportPanel";
 export const MAX_CSV_PREVIEW_ROWS = 500;
 const MAX_PREVIEW_BYTES = 512 * 1024;
 const RUTA_SALIDA_SEGURA = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[\w./-]+$/;
-const CSV_PREVIEW_NAMES_LEGACY = new Set([
-  "catalogo_competencias.csv",
-  "catalogo_habilidades.csv",
-  "catalogo_herramientas.csv",
-]);
 const CSV_PREVIEW_NAMES_TECNICOS = new Set([
   "curso.csv",
   "silabo.csv",
@@ -32,10 +27,12 @@ const CSV_PREVIEW_NAMES_TECNICOS = new Set([
   "catalogo_logros.csv",
   "cobertura_curricular.csv",
 ]);
-
 const INSPECCION_TABS = [
-  { id: "normalizador", label: "Normalizador" },
-  { id: "advertencias", label: "Advertencias y errores" },
+  { id: "progreso", label: "Progreso" },
+  { id: "revision", label: "Revisión" },
+  { id: "csv", label: "CSV" },
+  { id: "neo4j", label: "Neo4j" },
+  { id: "auditoria", label: "Auditoría" },
 ];
 
 const COMPETENCY_FINDING_CODES = [
@@ -56,12 +53,6 @@ const COMPETENCY_FINDING_LABELS = {
 };
 
 const FINDING_GROUP_COPY = {
-  habilidades_catalogo: {
-    title: "Habilidades aún no están en el catálogo",
-    description:
-      "Conserva la fuente original y revisa la equivalencia antes de incorporarlas al catálogo institucional.",
-    action: "Revisar equivalencias",
-  },
   logros_codigo: {
     title: "Logros tienen un código inconsistente",
     description:
@@ -155,14 +146,8 @@ function nombreArchivo(archivo) {
   );
 }
 
-function esModoTecnico(manifest) {
-  return manifest?.configuracion_curricular?.modo_analista === "technical";
-}
-
-function nombresCsvPreview(manifest) {
-  return esModoTecnico(manifest)
-    ? CSV_PREVIEW_NAMES_TECNICOS
-    : CSV_PREVIEW_NAMES_LEGACY;
+function nombresCsvPreview() {
+  return CSV_PREVIEW_NAMES_TECNICOS;
 }
 
 function textoParametro(valor, fallback) {
@@ -189,12 +174,7 @@ function parametrosDe(manifest) {
 }
 
 function salidasDe(manifest) {
-  const fuentes = [
-    manifest?.outputs,
-    manifest?.limpieza_silabos?.outputs,
-    manifest?.limpieza?.outputs,
-    manifest?.normalizacion?.outputs,
-  ];
+  const fuentes = [manifest?.outputs, manifest?.limpieza_silabos?.outputs];
   const salidas = [];
   const vistas = new Set();
   for (const fuente of fuentes) {
@@ -230,16 +210,8 @@ function objetoReporte(reporte) {
     : null;
 }
 
-function aprobacionCurricularDe(manifest, reportes) {
-  const directa = objetoReporte(manifest?.aprobacion_curricular);
-  if (directa) return directa;
-  const reporte = objetoReporte(
-    reportePorNombre(reportes, [
-      "aprobacion_curricular.json",
-      "aprobacion.json",
-    ]),
-  );
-  return reporte?.aprobacion_curricular || reporte?.aprobacion || reporte;
+function aprobacionCurricularDe(manifest) {
+  return objetoReporte(manifest?.aprobacion_curricular);
 }
 
 function releaseGateDe(manifest, reportes) {
@@ -254,10 +226,7 @@ function releaseGateDe(manifest, reportes) {
 }
 
 function filasDePendientes(reportes) {
-  const reporte = reportePorNombre(reportes, [
-    "pendientes_curriculares.jsonl",
-    "pendientes_curriculares.json",
-  ]);
+  const reporte = reportePorNombre(reportes, ["propuestas_tecnicas.jsonl"]);
   if (Array.isArray(reporte))
     return reporte.filter((fila) => fila && typeof fila === "object");
   for (const clave of ["filas", "pendientes", "items", "propuestas"]) {
@@ -308,20 +277,13 @@ function filaResuelta(fila) {
 }
 
 function pendientesPorDecidirDe(manifest, reportes, aprobacion, gate) {
-  const pendientesDePaquetes = numeroNoNegativo(
-    aprobacion?.paquetes?.pendientes_por_decidir,
-    aprobacion?.paquetes?.pending_decision,
-  );
   const explicitos = numeroNoNegativo(
     aprobacion?.pendientes_por_decidir,
     aprobacion?.pending_decision,
     gate?.checks?.approval?.pending_decision,
     gate?.checks?.approval?.pendingDecision,
   );
-  if (pendientesDePaquetes !== null && pendientesDePaquetes > 0)
-    return pendientesDePaquetes;
   if (explicitos !== null) return explicitos;
-  if (pendientesDePaquetes !== null) return pendientesDePaquetes;
   return (
     filasDePendientes(reportes).filter((fila) => !filaResuelta(fila)).length ||
     (aprobacion?.requiere_decision === true ||
@@ -340,39 +302,14 @@ function requiereDecisionCurricular(manifest, aprobacion, gate, pendientes) {
   );
 }
 
-function esEjecucionCurricular(manifest, reportes, salidas) {
-  return (
-    manifest?.tipo === "silabos" ||
-    manifest?.tipo === "curricular" ||
-    Boolean(manifest?.limpieza_silabos) ||
-    Boolean(manifest?.aprobacion_curricular) ||
-    Boolean(manifest?.release_gate?.checks?.approval) ||
-    Boolean(
-      reportePorNombre(reportes, [
-        "pendientes_curriculares.jsonl",
-        "pendientes_curriculares.json",
-        "release_gate.json",
-      ]),
-    ) ||
-    salidas.some(
-      (salida) =>
-        salida?.tipo === "csv_curricular" ||
-        String(salida?.tipo || "").includes("curricular"),
-    )
+function salidasCanonicasDe(salidas, nombres) {
+  return salidas.filter((salida) =>
+    nombres.has(nombreArchivo(salida?.archivo).toLowerCase()),
   );
 }
 
-function salidasCanonicasDe(salidas, nombres, modoTecnico) {
-  return salidas.filter((salida) => {
-    const nombre = nombreArchivo(salida?.archivo).toLowerCase();
-    if (!nombres.has(nombre)) return false;
-    if (modoTecnico) return true;
-    return salida?.tipo === "csv_curricular" || nombre.startsWith("catalogo_");
-  });
-}
-
-function vistasPreviasCompletas(salidas, previews, nombres, modoTecnico) {
-  const salidasCanonicas = salidasCanonicasDe(salidas, nombres, modoTecnico);
+function vistasPreviasCompletas(salidas, previews, nombres) {
+  const salidasCanonicas = salidasCanonicasDe(salidas, nombres);
   return [...nombres].every((nombre) => {
     const salida = salidasCanonicas.find(
       (item) => nombreArchivo(item.archivo).toLowerCase() === nombre,
@@ -387,17 +324,9 @@ function vistasPreviasCompletas(salidas, previews, nombres, modoTecnico) {
   });
 }
 
-function releaseGatePermiteImportar(
-  gate,
-  aprobacion,
-  salidas,
-  previews,
-  modoTecnico = false,
-) {
-  const nombres = modoTecnico
-    ? CSV_PREVIEW_NAMES_TECNICOS
-    : CSV_PREVIEW_NAMES_LEGACY;
-  const salidasCanonicas = salidasCanonicasDe(salidas, nombres, modoTecnico);
+function releaseGatePermiteImportar(gate, salidas, previews) {
+  const nombres = CSV_PREVIEW_NAMES_TECNICOS;
+  const salidasCanonicas = salidasCanonicasDe(salidas, nombres);
   const nombresDeclarados = new Set(
     salidasCanonicas.map((salida) =>
       nombreArchivo(salida.archivo).toLowerCase(),
@@ -406,20 +335,10 @@ function releaseGatePermiteImportar(
   const contratoCompleto =
     nombresDeclarados.size === nombres.size &&
     [...nombres].every((nombre) => nombresDeclarados.has(nombre));
-  if (modoTecnico) {
-    return (
-      gate?.decision === "ALLOW_IMPORT" &&
-      contratoCompleto &&
-      vistasPreviasCompletas(salidas, previews, nombres, true)
-    );
-  }
   return (
     gate?.decision === "ALLOW_IMPORT" &&
-    gate?.checks?.approval?.canonical_materialized === true &&
-    Number(gate?.checks?.approval?.pending_decision ?? 0) === 0 &&
-    aprobacion?.materializacion?.csv_canonicos_disponibles === true &&
     contratoCompleto &&
-    vistasPreviasCompletas(salidas, previews, nombres, false)
+    vistasPreviasCompletas(salidas, previews, nombres)
   );
 }
 
@@ -513,10 +432,6 @@ function isCompetencyFinding(hallazgo) {
   return COMPETENCY_FINDING_CODES.some((codigo) => texto.includes(codigo));
 }
 
-function isSkillFinding(hallazgo) {
-  return /\bHABILIDAD_[A-Z0-9_]+\b/.test(findingSearchText(hallazgo));
-}
-
 function isOutcomeFinding(hallazgo) {
   const texto = findingSearchText(hallazgo);
   return /\bLOGRO_[A-Z0-9_]+\b/.test(texto) && !isCompetencyFinding(hallazgo);
@@ -530,7 +445,6 @@ function hallazgosAccionablesDe(hallazgos) {
   const tieneDetalleCactus = hallazgos.some(isCactusSyllabusFinding);
   return hallazgos.filter((hallazgo) => {
     const codigo = findingCode(hallazgo);
-    if (codigo === "CHH_GRAPH_GATE_BLOCKED") return false;
     if (codigo === "EXTRACCION_CACTUS_INCOMPLETA" && tieneDetalleCactus)
       return false;
     return true;
@@ -576,10 +490,6 @@ function getCompetencySubgroups(hallazgos) {
 function groupFindings(hallazgos) {
   const gruposBase = [
     {
-      id: "habilidades_catalogo",
-      coincide: isSkillFinding,
-    },
-    {
       id: "logros_codigo",
       coincide: isOutcomeFinding,
     },
@@ -623,71 +533,31 @@ function groupFindings(hallazgos) {
   return grupos;
 }
 
-function conteosDe(manifest, modoTecnico = false) {
-  const curricular = manifest?.limpieza_silabos || {};
-  const laboral = manifest?.normalizacion || {};
-  if (modoTecnico) {
-    const salidas = salidasDe(manifest);
-    const registrosDe = (nombre) => {
-      const salida = salidas.find(
-        (item) => nombreArchivo(item.archivo).toLowerCase() === nombre,
-      );
-      return salida?.registros ?? null;
-    };
-    return [
-      { clave: "cursos", etiqueta: "cursos", valor: registrosDe("curso.csv") },
-      {
-        clave: "silabos",
-        etiqueta: "sílabos",
-        valor: registrosDe("silabo.csv"),
-      },
-      {
-        clave: "competencias",
-        etiqueta: "competencias técnicas",
-        valor: registrosDe("catalogo_competencias.csv"),
-      },
-      {
-        clave: "logros",
-        etiqueta: "logros",
-        valor: registrosDe("catalogo_logros.csv"),
-      },
-      {
-        clave: "relaciones",
-        etiqueta: "relaciones de cobertura",
-        valor: registrosDe("cobertura_curricular.csv"),
-      },
-    ];
-  }
-  const registrosLaborales = laboral.registros_procesados;
-  const registros =
-    curricular.registros ??
-    (registrosLaborales && typeof registrosLaborales === "object"
-      ? Object.values(registrosLaborales).reduce(
-          (total, valor) => total + Number(valor || 0),
-          0,
-        )
-      : null);
+function conteosDe(manifest) {
+  const salidas = salidasDe(manifest);
+  const registrosDe = (nombre) => {
+    const salida = salidas.find(
+      (item) => nombreArchivo(item.archivo).toLowerCase() === nombre,
+    );
+    return salida?.registros ?? null;
+  };
   return [
-    { clave: "registros", etiqueta: "registros procesados", valor: registros },
+    { clave: "cursos", etiqueta: "cursos", valor: registrosDe("curso.csv") },
+    { clave: "silabos", etiqueta: "sílabos", valor: registrosDe("silabo.csv") },
     {
       clave: "competencias",
-      etiqueta: "competencias",
-      valor: curricular.competencias,
+      etiqueta: "competencias técnicas",
+      valor: registrosDe("catalogo_competencias.csv"),
     },
     {
-      clave: "habilidades",
-      etiqueta: "habilidades",
-      valor: curricular.habilidades,
-    },
-    {
-      clave: "herramientas",
-      etiqueta: "herramientas",
-      valor: curricular.herramientas,
+      clave: "logros",
+      etiqueta: "logros",
+      valor: registrosDe("catalogo_logros.csv"),
     },
     {
       clave: "relaciones",
       etiqueta: "relaciones de cobertura",
-      valor: curricular.relaciones ?? laboral.relaciones,
+      valor: registrosDe("cobertura_curricular.csv"),
     },
   ];
 }
@@ -712,20 +582,17 @@ function esEstadoActivo(estado) {
 
 function estadoLegible(estado, contexto = {}) {
   const clave = estadoNormalizado(estado);
-  if (
-    contexto.esCurricular &&
-    ["limpiado", "limpiado_con_advertencias"].includes(clave)
-  ) {
+  if (["limpiado", "limpiado_con_advertencias"].includes(clave)) {
     if (contexto.csvCanonicosListos) {
       return clave === "limpiado_con_advertencias"
-        ? "CSV curriculares listos con advertencias"
-        : "CSV curriculares listos";
+        ? "CSV técnicos listos con advertencias"
+        : "CSV técnicos listos";
     }
     if (contexto.pendientesPorDecidir > 0 || contexto.requiereDecision)
-      return "Revisión curricular pendiente";
+      return "Revisión técnica pendiente";
     return contexto.gateDecision && contexto.gateDecision !== "ALLOW_IMPORT"
-      ? "Revisión curricular persistida; publicación bloqueada"
-      : "Revisión curricular persistida; CSV canónicos pendientes";
+      ? "Revisión técnica persistida; publicación bloqueada"
+      : "Revisión técnica persistida; CSV técnicos pendientes";
   }
   return (
     {
@@ -736,9 +603,10 @@ function estadoLegible(estado, contexto = {}) {
       limpiando: "Limpiando datos",
       limpiado: "Limpieza completada",
       limpiado_con_advertencias: "Limpieza completada con advertencias",
-      normalizando: "Normalizando relaciones",
-      normalizado: "Normalización completa",
-      normalizado_con_advertencias: "Normalización completa con advertencias",
+      normalizando: "Procesando resultados técnicos",
+      normalizado: "Resultados técnicos completos",
+      normalizado_con_advertencias:
+        "Resultados técnicos completos con advertencias",
       cancelado: "Procesamiento cancelado",
       error: "Error de ejecución",
       rechazado: "Entrada rechazada",
@@ -813,6 +681,29 @@ async function cargarPreviewCsv(idEjecucion, salida) {
   return { ...parseCsvPreview(texto), url };
 }
 
+function faseAutomaticaDe({
+  ejecucionActiva,
+  mostrarAprobacion,
+  requiereAuditoria,
+  csvCanonicosListos,
+  cantidadErrores,
+}) {
+  if (ejecucionActiva) return "progreso";
+  if (mostrarAprobacion) return "revision";
+  if (requiereAuditoria || (!csvCanonicosListos && cantidadErrores > 0))
+    return "auditoria";
+  if (csvCanonicosListos) return "csv";
+  return "progreso";
+}
+
+function mensajeBloqueoNeo4j(ejecucionActiva, mostrarAprobacion) {
+  if (ejecucionActiva)
+    return "La importación se habilitará cuando la ejecución finalice.";
+  if (mostrarAprobacion)
+    return "Resolvé las decisiones técnicas pendientes antes de publicar.";
+  return "El release gate todavía no certifica los CSV técnicos para importar.";
+}
+
 function Check({ children, ok = true }) {
   return (
     <li
@@ -862,7 +753,7 @@ function InspectionTabs({ activeTab, onChange }) {
   return (
     <nav
       className="mt-5 border-y border-line"
-      aria-label="Secciones de la inspección CHH"
+      aria-label="Secciones de la inspección"
     >
       <div
         className="flex gap-0 overflow-x-auto"
@@ -1047,6 +938,138 @@ function FindingGroupCard({ grupo, detailed = false, onOpen }) {
   );
 }
 
+function CsvOutputsPanel({
+  idEjecucion,
+  csvs,
+  previews,
+  ejecucionActiva,
+  csvCanonicosListos,
+}) {
+  return (
+    <section
+      className="rounded-2xl border border-line bg-paper p-5 shadow-sm sm:p-6"
+      aria-labelledby="csv-outputs-title"
+    >
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
+            Salidas publicadas
+          </p>
+          <h2
+            id="csv-outputs-title"
+            className="mt-2 text-xl font-extrabold tracking-[-0.025em]"
+          >
+            Archivos CSV
+          </h2>
+        </div>
+        <span className="font-mono text-xs font-bold text-muted">
+          {csvs.length} {csvs.length === 1 ? "archivo" : "archivos"}
+        </span>
+      </div>
+
+      {ejecucionActiva ? (
+        <p className="mt-5 rounded-xl border border-line bg-fondo px-3.5 py-3 text-sm text-muted">
+          Las salidas se habilitarán automáticamente cuando finalice la
+          ejecución.
+        </p>
+      ) : csvs.length ? (
+        <div className="mt-5 space-y-4">
+          {csvCanonicosListos ? null : (
+            <p className="rounded-xl border border-ulima/25 bg-ulima/5 px-3.5 py-3 text-sm text-ink">
+              Los archivos declarados se muestran para inspección, pero el
+              release gate aún no permite publicarlos en Neo4j.
+            </p>
+          )}
+          {csvs.map((salida) => {
+            const nombre = nombreArchivo(salida.archivo);
+            const preview = previews[salida.archivo];
+            const url =
+              preview?.url ||
+              obtenerUrlOutputNormalizador(idEjecucion, salida.archivo);
+            return (
+              <article
+                key={salida.archivo}
+                className="overflow-hidden rounded-2xl border border-line bg-fondo"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-extrabold text-ink">
+                      {nombre}
+                    </h3>
+                    <p className="mt-1 font-mono text-[10px] text-muted">
+                      {Number.isFinite(Number(salida.registros))
+                        ? `${Number(salida.registros).toLocaleString("es-PE")} registros`
+                        : salida.tipo || "CSV"}
+                    </p>
+                  </div>
+                  <a
+                    href={url}
+                    download={nombre}
+                    aria-label={`Descargar ${nombre}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-paper px-3 py-2 text-xs font-bold text-ink transition hover:border-ulima hover:text-ulima focus:outline-none focus:ring-2 focus:ring-ulima/30"
+                  >
+                    Descargar <ExternalLink size={13} aria-hidden="true" />
+                  </a>
+                </div>
+                {preview?.error ? (
+                  <p className="px-4 py-3 text-xs text-red-700">
+                    {preview.error}
+                  </p>
+                ) : preview?.encabezados?.length ? (
+                  <div className="max-h-80 overflow-auto" tabIndex={0}>
+                    <table className="min-w-full border-collapse text-left text-xs">
+                      <thead className="sticky top-0 bg-paper">
+                        <tr>
+                          {preview.encabezados.map((encabezado, indice) => (
+                            <th
+                              key={`${encabezado}-${indice}`}
+                              scope="col"
+                              className="whitespace-nowrap border-b border-line px-3 py-2 font-bold text-ink"
+                            >
+                              {encabezado || `Columna ${indice + 1}`}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.filas.map((fila, filaIndice) => (
+                          <tr key={filaIndice} className="odd:bg-paper/60">
+                            {preview.encabezados.map((_, columnaIndice) => (
+                              <td
+                                key={columnaIndice}
+                                className="max-w-80 border-b border-line/70 px-3 py-2 align-top text-muted"
+                              >
+                                {fila[columnaIndice] || "—"}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="px-4 py-3 text-xs text-muted">
+                    Vista previa no disponible; el archivo puede descargarse.
+                  </p>
+                )}
+                {preview?.truncado ? (
+                  <p className="border-t border-line px-4 py-2 text-[11px] text-muted">
+                    Vista previa limitada a {MAX_CSV_PREVIEW_ROWS} filas.
+                  </p>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="mt-5 rounded-xl border border-dashed border-line px-3.5 py-4 text-sm text-muted">
+          Esta ejecución todavía no declara archivos CSV accesibles.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function FindingsDetail({ grupos, total, errors, warnings }) {
   return (
     <section
@@ -1094,7 +1117,8 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
     previews: {},
   });
   const [revisionReporte, setRevisionReporte] = useState(0);
-  const [activeTab, setActiveTab] = useState("normalizador");
+  const [activeTab, setActiveTab] = useState("progreso");
+  const faseAutomaticaRef = useRef("");
 
   useEffect(() => {
     let activo = true;
@@ -1178,7 +1202,8 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
   }, [idEjecucion, revisionReporte]);
 
   useEffect(() => {
-    setActiveTab("normalizador");
+    faseAutomaticaRef.current = "";
+    setActiveTab("progreso");
   }, [idEjecucion]);
 
   const manifest = estado.reporte?.manifest || {};
@@ -1188,10 +1213,8 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
   const csvs = salidas.filter((salida) =>
     salida.archivo.toLowerCase().endsWith(".csv"),
   );
-  const modoTecnico = esModoTecnico(manifest);
-  const aprobacionCurricular = aprobacionCurricularDe(manifest, reportes);
+  const aprobacionCurricular = aprobacionCurricularDe(manifest);
   const releaseGate = releaseGateDe(manifest, reportes);
-  const esCurricular = esEjecucionCurricular(manifest, reportes, salidas);
   const pendientesPorDecidir = pendientesPorDecidirDe(
     manifest,
     reportes,
@@ -1206,14 +1229,11 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
   );
   const csvCanonicosListos = releaseGatePermiteImportar(
     releaseGate,
-    aprobacionCurricular,
     salidas,
     estado.previews,
-    modoTecnico,
   );
   const mostrarAprobacionCurricular =
     !esEstadoActivo(manifest.estado) &&
-    esCurricular &&
     (requiereDecision ||
       filasDePendientes(reportes).some((fila) => !filaResuelta(fila)));
   const hallazgos = useMemo(
@@ -1230,24 +1250,36 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
   const errores = hallazgosAccionables.filter(
     (hallazgo) => hallazgo?.severidad === "error",
   );
-  const conteos = conteosDe(manifest, modoTecnico);
+  const conteos = conteosDe(manifest);
   const validacion = manifest.validacion_silabos || manifest.validacion;
   const ejecucionActiva = esEstadoActivo(manifest.estado);
   const progresoActivo = progresoActivoDe(manifest);
-  const estadoError = ["error", "rechazado"].includes(
-    estadoNormalizado(manifest.estado),
-  );
+  const estadoActual = estadoNormalizado(manifest.estado);
+  const estadoError = ["error", "rechazado"].includes(estadoActual);
+  const requiereAuditoria = estadoError || estadoActual === "no_publicado";
   const gruposHallazgos = useMemo(
     () => groupFindings(hallazgosAccionables),
     [hallazgosAccionables],
   );
   const contextoEstado = {
-    esCurricular,
     csvCanonicosListos,
     pendientesPorDecidir,
     requiereDecision,
     gateDecision: releaseGate?.decision,
   };
+  const faseAutomatica = faseAutomaticaDe({
+    ejecucionActiva,
+    mostrarAprobacion: mostrarAprobacionCurricular,
+    requiereAuditoria,
+    csvCanonicosListos,
+    cantidadErrores: errores.length,
+  });
+
+  useEffect(() => {
+    if (!estado.reporte || faseAutomaticaRef.current === faseAutomatica) return;
+    faseAutomaticaRef.current = faseAutomatica;
+    setActiveTab(faseAutomatica);
+  }, [estado.reporte, faseAutomatica]);
 
   return (
     <main className="h-[100dvh] min-h-screen overflow-y-auto overscroll-y-contain bg-fondo px-4 pb-24 pt-6 font-body text-ink sm:px-8 sm:pb-32 sm:pt-8">
@@ -1259,10 +1291,8 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
                 Inspección histórica / normalizador
               </p>
               <h1 className="mt-2 flex items-center gap-2 font-editorial text-3xl font-extrabold tracking-[-0.04em] text-institucional-negro sm:text-4xl">
-                <History className="shrink-0 text-ulima" size={28} />{" "}
-                {modoTecnico
-                  ? "Inspección técnica curricular"
-                  : "Inspección CHH"}
+                <History className="shrink-0 text-ulima" size={28} /> Inspección
+                técnica curricular
               </h1>
               <p className="mt-2 text-sm font-semibold text-muted">
                 <span>Inspección de ejecución</span>
@@ -1333,11 +1363,11 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
         {estado.reporte ? (
           <>
             <section
-              id="panel-normalizador"
+              id="panel-progreso"
               role="tabpanel"
-              aria-labelledby="tab-normalizador"
+              aria-labelledby="tab-progreso"
               tabIndex={0}
-              hidden={activeTab !== "normalizador"}
+              hidden={activeTab !== "progreso"}
               className="mt-5 space-y-5 outline-none focus-visible:ring-2 focus-visible:ring-ulima/30"
             >
               {ejecucionActiva ? (
@@ -1422,7 +1452,7 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
                     <Check ok={validacion.valida !== false}>
                       {validacion.valida === false
                         ? "La validación de entrada no fue aprobada."
-                        : "Validación curricular aprobada"}
+                        : "Validación técnica aprobada"}
                     </Check>
                   ) : (
                     <Check ok={false}>
@@ -1434,27 +1464,16 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
                     <Check>
                       Las salidas se habilitarán al finalizar la ejecución.
                     </Check>
-                  ) : esCurricular ? (
-                    csvCanonicosListos ? (
-                      <Check>
-                        Los CSV canónicos están materializados y disponibles
-                        para inspección.
-                      </Check>
-                    ) : (
-                      <Check ok={false}>
-                        {csvs.length
-                          ? "Hay archivos curriculares declarados, pero todavía no están certificados para publicar."
-                          : "Aún no hay catálogos curriculares materializados."}
-                      </Check>
-                    )
-                  ) : csvs.length ? (
+                  ) : csvCanonicosListos ? (
                     <Check>
-                      {csvs.length} salidas CSV declaradas y disponibles para
+                      Los CSV canónicos están materializados y disponibles para
                       inspección.
                     </Check>
                   ) : (
                     <Check ok={false}>
-                      Esta ejecución no declara salidas CSV accesibles.
+                      {csvs.length
+                        ? "Hay CSV técnicos declarados, pero todavía no están certificados para publicar."
+                        : "Aún no hay CSV técnicos materializados."}
                     </Check>
                   )}
                   {ejecucionActiva ? (
@@ -1475,8 +1494,7 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
                         : "El estado final no está disponible."}
                     </Check>
                   )}
-                  {manifest.limpieza_silabos?.publicable === false ||
-                  manifest.normalizacion?.publicable === false ? (
+                  {manifest.limpieza_silabos?.publicable === false ? (
                     <Check ok={false}>
                       La ejecución quedó marcada como no publicable; los
                       artefactos siguen disponibles para revisión.
@@ -1529,7 +1547,16 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
                   ))}
                 </div>
               </section>
+            </section>
 
+            <section
+              id="panel-revision"
+              role="tabpanel"
+              aria-labelledby="tab-revision"
+              tabIndex={0}
+              hidden={activeTab !== "revision"}
+              className="mt-5 space-y-5 outline-none focus-visible:ring-2 focus-visible:ring-ulima/30"
+            >
               {mostrarAprobacionCurricular ? (
                 <div id="aprobacion-curricular">
                   <CurricularApprovalPanel
@@ -1539,22 +1566,64 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
                     }
                   />
                 </div>
-              ) : null}
-
-              {!ejecucionActiva && csvCanonicosListos ? (
-                <Neo4jImportPanel
-                  idEjecucion={idEjecucion}
-                  modo={modoTecnico ? "technical" : "legacy"}
-                />
-              ) : null}
+              ) : (
+                <section className="rounded-2xl border border-line bg-paper p-5 shadow-sm sm:p-6">
+                  <h2 className="text-xl font-extrabold">Revisión técnica</h2>
+                  <p className="mt-2 text-sm leading-6 text-muted">
+                    No hay decisiones humanas pendientes para esta ejecución.
+                  </p>
+                </section>
+              )}
             </section>
 
             <section
-              id="panel-advertencias"
+              id="panel-csv"
               role="tabpanel"
-              aria-labelledby="tab-advertencias"
+              aria-labelledby="tab-csv"
               tabIndex={0}
-              hidden={activeTab !== "advertencias"}
+              hidden={activeTab !== "csv"}
+              className="mt-5 space-y-5 outline-none focus-visible:ring-2 focus-visible:ring-ulima/30"
+            >
+              <CsvOutputsPanel
+                idEjecucion={idEjecucion}
+                csvs={csvs}
+                previews={estado.previews}
+                ejecucionActiva={ejecucionActiva}
+                csvCanonicosListos={csvCanonicosListos}
+              />
+            </section>
+
+            <section
+              id="panel-neo4j"
+              role="tabpanel"
+              aria-labelledby="tab-neo4j"
+              tabIndex={0}
+              hidden={activeTab !== "neo4j"}
+              className="mt-5 space-y-5 outline-none focus-visible:ring-2 focus-visible:ring-ulima/30"
+            >
+              {!ejecucionActiva && csvCanonicosListos ? (
+                <Neo4jImportPanel idEjecucion={idEjecucion} modo="technical" />
+              ) : (
+                <section className="rounded-2xl border border-line bg-paper p-5 shadow-sm sm:p-6">
+                  <h2 className="text-xl font-extrabold">
+                    Publicación en Neo4j
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-muted">
+                    {mensajeBloqueoNeo4j(
+                      ejecucionActiva,
+                      mostrarAprobacionCurricular,
+                    )}
+                  </p>
+                </section>
+              )}
+            </section>
+
+            <section
+              id="panel-auditoria"
+              role="tabpanel"
+              aria-labelledby="tab-auditoria"
+              tabIndex={0}
+              hidden={activeTab !== "auditoria"}
               className="mt-5 space-y-5 outline-none focus-visible:ring-2 focus-visible:ring-ulima/30"
             >
               <FindingsDetail
