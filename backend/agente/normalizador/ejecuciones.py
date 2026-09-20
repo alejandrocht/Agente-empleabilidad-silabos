@@ -21,22 +21,18 @@ from agente.config.settings import (
     texto,
 )
 from agente.normalizador.ejecuciones_curriculares import EjecutorCurricular
-from agente.normalizador.empleabilidad.catalogo import cargar_catalogo
-from agente.normalizador.empleabilidad.entrada import validar_archivo
-from agente.normalizador.empleabilidad.limpieza import limpiar_archivo
-from agente.normalizador.empleabilidad.pipeline import normalizar_staging
 from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import (
     EstadoEjecucion,
     Hallazgo,
     ProgresoLimpiezaLLM,
-    ResultadoLimpieza,
     ResultadoLimpiezaSilabos,
-    ResultadoNormalizacion,
-    ResultadoValidacionEntrada,
     ResultadoValidacionSilabos,
 )
-from agente.normalizador.persistencia_ejecuciones import RepositorioEjecucionesPersistidas
+from agente.normalizador.persistencia_ejecuciones import (
+    EjecucionPersistible,
+    RepositorioEjecucionesPersistidas,
+)
 from agente.normalizador.silabos.entrada import validar_archivo as validar_silabos
 from agente.normalizador.silabos.fuente_cactus import (
     CactusExtractor,
@@ -100,12 +96,8 @@ class Ejecucion:
         self.estado: EstadoEjecucion = "recibido"
         self.creada_en = _ahora()
         self.actualizada_en = self.creada_en
-        self.validacion: ResultadoValidacionEntrada | None = None
         self.validacion_silabos: ResultadoValidacionSilabos | None = None
-        self.limpieza: ResultadoLimpieza | None = None
         self.limpieza_silabos: ResultadoLimpiezaSilabos | None = None
-        self.normalizacion: ResultadoNormalizacion | None = None
-        self.catalogo_chh: dict[str, object] | None = None
         self.hallazgos: list[Hallazgo] = []
         self.progreso_llm: ProgresoLimpiezaLLM | None = None
         self.fuente: dict[str, object] | None = None
@@ -153,15 +145,6 @@ class GestorEjecuciones:
             self._ejecuciones[id_ejecucion] = ejecucion
         self._persistir(ejecucion)
         return id_ejecucion, directorio
-
-    def iniciar_validacion(self, id_ejecucion: str, ruta_entrada: Path) -> None:
-        """Programa la validación sin bloquear la petición HTTP."""
-
-        ejecucion = self._obtener_objeto(id_ejecucion)
-        ejecucion.estado = "validando"
-        ejecucion.actualizada_en = _ahora()
-        self._persistir(ejecucion)
-        self._executor.submit(self._validar, ejecucion, ruta_entrada)
 
     def iniciar_validacion_silabos(
         self,
@@ -216,7 +199,7 @@ class GestorEjecuciones:
         )
 
     def marcar_rechazo(self, id_ejecucion: str, hallazgo: Hallazgo) -> None:
-        """Marca un rechazo inmediato, por ejemplo por límite de carga."""
+        """Marca un rechazo inmediato antes de iniciar el pipeline curricular."""
 
         ejecucion = self._obtener_objeto(id_ejecucion)
         ejecucion.estado = "rechazado"
@@ -375,10 +358,6 @@ class GestorEjecuciones:
 
         raiz = ejecucion.directorio.resolve()
         temporales = ["fuentes_curriculares", "cactus_chrome_profile"]
-        if ejecucion.tipo != "silabos":
-            temporales.append("limpios")
-        if ejecucion.tipo != "silabos":
-            temporales.append("entrada")
         for relativo in temporales:
             ruta = (raiz / relativo).resolve()
             if raiz not in ruta.parents or not ruta.is_dir():
@@ -388,99 +367,6 @@ class GestorEjecuciones:
             except OSError:
                 # La ejecución ya terminó; una falla de limpieza no invalida los CSV.
                 continue
-
-    def _validar(self, ejecucion: Ejecucion, ruta_entrada: Path) -> None:
-        """Ejecuta el gate y genera staging solo cuando la fuente es estructuralmente válida."""
-
-        try:
-            self._verificar_cancelacion(ejecucion)
-            resultado = validar_archivo(ruta_entrada, ejecucion.archivo)
-        except CancelacionSolicitada:
-            self._marcar_cancelado(ejecucion)
-            self._finalizar(ejecucion)
-            return
-        except Exception as exc:
-            ejecucion.estado = "error"
-            ejecucion.hallazgos = [
-                Hallazgo(
-                    codigo="ERROR_INTERNO_VALIDACION",
-                    severidad="error",
-                    mensaje="La validación terminó con un error interno.",
-                    detalle=f"{type(exc).__name__}: {str(exc)[:200]}",
-                )
-            ]
-            ejecucion.actualizada_en = _ahora()
-            self._finalizar(ejecucion)
-            return
-
-        ejecucion.validacion = resultado
-        ejecucion.hallazgos = list(resultado.hallazgos)
-        if self._cancelar_si_solicitada(ejecucion):
-            self._finalizar(ejecucion)
-            return
-        if not resultado.valida:
-            ejecucion.estado = "rechazado"
-            self._finalizar(ejecucion)
-            return
-
-        try:
-            ejecucion.catalogo_chh = cargar_catalogo().resumen()
-        except Exception as exc:
-            ejecucion.catalogo_chh = {
-                "disponible": False,
-                "error": f"{type(exc).__name__}: {str(exc)[:200]}",
-            }
-
-        try:
-            self._verificar_cancelacion(ejecucion)
-            ejecucion.estado = "limpiando"
-            ejecucion.actualizada_en = _ahora()
-            self._persistir(ejecucion)
-            limpieza = limpiar_archivo(ruta_entrada, ejecucion.directorio, resultado)
-            self._verificar_cancelacion(ejecucion)
-            ejecucion.limpieza = limpieza
-            ejecucion.hallazgos = list(resultado.hallazgos) + list(limpieza.hallazgos)
-            ejecucion.estado = (
-                "limpiado_con_advertencias"
-                if any(hallazgo.severidad == "warning" for hallazgo in ejecucion.hallazgos)
-                else "limpiado"
-            )
-            ejecucion.actualizada_en = _ahora()
-            self._persistir(ejecucion)
-
-            ejecucion.estado = "normalizando"
-            ejecucion.actualizada_en = _ahora()
-            self._persistir(ejecucion)
-            self._verificar_cancelacion(ejecucion)
-            normalizacion = normalizar_staging(ejecucion.directorio, resultado)
-            ejecucion.normalizacion = normalizacion
-            ejecucion.hallazgos = ejecucion.hallazgos + list(normalizacion.hallazgos)
-            hay_advertencias = any(
-                hallazgo.severidad == "warning" for hallazgo in ejecucion.hallazgos
-            )
-            if not normalizacion.publicable:
-                ejecucion.estado = "no_publicado"
-            elif hay_advertencias:
-                ejecucion.estado = "normalizado_con_advertencias"
-            else:
-                ejecucion.estado = "normalizado"
-        except CancelacionSolicitada:
-            self._marcar_cancelado(ejecucion)
-        except Exception as exc:
-            if ejecucion.cancelada.is_set():
-                self._marcar_cancelado(ejecucion)
-                return
-            ejecucion.estado = "error"
-            ejecucion.hallazgos.append(
-                Hallazgo(
-                    codigo="ERROR_INTERNO_LIMPIEZA",
-                    severidad="error",
-                    mensaje="La limpieza o normalización terminó con un error interno.",
-                    detalle=f"{type(exc).__name__}: {str(exc)[:200]}",
-                )
-            )
-        finally:
-            self._finalizar(ejecucion)
 
     def _validar_silabos(
         self,
@@ -560,7 +446,7 @@ class GestorEjecuciones:
     def _persistir(self, ejecucion: Ejecucion) -> None:
         """Escribe el manifest para conservar evidencia aunque el proceso reinicie."""
 
-        self._persistencia.persistir(ejecucion)
+        self._persistencia.persistir(cast(EjecucionPersistible, ejecucion))
 
 
 gestor_ejecuciones = GestorEjecuciones()

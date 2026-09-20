@@ -29,9 +29,37 @@ class FakeImportador:
         return {"id_importacion": id_importacion, "confirmar": confirmar, "estado": "revertida"}
 
 
+def test_rutas_neo4j_rechazan_peer_remoto_aunque_headers_digan_loopback(
+    monkeypatch: Any,
+) -> None:
+    llamada = False
+
+    def fake_schema(**_kwargs: Any) -> neo4j_schema.Neo4jSchemaSnapshot:
+        nonlocal llamada
+        llamada = True
+        return neo4j_schema.Neo4jSchemaSnapshot(text="schema", structured={})
+
+    monkeypatch.setattr(neo4j_importacion, "get_cached_neo4j_schema", fake_schema)
+    cliente = TestClient(servidor.app, client=("198.51.100.10", 0))
+
+    respuesta = cliente.get(
+        "/neo4j/estado",
+        headers={
+            "host": "127.0.0.1",
+            "x-forwarded-for": "127.0.0.1",
+            "forwarded": "for=127.0.0.1",
+            "x-real-ip": "127.0.0.1",
+        },
+    )
+
+    assert respuesta.status_code == 403
+    assert llamada is False
+    assert respuesta.json()["detail"] == "Acceso administrativo solo disponible desde loopback."
+
+
 def test_publicacion_exige_confirmacion_y_expone_reversion(monkeypatch: Any) -> None:
     monkeypatch.setattr(neo4j_importacion, "importador_neo4j", FakeImportador())
-    cliente = TestClient(servidor.app)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
 
     validar = cliente.post(
         "/neo4j/validar",
@@ -69,6 +97,7 @@ def test_estado_neo4j_reports_a_verified_ciar_graph(monkeypatch: Any) -> None:
         structured={"node_props": {"Carrera": {}, "Empresa": {}, "OfertaLaboral": {}}},
     )
     cache_calls: list[dict[str, Any]] = []
+
     def cached_schema(**kwargs: Any) -> neo4j_schema.Neo4jSchemaSnapshot:
         cache_calls.append(kwargs)
         return snapshot
@@ -79,7 +108,7 @@ def test_estado_neo4j_reports_a_verified_ciar_graph(monkeypatch: Any) -> None:
         cached_schema,
         raising=False,
     )
-    response = TestClient(servidor.app).get("/neo4j/estado")
+    response = TestClient(servidor.app, client=("127.0.0.1", 0)).get("/neo4j/estado")
 
     assert response.status_code == 200
     body = response.json()
@@ -102,7 +131,7 @@ def test_estado_neo4j_distinguishes_a_reachable_incompatible_graph(monkeypatch: 
         raising=False,
     )
 
-    response = TestClient(servidor.app).get("/neo4j/estado")
+    response = TestClient(servidor.app, client=("127.0.0.1", 0)).get("/neo4j/estado")
 
     assert response.status_code == 200
     assert response.json()["state"] == "schema_mismatch"
@@ -120,7 +149,7 @@ def test_estado_neo4j_maps_connectivity_failures_to_disconnected(monkeypatch: An
         raising=False,
     )
 
-    response = TestClient(servidor.app).get("/neo4j/estado")
+    response = TestClient(servidor.app, client=("127.0.0.1", 0)).get("/neo4j/estado")
 
     assert response.status_code == 200
     assert response.json()["state"] == "disconnected"

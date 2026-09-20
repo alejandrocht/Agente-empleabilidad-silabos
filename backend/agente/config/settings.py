@@ -101,17 +101,6 @@ class ConfiguracionNormalizadorCurricular:
     max_reintentos_llm: int
     tamano_lote_llm: int
     temperatura_llm: float
-    embeddings_habilitados: bool
-    embedding_carreras: str
-    modelo_embedding: str
-    umbral_similitud_embedding: float
-    limite_embedding_competencia: int
-    limite_embedding_habilidad: int
-    limite_embedding_herramienta: int
-    limite_lexical_competencia: int
-    limite_lexical_habilidad: int
-    limite_lexical_herramienta: int
-    limite_ejemplos_contexto: int
     modo_analista: str = "technical"
     ruta_catalogo_tecnico: str = ""
 
@@ -130,22 +119,6 @@ class ConfiguracionNormalizadorCurricular:
         return {
             "analista_curricular": self.esfuerzo_analista,
         }[rol]
-
-    def limites_embedding(self) -> dict[str, int]:
-        """Devuelve los límites efectivos del recuperador semántico."""
-        return {
-            "competencia": self.limite_embedding_competencia,
-            "habilidad": self.limite_embedding_habilidad,
-            "herramienta": self.limite_embedding_herramienta,
-        }
-
-    def limites_lexicales(self) -> dict[str, int]:
-        """Devuelve los límites efectivos del fallback léxico para el prompt."""
-        return {
-            "competencia": self.limite_lexical_competencia,
-            "habilidad": self.limite_lexical_habilidad,
-            "herramienta": self.limite_lexical_herramienta,
-        }
 
 
 def _leer_archivo_entorno(ruta: Path) -> dict[str, str]:
@@ -203,13 +176,6 @@ def _decimal_curricular(entorno: Mapping[str, str], clave: str) -> float:
         raise ValueError(f"{clave} debe ser un número; se recibió {valor!r}") from exc
 
 
-def _limite_candidatos_curricular(entorno: Mapping[str, str], clave: str) -> int:
-    valor = _entero_curricular(entorno, clave)
-    if valor < 0:
-        raise ValueError(f"{clave} no puede ser negativo")
-    return valor
-
-
 def _esfuerzo_curricular(entorno: Mapping[str, str], clave: str) -> str:
     valor = _requerir_texto(entorno, clave).lower()
     permitidos = {"low", "medium", "high"}
@@ -234,9 +200,6 @@ def configuracion_normalizador_curricular(
     reintentos = _entero_curricular(entorno, "NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES")
     tamano_lote = _entero_curricular(entorno, "NORMALIZADOR_CURRICULAR_LLM_BATCH_SIZE")
     temperatura = _decimal_curricular(entorno, "NORMALIZADOR_CURRICULAR_LLM_TEMPERATURE")
-    umbral_similitud = _decimal_curricular(
-        entorno, "NORMALIZADOR_CURRICULAR_EMBEDDING_MIN_SIMILARITY"
-    )
     if timeout <= 0:
         raise ValueError("NORMALIZADOR_CURRICULAR_LLM_TIMEOUT_SECONDS debe ser mayor que cero")
     if reintentos < 0:
@@ -245,10 +208,6 @@ def configuracion_normalizador_curricular(
         raise ValueError("NORMALIZADOR_CURRICULAR_LLM_BATCH_SIZE debe ser mayor que cero")
     if not 0 <= temperatura <= 2:
         raise ValueError("NORMALIZADOR_CURRICULAR_LLM_TEMPERATURE debe estar entre 0 y 2")
-    if not 0 <= umbral_similitud < 1:
-        raise ValueError(
-            "NORMALIZADOR_CURRICULAR_EMBEDDING_MIN_SIMILARITY debe estar entre 0 y menor que 1"
-        )
     proveedor_llm = entorno.get("NORMALIZADOR_CURRICULAR_LLM_PROVIDER", "ollama").strip().lower()
     if proveedor_llm not in {"ollama", "openai"}:
         raise ValueError(
@@ -283,31 +242,4 @@ def configuracion_normalizador_curricular(
         max_reintentos_llm=reintentos,
         tamano_lote_llm=tamano_lote,
         temperatura_llm=temperatura,
-        embeddings_habilitados=_booleano_curricular(entorno, "NORMALIZADOR_CURRICULAR_EMBEDDINGS"),
-        embedding_carreras=_requerir_texto(
-            entorno, "NORMALIZADOR_CURRICULAR_EMBEDDING_CARRERAS", permitir_vacio=True
-        ),
-        modelo_embedding=_requerir_texto(entorno, "NORMALIZADOR_CURRICULAR_EMBEDDING_MODEL"),
-        umbral_similitud_embedding=umbral_similitud,
-        limite_embedding_competencia=_limite_candidatos_curricular(
-            entorno, "NORMALIZADOR_CURRICULAR_EMBEDDING_COMPETENCIA_CANDIDATES"
-        ),
-        limite_embedding_habilidad=_limite_candidatos_curricular(
-            entorno, "NORMALIZADOR_CURRICULAR_EMBEDDING_HABILIDAD_CANDIDATES"
-        ),
-        limite_embedding_herramienta=_limite_candidatos_curricular(
-            entorno, "NORMALIZADOR_CURRICULAR_EMBEDDING_HERRAMIENTA_CANDIDATES"
-        ),
-        limite_lexical_competencia=_limite_candidatos_curricular(
-            entorno, "NORMALIZADOR_CURRICULAR_LEXICAL_COMPETENCIA_CANDIDATES"
-        ),
-        limite_lexical_habilidad=_limite_candidatos_curricular(
-            entorno, "NORMALIZADOR_CURRICULAR_LEXICAL_HABILIDAD_CANDIDATES"
-        ),
-        limite_lexical_herramienta=_limite_candidatos_curricular(
-            entorno, "NORMALIZADOR_CURRICULAR_LEXICAL_HERRAMIENTA_CANDIDATES"
-        ),
-        limite_ejemplos_contexto=_limite_candidatos_curricular(
-            entorno, "NORMALIZADOR_CURRICULAR_CONTEXT_EXAMPLE_LIMIT"
-        ),
     )

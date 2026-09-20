@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import time
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
+from typing import Any, cast
 
+import pytest
 from docx import Document
 from fastapi.testclient import TestClient
-from openpyxl import Workbook
 
 from agente.api import normalizador, servidor
+from agente.api.acceso_administrativo import peer_is_loopback
 from agente.normalizador import ejecuciones
 from agente.normalizador.ejecuciones import GestorEjecuciones
 from agente.normalizador.modelos import (
@@ -22,141 +25,92 @@ from agente.normalizador.modelos import (
     ResultadoValidacionSilabos,
     UltimoChunkLimpiezaLLM,
 )
+from api import servidor as api_servidor
 
 
-def _fuente_xlsx() -> bytes:
-    """Construye una fuente mínima válida para el contrato HTTP."""
+def test_guardia_reconoce_solo_loopback_directo() -> None:
+    assert peer_is_loopback("127.0.0.1") is True
+    assert peer_is_loopback("::1") is True
+    assert peer_is_loopback("::ffff:127.0.0.1") is True
+    assert peer_is_loopback("testclient") is False
+    assert peer_is_loopback("192.168.1.5") is False
+    assert peer_is_loopback(None) is False
 
-    libro = Workbook()
-    convenios = libro.active
-    assert convenios is not None
-    convenios.title = "Convenios 2030"
-    convenios.append(["RUC", "Empresa", "Facultad", "Cód_carrera", "Carrera", "Ciclo_convenio"])
-    convenios.append(["20100000000", "Empresa", "Facultad", "01", "Administración", "6"])
 
-    informes = libro.create_sheet("Informes 2030")
-    informes.append(
-        [
-            "Año",
-            "Ciclo",
-            "Facultad",
-            "Cód_carrera",
-            "Carrera",
-            "Desempeño General",
-            "COMPET Adapta bilidad",
-            "COMPET Capac. aprender",
-            "COMPET Capac. análisis",
-            "COMPET Nivel conoci.",
-            "COMPET Aplic. conoci.",
-            "COMPET Dinamis energía",
-            "COMPET Iniciativa autono.",
-            "COMPET Creatividad",
-            "COMPET Toleran. presión",
-            "COMPET Resoluci. problema",
-            "COMPET Preocupa orden",
-            "COMPET Visión futuro",
-            "COMPET Orienta. cliente",
-            "COMPET Relacion Interpers.",
-            "COMPET Trabajo equipo",
-            "COMPET Otros 1",
-            "COMPET Califica 1",
-            "COMPET Otros 2",
-            "COMPET Califica 2",
-            "VALORES Etica",
-            "VALORES Responsa",
-            "VALORES Lealtad",
-            "VALORES Adhesion normas",
-            "VALORES Puntualidad",
-            "VALORES Orienta servicio",
-            "ACTITUD Entusiasmo",
-            "ACTITUD Responsa. Social",
-            "ACTITUD Persistencia",
-            "ACTITUD Flexibilidad",
-            "Sugerencias y Recomendaciones",
-            "RUC",
-            "Razon social",
-            "Fecha Inicio Aprobada",
-            "Fecha Fin Aprobada",
-            "Funciones Iniciales",
-            "Funciones Finales",
-            "Estado",
-            "Fch.Prest.Inf.Fin",
-            "Fe.Hr.Crea Inf Ini",
-            "ciclo creado inf inicial",
-            "Ciclo aprobado",
-            "TOP 1000 2024.id",
-        ]
-    )
-    informes.append(
-        [
-            "2030",
-            "6",
-            "Facultad",
-            "01",
-            "Administración",
-            "Muy Satisfecho",
-            "Excelente",
-        ]
-        + [""] * 29
-        + [
-            "20100000000",
-            "Empresa Uno",
-            "",
-            "",
-            "Analizar datos usando SQL",
-            "Analizar datos usando SQL",
-            "",
-            "2030-01-31",
-            "",
-            "2030-0",
-            "2030-0",
-            "",
-        ]
+def test_rutas_administrativas_rechazan_peer_remoto_sin_ejecutar_operacion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    llamada = False
+
+    def listar(*_args: object, **_kwargs: object) -> dict[str, object]:
+        nonlocal llamada
+        llamada = True
+        return {"ejecuciones": []}
+
+    monkeypatch.setattr(gestor, "listar_historial", listar)
+    cliente = TestClient(servidor.app, client=("203.0.113.10", 0))
+
+    respuesta = cliente.get(
+        "/normalizador/ejecuciones",
+        headers={
+            "host": "127.0.0.1",
+            "x-forwarded-for": "127.0.0.1",
+            "forwarded": "for=127.0.0.1",
+            "x-real-ip": "127.0.0.1",
+        },
     )
 
-    publicaciones = libro.create_sheet("Publicaciones 2030")
-    publicaciones.append(
-        [
-            "Año de la vacante",
-            "RUC",
-            "Razón Social",
-            "Identificación",
-            "Tipo de puesto",
-            "Fecha de publicación",
-            "Fecha de finalización",
-            "Creado_Empleo",
-            "Área",
-            "Área específica",
-            "Cargo",
-            "Cargo específico",
-            "Posición a publicar",
-            "Carrera resumen",
-            "Funciones",
-        ]
-    )
-    publicaciones.append(
-        [
-            "2030",
-            "20100000000",
-            "Empresa Uno",
-            "dato",
-            "Empleos",
-            "",
-            "",
-            "",
-            "Sistemas",
-            "",
-            "Analista",
-            "",
-            "Analista de datos",
-            "Sistemas",
-            "Analizar datos usando SQL",
-        ]
-    )
+    assert respuesta.status_code == 403
+    assert llamada is False
+    assert respuesta.json()["detail"] == "Acceso administrativo solo disponible desde loopback."
 
-    buffer = BytesIO()
-    libro.save(buffer)
-    return buffer.getvalue()
+
+def test_guardia_rechaza_formas_no_loopback_y_no_resuelve_nombres() -> None:
+    for host in (
+        "127.0.0.2.example",
+        "10.0.0.1",
+        "8.8.8.8",
+        "2001:db8::1",
+        "::ffff:10.0.0.1",
+        "not-an-ip",
+        " 127.0.0.1",
+        "127.0.0.1 ",
+    ):
+        assert peer_is_loopback(host) is False
+
+
+def test_rutas_publicas_conservan_acceso_desde_peer_remoto(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def responder_falso(*_args: object, **_kwargs: object) -> str:
+        return "respuesta local"
+
+    async def metadatos_falsos() -> dict[str, object]:
+        return {"fuente": "fixture"}
+
+    class GrafoFalso:
+        async def astream_events(
+            self, *_args: object, **_kwargs: object
+        ) -> AsyncIterator[dict[str, object]]:
+            if False:
+                yield {}
+
+    monkeypatch.setattr(api_servidor, "responder", responder_falso)
+    monkeypatch.setattr(
+        cast(Any, getattr(api_servidor, "dashboard")), "metadatos", metadatos_falsos
+    )
+    monkeypatch.setattr(api_servidor, "construir_grafo", lambda: GrafoFalso())
+    cliente = TestClient(servidor.app, client=("203.0.113.10", 0))
+
+    assert cliente.get("/health").json() == {"status": "ok"}
+    assert cliente.get("/dashboard/metadata").json() == {"fuente": "fixture"}
+    assert cliente.post("/preguntar", json={"texto": "hola"}).status_code == 200
+    assert cliente.post("/chat", json={"pregunta": "hola"}).status_code == 200
+    stream = cliente.post("/chat/stream", json={"input": {"pregunta": "hola"}})
+    assert stream.status_code == 200
+    assert "event: end" in stream.text
 
 
 def _fuente_docx() -> bytes:
@@ -188,65 +142,72 @@ def _fuente_docx() -> bytes:
     return buffer.getvalue()
 
 
-def test_inicia_y_consulta_ejecucion(monkeypatch, tmp_path: Path) -> None:
-    """El frontend recibe un ID y puede consultar el resultado del trabajo."""
+@pytest.mark.parametrize(
+    ("ruta", "nombre", "datos"),
+    [
+        (
+            "/normalizador/silabos",
+            "fuente.zip",
+            {"carrera": "Marketing", "periodo": "2026-1"},
+        ),
+    ],
+)
+def test_rechaza_content_length_excesivo_antes_de_crear_ejecucion(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    ruta: str,
+    nombre: str,
+    datos: dict[str, str],
+) -> None:
 
     gestor = GestorEjecuciones(tmp_path)
-    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
-    cliente = TestClient(servidor.app)
+    llamadas = 0
 
-    tipo_xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    def crear(*_args: object, **_kwargs: object) -> None:
+        nonlocal llamadas
+        llamadas += 1
+        raise AssertionError("crear no debe ejecutarse antes del rechazo")
+
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    monkeypatch.setattr(gestor, "crear", crear)
+    monkeypatch.setattr(normalizador, "MAX_UPLOAD_BYTES", 10)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    respuesta = cliente.post(
+        ruta,
+        files={"archivo": (nombre, b"pequeno", "application/octet-stream")},
+        data=datos,
+        headers={"content-length": "11"},
+    )
+
+    assert respuesta.status_code == 413
+    assert respuesta.json() == {"detail": "La carga excede el límite permitido."}
+    assert llamadas == 0
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_ruta_de_empleabilidad_no_existe(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
     respuesta = cliente.post(
         "/normalizador/empleabilidad",
-        files={"archivo": ("fuente.xlsx", _fuente_xlsx(), tipo_xlsx)},
+        files={"archivo": ("fuente.xlsx", b"retirado", "application/octet-stream")},
     )
 
-    assert respuesta.status_code == 202
-    id_ejecucion = respuesta.json()["id_ejecucion"]
-    estado = respuesta.json()["estado"]
-    for _ in range(100):
-        estado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()["estado"]
-        if estado in {
-            "normalizado",
-            "normalizado_con_advertencias",
-            "no_publicado",
-            "rechazado",
-            "error",
-        }:
-            break
-        time.sleep(0.01)
-
-    assert estado == "normalizado"
-    ejecucion = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()
-    assert ejecucion["normalizacion"]["publicable"] is True
-    assert ejecucion["normalizacion"]["registros_procesados"] == {
-        "publicaciones": 1,
-        "informes": 1,
-    }
-    assert any(
-        output["archivo"].endswith("/requerimiento_laboral.csv") for output in ejecucion["outputs"]
-    )
-    descarga = cliente.get(
-        f"/normalizador/ejecuciones/{id_ejecucion}/outputs/salidas/requerimiento_laboral.csv"
-    )
-    assert descarga.status_code == 200
-    assert "attachment" in descarga.headers["content-disposition"]
-    assert descarga.content
-    assert (
-        cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/outputs/manifest.json").status_code
-        == 404
-    )
-    errores = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/errores")
-    assert errores.status_code == 200
-    assert errores.json()["hallazgos"] == []
+    assert respuesta.status_code == 404
+    assert list(tmp_path.iterdir()) == []
 
 
-def test_inicia_y_consulta_ejecucion_de_silabos(monkeypatch, tmp_path: Path) -> None:
+def test_inicia_y_consulta_ejecucion_de_silabos(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """La fuente curricular produce los cinco CSV del contrato."""
 
     gestor = GestorEjecuciones(tmp_path)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
-    cliente = TestClient(servidor.app)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
 
     respuesta = cliente.post(
         "/normalizador/silabos",
@@ -278,14 +239,15 @@ def test_inicia_y_consulta_ejecucion_de_silabos(monkeypatch, tmp_path: Path) -> 
     assert estado in {"limpiado", "limpiado_con_advertencias"}
     ejecucion = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()
     assert ejecucion["validacion_silabos"]["valida"] is True
+    assert not {"validacion", "limpieza", "normalizacion"} & ejecucion.keys()
     assert ejecucion["limpieza_silabos"]["registros"] == 1
     assert ejecucion["release_gate"]["decision"] == "ALLOW_IMPORT"
     outputs = {output["archivo"] for output in ejecucion["outputs"]}
     assert outputs == {
         "salidas/curso.csv",
+        "salidas/silabo.csv",
         "salidas/catalogo_competencias.csv",
-        "salidas/catalogo_habilidades.csv",
-        "salidas/catalogo_herramientas.csv",
+        "salidas/catalogo_logros.csv",
         "salidas/cobertura_curricular.csv",
     }
     descarga = cliente.get(
@@ -294,11 +256,6 @@ def test_inicia_y_consulta_ejecucion_de_silabos(monkeypatch, tmp_path: Path) -> 
     assert descarga.status_code == 200
     assert "attachment" in descarga.headers["content-disposition"]
     assert descarga.content
-    provenance = cliente.get(
-        f"/normalizador/ejecuciones/{id_ejecucion}/outputs/"
-        "salidas/reportes/habilidades_fuente.jsonl"
-    )
-    assert provenance.status_code == 404
     cuarentena = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/cuarentena")
     assert cuarentena.status_code == 200
     assert cuarentena.json()["total"] == 0
@@ -306,11 +263,11 @@ def test_inicia_y_consulta_ejecucion_de_silabos(monkeypatch, tmp_path: Path) -> 
 
 
 def test_silabos_bloqueado_no_expone_outputs_curriculares_y_conserva_revision(
-    monkeypatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     gestor = GestorEjecuciones(tmp_path)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
-    cliente = TestClient(servidor.app)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
     id_ejecucion, directorio = gestor.crear("silabos", "entrada.zip")
     reportes = directorio / "salidas" / "reportes"
     reportes.mkdir(parents=True)
@@ -379,10 +336,12 @@ def test_silabos_bloqueado_no_expone_outputs_curriculares_y_conserva_revision(
     assert no_permitida.status_code == 404
 
 
-def test_silabos_aprobado_expone_outputs_curriculares(monkeypatch, tmp_path: Path) -> None:
+def test_silabos_aprobado_expone_outputs_curriculares(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     gestor = GestorEjecuciones(tmp_path)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
-    cliente = TestClient(servidor.app)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
     id_ejecucion, directorio = gestor.crear("silabos", "entrada.zip")
     salida = directorio / "salidas" / "cobertura_curricular.csv"
     salida.parent.mkdir(parents=True)
@@ -445,7 +404,9 @@ def test_silabos_aprobado_expone_outputs_curriculares(monkeypatch, tmp_path: Pat
     assert candidatos.status_code == 404
 
 
-def test_inicia_extraccion_cactus_sin_persistir_credenciales(monkeypatch, tmp_path: Path) -> None:
+def test_inicia_extraccion_cactus_sin_persistir_credenciales(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """El endpoint automático recibe credenciales, pero nunca las guarda en el manifest."""
 
     gestor = GestorEjecuciones(tmp_path)
@@ -468,7 +429,7 @@ def test_inicia_extraccion_cactus_sin_persistir_credenciales(monkeypatch, tmp_pa
         )
 
     monkeypatch.setattr(gestor, "iniciar_extraccion_silabos", fake_iniciar)
-    cliente = TestClient(servidor.app)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
 
     respuesta = cliente.post(
         "/normalizador/silabos/cactus",
@@ -496,11 +457,11 @@ def test_inicia_extraccion_cactus_sin_persistir_credenciales(monkeypatch, tmp_pa
 
 
 def test_valida_longitud_de_contrasena_sin_hacer_echo_del_secreto(
-    monkeypatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     gestor = GestorEjecuciones(tmp_path)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
-    cliente = TestClient(servidor.app)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
 
     secreto = "secreto-demasiado-largo" * 20
     respuesta = cliente.post(
@@ -518,16 +479,15 @@ def test_valida_longitud_de_contrasena_sin_hacer_echo_del_secreto(
     assert "entre 1 y 200 caracteres" in respuesta.json()["detail"]
 
 
-def test_expone_pendientes_y_release_gate(monkeypatch, tmp_path: Path) -> None:
+def test_expone_pendientes_y_release_gate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     gestor = GestorEjecuciones(tmp_path)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
-    cliente = TestClient(servidor.app)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
     id_ejecucion, directorio = gestor.crear("silabos", "entrada.zip")
     reportes = directorio / "salidas" / "reportes"
     reportes.mkdir(parents=True)
-    (reportes / "pendientes_curriculares.jsonl").write_text(
-        '{"tipo":"habilidad","estado_resolucion":"PENDIENTE_CATALOGACION"}\n'
-        '{"tipo":"competencia","estado_resolucion":"PENDIENTE_AMPLIACION_PERFIL"}\n',
+    (reportes / "propuestas_tecnicas.jsonl").write_text(
+        '{"id_propuesta":"PROP_1","nombre_competencia":"Competencia técnica"}\n',
         encoding="utf-8",
     )
     (reportes / "release_gate.json").write_text(
@@ -538,7 +498,7 @@ def test_expone_pendientes_y_release_gate(monkeypatch, tmp_path: Path) -> None:
 
     pendientes = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/pendientes?limite=1")
     assert pendientes.status_code == 200
-    assert pendientes.json()["total"] == 2
+    assert pendientes.json()["total"] == 1
     assert len(pendientes.json()["filas"]) == 1
 
     gate = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/release-gate")
@@ -547,7 +507,7 @@ def test_expone_pendientes_y_release_gate(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_warning_de_ingestion_marca_limpieza_curricular_con_advertencias(
-    monkeypatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Un warning de ingreso persiste y determina el estado final aunque limpiar no halle nada."""
 
@@ -577,11 +537,6 @@ def test_warning_de_ingestion_marca_limpieza_curricular_con_advertencias(
 
     monkeypatch.setattr(ejecuciones, "validar_silabos", lambda *_: validacion)
     monkeypatch.setattr(ejecuciones, "limpiar_silabos", lambda *_args, **_kwargs: limpieza)
-    monkeypatch.setattr(
-        ejecuciones,
-        "cargar_catalogo",
-        lambda: (_ for _ in ()).throw(RuntimeError("catálogo no necesario para esta prueba")),
-    )
 
     gestor._validar_silabos(
         ejecucion,
@@ -590,7 +545,7 @@ def test_warning_de_ingestion_marca_limpieza_curricular_con_advertencias(
         "2030-1",
     )
 
-    respuesta = gestor.obtener(id_ejecucion)
+    respuesta = cast(Any, gestor.obtener(id_ejecucion))
     manifest = (directorio / "manifest.json").read_text(encoding="utf-8")
 
     assert respuesta["estado"] == "limpiado_con_advertencias"
@@ -599,7 +554,9 @@ def test_warning_de_ingestion_marca_limpieza_curricular_con_advertencias(
     assert manifest.count("ARCHIVO_NO_CURRICULAR") == 2
 
 
-def test_persiste_progreso_llm_en_el_manifest_durante_limpieza(monkeypatch, tmp_path: Path) -> None:
+def test_persiste_progreso_llm_en_el_manifest_durante_limpieza(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     gestor = GestorEjecuciones(tmp_path)
     id_ejecucion, directorio = gestor.crear("silabos", "paquete.zip")
     ejecucion = gestor._obtener_objeto(id_ejecucion)
@@ -619,7 +576,7 @@ def test_persiste_progreso_llm_en_el_manifest_durante_limpieza(monkeypatch, tmp_
         publicable=True,
     )
 
-    def limpiar_con_progreso(*_args, **kwargs):
+    def limpiar_con_progreso(*_args: object, **kwargs: Any) -> ResultadoLimpiezaSilabos:
         actualizar = kwargs["al_actualizar_progreso_llm"]
         assert callable(actualizar)
         inicial = kwargs["progreso_inicial"]
@@ -667,21 +624,19 @@ def test_persiste_progreso_llm_en_el_manifest_durante_limpieza(monkeypatch, tmp_
     monkeypatch.setenv("NORMALIZADOR_CURRICULAR_LLM", "true")
     monkeypatch.setattr(ejecuciones, "validar_silabos", lambda *_: validacion)
     monkeypatch.setattr(ejecuciones, "limpiar_silabos", limpiar_con_progreso)
-    monkeypatch.setattr(
-        ejecuciones,
-        "cargar_catalogo",
-        lambda: (_ for _ in ()).throw(RuntimeError("catálogo no necesario para esta prueba")),
-    )
 
     gestor._validar_silabos(ejecucion, tmp_path / "paquete.zip", "Marketing", "2026-1")
 
     manifest = (directorio / "manifest.json").read_text(encoding="utf-8")
-    assert gestor.obtener(id_ejecucion)["progreso_llm"]["reporte_final"] == "disponible"
+    estado = cast(Any, gestor.obtener(id_ejecucion))
+    assert estado["progreso_llm"]["reporte_final"] == "disponible"
     assert '"progreso_llm"' in manifest
     assert '"decisiones_cacheadas": 4' in manifest
 
 
-def test_publica_evento_de_error_sin_perder_historial(monkeypatch, tmp_path: Path) -> None:
+def test_publica_evento_de_error_sin_perder_historial(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     gestor = GestorEjecuciones(tmp_path)
     id_ejecucion, _directorio = gestor.crear("silabos", "paquete.zip")
     ejecucion = gestor._obtener_objeto(id_ejecucion)
@@ -695,7 +650,7 @@ def test_publica_evento_de_error_sin_perder_historial(monkeypatch, tmp_path: Pat
         hallazgos=(),
     )
 
-    def limpiar_con_error(*_args, **kwargs):
+    def limpiar_con_error(*_args: object, **kwargs: Any) -> ResultadoLimpiezaSilabos:
         actualizar = kwargs["al_actualizar_progreso_llm"]
         progreso = replace(
             kwargs["progreso_inicial"],
@@ -713,11 +668,6 @@ def test_publica_evento_de_error_sin_perder_historial(monkeypatch, tmp_path: Pat
     monkeypatch.setenv("NORMALIZADOR_CURRICULAR_LLM", "true")
     monkeypatch.setattr(ejecuciones, "validar_silabos", lambda *_: validacion)
     monkeypatch.setattr(ejecuciones, "limpiar_silabos", limpiar_con_error)
-    monkeypatch.setattr(
-        ejecuciones,
-        "cargar_catalogo",
-        lambda: (_ for _ in ()).throw(RuntimeError("catálogo no necesario para esta prueba")),
-    )
 
     gestor._validar_silabos(ejecucion, tmp_path / "paquete.zip", "Marketing", "2026-1")
 

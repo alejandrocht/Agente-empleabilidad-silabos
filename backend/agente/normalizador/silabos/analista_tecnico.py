@@ -225,8 +225,9 @@ class RespuestaCompetenciasTecnicas(BaseModel):
 SYSTEM_PROMPT_TECNICO = (
     "You are a senior curricular analyst. Analyze one syllabus for one career. "
     "Infer only technical competencies demonstrable through curricular learning outcomes. "
-    "The only valid evidence is the learning outcomes: no period, course summary, or weekly "
-    "program is provided. Do not request or return confidence. Do not use generic or "
+    "Weekly analytical-program context is supplied and may be used as contextual evidence, "
+    "but literal evidence from learning outcomes and at least one copied learning outcome "
+    "remain mandatory. Do not request or return confidence. Do not use generic or "
     "institutional competencies as technical competencies, do not invent tools, and do not "
     "expose chain of thought. The career catalog contains candidates, not facts: choose a "
     "candidate only if the syllabus learning outcomes support it. If none applies, use "
@@ -255,6 +256,17 @@ def _lista_mapeos(valor: object) -> list[Mapping[str, object]]:
     if not isinstance(valor, Sequence) or isinstance(valor, (str, bytes)):
         return []
     return [fila for fila in valor if isinstance(fila, Mapping)]
+
+
+def _programa_analitico_detalle(datos: Mapping[str, object]) -> list[dict[str, str]]:
+    filas: list[dict[str, str]] = []
+    for fila in _lista_mapeos(datos.get("programa_analitico_detalle")):
+        fila_reducida = {
+            campo: _texto(fila.get(campo)) for campo in ("semana", "tema", "contenido")
+        }
+        if any(fila_reducida.values()):
+            filas.append(fila_reducida)
+    return filas
 
 
 def construir_contexto_tecnico(
@@ -287,6 +299,7 @@ def construir_contexto_tecnico(
         "periodo": _texto(registro.get("periodo")),
         "nombre_curso": _texto(datos.get("nombre_curso") or datos.get("curso")),
         "logros": logros,
+        "programa_analitico_detalle": _programa_analitico_detalle(datos),
         "catalogo_tecnico": [candidato.a_dict() for candidato in candidatos],
     }
 
@@ -294,7 +307,13 @@ def construir_contexto_tecnico(
 def _payload_prompt(contexto: Mapping[str, object]) -> dict[str, object]:
     return {
         clave: contexto.get(clave)
-        for clave in ("carrera", "nombre_curso", "logros", "catalogo_tecnico")
+        for clave in (
+            "carrera",
+            "nombre_curso",
+            "logros",
+            "programa_analitico_detalle",
+            "catalogo_tecnico",
+        )
     }
 
 
@@ -422,6 +441,7 @@ def _materializar_propuesta(
         "id_propuesta": _id_propuesta(contexto, propuesta, logros or []),
         "id_curso": _texto(contexto.get("id_curso")),
         "id_silabo": _texto(contexto.get("id_silabo")),
+        "nombre_curso": _texto(contexto.get("nombre_curso")),
         "carrera": _texto(contexto.get("carrera")),
         "periodo": _texto(contexto.get("periodo")),
         "catalogo_ref": candidato.referencia if candidato is not None else "",
@@ -456,16 +476,14 @@ def _propuesta_minima_desde_evidencia(
         else "Competencia técnica propuesta"
     )[:240]
     descripcion = (
-        "Aplica capacidades técnicas evidenciadas en los resultados de aprendizaje: "
-        f"{logros[0]}"
+        f"Aplica capacidades técnicas evidenciadas en los resultados de aprendizaje: {logros[0]}"
     )[:1200]
     return CompetenciaTecnicaInferida(
         nombre_competencia=nombre,
         descripcion_breve_competencia=descripcion,
         logros=logros,
         evidencia=[
-            EvidenciaCompetenciaTecnica(fuente="logro", fragmento=logro)
-            for logro in logros
+            EvidenciaCompetenciaTecnica(fuente="logro", fragmento=logro) for logro in logros
         ],
         justificacion=(
             "Propuesta mínima generada a partir de evidencia literal del sílabo "
@@ -621,9 +639,7 @@ def inferir_competencias_tecnicas(
                 clave_fallback = (
                     _texto(fallback["id_silabo"]),
                     _clave_texto(fallback["nombre_competencia"]),
-                    tuple(fallback["logros"])
-                    if isinstance(fallback["logros"], list)
-                    else (),
+                    tuple(fallback["logros"]) if isinstance(fallback["logros"], list) else (),
                 )
                 if clave_fallback not in vistos:
                     vistos.add(clave_fallback)

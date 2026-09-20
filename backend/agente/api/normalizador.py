@@ -25,10 +25,11 @@ from agente.normalizador.ejecuciones import (
 from agente.normalizador.modelos import Hallazgo
 
 aprobaciones_tecnicas = import_module("agente.normalizador.silabos.aprobaciones_tecnicas")
+errores_tecnicos = import_module("agente.normalizador.silabos.errores_tecnicos")
 
 
 MAX_UPLOAD_BYTES = entero("NORMALIZADOR_MAX_UPLOAD_BYTES", 100 * 1024 * 1024)
-_UPLOAD_PATHS = frozenset({"/normalizador/empleabilidad", "/normalizador/silabos"})
+_UPLOAD_PATHS = frozenset({"/normalizador/silabos"})
 _GENERIC_UPLOAD_LIMIT_DETAIL = "La carga excede el límite permitido."
 
 
@@ -69,9 +70,6 @@ class DecisionCurricularIn(BaseModel):
     """Decisión explícita sobre una propuesta no catalogada."""
 
     id_pendiente: str | None = Field(default=None, min_length=1, max_length=200)
-    id_paquete_chh: str | None = Field(default=None, min_length=1, max_length=200)
-    package_id: str | None = Field(default=None, min_length=1, max_length=200)
-    id_paquete: str | None = Field(default=None, min_length=1, max_length=200)
     decision: Literal["ADD", "KEEP_PENDING", "DISCARD"]
     reason: str | None = Field(default=None, min_length=1, max_length=600)
 
@@ -80,8 +78,6 @@ class DecidirPendientesIn(BaseModel):
     """Lote atómico de decisiones del ejecutor de la normalización."""
 
     decisiones: list[DecisionCurricularIn] = Field(default_factory=list, max_length=1000)
-    paquetes: list[DecisionCurricularIn] = Field(default_factory=list, max_length=1000)
-    decisiones_paquetes: list[DecisionCurricularIn] = Field(default_factory=list, max_length=1000)
     actor: str = Field(default="ejecutor", min_length=1, max_length=200)
     revision: str | None = Field(default=None, min_length=1, max_length=64)
 
@@ -95,36 +91,6 @@ class IniciarSilabosCactusIn(BaseModel):
     # La longitud se valida en la ruta para que los errores de Pydantic no hagan
     # eco de una contraseña enviada en el campo `input` de la respuesta 422.
     contrasena: SecretStr
-
-
-@router.post("/empleabilidad", status_code=202)
-def iniciar_empleabilidad(archivo: UploadFile = File(...)) -> dict[str, object]:
-    """Recibe el XLSX y devuelve un ID para consultar el progreso."""
-
-    nombre = Path(archivo.filename or "entrada.xlsx").name
-    id_ejecucion, directorio = gestor_ejecuciones.crear("empleabilidad", nombre)
-    ruta_entrada = directorio / "entrada" / nombre
-    try:
-        with ruta_entrada.open("wb") as destino:
-            shutil.copyfileobj(archivo.file, destino, length=1024 * 1024)
-    finally:
-        archivo.file.close()
-
-    tamano = ruta_entrada.stat().st_size
-    if tamano > MAX_UPLOAD_BYTES:
-        gestor_ejecuciones.marcar_rechazo(
-            id_ejecucion,
-            Hallazgo(
-                codigo="ARCHIVO_DEMASIADO_GRANDE",
-                severidad="error",
-                mensaje="El archivo supera el límite permitido.",
-                detalle=f"bytes={tamano}; máximo={MAX_UPLOAD_BYTES}",
-            ),
-        )
-        return gestor_ejecuciones.obtener(id_ejecucion)
-
-    gestor_ejecuciones.iniciar_validacion(id_ejecucion, ruta_entrada)
-    return gestor_ejecuciones.obtener(id_ejecucion)
 
 
 @router.post("/silabos", status_code=202)
@@ -301,10 +267,6 @@ def descargar_output(id_ejecucion: str, ruta_salida: str) -> FileResponse:
 
     raiz = (gestor_ejecuciones.base_dir / id_ejecucion).resolve()
     candidatas = [raiz / relativa]
-    # Compatibilidad con manifests antiguos de empleabilidad que solo guardaban
-    # el nombre del archivo y materializaban todos los outputs bajo `salidas/`.
-    if len(relativa.parts) == 1:
-        candidatas.append(raiz / "salidas" / relativa)
     ruta = next(
         (
             candidata.resolve()
@@ -395,9 +357,9 @@ def pendientes_ejecucion(
                 incluir_resueltas=incluir_resueltas,
             ),
         )
-    except aprobaciones_tecnicas.AprobacionNoPermitida as exc:
+    except errores_tecnicos.AprobacionNoPermitida as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except aprobaciones_tecnicas.DecisionCurricularInvalida as exc:
+    except errores_tecnicos.DecisionCurricularInvalida as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
@@ -414,11 +376,6 @@ def decidir_pendientes_ejecucion(
             status_code=409,
             detail="Las decisiones técnicas solo aplican a ejecuciones de sílabos.",
         )
-    if solicitud.paquetes or solicitud.decisiones_paquetes:
-        raise HTTPException(
-            status_code=422,
-            detail="El pipeline curricular solo admite decisiones de propuestas técnicas.",
-        )
     try:
         resultado = aprobaciones_tecnicas.aplicar_decisiones(
             gestor_ejecuciones.base_dir / id_ejecucion,
@@ -426,11 +383,11 @@ def decidir_pendientes_ejecucion(
             actor=solicitud.actor,
             revision=solicitud.revision,
         )
-    except aprobaciones_tecnicas.AprobacionNoPermitida as exc:
+    except errores_tecnicos.AprobacionNoPermitida as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except aprobaciones_tecnicas.RevisionCurricularInvalida as exc:
+    except errores_tecnicos.RevisionCurricularInvalida as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except aprobaciones_tecnicas.DecisionCurricularInvalida as exc:
+    except errores_tecnicos.DecisionCurricularInvalida as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {
         "id_ejecucion": id_ejecucion,

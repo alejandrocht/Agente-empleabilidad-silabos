@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
+from importlib import import_module
 from pathlib import Path
 from typing import cast
 
@@ -13,13 +14,10 @@ from fastapi.testclient import TestClient
 
 from agente.api import normalizador, servidor
 from agente.normalizador.ejecuciones import GestorEjecuciones
-from agente.normalizador.modelos import (
-    Hallazgo,
-    ResultadoLimpiezaSilabos,
-    ResultadoNormalizacion,
-)
+from agente.normalizador.modelos import Hallazgo, ResultadoLimpiezaSilabos
 from agente.normalizador.silabos import aprobaciones_tecnicas
-from agente.normalizador.silabos.validacion_aprobaciones import DecisionCurricularInvalida
+
+errores_tecnicos = import_module("agente.normalizador.silabos.errores_tecnicos")
 
 
 def _gestor_con_ejecucion(tmp_path: Path) -> tuple[GestorEjecuciones, str, Path]:
@@ -48,17 +46,22 @@ def _salidas_curriculares() -> tuple[dict[str, object], ...]:
     return (
         {
             "tipo": "csv_curricular",
+            "archivo": "salidas/curso.csv",
+            "registros": 1,
+        },
+        {
+            "tipo": "csv_curricular",
+            "archivo": "salidas/silabo.csv",
+            "registros": 1,
+        },
+        {
+            "tipo": "csv_curricular",
             "archivo": "salidas/catalogo_competencias.csv",
             "registros": 1,
         },
         {
             "tipo": "csv_curricular",
-            "archivo": "salidas/catalogo_habilidades.csv",
-            "registros": 1,
-        },
-        {
-            "tipo": "csv_curricular",
-            "archivo": "salidas/catalogo_herramientas.csv",
+            "archivo": "salidas/catalogo_logros.csv",
             "registros": 1,
         },
         {
@@ -67,13 +70,8 @@ def _salidas_curriculares() -> tuple[dict[str, object], ...]:
             "registros": 1,
         },
         {
-            "tipo": "candidatos_curriculares",
-            "archivo": "salidas/reportes/candidatos_curriculares.json",
-            "registros": 4,
-        },
-        {
-            "tipo": "decisiones_curriculares",
-            "archivo": "salidas/reportes/decisiones_curriculares.jsonl",
+            "tipo": "auditoria_tecnica",
+            "archivo": "salidas/reportes/analisis_tecnico.json",
             "registros": 1,
         },
     )
@@ -84,7 +82,7 @@ def test_decision_tecnica_discard_requiere_motivo_y_normaliza_la_razon() -> None
     revision = aprobaciones_tecnicas._revision(propuestas)
 
     with pytest.raises(
-        DecisionCurricularInvalida,
+        errores_tecnicos.DecisionCurricularInvalida,
         match="requiere un motivo",
     ):
         aprobaciones_tecnicas._validar_solicitudes(
@@ -149,7 +147,7 @@ def test_iniciar_validacion_silabos_entrega_wrapper_y_argumentos_al_executor(
     )
 
 
-def test_a_dict_oculta_salidas_curriculares_hasta_cerrar_hitl(tmp_path: Path) -> None:
+def test_a_dict_oculta_salidas_tecnicas_hasta_permitir_el_gate(tmp_path: Path) -> None:
     gestor, id_ejecucion, directorio = _gestor_con_ejecucion(tmp_path)
     ejecucion = gestor._obtener_objeto(id_ejecucion)
     for salida in _salidas_curriculares():
@@ -184,7 +182,6 @@ def test_a_dict_oculta_salidas_curriculares_hasta_cerrar_hitl(tmp_path: Path) ->
 def test_a_dict_filtra_salidas_y_reportes_tecnicos_por_gate(tmp_path: Path) -> None:
     gestor, id_ejecucion, directorio = _gestor_con_ejecucion(tmp_path)
     ejecucion = gestor._obtener_objeto(id_ejecucion)
-    ejecucion.configuracion_curricular = {"modo_analista": "technical"}
     csvs = (
         "salidas/curso.csv",
         "salidas/silabo.csv",
@@ -246,35 +243,6 @@ def test_a_dict_filtra_salidas_y_reportes_tecnicos_por_gate(tmp_path: Path) -> N
     assert set(_mapping(gestor.obtener_reporte(id_ejecucion)["reportes"])) == set(reportes)
 
 
-def test_a_dict_de_empleabilidad_conserva_sus_outputs(tmp_path: Path) -> None:
-    gestor = GestorEjecuciones(tmp_path)
-    _id_ejecucion, directorio = gestor.crear("empleabilidad", "fuente.xlsx")
-    ejecucion = gestor._obtener_objeto(_id_ejecucion)
-    ruta = directorio / "salidas" / "requerimiento_laboral.csv"
-    ruta.parent.mkdir(parents=True)
-    ruta.write_text("id\nuno\n", encoding="utf-8")
-    ejecucion.normalizacion = ResultadoNormalizacion(
-        publicable=True,
-        registros_procesados={"publicaciones": 1},
-        relaciones=1,
-        cuarentena=0,
-        outputs=(
-            {
-                "tipo": "requerimiento_laboral",
-                "archivo": "salidas/requerimiento_laboral.csv",
-                "registros": 1,
-            },
-        ),
-        hallazgos=(),
-    )
-
-    estado = ejecucion.a_dict()
-
-    assert [output["archivo"] for output in _mappings(estado["outputs"])] == [
-        "salidas/requerimiento_laboral.csv"
-    ]
-
-
 def test_manifest_conserva_bytes_ordenados_y_timestamps_en_un_reinicio(tmp_path: Path) -> None:
     gestor, id_ejecucion, directorio = _gestor_con_ejecucion(tmp_path)
     ejecucion = gestor._obtener_objeto(id_ejecucion)
@@ -302,14 +270,10 @@ def test_manifest_conserva_bytes_ordenados_y_timestamps_en_un_reinicio(tmp_path:
         "actualizada_en",
         "cancelacion_solicitada",
         "cancelada_en",
-        "validacion",
         "validacion_silabos",
-        "limpieza",
         "limpieza_silabos",
-        "normalizacion",
         "release_gate",
         "aprobacion_curricular",
-        "catalogo_chh",
         "fuente",
         "progreso_fuente",
         "progreso_llm",
@@ -336,20 +300,20 @@ def test_historial_usa_snapshot_activo_sobre_manifest_persistido(tmp_path: Path)
 
 def test_reporte_malformado_conserva_mensajes_publicos(tmp_path: Path) -> None:
     gestor = GestorEjecuciones(tmp_path)
-    id_ejecucion, directorio = gestor.crear("empleabilidad", "fuente.xlsx")
+    id_ejecucion, directorio = gestor.crear("silabos", "fuente.zip")
     reportes = directorio / "salidas" / "reportes"
     reportes.mkdir(parents=True)
-    (reportes / "incompleto.json").write_text("{", encoding="utf-8")
-    (reportes / "incompleto.jsonl").write_text('{"ok":true}\n{', encoding="utf-8")
+    (reportes / "analisis_tecnico.json").write_text("{", encoding="utf-8")
+    (reportes / "propuestas_tecnicas.jsonl").write_text('{"ok":true}\n{', encoding="utf-8")
 
     reporte = gestor.obtener_reporte(id_ejecucion)
 
     assert reporte["reportes"] == {
-        "incompleto.json": {
+        "analisis_tecnico.json": {
             "no_disponible": True,
             "mensaje": "El reporte está malformado.",
         },
-        "incompleto.jsonl": {
+        "propuestas_tecnicas.jsonl": {
             "no_disponible": True,
             "mensaje": "El reporte contiene una línea malformada.",
         },

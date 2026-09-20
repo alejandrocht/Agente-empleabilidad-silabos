@@ -76,49 +76,13 @@ describe("inspección de ejecución normalizada", () => {
     obtenerReporteEjecucionNormalizador.mockResolvedValue({
       manifest: {
         id_ejecucion: "NOR_0123456789abcdef",
+        tipo: "silabos",
         estado: "limpiado",
+        configuracion_curricular: { modo_analista: "technical" },
         parametros: { carrera: "Marketing", periodo: "2026-1" },
         validacion_silabos: { valida: true },
-        release_gate: {
-          decision: "ALLOW_IMPORT",
-          checks: {
-            approval: { pending_decision: 0, canonical_materialized: true },
-          },
-        },
-        aprobacion_curricular: {
-          requiere_decision: false,
-          pendientes_por_decidir: 0,
-          materializacion: { csv_canonicos_disponibles: true },
-        },
-        limpieza_silabos: {
-          registros: 3,
-          competencias: 2,
-          habilidades: 4,
-          herramientas: 1,
-          relaciones: 5,
-          outputs: [
-            {
-              archivo: "salidas/catalogo_competencias.csv",
-              tipo: "csv_curricular",
-              registros: 2,
-            },
-            {
-              archivo: "salidas/catalogo_habilidades.csv",
-              tipo: "csv_curricular",
-              registros: 45,
-            },
-            {
-              archivo: "salidas/catalogo_herramientas.csv",
-              tipo: "csv_curricular",
-              registros: 2,
-            },
-            {
-              archivo: "salidas/cobertura_curricular.csv",
-              tipo: "csv_curricular",
-              registros: 5,
-            },
-          ],
-        },
+        release_gate: { decision: "ALLOW_IMPORT" },
+        outputs: salidasTecnicas(),
         hallazgos: [
           {
             codigo: "ARCHIVO_NO_CURRICULAR",
@@ -136,21 +100,7 @@ describe("inspección de ejecución normalizada", () => {
           ],
         },
       },
-      reportes: {
-        "decisiones_llm.jsonl": [
-          {
-            estado: "PENDIENTE_REVISION_HUMANA",
-            id_habilidad_fuente: "HAB_1",
-            justificacion: "Evidencia suficiente.",
-          },
-          {
-            estado: "REVISAR_VALIDACION",
-            id_habilidad_fuente: "HAB_2",
-            problemas: ["Requiere revisión."],
-          },
-        ],
-        "analisis_llm.json": { estado: "COMPLETADO", propuestas_pendientes: 1 },
-      },
+      reportes: {},
     });
     obtenerPendientesNormalizador.mockResolvedValue({
       filas: [],
@@ -159,25 +109,10 @@ describe("inspección de ejecución normalizada", () => {
     decidirPendientesNormalizador.mockResolvedValue({ aprobacion: null });
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockImplementation(async (url) => ({
+      vi.fn().mockImplementation(async (_url) => ({
         ok: true,
         text: async () => {
-          if (url.includes("catalogo_habilidades")) {
-            return [
-              "id_habilidad,nombre_habilidad",
-              ...Array.from(
-                { length: 45 },
-                (_item, indice) => `HAB_${indice + 1},Habilidad ${indice + 1}`,
-              ),
-            ].join("\n");
-          }
-          if (url.includes("catalogo_herramientas")) {
-            return "id_herramienta,nombre_herramienta\nHERR_1,Excel\nHERR_2,Power BI\n";
-          }
-          if (url.includes("competencias")) {
-            return "id_competencia,nombre_competencia\nCOM_1,Analizar datos\nCOM_2,Comunicar resultados\n";
-          }
-          return "id_cob_curricular,id_curso\nCOB_1,CUR_1\nCOB_2,CUR_2\n";
+          return "id_requerimiento,descripcion\nREQ_1,Analizar datos\n";
         },
       })),
     );
@@ -192,11 +127,17 @@ describe("inspección de ejecución normalizada", () => {
     expect(
       screen.getByRole("heading", { name: "Inspección técnica curricular" }),
     ).toBeTruthy();
-    expect(
-      screen.queryByRole("heading", { name: "Inspección CHH" }),
-    ).toBeNull();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: "CSV" }).getAttribute("aria-selected"),
+      ).toBe("true"),
+    );
+    expect(screen.getByText("curso.csv")).toBeTruthy();
+    expect(screen.getByText("silabo.csv")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Progreso" }));
     expect(screen.getByText("cursos")).toBeTruthy();
     expect(screen.getByText("competencias técnicas")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Neo4j" }));
     expect(
       await screen.findByRole("button", { name: "Subir datos a Neo4j" }),
     ).toBeTruthy();
@@ -213,8 +154,8 @@ describe("inspección de ejecución normalizada", () => {
         limpieza_silabos: {
           outputs: [
             {
-              archivo: "salidas/reportes/pendientes_curriculares.jsonl",
-              tipo: "pendientes_curriculares",
+              archivo: "salidas/reportes/propuestas_tecnicas.jsonl",
+              tipo: "propuestas_tecnicas",
               registros: 174,
             },
             {
@@ -244,7 +185,7 @@ describe("inspección de ejecución normalizada", () => {
       filas: [
         {
           id_pendiente: "PEND_1",
-          tipo: "habilidad",
+          tipo: "competencia_tecnica",
           propuesta: {
             nombre: "Analítica digital",
             descripcion: "Propuesta curricular",
@@ -263,19 +204,24 @@ describe("inspección de ejecución normalizada", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Revisión curricular requerida",
+        name: "Revisión técnica requerida",
       }),
     ).toBeTruthy();
     expect(
       screen.getByRole("button", {
-        name: /Agregar al perfil para Analítica digital/i,
+        name: /Agregar al catálogo para Analítica digital/i,
       }),
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Subir datos a Neo4j" }),
     ).toBeNull();
     expect(
-      within(screen.getByRole("tabpanel", { name: "Normalizador" })).getByText(
+      screen
+        .getByRole("tab", { name: "Revisión" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(
+      within(screen.getByRole("tabpanel", { name: "Revisión" })).getByText(
         "174",
         { exact: true },
       ),
@@ -287,104 +233,6 @@ describe("inspección de ejecución normalizada", () => {
       screen.queryByText("Resolver 174 decisiones curriculares"),
     ).toBeNull();
     expect(screen.queryByText(/CSV listos con advertencias/i)).toBeNull();
-  });
-
-  it("muestra la revisión por paquetes cuando el resumen de filas no marca decisiones, pero sí hay paquetes pendientes", async () => {
-    const idEjecucion = "NOR_PACKAGE_SUMMARY_DRIFT";
-    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
-      manifest: {
-        id_ejecucion: idEjecucion,
-        tipo: "silabos",
-        estado: "limpiado_con_advertencias",
-        parametros: { carrera: "Marketing", periodo: "2026-1" },
-        aprobacion_curricular: {
-          requiere_decision: false,
-          pendientes_por_decidir: 0,
-          remaining_pending: 1,
-          paquetes: { total: 1, pendientes_por_decidir: 1 },
-        },
-        release_gate: {
-          decision: "BLOCK_IMPORT",
-          checks: {
-            approval: { pending_decision: 0, canonical_materialized: false },
-          },
-        },
-      },
-      reportes: {},
-    });
-    obtenerPendientesNormalizador.mockResolvedValueOnce({
-      filas: [],
-      paquetes: [
-        {
-          id_paquete_chh: "PKG_CHH_PENDING",
-          source_identity: {
-            carrera: "Marketing",
-            periodo: "2026-1",
-            id_curso: "MKT-101",
-            id_silabo: "SIL-1",
-          },
-          componentes: {
-            competencias: [{ nombre: "Competencia pendiente" }],
-            habilidades: [{ nombre: "Habilidad pendiente" }],
-            herramientas: [],
-          },
-          filas: [
-            {
-              id_pendiente: "PEN_PACKAGE_1",
-              evidencia: ["Evidencia del sílabo"],
-            },
-          ],
-          relaciones: [],
-        },
-      ],
-      revision: "rev-package-summary-drift",
-      aprobacion: {
-        requiere_decision: false,
-        pendientes_por_decidir: 0,
-        paquetes: { total: 1, pendientes_por_decidir: 1 },
-      },
-    });
-
-    render(<InspeccionEjecucionNormalizador idEjecucion={idEjecucion} />);
-
-    expect(
-      await screen.findByRole("heading", {
-        name: "Revisión curricular requerida",
-      }),
-    ).toBeTruthy();
-    expect(screen.getByTestId("curricular-package-card")).toBeTruthy();
-    expect(
-      screen.getByRole("button", {
-        name: /Agregar al perfil para paquete PKG_CHH_PENDING/i,
-      }),
-    ).toBeTruthy();
-    const normalizador = screen.getByRole("tabpanel", { name: "Normalizador" });
-    expect(
-      within(normalizador).getByRole("heading", {
-        name: "Resultados positivos y estado",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(normalizador).getByRole("heading", {
-        name: "Conteos de la normalización",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(normalizador).getByRole("heading", {
-        name: "Revisión curricular requerida",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(normalizador).queryByRole("heading", {
-        name: "Qué falta para publicar",
-      }),
-    ).toBeNull();
-    expect(
-      within(normalizador).queryByRole("heading", {
-        name: "Avisos que requieren atención",
-      }),
-    ).toBeNull();
-    expect(within(normalizador).queryByText("Siguiente paso")).toBeNull();
   });
 
   it("mantiene Neo4j bloqueado aunque existan tres CSV cuando quedan decisiones sin resolver", async () => {
@@ -404,12 +252,12 @@ describe("inspección de ejecución normalizada", () => {
               registros: 1,
             },
             {
-              archivo: "salidas/catalogo_habilidades.csv",
+              archivo: "salidas/catalogo_logros.csv",
               tipo: "csv_curricular",
               registros: 1,
             },
             {
-              archivo: "salidas/catalogo_herramientas.csv",
+              archivo: "salidas/cobertura_curricular.csv",
               tipo: "csv_curricular",
               registros: 1,
             },
@@ -434,7 +282,7 @@ describe("inspección de ejecución normalizada", () => {
       filas: [
         {
           id_pendiente: "PEND_BLOCKED",
-          tipo: "habilidad",
+          tipo: "competencia_tecnica",
           propuesta: { nombre: "Habilidad pendiente" },
         },
       ],
@@ -445,7 +293,7 @@ describe("inspección de ejecución normalizada", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Revisión curricular requerida",
+        name: "Revisión técnica requerida",
       }),
     ).toBeTruthy();
     expect(
@@ -464,8 +312,9 @@ describe("inspección de ejecución normalizada", () => {
   it("tolera hallazgos malformados en reportes legados sin renderizar logs internos", async () => {
     obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
       manifest: {
-        id_ejecucion: "NOR_LEGACY_SHAPES",
+        id_ejecucion: "NOR_TECHNICAL_SHAPES",
         tipo: "silabos",
+        configuracion_curricular: { modo_analista: "technical" },
         estado: "limpiado",
         carrera: "Marketing legacy",
         periodo: "2025-2",
@@ -489,16 +338,16 @@ describe("inspección de ejecución normalizada", () => {
       },
     });
 
-    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_LEGACY_SHAPES" />);
+    render(
+      <InspeccionEjecucionNormalizador idEjecucion="NOR_TECHNICAL_SHAPES" />,
+    );
 
-    await screen.findByRole("tab", { name: "Advertencias y errores" });
+    await screen.findByRole("tab", { name: "Auditoría" });
     expect(screen.queryByText("Decisión legada.")).toBeNull();
     expect(screen.queryByText("Evento legado.")).toBeNull();
-    fireEvent.click(
-      screen.getByRole("tab", { name: "Advertencias y errores" }),
-    );
+    fireEvent.click(screen.getByRole("tab", { name: "Auditoría" }));
     const warnings = screen.getByRole("tabpanel", {
-      name: "Advertencias y errores",
+      name: "Auditoría",
     });
     expect(within(warnings).getByText("Advertencia legada.")).toBeTruthy();
   });
@@ -511,17 +360,22 @@ describe("inspección de ejecución normalizada", () => {
     const tablist = await screen.findByRole("tablist", {
       name: "Secciones de la inspección",
     });
-    expect(within(tablist).getAllByRole("tab")).toHaveLength(2);
-    const normalizador = screen.getByRole("tabpanel", { name: "Normalizador" });
-    expect(normalizador.hidden).toBe(false);
-    expect(within(normalizador).queryByText("Salidas generadas")).toBeNull();
+    expect(within(tablist).getAllByRole("tab")).toHaveLength(5);
+    fireEvent.click(screen.getByRole("tab", { name: "CSV" }));
+    const csv = screen.getByRole("tabpanel", { name: "CSV" });
+    expect(csv.hidden).toBe(false);
     expect(
-      within(normalizador).queryByText("Decisiones LLM aceptadas"),
-    ).toBeNull();
+      within(csv).getByRole("heading", { name: "Archivos CSV" }),
+    ).toBeTruthy();
+    expect(within(csv).getByText("curso.csv")).toBeTruthy();
     expect(
-      screen
-        .getByRole("tab", { name: "Normalizador" })
-        .getAttribute("aria-selected"),
+      within(csv).getByRole("link", {
+        name: /Descargar curso\.csv/,
+      }),
+    ).toBeTruthy();
+    expect(within(csv).queryByText("Decisiones LLM aceptadas")).toBeNull();
+    expect(
+      screen.getByRole("tab", { name: "CSV" }).getAttribute("aria-selected"),
     ).toBe("true");
     expect(screen.queryByRole("tab", { name: "Logs" })).toBeNull();
     expect(screen.queryByRole("tabpanel", { name: "Logs" })).toBeNull();
@@ -536,16 +390,6 @@ describe("inspección de ejecución normalizada", () => {
         tipo: "silabos",
         estado: "limpiado_con_advertencias",
         hallazgos: [
-          {
-            codigo: "HABILIDAD_NO_CATALOGADA",
-            severidad: "warning",
-            mensaje: "No existe en catálogo.",
-          },
-          {
-            codigo: "HABILIDAD_PENDIENTE_CANONICALIZACION",
-            severidad: "warning",
-            mensaje: "Requiere equivalencia.",
-          },
           {
             codigo: "LOGRO_CODIGO_INCONSISTENTE",
             severidad: "warning",
@@ -587,16 +431,11 @@ describe("inspección de ejecución normalizada", () => {
     render(
       <InspeccionEjecucionNormalizador idEjecucion="NOR_GROUPED_FINDINGS" />,
     );
-    fireEvent.click(
-      await screen.findByRole("tab", { name: "Advertencias y errores" }),
-    );
+    fireEvent.click(await screen.findByRole("tab", { name: "Auditoría" }));
 
     const panel = screen.getByRole("tabpanel", {
-      name: "Advertencias y errores",
+      name: "Auditoría",
     });
-    const habilidades = within(panel)
-      .getByRole("heading", { name: "Habilidades aún no están en el catálogo" })
-      .closest("article");
     const logros = within(panel)
       .getByRole("heading", { name: "Logros tienen un código inconsistente" })
       .closest("article");
@@ -606,7 +445,6 @@ describe("inspección de ejecución normalizada", () => {
     const cactus = within(panel)
       .getByRole("heading", { name: "Cursos sin sílabo descargable" })
       .closest("article");
-    expect(within(habilidades).getByText("2 avisos")).toBeTruthy();
     expect(within(logros).getByText("1 aviso")).toBeTruthy();
     expect(within(competencias).getByText("2 avisos")).toBeTruthy();
     expect(within(cactus).getByText("2 avisos")).toBeTruthy();
@@ -640,8 +478,10 @@ describe("inspección de ejecución normalizada", () => {
 
     expect(await screen.findByText("Inspección de ejecución")).toBeTruthy();
     await waitFor(() =>
-      expect(screen.getByText("Validación curricular aprobada")).toBeTruthy(),
+      expect(screen.getByRole("tab", { name: "CSV" })).toBeTruthy(),
     );
+    fireEvent.click(screen.getByRole("tab", { name: "Progreso" }));
+    expect(screen.getByText("Validación técnica aprobada")).toBeTruthy();
     const parametros = screen.getByRole("region", {
       name: "Parámetros de la ejecución",
     });
@@ -656,51 +496,53 @@ describe("inspección de ejecución normalizada", () => {
     const conteos = screen
       .getByRole("heading", { name: "Conteos de la normalización" })
       .closest("section");
-    expect(within(conteos).getByText("registros procesados")).toBeTruthy();
-    expect(within(conteos).getByText("3", { exact: true })).toBeTruthy();
-    expect(within(conteos).getByText("competencias")).toBeTruthy();
-    expect(within(conteos).getByText("2", { exact: true })).toBeTruthy();
+    expect(within(conteos).getByText("cursos")).toBeTruthy();
+    expect(within(conteos).getAllByText("1", { exact: true })).toHaveLength(5);
     expect(within(conteos).getByText("relaciones de cobertura")).toBeTruthy();
-    expect(within(conteos).getByText("5", { exact: true })).toBeTruthy();
-    const normalizador = screen.getByRole("tabpanel", { name: "Normalizador" });
-    expect(within(normalizador).queryByText("Salidas generadas")).toBeNull();
+    const progreso = screen.getByRole("tabpanel", { name: "Progreso" });
+    expect(within(progreso).queryByText("Salidas generadas")).toBeNull();
+    expect(within(progreso).queryByText("Decisiones LLM aceptadas")).toBeNull();
+    expect(within(progreso).queryByText("Logs y eventos")).toBeNull();
     expect(
-      within(normalizador).queryByText("catalogo_competencias.csv"),
-    ).toBeNull();
-    expect(
-      within(normalizador).queryByText("Decisiones LLM aceptadas"),
-    ).toBeNull();
-    expect(within(normalizador).queryByText("Logs y eventos")).toBeNull();
-    expect(
-      within(normalizador).queryByRole("heading", {
+      within(progreso).queryByRole("heading", {
         name: "Qué falta para publicar",
       }),
     ).toBeNull();
     expect(
-      within(normalizador).queryByRole("heading", {
+      within(progreso).queryByRole("heading", {
         name: "Avisos que requieren atención",
       }),
     ).toBeNull();
     expect(screen.queryByRole("tab", { name: "Logs" })).toBeNull();
     expect(screen.queryByRole("tabpanel", { name: "Logs" })).toBeNull();
     expect(
-      within(normalizador).queryByText("Se omitió un archivo accesorio."),
+      within(progreso).queryByText("Se omitió un archivo accesorio."),
     ).toBeNull();
-    fireEvent.click(
-      screen.getByRole("tab", { name: "Advertencias y errores" }),
-    );
+    fireEvent.click(screen.getByRole("tab", { name: "Auditoría" }));
     const warnings = screen.getByRole("tabpanel", {
-      name: "Advertencias y errores",
+      name: "Auditoría",
     });
     expect(within(warnings).getByText("Advertencias y errores")).toBeTruthy();
     expect(
       within(warnings).getByText("Se omitió un archivo accesorio."),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: "Normalizador" }));
+    fireEvent.click(screen.getByRole("tab", { name: "CSV" }));
+    const csv = screen.getByRole("tabpanel", { name: "CSV" });
+    expect(within(csv).getByText("curso.csv")).toBeTruthy();
     expect(
-      await within(
-        screen.getByRole("tabpanel", { name: "Normalizador" }),
-      ).findByRole("button", { name: "Subir datos a Neo4j" }),
+      within(csv).getByRole("link", {
+        name: /Descargar curso\.csv/,
+      }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Neo4j" }));
+    expect(
+      within(screen.getByRole("tabpanel", { name: "Neo4j" })).getByRole(
+        "heading",
+        { name: "Subir catálogos a Neo4j" },
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Subir datos a Neo4j" }),
     ).toBeTruthy();
     expect(obtenerUrlOutputNormalizador).toHaveBeenCalled();
   });
@@ -767,7 +609,7 @@ describe("inspección de ejecución normalizada", () => {
 
       expect(obtenerReporteEjecucionNormalizador).toHaveBeenCalledTimes(2);
       expect(screen.queryByRole("tab", { name: "Logs" })).toBeNull();
-      expect(screen.queryByText("final.csv")).toBeNull();
+      expect(screen.getByText("final.csv")).toBeTruthy();
       const llamadasTrasEstadoTerminal =
         obtenerReporteEjecucionNormalizador.mock.calls.length;
 
@@ -781,26 +623,6 @@ describe("inspección de ejecución normalizada", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("usa campos legados cuando el manifest no tiene parametros anidados", async () => {
-    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
-      manifest: {
-        id_ejecucion: "NOR_LEGACY",
-        estado: "limpiado",
-        carrera: "Marketing legacy",
-        periodo: "2025-2",
-      },
-      reportes: {},
-    });
-
-    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_LEGACY" />);
-
-    const parametros = await screen.findByRole("region", {
-      name: "Parámetros de la ejecución",
-    });
-    expect(within(parametros).getByText("Marketing legacy")).toBeTruthy();
-    expect(within(parametros).getByText("2025-2")).toBeTruthy();
   });
 
   it("parsea celdas CSV con comillas y respeta el límite solicitado", () => {

@@ -28,17 +28,6 @@ def _configuracion() -> ConfiguracionNormalizadorCurricular:
             "NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES": "2",
             "NORMALIZADOR_CURRICULAR_LLM_BATCH_SIZE": "1",
             "NORMALIZADOR_CURRICULAR_LLM_TEMPERATURE": "0",
-            "NORMALIZADOR_CURRICULAR_EMBEDDINGS": "false",
-            "NORMALIZADOR_CURRICULAR_EMBEDDING_CARRERAS": "",
-            "NORMALIZADOR_CURRICULAR_EMBEDDING_MODEL": "text-embedding-3-small",
-            "NORMALIZADOR_CURRICULAR_EMBEDDING_MIN_SIMILARITY": "0.2",
-            "NORMALIZADOR_CURRICULAR_EMBEDDING_COMPETENCIA_CANDIDATES": "0",
-            "NORMALIZADOR_CURRICULAR_EMBEDDING_HABILIDAD_CANDIDATES": "0",
-            "NORMALIZADOR_CURRICULAR_EMBEDDING_HERRAMIENTA_CANDIDATES": "0",
-            "NORMALIZADOR_CURRICULAR_LEXICAL_COMPETENCIA_CANDIDATES": "0",
-            "NORMALIZADOR_CURRICULAR_LEXICAL_HABILIDAD_CANDIDATES": "0",
-            "NORMALIZADOR_CURRICULAR_LEXICAL_HERRAMIENTA_CANDIDATES": "0",
-            "NORMALIZADOR_CURRICULAR_CONTEXT_EXAMPLE_LIMIT": "0",
         }
     )
 
@@ -57,7 +46,8 @@ def _registro() -> dict[str, object]:
                     "semana": "4",
                     "tema": "Patrones",
                     "contenido": "Patrones de arquitectura y atributos de calidad.",
-                }
+                },
+                {"semana": " ", "tema": "", "contenido": "  "},
             ],
             "herramientas_evidencia": [{"texto": "No debe enviarse"}],
         },
@@ -72,6 +62,13 @@ def test_contexto_tecnico_conserva_fuentes_internas_sin_herramientas() -> None:
     assert contexto["logros"] == [
         {"tipo": "general", "orden": "", "texto": "Diseña arquitecturas de software."},
         {"tipo": "especifico", "orden": "1", "texto": "Compara patrones arquitectónicos."},
+    ]
+    assert contexto["programa_analitico_detalle"] == [
+        {
+            "semana": "4",
+            "tema": "Patrones",
+            "contenido": "Patrones de arquitectura y atributos de calidad.",
+        }
     ]
     assert "sumilla" not in contexto
     assert "semanas" not in contexto
@@ -126,6 +123,7 @@ def test_inferencia_estructurada_conserva_evidencia_y_relaciones(
     assert trazas[-1].latencia_modelo_ms >= 0
     assert resultado[0]["id_curso"] == "CUR_1"
     assert resultado[0]["id_silabo"] == "SIL_1"
+    assert resultado[0]["nombre_curso"] == "Arquitectura de software"
     evidencia = resultado[0]["evidencia"]
     assert isinstance(evidencia, list)
     assert isinstance(evidencia[0], dict)
@@ -305,9 +303,12 @@ def test_inferencia_sin_logros_registra_advertencia_y_no_fabrica_propuesta(
     datos["logros_especificos"] = []
     auditoria: list[dict[str, object]] = []
 
-    assert analista_tecnico.inferir_competencias_tecnicas(
-        [registro], _configuracion(), auditoria=auditoria
-    ) == []
+    assert (
+        analista_tecnico.inferir_competencias_tecnicas(
+            [registro], _configuracion(), auditoria=auditoria
+        )
+        == []
+    )
     assert auditoria == [
         {
             "codigo": "SILABO_SIN_PROPUESTA_TECNICA",
@@ -461,9 +462,22 @@ def test_prompt_tecnico_inyecta_solo_catalogo_y_evidencia_curricular() -> None:
     mensajes = analista_tecnico.construir_prompt_tecnico(contexto)
     payload = json.loads(mensajes[1][1].split("\n", maxsplit=1)[1])
 
-    assert set(payload) == {"carrera", "nombre_curso", "logros", "catalogo_tecnico"}
+    assert set(payload) == {
+        "carrera",
+        "nombre_curso",
+        "logros",
+        "programa_analitico_detalle",
+        "catalogo_tecnico",
+    }
     assert payload["catalogo_tecnico"] == [candidato.a_dict()]
     assert payload["logros"][1]["texto"] == "Compara patrones arquitectónicos."
+    assert payload["programa_analitico_detalle"] == [
+        {
+            "semana": "4",
+            "tema": "Patrones",
+            "contenido": "Patrones de arquitectura y atributos de calidad.",
+        }
+    ]
     serializado = json.dumps(payload, ensure_ascii=False)
     assert all(
         clave not in serializado
@@ -476,6 +490,8 @@ def test_prompt_tecnico_inyecta_solo_catalogo_y_evidencia_curricular() -> None:
             "id_silabo",
             "competencias_declaradas",
             "herramientas_evidencia",
+            "relaciones",
+            "relationships",
         )
     )
 
@@ -486,6 +502,10 @@ def test_system_prompt_tecnico_is_english_and_preserves_literal_candidate_rules(
     system_message = mensajes[0][1]
 
     assert system_message.startswith("You are a senior curricular analyst.")
+    assert (
+        "Weekly analytical-program context is supplied and may be used as contextual evidence"
+        in system_message
+    )
     assert "specific learning outcome copied literally" in system_message
     assert "literal evidence from a learning outcome" in system_message
     assert "Do not summarize or paraphrase learning outcomes." in system_message

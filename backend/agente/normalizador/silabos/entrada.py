@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
+import unicodedata
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
-from agente.normalizador.empleabilidad.entrada import calcular_sha256, normalizar_etiqueta
 from agente.normalizador.modelos import (
     ArchivoSilabo,
     Hallazgo,
@@ -20,6 +21,35 @@ MAX_ARCHIVOS = 500
 MAX_BYTES_ARCHIVO = 50 * 1024 * 1024
 MAX_BYTES_DESCOMPRIMIDOS = 500 * 1024 * 1024
 PATRON_PERIODO = re.compile(r"\d{4}-\d+")
+
+
+def normalizar_etiqueta(valor: object) -> str:
+    """Normaliza texto para comparar etiquetas sin destruir la fuente."""
+
+    texto = unicodedata.normalize("NFKD", str(valor or "")).lower()
+    texto = "".join(caracter for caracter in texto if not unicodedata.combining(caracter))
+    return re.sub(r"[^a-z0-9]+", " ", texto).strip()
+
+
+def clave_concepto(valor: object) -> str:
+    """Normaliza conceptos preservando signos relevantes para identificadores."""
+
+    normalizado = unicodedata.normalize("NFKD", str(valor or "")).lower()
+    normalizado = "".join(
+        caracter for caracter in normalizado if not unicodedata.combining(caracter)
+    )
+    normalizado = re.sub(r"[^a-z0-9+#.]+", " ", normalizado)
+    return re.sub(r"\s+", " ", normalizado).strip()
+
+
+def calcular_sha256(ruta: Path) -> str:
+    """Calcula la identidad de la fuente por bloques para no cargarla en memoria."""
+
+    digest = hashlib.sha256()
+    with ruta.open("rb") as fuente:
+        for bloque in iter(lambda: fuente.read(1024 * 1024), b""):
+            digest.update(bloque)
+    return digest.hexdigest()
 
 
 def normalizar_carrera(valor: object) -> str:
@@ -131,9 +161,7 @@ def validar_archivo(
     if ruta.suffix.lower() in {".docx", ".pdf"}:
         formato = _formato(ruta.name)
         if formato:
-            archivos.append(
-                ArchivoSilabo(ruta.name, formato, ruta.stat().st_size)
-            )
+            archivos.append(ArchivoSilabo(ruta.name, formato, ruta.stat().st_size))
     else:
         try:
             with zipfile.ZipFile(ruta) as paquete:

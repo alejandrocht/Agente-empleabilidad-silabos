@@ -61,7 +61,7 @@ ARCHIVOS_CATALOGO = (
 
 @dataclass(frozen=True, slots=True)
 class ResultadoCatalogosTecnicos:
-    """Resumen de la salida técnica sin dependencias del catálogo CHH."""
+    """Resumen de la salida técnica CL independiente de la empleabilidad."""
 
     publicable: bool
     relaciones: int
@@ -71,8 +71,6 @@ class ResultadoCatalogosTecnicos:
     release_gate: dict[str, object]
     hallazgos: tuple[Hallazgo, ...] = ()
     cuarentena: tuple[dict[str, object], ...] = ()
-    habilidades: int = 0
-    herramientas: int = 0
 
 
 def _texto(valor: object) -> str:

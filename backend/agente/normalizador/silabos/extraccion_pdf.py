@@ -11,7 +11,6 @@ from pypdf import PdfReader
 
 from agente.normalizador.silabos.extraccion_curricular import (
     _ciclo_desde_ruta,
-    _deduplicar_evidencias_herramientas,
     _ids_curriculares,
     _nombre_desde_archivo,
     _normalizar_modalidad,
@@ -542,27 +541,6 @@ def _codigos_curriculares_pdf(texto: str) -> list[str]:
             )
         )
     )
-
-
-def _evidencias_herramientas_pdf(
-    programa: list[dict[str, str]],
-) -> list[dict[str, str]]:
-    """Expone evidencia PDF de herramientas solo desde la tabla VI."""
-
-    resultado: list[dict[str, str]] = []
-    for fila in programa:
-        texto = _texto(fila.get("texto"))
-        if not texto:
-            continue
-        semana = _texto(fila.get("semana"))
-        pagina = _texto(fila.get("pagina"))
-        seccion = "Programa analítico"
-        if semana:
-            seccion += f" — semana {semana}"
-        if pagina:
-            seccion += f" (página {pagina})"
-        resultado.append({"seccion": seccion, "texto": texto})
-    return _deduplicar_evidencias_herramientas(resultado)
 
 
 def _ciclo_pdf(texto: str) -> str:

@@ -31,27 +31,9 @@ uv run --locked python scripts/consola.py
 
 Exit with `/salir`.
 
-## Normalizadores de Empleabilidad y Sílabos
+## Normalizador Curricular/Técnico de Sílabos
 
-El primer vertical del normalizador recibe el XLSX sin exigir años fijos. Identifica las hojas
-por los roles `Convenios`, `Informes` y `Publicaciones`, valida sus columnas mínimas, calcula el
-hash de la fuente y devuelve un ID de ejecución. La validación ocurre en segundo plano y no
-bloquea el chat ni el dashboard.
-
-```text
-POST /normalizador/empleabilidad
-GET  /normalizador/ejecuciones/{id_ejecucion}
-GET  /normalizador/ejecuciones/{id_ejecucion}/errores
-```
-
-La respuesta distingue `limpiado`, `limpiado_con_advertencias`, `rechazado` y `error`. Cuando la
-entrada es válida, genera tres JSONL de staging bajo `limpios/`, con valores estructuralmente
-limpios, IDs reproducibles y referencia a la hoja/fila de origen. Luego aplica el catálogo CHH
-versionado, conserva la evidencia y separa las propuestas de herramienta que requieren revisión.
-Una ejecución pasa a `normalizado` solo si las relaciones candidatas cumplen las puertas de
-publicación; en caso contrario queda en `no_publicado` con hallazgos y cuarentena consultables.
-
-El vertical curricular recibe una fuente declarando carrera y periodo. Acepta un DOCX o PDF
+El normalizador recibe una fuente declarando carrera y periodo. Acepta un DOCX o PDF
 individual, o un ZIP con varios archivos seguros:
 
 ```text
@@ -89,62 +71,45 @@ NORMALIZADOR_CACTUS_HEADLESS=false
 NORMALIZADOR_CACTUS_DOWNLOAD_WORKERS=3
 ```
 
-El corte curricular valida el paquete, extrae metadatos, sumilla, logro general, logros específicos
-y programa analítico. El JSONL de limpieza es staging interno y no se ofrece como salida de negocio.
-Cada ejecución conserva exactamente cinco CSV curriculares como paquete candidato:
+El corte curricular valida el paquete y extrae cada sílabo una sola vez, incluyendo metadatos,
+sumilla, logros y programa analítico. El JSONL de limpieza es staging interno y no se ofrece como salida
+de negocio. La ejecución técnica conserva exactamente cinco CSV:
 
 ```text
 salidas/curso.csv
+salidas/silabo.csv
 salidas/catalogo_competencias.csv
-salidas/catalogo_habilidades.csv
-salidas/catalogo_herramientas.csv
+salidas/catalogo_logros.csv
 salidas/cobertura_curricular.csv
 ```
 
-La cobertura solo contiene `id_cob_curricular`, `id_curso`, `id_silabo`, `id_competencia`,
-`id_habilidad` e `id_herramienta`. El último campo puede estar vacío; los demás identifican la
-relación atómica y conectan cada resultado con el curso y el sílabo de origen. La proveniencia
-detallada se conserva en `salidas/reportes/{competencias,habilidades,herramientas}_fuente.jsonl` y
-en `cobertura_curricular_fuente.jsonl`; las propuestas no catalogadas quedan en
-`pendientes_curriculares.jsonl` con un `id_pendiente` estable, evidencia y estado explícito.
+El analista técnico recibe carrera, nombre del curso, resultados de aprendizaje, las filas extraídas de
+`programa_analitico_detalle` (`semana`, `tema`, `contenido`) y candidatos del catálogo técnico. No recibe
+IDs, periodo, sumilla, competencias declaradas, herramientas ni relaciones del grafo.
 
-Cuando el LLM propone una competencia, habilidad o herramienta que no coincide con el catálogo,
-la interfaz muestra un checkpoint al finalizar la ejecución. El ejecutor envía un lote con
-`{"id_pendiente":"...","decision":"ADD"}` o `KEEP_PENDING`. `ADD` promueve el concepto solo
-al perfil de carrera/periodo, genera provenance y recalcula el release gate; `KEEP_PENDING` conserva
-la evidencia fuera de los CSV canónicos. Ambas decisiones quedan en
-`reportes/decisiones_curriculares.jsonl` y una repetición exacta es idempotente.
+La cobertura conecta curso, sílabo, logro y competencia con IDs generados por Python. La proveniencia
+y las propuestas técnicas se conservan en `salidas/reportes/`, principalmente
+`analisis_tecnico.json`, `propuestas_tecnicas.jsonl` y `decisiones_tecnicas.jsonl`. Cada propuesta tiene
+evidencia literal de un logro y queda `PENDIENTE_APROBACION` hasta que la revisión técnica registra
+`ADD`, `DISCARD` o `KEEP_PENDING`.
 
-El reporte `release_gate.json` es la decisión de publicación para Neo4j. Los pendientes preservados
-son válidos en un borrador, pero una salida solo puede importarse cuando el gate indica
-`ALLOW_IMPORT`; provenance incompleta, relaciones canónicas no verificadas o errores estructurales
-mantienen `BLOCK_IMPORT`. Así la revisión humana se concentra en ambigüedades y evolución del perfil,
-no en cada logro claro.
+El reporte `release_gate.json` es la decisión de publicación para Neo4j. Una salida solo puede importarse
+cuando el gate indica `ALLOW_IMPORT`; evidencia incompleta, propuestas sin decisión o referencias
+huérfanas mantienen `BLOCK_IMPORT`.
 
 Cada ejecución curricular está aislada por la pareja declarada `carrera` + `periodo`: esa pareja se
-normaliza, se conserva en el registro y forma parte de los IDs de curso y sílabo. No se aplica un
-mapa global fijo de `L1`, `E1` o `G1`; esos códigos se validan dentro del sílabo que los declara.
-Cuando un logro referencia un código ausente o ambiguo, la descripción textual del logro conserva la
-relación y el catálogo CHH solo ayuda a canonicalizarla. La inconsistencia se reporta como advertencia;
-solo una falta de evidencia utilizable genera cuarentena.
+normaliza, se conserva en el registro y forma parte de los IDs de curso y sílabo. Python genera todos los
+IDs y relaciones del grafo; el catálogo técnico solo aporta candidatos para el análisis. DOCX y PDF pasan
+por el mismo extractor curricular y cada sílabo se analiza una sola vez.
 
-El alcance de competencias es curricular, no global: si existe
-`catalogos/carreras/{CARRERA}/{PERIODO}/`, se usa ese catálogo; si aún no existe, se construye un perfil
-provisional con las competencias declaradas por los sílabos de la ejecución. El catálogo global conserva
-el vocabulario compartido de habilidades y herramientas, pero no puede inventar una competencia de otra
-carrera. Las referencias no declaradas (por ejemplo, `EE`) se conservan como evidencia de fuente y se
-reportan para revisión. DOCX y PDF admiten códigos `E/G` numéricos y alfabéticos de forma acotada.
+### Analista técnico LLM
 
-### Analista curricular LLM por carrera
-
-El normalizador curricular usa únicamente el contrato técnico. El catálogo canónico vive en
-`backend/catalogos/catalogo_competencias_tecnicas.xlsx`; no se configura una ruta externa ni un
-selector `legacy|technical`. En producción la ejecución curricular debe activar el analista
-semántico. Para ello:
+El normalizador curricular usa un único contrato técnico. El catálogo canónico vive en
+`backend/catalogos/catalogo_competencias_tecnicas.xlsx` y la configuración siempre fija
+`modo_analista=technical`:
 
 ```dotenv
 NORMALIZADOR_CURRICULAR_LLM=true
-# Cambiar solo esta variable para alternar entre los dos proveedores configurados.
 NORMALIZADOR_CURRICULAR_LLM_PROVIDER=ollama
 NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL=http://localhost:11434/v1
 NORMALIZADOR_CURRICULAR_OLLAMA_MODEL=qwen3.8:27b
@@ -156,114 +121,41 @@ NORMALIZADOR_CURRICULAR_LLM_BATCH_SIZE=8
 NORMALIZADOR_CURRICULAR_LLM_TEMPERATURE=0
 ```
 
-El analista resuelve su modelo desde el proveedor activo. Ollama usa
-`NORMALIZADOR_CURRICULAR_OLLAMA_MODEL`; OpenAI usa
-`NORMALIZADOR_CURRICULAR_OPENAI_MODEL` y además requiere `OPENAI_API_KEY`. Los valores por defecto
-son `qwen3.8:27b` y `gpt-5.6-luna`, respectivamente. No existe una segunda pasada
-LLM residual: los errores de validación quedan para revisión. Se conserva el único
-reintento del mismo analista para IDs omitidos y la nominalización determinista.
-Las antiguas variables de escalamiento residual ya no se requieren ni se utilizan.
+Ollama usa `NORMALIZADOR_CURRICULAR_OLLAMA_MODEL`; OpenAI usa
+`NORMALIZADOR_CURRICULAR_OPENAI_MODEL` y requiere `OPENAI_API_KEY`. No existe una ruta curricular
+`legacy`: una ejecución de sílabos usa `analista_tecnico.py`, una llamada por sílabo y el reintento
+acotado del mismo analista cuando falta una propuesta válida.
 
-El analista recibe lotes compactos de logros, sumilla, contenido y perfil de la carrera. Devuelve
-competencia, habilidad, herramientas y evidencia en JSON estructurado; Python genera los IDs,
-normaliza nominalizaciones cerradas y valida la evidencia estructurada del programa analítico.
-También rechaza competencias y habilidades genéricas, herramientas no detectadas y evidencia ausente.
-Toda propuesta LLM válida queda pendiente de decisión humana; `confianza` se conserva solo como metadata auditable y nunca aprueba ni enruta. Si el proveedor falla,
-se conserva el resultado determinista y se registra `ANALISTA_LLM_NO_DISPONIBLE`.
+El payload del LLM contiene únicamente carrera, nombre del curso, logros, candidatos técnicos y las filas
+extraídas de `programa_analitico_detalle` (`semana`, `tema`, `contenido`). No se envían IDs, periodo,
+sumilla, competencias declaradas, herramientas ni relaciones del grafo. Toda propuesta debe citar un
+logro literalmente; Python valida la evidencia, genera IDs y deja la decisión en
+`PENDIENTE_APROBACION` hasta la revisión humana `ADD`, `DISCARD` o `KEEP_PENDING`.
 
-La auditoría se guarda fuera de los CSV en `salidas/reportes/decisiones_llm.jsonl` y
-`salidas/reportes/analisis_llm.json`. Los reportes conservan los campos históricos `modelo_analista_residual=no_ejecutado` y
-`decisiones_escaladas=0` por compatibilidad con lectores anteriores. Python conserva sin cambios los esquemas de los
-cinco CSV publicados, incluido `curso.csv` con su contrato exacto.
+La auditoría técnica se conserva en `salidas/reportes/` (`analisis_tecnico.json`,
+`propuestas_tecnicas.jsonl`, `decisiones_tecnicas.jsonl` y `release_gate.json`). El gate solo permite
+importar cuando indica `ALLOW_IMPORT`; propuestas pendientes, evidencia incompleta o referencias
+huérfanas mantienen `BLOCK_IMPORT`.
 
-### Embeddings curriculares por carrera (opt-in)
+### Contrato técnico y esquemas CSV
 
-La recuperación semántica es opcional y solo sugiere candidatos CHH al LLM por cada logro. No mezcla
-el corpus laboral, se limita al catálogo de la misma `carrera` + `periodo`, y nunca se considera
-evidencia: Python sigue verificando las citas contra el sílabo literal antes de aprobar una decisión.
-
-```dotenv
-# Requiere OPENAI_API_KEY y un catálogo curricular revisado para la carrera/periodo.
-NORMALIZADOR_CURRICULAR_EMBEDDINGS=true
-NORMALIZADOR_CURRICULAR_EMBEDDING_CARRERAS=MARKETING@2026-1,INGENIERIA@2026-1
-NORMALIZADOR_CURRICULAR_EMBEDDING_MODEL=text-embedding-3-small
-# Se aceptan únicamente similitudes estrictamente mayores al umbral.
-# El valor seguro por defecto 0 excluye similitudes cero y negativas.
-NORMALIZADOR_CURRICULAR_EMBEDDING_MIN_SIMILARITY=0
-```
-
-Ambos controles (`NORMALIZADOR_CURRICULAR_EMBEDDINGS` y la allowlist
-`NORMALIZADOR_CURRICULAR_EMBEDDING_CARRERAS`) deben habilitar exactamente la pareja carrera + periodo
-enviada; las entradas antiguas que solo contienen una carrera fallan cerrado. Sin credenciales,
-catálogo específico, proveedor/vector válido o candidatos por encima del umbral, el sistema usa el
-fallback lexical y registra solo un `reason_code` estable: `embedding_retriever_absent`,
-`embedding_catalog_empty`, `embedding_provider_or_vector_invalid` o
-`embedding_candidates_below_threshold`. La auditoría no persiste mensajes de excepción, rutas ni
-secretos.
-
-Las herramientas no se buscan en el texto completo: únicamente se aceptan cuando aparecen en una sección
-estructurada de recursos, software, herramientas digitales o programa analítico. El programa analítico es
-una fuente estructurada válida después de excluir bibliografía, URLs y recursos docentes genéricos; esas
-fuentes siguen sin ser herramientas publicables. Esto también impide publicar coincidencias de apellidos o
-términos financieros. Cada evidencia incluye sección, texto fuente y coincidencia en
-`herramientas_fuente.jsonl`; se reconocen alias explícitos como `MS Excel` → `Microsoft Excel`.
-
-### Contrato evidence-first y esquemas CSV
-
-El flujo curricular es determinista y respeta la evidencia en este orden:
-
-1. registra todas las competencias declaradas por cada sílabo;
-2. resuelve el logro contra esas declaraciones dentro del mismo sílabo; si el código es
-   ambiguo o no está declarado, conserva el código como referencia de fuente y solo usa la
-   descripción para una relación textual revisable;
-3. intenta canonicalizar la habilidad contra el catálogo de habilidades, primero por nombre exacto
-   y luego con coincidencia lexical fuerte; si no hay evidencia suficiente, no inventa una fila
-   pública y la conserva como pendiente con propuesta/evidencia;
-4. busca herramientas explícitas solo en secciones curriculares estructuradas y las relaciona con la
-   competencia principal de la habilidad, evitando productos cartesianos; y
-5. ejecuta un juez determinista que rechaza esquemas inválidos, IDs duplicados, relaciones huérfanas
-   y competencias placeholder.
-
-Los cinco CSV del paquete candidato conservan el contrato exacto; no se agregan columnas ni archivos CSV alternativos:
+El paquete candidato técnico tiene exactamente estos cinco archivos:
 
 ```text
 curso.csv:
 id_curso,nombre_curso,coordinador,creditos,nivel,tipo_curso,codigo_curso,id_carrera
+silabo.csv:
+id_silabo,codigo_silabo,sumilla,id_curso,periodo_academico
 catalogo_competencias.csv:
-id_competencia,nombre_competencia,descripcion_breve_competencia,tipo_competencia
-catalogo_habilidades.csv:
-id_habilidad,nombre_habilidad,descripcion_breve
-catalogo_herramientas.csv:
-id_herramienta,nombre_herramienta,descripcion_breve_herramienta
+id_competencia,nombre_competencia,descripcion_breve_competencia,tipo_competencia,codigo_competencia
+catalogo_logros.csv:
+id_logro,logro
 cobertura_curricular.csv:
-id_cob_curricular,id_curso,id_silabo,id_competencia,id_habilidad,id_herramienta
+id_cob_curricular,id_curso,id_silabo,id_competencia,id_logro
 ```
 
-La evidencia que no puede expresarse en ese contrato se guarda como JSONL de auditoría en
-`salidas/reportes/`: `competencias_fuente.jsonl`, `habilidades_fuente.jsonl`,
-`herramientas_fuente.jsonl`, `cobertura_curricular_fuente.jsonl` y
-`cobertura_curricular_canonica.jsonl`. Las resoluciones incluyen método, puntaje y segundo puntaje para
-que coincidencias ambiguas se mantengan en revisión. Esos reportes no alteran los esquemas CSV y permiten
-revisar qué declaró cada sílabo sin publicar placeholders.
-
-### Perfil bootstrap por carrera
-
-Después de revisar una ejecución, se puede generar un perfil inicial sin alterar los esquemas CSV:
-
-```bash
-uv run --locked python -m scripts.generar_perfil_carrera \
-  --ejecucion .normalizador/NOR_xxx \
-  --catalogos "/ruta/Normalizacion CIAR/catalogos" \
-  --carrera Marketing --periodo 2026-1
-```
-
-El resultado queda en `catalogos/carreras/MARKETING/2026-1/` con los tres catálogos y cobertura opcional.
-`perfil.json` conserva `BORRADOR_CON_PENDIENTES` mientras exista cola abierta (o `BORRADOR` si está vacía);
-las habilidades, competencias y herramientas no canónicas quedan en
-`reportes/pendientes_curriculares.jsonl` y `habilidades_pendientes.jsonl`, no en columnas nuevas ni como
-conceptos inventados. Mientras
-un perfil está en bootstrap, especializa el espacio de **competencias**; las habilidades y herramientas aún se
-contrastan contra el catálogo global para que un perfil incompleto no elimine candidatos y fuerce falsos positivos.
+La proveniencia y las decisiones no amplían el contrato CSV: son reportes auditables fuera del paquete
+canónico.
 
 ## Logs
 

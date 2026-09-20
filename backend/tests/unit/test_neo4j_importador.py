@@ -14,13 +14,17 @@ from agente.normalizador.ejecuciones import GestorEjecuciones
 from agente.normalizador.silabos import salida_catalogos
 
 
-def test_importer_defers_legacy_output_loader() -> None:
+def test_importer_imports_only_the_technical_contract() -> None:
     probe = """
 import sys
+from agente.api import normalizador
 from agente.db import neo4j_importador
 
+assert "agente.normalizador.silabos.aprobaciones_tecnicas" in sys.modules
+assert "agente.normalizador.silabos.errores_tecnicos" in sys.modules
 assert "agente.normalizador.silabos.salida" not in sys.modules
-assert callable(neo4j_importador._cargar_salida_legacy)
+assert "agente.normalizador.silabos.validacion_aprobaciones" not in sys.modules
+assert not hasattr(neo4j_importador, "_cargar_salida_legacy")
 """
     entorno = os.environ.copy()
     backend = str(Path(__file__).resolve().parents[2])
@@ -165,7 +169,7 @@ def _manifest_tecnico(
     return gestor, id_ejecucion
 
 
-def test_modo_tecnico_importa_grafo_canonico_y_revierte_sus_creaciones(
+def test_importa_grafo_tecnico_y_revierte_sus_creaciones(
     tmp_path: Path,
 ) -> None:
     gestor, id_ejecucion = _manifest_tecnico(tmp_path)
@@ -194,7 +198,7 @@ def test_modo_tecnico_importa_grafo_canonico_y_revierte_sus_creaciones(
     assert any("_ciar_import_created = true" in consulta for consulta in consultas)
 
 
-def test_modo_tecnico_bloqueado_no_lee_neo4j(
+def test_gate_tecnico_bloqueado_no_lee_neo4j(
     tmp_path: Path,
 ) -> None:
     gestor, id_ejecucion = _manifest_tecnico(tmp_path, decision="BLOCK_IMPORT")
