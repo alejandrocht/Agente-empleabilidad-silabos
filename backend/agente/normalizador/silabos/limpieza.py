@@ -14,6 +14,7 @@ from time import perf_counter
 from typing import Protocol, cast
 
 from docx import Document
+from openai import LengthFinishReasonError
 from pypdf import PdfReader
 
 from agente.config.settings import ConfiguracionNormalizadorCurricular
@@ -549,13 +550,24 @@ def limpiar_archivo(
             except CancelacionSolicitada:
                 raise
             except Exception as exc:
+                respuesta_truncada = isinstance(exc, LengthFinishReasonError)
                 hallazgos.append(
                     _hallazgo(
-                        "ANALISTA_TECNICO_NO_DISPONIBLE",
+                        (
+                            "ANALISTA_TECNICO_RESPUESTA_TRUNCADA"
+                            if respuesta_truncada
+                            else "ANALISTA_TECNICO_NO_DISPONIBLE"
+                        ),
                         "warning",
                         (
-                            "El analista técnico no estuvo disponible; se conserva "
-                            "el resultado determinista."
+                            "El analista técnico respondió, pero su salida fue truncada "
+                            "al alcanzar el límite de contexto/longitud; se conservan "
+                            "los resultados deterministas."
+                            if respuesta_truncada
+                            else (
+                                "El analista técnico no estuvo disponible; se conserva "
+                                "el resultado determinista."
+                            )
                         ),
                         validacion.archivo,
                         f"{type(exc).__name__}: {str(exc)[:200]}",

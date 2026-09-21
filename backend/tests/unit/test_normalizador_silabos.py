@@ -13,6 +13,7 @@ from unittest.mock import Mock
 
 import pytest
 from docx import Document
+from openai import LengthFinishReasonError
 
 from agente.config import settings
 from agente.normalizador.modelos import ProgresoLimpiezaLLM
@@ -448,6 +449,83 @@ def test_technical_mode_without_llm_builds_deterministic_contract_without_propos
     assert isinstance(approval, dict)
     assert deterministic_outputs["ok"] is True
     assert approval["ok"] is True
+
+
+def test_technical_analyzer_classifies_length_truncation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fuente = tmp_path / "Ciclo_03" / "DISENO_DE_BASES_DE_DATOS.docx"
+    fuente.parent.mkdir()
+    _crear_docx(fuente)
+    validacion = validar_archivo(fuente, "Ingeniería de Sistemas", "2030-1")
+    configuracion = replace(
+        settings.configuracion_normalizador_curricular(),
+        ruta_catalogo_tecnico="catalogo-tecnico.xlsx",
+    )
+    monkeypatch.setattr(
+        analista_tecnico,
+        "inferir_competencias_tecnicas",
+        Mock(side_effect=LengthFinishReasonError(completion=Mock())),
+    )
+
+    ejecucion = tmp_path / "ejecucion"
+    resultado = limpiar_archivo(
+        fuente,
+        ejecucion,
+        validacion,
+        usar_llm=True,
+        configuracion_curricular=configuracion,
+    )
+
+    hallazgo = next(
+        hallazgo
+        for hallazgo in resultado.hallazgos
+        if hallazgo.codigo.startswith("ANALISTA_TECNICO_")
+    )
+    assert hallazgo.codigo == "ANALISTA_TECNICO_RESPUESTA_TRUNCADA"
+    assert hallazgo.mensaje == (
+        "El analista técnico respondió, pero su salida fue truncada al alcanzar "
+        "el límite de contexto/longitud; se conservan los resultados deterministas."
+    )
+    analisis = json.loads(
+        (ejecucion / "salidas" / "reportes" / "analisis_tecnico.json").read_text(encoding="utf-8")
+    )
+    assert analisis["estado"] == "FALLBACK_DETERMINISTA"
+    assert resultado.publicable is False
+    assert resultado.release_gate["decision"] == "BLOCK_IMPORT"
+    blockers = resultado.release_gate["blockers"]
+    assert isinstance(blockers, list)
+    assert "TECHNICAL_ANALYSIS_FAILED" in blockers
+
+
+def test_technical_analyzer_classifies_unrelated_failure_as_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fuente = tmp_path / "Ciclo_03" / "DISENO_DE_BASES_DE_DATOS.docx"
+    fuente.parent.mkdir()
+    _crear_docx(fuente)
+    validacion = validar_archivo(fuente, "Ingeniería de Sistemas", "2030-1")
+    configuracion = replace(
+        settings.configuracion_normalizador_curricular(),
+        ruta_catalogo_tecnico="catalogo-tecnico.xlsx",
+    )
+    monkeypatch.setattr(
+        analista_tecnico,
+        "inferir_competencias_tecnicas",
+        Mock(side_effect=RuntimeError("fallo no relacionado")),
+    )
+
+    resultado = limpiar_archivo(
+        fuente,
+        tmp_path / "ejecucion",
+        validacion,
+        usar_llm=True,
+        configuracion_curricular=configuracion,
+    )
+
+    assert any(
+        hallazgo.codigo == "ANALISTA_TECNICO_NO_DISPONIBLE" for hallazgo in resultado.hallazgos
+    )
 
 
 def test_technical_analyzer_without_valid_proposals_records_warning(
