@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Offline technical competency benchmark JSONL row",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["kind", "description"],
+      "properties": {
+        "kind": {"const": "metadata"},
+        "description": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "case_id",
+        "career",
+        "learning_outcomes",
+        "catalog_candidates",
+        "expected"
+      ],
+      "properties": {
+        "case_id": {"type": "string", "minLength": 1},
+        "career": {"type": "string", "minLength": 1},
+        "learning_outcomes": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "catalog_candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["catalogo_ref", "nombre", "descripcion"],
+            "properties": {
+              "catalogo_ref": {"type": "string", "minLength": 1},
+              "nombre": {"type": "string", "minLength": 1},
+              "descripcion": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          }
+        },
+        "expected": {
+          "type": "object",
+          "required": ["catalogo_refs", "evidence"],
+          "properties": {
+            "catalogo_refs": {"type": "array", "items": {"type": "string"}},
+            "evidence": {"type": "array", "items": {"type": "string"}},
+            "allow_fallback": {"type": "boolean", "default": false}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

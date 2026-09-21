@@ -66,10 +66,14 @@ class CatalogoTecnico:
     hoja: str
 
     def para_carrera(self, carrera: str) -> tuple[CandidatoTecnico, ...]:
-        carrera_exacta = _texto(carrera)
+        carrera_clave = clave_catalogo(carrera)
         return tuple(
             sorted(
-                (candidato for candidato in self.candidatos if candidato.carrera == carrera_exacta),
+                (
+                    candidato
+                    for candidato in self.candidatos
+                    if clave_catalogo(candidato.carrera) == carrera_clave
+                ),
                 key=lambda candidato: (clave_catalogo(candidato.nombre), candidato.referencia),
             )
         )
@@ -188,7 +192,7 @@ def _cargar_filas_xlsx(origen: Path) -> tuple[tuple[CandidatoTecnico, ...], str]
 
 
 def cargar_catalogo_tecnico(ruta: Path | str) -> CatalogoTecnico:
-    """Load the supported technical catalog formats without career aliases."""
+    """Load supported technical catalog formats with normalized career matching."""
 
     origen = Path(ruta).expanduser().resolve()
     if not origen.is_file():
@@ -229,7 +233,8 @@ SYSTEM_PROMPT_TECNICO = (
     "but literal evidence from learning outcomes and at least one copied learning outcome "
     "remain mandatory. Do not request or return confidence. Do not use generic or "
     "institutional competencies as technical competencies, do not invent tools, and do not "
-    "expose chain of thought. The career catalog contains candidates, not facts: choose a "
+    "expose chain of thought. The career catalog contains candidates, not facts. Use "
+    "career-scoped candidates to guide the desired technical vocabulary, but choose a "
     "candidate only if the syllabus learning outcomes support it. If none applies, use "
     "catalogo_ref=null and propose a new technical competency, which will remain pending human "
     "approval. For every proposal, include at least one general or specific learning outcome "
@@ -281,17 +286,11 @@ def construir_contexto_tecnico(
     logros: list[dict[str, object]] = []
     logro_general = _texto(datos.get("logro_general"))
     if logro_general:
-        logros.append({"tipo": "general", "orden": "", "texto": logro_general})
-    for indice, logro in enumerate(_lista_mapeos(datos.get("logros_especificos")), start=1):
+        logros.append({"texto": logro_general})
+    for logro in _lista_mapeos(datos.get("logros_especificos")):
         texto = _texto(logro.get("descripcion") or logro.get("logro"))
         if texto:
-            logros.append(
-                {
-                    "tipo": "especifico",
-                    "orden": _texto(logro.get("orden")) or str(indice),
-                    "texto": texto,
-                }
-            )
+            logros.append({"texto": texto})
     return {
         "id_curso": _texto(registro.get("id_curso")),
         "id_silabo": _texto(registro.get("id_silabo")),
