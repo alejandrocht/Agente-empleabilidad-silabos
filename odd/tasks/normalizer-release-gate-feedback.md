@@ -16,6 +16,8 @@ Users must be able to tell the difference between a completed-but-technically-bl
 
 - `frontend/src/components/InspeccionEjecucionNormalizador.jsx`
 - `frontend/src/components/InspeccionEjecucionNormalizador.test.jsx`
+- `backend/agente/normalizador/silabos/limpieza.py`
+- `backend/tests/unit/test_normalizador_silabos.py`
 
 ## Constraints
 
@@ -24,6 +26,7 @@ Users must be able to tell the difference between a completed-but-technically-bl
 - Keep the patch minimal and reuse existing manifest/release-gate helpers.
 - Preserve Spanish UI copy because the existing product UI is Spanish.
 - Commit and push to `test/local-llm-technical-pipeline` were explicitly authorized after verification.
+- Ollama context size is configured outside the OpenAI-compatible request path; this repository change classifies the resulting failure accurately but does not alter the Ollama runtime setting.
 
 ## Execution configuration
 
@@ -52,23 +55,48 @@ Users must be able to tell the difference between a completed-but-technically-bl
   - Run the focused component test file.
   - Inspect the final diff for unrelated changes and accidental debug output.
 
+- [x] **NRG-4 — Add truncation-classification regression**
+  - Reproduce `LengthFinishReasonError` through the public cleanup seam.
+  - Assert the warning code identifies a truncated response rather than an unavailable analyst.
+  - Preserve the generic unavailable warning for unrelated exceptions.
+  - Evidence: focused RED observed the old `ANALISTA_TECNICO_NO_DISPONIBLE`; focused GREEN passed after classification.
+
+- [x] **NRG-5 — Classify truncated analyst output**
+  - Map `LengthFinishReasonError` to `ANALISTA_TECNICO_RESPUESTA_TRUNCADA` with accurate Spanish copy.
+  - Preserve deterministic fallback, error detail, and release-gate blocking.
+  - Keep all non-length failures on `ANALISTA_TECNICO_NO_DISPONIBLE`.
+
+- [x] **NRG-6 — Verify backend behavior**
+  - Run the exact focused backend regression.
+  - Run the relevant normalizer syllabus unit file when focused behavior is green.
+  - Inspect the final diff and preserve unrelated worktree changes.
+  - Evidence: focused regression passed 1/1; full syllabus unit file passed 26/26; independent verification and parent spot check found no blockers.
+
 ## Acceptance criteria
 
 - A `TECHNICAL_ANALYSIS_FAILED` run with zero pending approvals does not suggest that the user must resolve human decisions.
 - The UI identifies that technical analysis was unavailable/failed and that publication was blocked by the gate.
 - The Review tab remains truthfully empty when no decisions exist.
 - A payload containing only `checks.approval.pending_count > 0` activates the Review flow.
+- `LengthFinishReasonError` produces `ANALISTA_TECNICO_RESPUESTA_TRUNCADA`, not `ANALISTA_TECNICO_NO_DISPONIBLE`.
+- Generic analyst failures retain `ANALISTA_TECNICO_NO_DISPONIBLE`.
+- Deterministic fallback and release-gate blocking remain unchanged.
 - Focused tests pass.
 
 ## Progress
 
 - Diagnosis confirmed from the live payload supplied by the user.
-- Root cause: technical analyst unavailable, deterministic fallback completed, gate intentionally blocked publication.
+- Initial payload classified the analyst as unavailable, but the captured exception proved the model responded and its structured output was truncated at the 4095-token context boundary; deterministic fallback completed and the gate intentionally blocked publication.
 - NRG-1 completed with observed RED/GREEN evidence.
 - NRG-2 completed with explicit technical-blocker feedback, `pending_count` support, and simplified JSX rendering.
 - NRG-3 completed through writer verification, an independent verifier, and a parent spot check.
 - Source/test work-unit commit: `31a5f2b1edace9bebfbaa728cfef76ed4a8b9079` (`fix(normalizer): explain gate blockers`).
-- Push to `test/local-llm-technical-pipeline` was authorized; remote confirmation is reported after delivery.
+- Frontend commits were pushed to `test/local-llm-technical-pipeline` and remote head was confirmed at `109f2ded2dc2d1eb2e0cf07a5eaa08c8d14f17c0`.
+- A live run then exposed `LengthFinishReasonError` at 4095 total tokens; the user authorized a backend classification fix with tests and another push to the same branch.
+- NRG-4 and NRG-5 completed through delegated strict TDD; the focused regression passed and the full syllabus unit file reported 26 passing tests.
+- NRG-6 completed through an independent verifier and parent spot check against the post-format source.
+- Backend source/test work-unit commit: `fa50fc2acb53c8c122802014293eb01454062d76` (`fix(normalizer): classify truncated output`).
+- Next step: commit this updated ODD evidence and push both commits selectively to `test/local-llm-technical-pipeline`.
 
 ## Verification evidence
 
@@ -81,4 +109,9 @@ Users must be able to tell the difference between a completed-but-technically-bl
 - Two parent spot-check attempts failed before execution because npm was invoked from the repository parent without `frontend/package.json`; a delegated incident check confirmed these were invocation errors, not source failures.
 - Native risk assessment was unavailable; the required independent verifier therefore ran.
 - Before the source commit, native review inspect created no lineage because unrelated workspace changes prevented a bounded candidate.
-- After the source commit isolated the two-file range, native assess remained unavailable and native inspect stopped on `managed_assets_outdated`; no review lineage was created. Independent verification remains the verification of record.
+- After the frontend source commit isolated the two-file range, native assess remained unavailable and native inspect stopped on `managed_assets_outdated`; no review lineage was created. Independent verification remains the verification of record.
+- Backend writer RED observed the old unavailable code; GREEN passed the new truncation regression, and the writer's full syllabus unit file passed 26/26.
+- Backend independent verifier reran the focused regression (1/1), full unit file (26/26), and scoped `git diff --check`; all passed with no correctness blockers.
+- Parent backend spot check reran the focused regression (1/1 in 0.77s); scoped `git diff --check` passed.
+- Pi-lens externally reformatted the two backend paths before commit; the parent reread the post-format diff, reran verification against it, and staged only the authorized backend pair.
+- Backend native assess remained unavailable and native inspect again stopped on `managed_assets_outdated`; no review lineage was created.
