@@ -9,6 +9,7 @@ import re
 import unicodedata
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from difflib import SequenceMatcher
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal
@@ -244,8 +245,13 @@ SYSTEM_PROMPT_TECNICO = (
     "syllabus learning outcomes support it. If no candidate is supported, catalogo_ref=null is "
     "allowed and a new technical competency may be proposed, which will remain pending human "
     "approval. For every proposal, include at least one general or specific learning outcome "
-    "copied literally and literal evidence from a learning outcome. Do not summarize or "
-    "paraphrase learning outcomes. Do not return graph IDs, institutional codes, or relationships. "
+    "copied literally and literal evidence from a learning outcome. Keep the literal source "
+    "learning outcome only in logros and evidencia: copy it "
+    "exactly there and do not summarize or paraphrase those evidence fields. For "
+    "catalogo_ref=null, "
+    "nombre_competencia and descripcion_breve_competencia must be a concise semantic abstraction, "
+    "not a full learning-outcome sentence, a restatement, or a near-verbatim paraphrase. Do not "
+    "return graph IDs, institutional codes, or relationships. "
     "When using a candidate, copy its exact catalogo_ref; Python will preserve the original name "
     "and description from the catalog. If there are no usable learning outcomes, return "
     "competencias=[] and do not force a match; that syllabus remains auditable without a "
@@ -261,6 +267,52 @@ def _texto(valor: object) -> str:
 
 def _clave_texto(valor: object) -> str:
     return _texto(valor).casefold()
+
+
+def _clave_comparacion_echo(valor: object) -> str:
+    texto = unicodedata.normalize("NFKD", _texto(valor)).casefold()
+    texto = "".join(caracter for caracter in texto if not unicodedata.combining(caracter))
+    return re.sub(r"[^a-z0-9]+", " ", texto).strip()
+
+
+def _es_echo_de_logro(propuesta: str, logro: str) -> bool:
+    propuesta_clave = _clave_comparacion_echo(propuesta)
+    logro_clave = _clave_comparacion_echo(logro)
+    if not propuesta_clave or not logro_clave:
+        return False
+    if propuesta_clave == logro_clave:
+        return True
+    propuesta_tokens = propuesta_clave.split()
+    logro_tokens = logro_clave.split()
+    if len(propuesta_tokens) < 3 or len(logro_tokens) < 3:
+        return False
+    cobertura_logro = len(set(propuesta_tokens) & set(logro_tokens)) / len(set(logro_tokens))
+    if cobertura_logro < 0.75:
+        return False
+    if propuesta_clave in logro_clave or logro_clave in propuesta_clave:
+        return True
+    return SequenceMatcher(None, propuesta_clave, logro_clave).ratio() >= 0.84
+
+
+def _propuesta_nueva_repite_logro(
+    propuesta: CompetenciaTecnicaInferida,
+    contexto: Mapping[str, object],
+) -> bool:
+    if _texto(propuesta.catalogo_ref):
+        return False
+    logros = [
+        _texto(logro.get("texto"))
+        for logro in _lista_mapeos(contexto.get("logros"))
+        if _texto(logro.get("texto"))
+    ]
+    return any(
+        _es_echo_de_logro(campo, logro)
+        for campo in (
+            propuesta.nombre_competencia,
+            propuesta.descripcion_breve_competencia,
+        )
+        for logro in logros
+    )
 
 
 def _lista_mapeos(valor: object) -> list[Mapping[str, object]]:
@@ -346,7 +398,9 @@ def construir_prompt_tecnico(
         human_message += (
             "\n\nReconsiderá el análisis: hay resultados de aprendizaje utilizables. "
             "Devolvé al menos una competencia técnica con un logro general o específico "
-            "copiado literalmente y evidencia literal válida; no inventes relaciones."
+            "copiado literalmente y evidencia literal válida; para propuestas nuevas, "
+            "usá una abstracción semántica concisa en nombre y descripción, no repitas ni "
+            "parafrasees el resultado de aprendizaje; no inventes relaciones."
         )
     return [("system", SYSTEM_PROMPT_TECNICO), ("human", human_message)]
 
@@ -468,37 +522,6 @@ def _materializar_propuesta(
     return fila
 
 
-def _propuesta_minima_desde_evidencia(
-    contexto: Mapping[str, object],
-) -> CompetenciaTecnicaInferida:
-    logros = [
-        _texto(logro.get("texto"))
-        for logro in _lista_mapeos(contexto.get("logros"))
-        if _texto(logro.get("texto"))
-    ][:8]
-    nombre_curso = _texto(contexto.get("nombre_curso"))
-    nombre = (
-        f"Competencia técnica de {nombre_curso}"
-        if nombre_curso
-        else "Competencia técnica propuesta"
-    )[:240]
-    descripcion = (
-        f"Aplica capacidades técnicas evidenciadas en los resultados de aprendizaje: {logros[0]}"
-    )[:1200]
-    return CompetenciaTecnicaInferida(
-        nombre_competencia=nombre,
-        descripcion_breve_competencia=descripcion,
-        logros=logros,
-        evidencia=[
-            EvidenciaCompetenciaTecnica(fuente="logro", fragmento=logro) for logro in logros
-        ],
-        justificacion=(
-            "Propuesta mínima generada a partir de evidencia literal del sílabo "
-            "para mantener la revisión técnica humana."
-        ),
-    )
-
-
 def inferir_competencias_tecnicas(
     registros: Sequence[Mapping[str, object]],
     configuracion: ConfiguracionNormalizadorCurricular,
@@ -593,11 +616,17 @@ def inferir_competencias_tecnicas(
                 )
             raise
 
+        abstraccion_rechazada = False
+
         def materializar_respuesta(
             respuesta_actual: RespuestaCompetenciasTecnicas,
         ) -> list[dict[str, object]]:
+            nonlocal abstraccion_rechazada
             filas: list[dict[str, object]] = []
             for propuesta in respuesta_actual.competencias:
+                if _propuesta_nueva_repite_logro(propuesta, contexto):
+                    abstraccion_rechazada = True
+                    continue
                 fila = _materializar_propuesta(
                     propuesta,
                     contexto,
@@ -633,25 +662,6 @@ def inferir_competencias_tecnicas(
                 )
             propuestas_validas_filas = materializar_respuesta(respuesta_reintento)
 
-        if not propuestas_validas_filas:
-            fallback = _materializar_propuesta(
-                _propuesta_minima_desde_evidencia(contexto),
-                contexto,
-                candidatos,
-                exigir_logro=True,
-                catalogo=catalogo,
-            )
-            if fallback is not None:
-                fallback["origen_propuesta"] = "FALLBACK_EVIDENCIA"
-                clave_fallback = (
-                    _texto(fallback["id_silabo"]),
-                    _clave_texto(fallback["nombre_competencia"]),
-                    tuple(fallback["logros"]) if isinstance(fallback["logros"], list) else (),
-                )
-                if clave_fallback not in vistos:
-                    vistos.add(clave_fallback)
-                    propuestas_validas_filas = [fallback]
-
         propuestas_validas = len(propuestas_validas_filas)
         resultado.extend(propuestas_validas_filas)
         if al_actualizar_progreso_silabo is not None:
@@ -664,7 +674,19 @@ def inferir_competencias_tecnicas(
                     propuestas_validas=propuestas_validas,
                 )
             )
-        if propuestas_validas == 0 and auditoria is not None:
+        if auditoria is not None and abstraccion_rechazada:
+            auditoria.append(
+                {
+                    "codigo": "SILABO_PROPUESTA_TECNICA_NO_ABSTRACTA",
+                    "id_silabo": _texto(contexto.get("id_silabo")) or "<sin id>",
+                    "mensaje": (
+                        "Se rechazó una propuesta técnica nueva porque su nombre o descripción "
+                        "repite un resultado de aprendizaje y no se emitió esa respuesta "
+                        "literal como competencia."
+                    ),
+                }
+            )
+        elif propuestas_validas == 0 and auditoria is not None:
             id_silabo = _texto(contexto.get("id_silabo")) or "<sin id>"
             auditoria.append(
                 {
