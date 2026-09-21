@@ -66,11 +66,11 @@ def test_contexto_tecnico_conserva_fuentes_internas_sin_herramientas() -> None:
     assert all(set(logro) == {"texto"} for logro in contexto["logros"])
     assert contexto["programa_analitico_detalle"] == [
         {
-            "semana": "4",
             "tema": "Patrones",
             "contenido": "Patrones de arquitectura y atributos de calidad.",
         }
     ]
+    assert all("semana" not in fila for fila in contexto["programa_analitico_detalle"])
     assert "sumilla" not in contexto
     assert "semanas" not in contexto
     assert "herramientas_evidencia" not in contexto
@@ -500,12 +500,13 @@ def test_prompt_tecnico_inyecta_catalogo_completo_y_evidencia_curricular() -> No
     assert payload["logros"][1]["texto"] == "Compara patrones arquitectónicos."
     assert payload["programa_analitico_detalle"] == [
         {
-            "semana": "4",
             "tema": "Patrones",
             "contenido": "Patrones de arquitectura y atributos de calidad.",
         }
     ]
+    assert all("semana" not in fila for fila in payload["programa_analitico_detalle"])
     serializado = json.dumps(payload, ensure_ascii=False)
+    assert "semana" not in mensajes[1][1]
     assert all(
         clave not in serializado
         for clave in (
