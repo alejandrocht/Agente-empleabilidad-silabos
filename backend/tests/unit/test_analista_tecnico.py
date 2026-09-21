@@ -60,9 +60,10 @@ def test_contexto_tecnico_conserva_fuentes_internas_sin_herramientas() -> None:
     assert contexto["nombre_curso"] == "Arquitectura de software"
     assert contexto["periodo"] == ""
     assert contexto["logros"] == [
-        {"tipo": "general", "orden": "", "texto": "Diseña arquitecturas de software."},
-        {"tipo": "especifico", "orden": "1", "texto": "Compara patrones arquitectónicos."},
+        {"texto": "Diseña arquitecturas de software."},
+        {"texto": "Compara patrones arquitectónicos."},
     ]
+    assert all(set(logro) == {"texto"} for logro in contexto["logros"])
     assert contexto["programa_analitico_detalle"] == [
         {
             "semana": "4",
@@ -390,9 +391,10 @@ def test_carga_catalogo_tecnico_normaliza_carrera_y_asigna_referencia(tmp_path: 
 
     catalogo = analista_tecnico.cargar_catalogo_tecnico(ruta)
 
-    candidatos = catalogo.para_carrera("Ingeniería de Sistemas")
+    candidatos = catalogo.para_carrera("INGENIERIA_DE_SISTEMAS")
     assert len(candidatos) == 1
-    assert catalogo.para_carrera("INGENIERIA_DE_SISTEMAS") == ()
+    assert catalogo.para_carrera("ingeniería_de_sistemas") == candidatos
+    assert candidatos[0].carrera == "Ingeniería de Sistemas"
     assert candidatos[0].nombre == "Diseñar arquitecturas de software"
     assert candidatos[0].referencia.startswith("CATTEC_")
     assert len(candidatos[0].referencia.removeprefix("CATTEC_")) == 16
@@ -422,10 +424,11 @@ def test_catalogo_tecnico_del_repositorio_cubre_las_carreras_del_frontend() -> N
         "Psicología",
     }
     assert len(catalogo.para_carrera("Ingeniería de Sistemas")) == 26
+    assert len(catalogo.para_carrera("INGENIERIA_DE_SISTEMAS")) == 26
     assert catalogo.para_carrera("SISTEMAS") == ()
 
 
-def test_carga_catalogo_csv_separa_carreras_y_exige_match_exacto(tmp_path: Path) -> None:
+def test_carga_catalogo_csv_separa_carreras_y_normaliza_match(tmp_path: Path) -> None:
     ruta = tmp_path / "catalogo.csv"
     ruta.write_text(
         "\ufeffid_competencia,nombre_competencia,descripcion_breve_competencia,"
@@ -444,21 +447,42 @@ def test_carga_catalogo_csv_separa_carreras_y_exige_match_exacto(tmp_path: Path)
     candidatos = catalogo.para_carrera("SISTEMAS")
     assert [candidato.nombre for candidato in candidatos] == ["Arquitectura de software"]
     assert catalogo.para_carrera("INDUSTRIAL")[0].referencia == candidatos[0].referencia
-    assert catalogo.para_carrera("INGENIERIA_DE_SISTEMAS") == ()
-    assert catalogo.para_carrera("sistemas") == ()
+    assert len(catalogo.para_carrera("INGENIERIA_DE_SISTEMAS")) == 0
+    assert catalogo.para_carrera("sistemas") == candidatos
     assert catalogo.hoja == "CSV"
 
 
-def test_prompt_tecnico_inyecta_solo_catalogo_y_evidencia_curricular() -> None:
-    candidato = analista_tecnico.CandidatoTecnico(
-        "CATTEC_1234567890abcdef",
-        "Ingeniería de Sistemas",
-        "Diseñar arquitecturas de software",
-        "Seleccionar estructuras y patrones técnicos.",
-        2,
+def test_prompt_tecnico_inyecta_catalogo_completo_y_evidencia_curricular() -> None:
+    candidatos_catalogo = (
+        analista_tecnico.CandidatoTecnico(
+            "CATTEC_1234567890abcdef",
+            "Ingeniería de Sistemas",
+            "Diseñar arquitecturas de software",
+            "Seleccionar estructuras y patrones técnicos.",
+            2,
+        ),
+        analista_tecnico.CandidatoTecnico(
+            "CATTEC_fedcba0987654321",
+            "Ingeniería de Sistemas",
+            "Evaluar atributos de calidad",
+            "Evaluar atributos técnicos en una arquitectura.",
+            3,
+        ),
+        analista_tecnico.CandidatoTecnico(
+            "CATTEC_aaaaaaaaaaaaaaaa",
+            "Marketing",
+            "Diseñar campañas",
+            "Planificar campañas medibles.",
+            4,
+        ),
+    )
+    catalogo = analista_tecnico.CatalogoTecnico(
+        candidatos_catalogo, "catalogo.xlsx", "a" * 64, "Catalogo"
     )
     registro = {**_registro(), "carrera": "INGENIERIA_DE_SISTEMAS", "periodo": "2026-2"}
-    contexto = analista_tecnico.construir_contexto_tecnico(registro, [candidato])
+    contexto = analista_tecnico.construir_contexto_tecnico(
+        registro, catalogo.para_carrera(registro["carrera"])
+    )
     mensajes = analista_tecnico.construir_prompt_tecnico(contexto)
     payload = json.loads(mensajes[1][1].split("\n", maxsplit=1)[1])
 
@@ -469,7 +493,10 @@ def test_prompt_tecnico_inyecta_solo_catalogo_y_evidencia_curricular() -> None:
         "programa_analitico_detalle",
         "catalogo_tecnico",
     }
-    assert payload["catalogo_tecnico"] == [candidato.a_dict()]
+    assert payload["catalogo_tecnico"] == [
+        candidato.a_dict() for candidato in candidatos_catalogo[:2]
+    ]
+    assert all(set(logro) == {"texto"} for logro in payload["logros"])
     assert payload["logros"][1]["texto"] == "Compara patrones arquitectónicos."
     assert payload["programa_analitico_detalle"] == [
         {
@@ -492,7 +519,15 @@ def test_prompt_tecnico_inyecta_solo_catalogo_y_evidencia_curricular() -> None:
             "herramientas_evidencia",
             "relaciones",
             "relationships",
+            "tipo",
+            "orden",
+            "logro_refs",
         )
+    )
+    assert "logro_refs" not in analista_tecnico.CompetenciaTecnicaInferida.model_fields
+    assert not any(
+        field.startswith("id_")
+        for field in analista_tecnico.CompetenciaTecnicaInferida.model_fields
     )
 
 
@@ -510,6 +545,7 @@ def test_system_prompt_tecnico_is_english_and_preserves_literal_candidate_rules(
     assert "literal evidence from a learning outcome" in system_message
     assert "Do not summarize or paraphrase learning outcomes." in system_message
     assert "The career catalog contains candidates, not facts" in system_message
+    assert "guide the desired technical vocabulary" in system_message
     assert "choose a candidate only if the syllabus learning outcomes support it" in system_message
     assert "catalogo_ref=null" in system_message
     assert "pending human approval" in system_message
@@ -555,7 +591,7 @@ def test_inferencia_catalogada_crea_propuesta_pendiente_y_copia_fuente(
             return AnalistaFalso()
 
     monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: LLMFalso())
-    registro = {**_registro(), "carrera": "Ingeniería de Sistemas", "periodo": "2026-2"}
+    registro = {**_registro(), "carrera": "INGENIERIA_DE_SISTEMAS", "periodo": "2026-2"}
 
     resultado = analista_tecnico.inferir_competencias_tecnicas(
         [registro], _configuracion(), catalogo
