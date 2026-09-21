@@ -143,6 +143,84 @@ describe("inspección de ejecución normalizada", () => {
     ).toBeTruthy();
   });
 
+  it("explica el bloqueo técnico sin inventar decisiones humanas pendientes", async () => {
+    const idEjecucion = "NOR_TECHNICAL_ANALYSIS_FAILED";
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: {
+        id_ejecucion: idEjecucion,
+        tipo: "silabos",
+        estado: "no_publicado",
+        parametros: { carrera: "Marketing", periodo: "2026-1" },
+        limpieza_silabos: { publicable: false, outputs: [] },
+        release_gate: {
+          decision: "BLOCK_IMPORT",
+          blockers: ["TECHNICAL_ANALYSIS_FAILED"],
+          checks: {
+            deterministic_outputs: { ok: true },
+            analysis: { ok: false, state: "FALLBACK_DETERMINISTA" },
+            approval: { ok: true, pending_count: 0 },
+          },
+        },
+        hallazgos: [
+          {
+            codigo: "ANALISTA_TECNICO_NO_DISPONIBLE",
+            severidad: "warning",
+            mensaje: "El analista técnico no estuvo disponible.",
+          },
+        ],
+      },
+      reportes: {
+        "analisis_tecnico.json": {
+          estado: "FALLBACK_DETERMINISTA",
+          propuestas_pendientes: 0,
+        },
+        "propuestas_tecnicas.jsonl": [],
+      },
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion={idEjecucion} />);
+
+    expect(
+      await screen.findByText(
+        "El análisis técnico no estuvo disponible; la publicación quedó bloqueada por el release gate.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Revisión" }));
+    expect(
+      screen.getByText("No hay decisiones humanas pendientes para esta ejecución."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Resolver .* decisión curricular/)).toBeNull();
+  });
+
+  it("activa Revisión cuando el release gate reporta pending_count sin resumen de aprobación", async () => {
+    const idEjecucion = "NOR_APPROVAL_PENDING_COUNT";
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: {
+        id_ejecucion: idEjecucion,
+        tipo: "silabos",
+        estado: "limpiado",
+        parametros: { carrera: "Marketing", periodo: "2026-1" },
+        release_gate: {
+          decision: "BLOCK_IMPORT",
+          checks: { approval: { pending_count: 2 } },
+        },
+      },
+      reportes: {},
+    });
+    obtenerPendientesNormalizador.mockResolvedValueOnce({
+      filas: [],
+      aprobacion: null,
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion={idEjecucion} />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: "Revisión" }).getAttribute("aria-selected"),
+      ).toBe("true"),
+    );
+  });
+
   it("prefiere el resumen de aprobación resuelto sobre propuestas técnicas legadas y abre CSV", async () => {
     const idEjecucion = "NOR_TECHNICAL_RESOLVED";
     obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
