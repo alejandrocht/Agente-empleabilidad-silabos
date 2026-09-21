@@ -20,12 +20,12 @@ from agente.normalizador.modelos import (
     ResultadoValidacionSilabos,
 )
 from agente.normalizador.silabos.contrato_salidas import (
-    ARCHIVOS_CURRICULARES_TECNICOS,
     filtrar_estado_publico,
     filtrar_outputs_curriculares,
     gate_permite_salidas_tecnicas,
     reporte_curricular_visible,
 )
+from agente.normalizador.silabos.salida_catalogos import ARCHIVOS_CATALOGO
 
 _ESTADOS_TERMINALES: frozenset[str] = frozenset(
     {
@@ -96,10 +96,18 @@ def _actualizar_metadatos_outputs(
         if raiz in ruta.parents and ruta.is_file():
             digest = hashlib.sha256()
             with ruta.open("rb") as contenido:
-                for bloque in iter(lambda: contenido.read(1024 * 1024), b""):
+                while bloque := contenido.read(1024 * 1024):
+                    if isinstance(bloque, str):
+                        bloque = bloque.encode("utf-8")
                     digest.update(bloque)
             actualizado["bytes"] = ruta.stat().st_size
             actualizado["sha256"] = digest.hexdigest()
+            if ruta.suffix.lower() == ".csv":
+                try:
+                    with ruta.open(encoding="utf-8-sig", newline="") as contenido:
+                        actualizado["registros"] = sum(1 for _ in csv.DictReader(contenido))
+                except (OSError, UnicodeDecodeError, csv.Error):
+                    pass
         resultado.append(actualizado)
 
     return resultado
@@ -120,8 +128,11 @@ def _reconciliar_outputs_tecnicos(
         if isinstance(outputs_value, list)
         else []
     )
-    declarados = {str(output.get("archivo") or "") for output in outputs}
-    for archivo in sorted(ARCHIVOS_CURRICULARES_TECNICOS - declarados):
+    archivos_declarados = {str(output.get("archivo") or "") for output in outputs}
+    for nombre, _columnas in ARCHIVOS_CATALOGO:
+        archivo = f"salidas/{nombre}"
+        if archivo in archivos_declarados:
+            continue
         ruta = directorio / archivo
         if not ruta.is_file():
             continue
@@ -141,6 +152,10 @@ def _reconciliar_outputs_tecnicos(
         _actualizar_metadatos_outputs(directorio, outputs),
         release_gate=gate,
     )
+    orden = {
+        f"salidas/{nombre}": indice for indice, (nombre, _columnas) in enumerate(ARCHIVOS_CATALOGO)
+    }
+    reconciliados.sort(key=lambda output: orden[str(output.get("archivo") or "")])
     actualizado = dict(estado)
     actualizado["outputs"] = reconciliados
     limpieza = actualizado.get("limpieza_silabos")
@@ -236,6 +251,19 @@ class RepositorioEjecucionesPersistidas:
             resumen_aprobacion(ejecucion.directorio) if ejecucion.tipo == "silabos" else None
         )
 
+        estado_publico: object = ejecucion.estado
+        if ejecucion.tipo == "silabos" and gate_permite_salidas_tecnicas(release_gate):
+            try:
+                manifest_persistido = json.loads(
+                    (ejecucion.directorio / "manifest.json").read_text(encoding="utf-8")
+                )
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                manifest_persistido = None
+            if isinstance(manifest_persistido, dict):
+                estado_persistido = manifest_persistido.get("estado")
+                if isinstance(estado_persistido, str):
+                    estado_publico = estado_persistido
+
         limpieza_silabos = limpieza_actual.a_dict() if limpieza_actual else None
         if ejecucion.tipo == "silabos":
             outputs = filtrar_outputs_curriculares(outputs, release_gate=release_gate)
@@ -254,7 +282,7 @@ class RepositorioEjecucionesPersistidas:
             "archivo": ejecucion.archivo,
             "parametros": dict(ejecucion.parametros),
             "configuracion_curricular": ejecucion.configuracion_curricular,
-            "estado": ejecucion.estado,
+            "estado": estado_publico,
             "creada_en": ejecucion.creada_en,
             "actualizada_en": ejecucion.actualizada_en,
             "cancelacion_solicitada": ejecucion.cancelacion_solicitada,

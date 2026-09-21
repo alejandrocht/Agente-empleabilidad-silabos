@@ -1235,7 +1235,8 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
   const mostrarAprobacionCurricular =
     !esEstadoActivo(manifest.estado) &&
     (requiereDecision ||
-      filasDePendientes(reportes).some((fila) => !filaResuelta(fila)));
+      (!aprobacionCurricular &&
+        filasDePendientes(reportes).some((fila) => !filaResuelta(fila))));
   const hallazgos = useMemo(
     () => hallazgosDe(manifest, reportes),
     [manifest, reportes],
