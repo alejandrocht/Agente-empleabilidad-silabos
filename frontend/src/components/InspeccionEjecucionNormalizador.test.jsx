@@ -143,6 +143,48 @@ describe("inspección de ejecución normalizada", () => {
     ).toBeTruthy();
   });
 
+  it("prefiere el resumen de aprobación resuelto sobre propuestas técnicas legadas y abre CSV", async () => {
+    const idEjecucion = "NOR_TECHNICAL_RESOLVED";
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      ...reporteTecnico({ id: idEjecucion }),
+      manifest: {
+        ...reporteTecnico({ id: idEjecucion }).manifest,
+        aprobacion_curricular: {
+          requiere_decision: false,
+          pendientes_por_decidir: 0,
+          remaining_pending: 0,
+          release_gate: { decision: "ALLOW_IMPORT", blockers: [] },
+          materializacion: { csv_canonicos_disponibles: true },
+        },
+      },
+      reportes: {
+        "propuestas_tecnicas.jsonl": [
+          { id_propuesta: "PROP_LEGACY", estado: "PENDIENTE" },
+        ],
+      },
+    });
+    obtenerPendientesNormalizador.mockResolvedValueOnce({
+      filas: [],
+      aprobacion: {
+        requiere_decision: false,
+        pendientes_por_decidir: 0,
+        remaining_pending: 0,
+      },
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion={idEjecucion} />);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(5));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: "CSV" }).getAttribute("aria-selected"),
+      ).toBe("true"),
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Revisión técnica requerida" }),
+    ).toBeNull();
+  });
+
   it("muestra el checkpoint humano histórico y explica por qué no habilita Neo4j sin CSV canónicos", async () => {
     const idEjecucion = "NOR_b468b1fb2b9c4268";
     obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import re
@@ -223,6 +224,43 @@ def _leer_gate(directorio: Path) -> dict[str, object]:
     return _leer_json(_reportes(directorio) / "release_gate.json")
 
 
+def _metadatos_salidas_tecnicas(
+    directorio: Path,
+    gate: Mapping[str, object],
+) -> list[dict[str, object]]:
+    if gate.get("decision") != "ALLOW_IMPORT":
+        return []
+    salidas: list[dict[str, object]] = []
+    for nombre, _columnas in salida_catalogos.ARCHIVOS_CATALOGO:
+        ruta = directorio / "salidas" / nombre
+        if not ruta.is_file():
+            return []
+        digest = hashlib.sha256()
+        try:
+            with ruta.open("rb") as contenido:
+                while bloque := contenido.read(1024 * 1024):
+                    if isinstance(bloque, str):
+                        bloque = bloque.encode("utf-8")
+                    digest.update(bloque)
+            with ruta.open(encoding="utf-8-sig", newline="") as contenido:
+                registros = sum(1 for _ in csv.DictReader(contenido))
+            bytes_archivo = ruta.stat().st_size
+        except (OSError, UnicodeDecodeError, csv.Error) as exc:
+            raise DecisionCurricularInvalida(
+                f"No se pudo recalcular la metadata de {nombre}."
+            ) from exc
+        salidas.append(
+            {
+                "tipo": "csv_curricular",
+                "archivo": f"salidas/{nombre}",
+                "registros": registros,
+                "bytes": bytes_archivo,
+                "sha256": digest.hexdigest(),
+            }
+        )
+    return salidas
+
+
 def _resumen(
     directorio: Path,
     propuestas: Sequence[Mapping[str, object]],
@@ -232,6 +270,7 @@ def _resumen(
     decisiones = [str(fila.get("decision") or "") for fila in filas]
     pendientes = sum(decision in {"", "KEEP_PENDING"} for decision in decisiones)
     gate = _leer_gate(directorio)
+    outputs = _metadatos_salidas_tecnicas(directorio, gate)
     return {
         "requiere_decision": pendientes > 0,
         "total": len(filas),
@@ -250,10 +289,8 @@ def _resumen(
         },
         "revision": _revision(propuestas, journal),
         "materializacion": {
-            "csv_canonicos_disponibles": all(
-                (directorio / "salidas" / nombre).is_file()
-                for nombre, _ in salida_catalogos.ARCHIVOS_CATALOGO
-            )
+            "csv_canonicos_disponibles": bool(outputs),
+            "outputs": outputs,
         },
         "release_gate": gate,
     }
@@ -412,15 +449,50 @@ def _gate_tecnico(
     return resultado
 
 
+def _tiene_advertencias(manifest: Mapping[str, object]) -> bool:
+    valores = [manifest.get("hallazgos")]
+    limpieza = manifest.get("limpieza_silabos")
+    if isinstance(limpieza, Mapping):
+        valores.append(limpieza.get("hallazgos"))
+    return any(
+        isinstance(valor, list)
+        and any(
+            isinstance(hallazgo, Mapping) and hallazgo.get("severidad") == "warning"
+            for hallazgo in valor
+        )
+        for valor in valores
+    )
+
+
 def _persistir_manifest(
     directorio: Path,
     manifest: Mapping[str, object],
     gate: Mapping[str, object],
     resumen: Mapping[str, object],
 ) -> None:
+    outputs = _metadatos_salidas_tecnicas(directorio, gate)
+    if gate.get("decision") == "ALLOW_IMPORT" and len(outputs) != len(
+        salida_catalogos.ARCHIVOS_CATALOGO
+    ):
+        raise DecisionCurricularInvalida(
+            "El gate permite publicar, pero no están disponibles los cinco CSV canónicos."
+        )
     actualizado = dict(manifest)
     actualizado["release_gate"] = dict(gate)
     actualizado["aprobacion_curricular"] = dict(resumen)
+    actualizado["outputs"] = outputs
+    if gate.get("decision") == "ALLOW_IMPORT":
+        actualizado["estado"] = (
+            "limpiado_con_advertencias" if _tiene_advertencias(actualizado) else "limpiado"
+        )
+    limpieza = actualizado.get("limpieza_silabos")
+    if isinstance(limpieza, Mapping):
+        limpieza_actualizada = dict(limpieza)
+        limpieza_actualizada["outputs"] = outputs
+        limpieza_actualizada["release_gate"] = dict(gate)
+        if gate.get("decision") == "ALLOW_IMPORT":
+            limpieza_actualizada["publicable"] = True
+        actualizado["limpieza_silabos"] = limpieza_actualizada
     actualizado["actualizada_en"] = datetime.now(UTC).isoformat()
     _escribir_json_atomico(directorio / "manifest.json", actualizado)
 
@@ -541,6 +613,7 @@ def aplicar_decisiones(
         if not validadas:
             resumen = _resumen(directorio, propuestas, journal)
             return {
+                "estado": str(manifest.get("estado") or ""),
                 "aprobacion": resumen,
                 "filas": _filas_actuales(propuestas, journal),
                 "revision": revision_actual,
@@ -586,7 +659,15 @@ def aplicar_decisiones(
             _restaurar_arbol(directorio, snapshot)
             raise
 
+        estado = (
+            "limpiado_con_advertencias"
+            if gate.get("decision") == "ALLOW_IMPORT" and _tiene_advertencias(manifest)
+            else "limpiado"
+            if gate.get("decision") == "ALLOW_IMPORT"
+            else str(manifest.get("estado") or "")
+        )
         return {
+            "estado": estado,
             "aprobacion": resumen,
             "filas": _filas_actuales(propuestas, journal_candidato),
             "revision": _revision(propuestas, journal_candidato),
