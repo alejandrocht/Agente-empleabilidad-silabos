@@ -280,6 +280,7 @@ function pendientesPorDecidirDe(manifest, reportes, aprobacion, gate) {
   const explicitos = numeroNoNegativo(
     aprobacion?.pendientes_por_decidir,
     aprobacion?.pending_decision,
+    gate?.checks?.approval?.pending_count,
     gate?.checks?.approval?.pending_decision,
     gate?.checks?.approval?.pendingDecision,
   );
@@ -297,6 +298,7 @@ function requiereDecisionCurricular(manifest, aprobacion, gate, pendientes) {
   return (
     aprobacion?.requiere_decision === true ||
     manifest?.requiere_decision === true ||
+    numeroNoNegativo(gate?.checks?.approval?.pending_count) > 0 ||
     numeroNoNegativo(gate?.checks?.approval?.pending_decision) > 0 ||
     pendientes > 0
   );
@@ -322,6 +324,20 @@ function vistasPreviasCompletas(salidas, previews, nombres) {
       preview.encabezados.length > 0
     );
   });
+}
+
+function tieneFalloAnalisisTecnico(manifest, gate) {
+  const blockers = Array.isArray(gate?.blockers) ? gate.blockers : [];
+  const estadoAnalisis = String(gate?.checks?.analysis?.state || "").toUpperCase();
+  return (
+    blockers.includes("TECHNICAL_ANALYSIS_FAILED") ||
+    estadoAnalisis === "FALLBACK_DETERMINISTA" ||
+    (Array.isArray(manifest?.hallazgos) &&
+      manifest.hallazgos.some(
+        (hallazgo) =>
+          findingCode(hallazgo) === "ANALISTA_TECNICO_NO_DISPONIBLE",
+      ))
+  );
 }
 
 function releaseGatePermiteImportar(gate, salidas, previews) {
@@ -1232,6 +1248,22 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
     salidas,
     estado.previews,
   );
+  const analisisTecnicoFallido = tieneFalloAnalisisTecnico(
+    manifest,
+    releaseGate,
+  );
+  let mensajePublicacion =
+    "Los resultados se presentan como evidencia de solo lectura.";
+  let publicacionBloqueada = false;
+  if (analisisTecnicoFallido) {
+    mensajePublicacion =
+      "El análisis técnico no estuvo disponible; la publicación quedó bloqueada por el release gate.";
+    publicacionBloqueada = true;
+  } else if (manifest.limpieza_silabos?.publicable === false) {
+    mensajePublicacion =
+      "La ejecución quedó marcada como no publicable; los artefactos siguen disponibles para revisión.";
+    publicacionBloqueada = true;
+  }
   const mostrarAprobacionCurricular =
     !esEstadoActivo(manifest.estado) &&
     (requiereDecision ||
@@ -1495,17 +1527,7 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
                         : "El estado final no está disponible."}
                     </Check>
                   )}
-                  {manifest.limpieza_silabos?.publicable === false ? (
-                    <Check ok={false}>
-                      La ejecución quedó marcada como no publicable; los
-                      artefactos siguen disponibles para revisión.
-                    </Check>
-                  ) : (
-                    <Check>
-                      Los resultados se presentan como evidencia de solo
-                      lectura.
-                    </Check>
-                  )}
+                  <Check ok={!publicacionBloqueada}>{mensajePublicacion}</Check>
                 </ul>
               </section>
 
