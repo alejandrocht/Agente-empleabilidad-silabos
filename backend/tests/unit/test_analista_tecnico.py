@@ -138,7 +138,7 @@ def test_inferencia_estructurada_conserva_evidencia_y_relaciones(
     assert "No debe enviarse" not in str(llamadas["mensajes"])
 
 
-def test_inferencia_usa_logro_general_para_propuesta_minima(
+def test_inferencia_acepta_abstraccion_concisa_con_evidencia_literal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class AnalistaFalso:
@@ -173,16 +173,33 @@ def test_inferencia_usa_logro_general_para_propuesta_minima(
     assert resultado[0]["evidencia"] == [{"fuente": "logro", "fragmento": "Diseña arquitecturas"}]
 
 
-def test_inferencia_genera_propuesta_minima_si_llm_no_materializa_ninguna(
+def test_inferencia_reintenta_y_no_fabrica_fallback_literal_si_llm_repite_logro(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     llamadas = 0
+    auditoria: list[dict[str, object]] = []
 
     class AnalistaFalso:
         def invoke(self, _mensajes: object) -> object:
             nonlocal llamadas
             llamadas += 1
-            return {"competencias": []}
+            return {
+                "competencias": [
+                    {
+                        "nombre_competencia": "Diseña arquitecturas de software.",
+                        "descripcion_breve_competencia": (
+                            "Diseña arquitecturas de software para sistemas mantenibles."
+                        ),
+                        "evidencia": [
+                            {
+                                "fuente": "logro",
+                                "fragmento": "Diseña arquitecturas de software.",
+                            }
+                        ],
+                        "justificacion": "La propuesta usa el logro como evidencia.",
+                    }
+                ]
+            }
 
     class LLMFalso:
         def with_structured_output(self, schema: object, *, method: str) -> object:
@@ -190,21 +207,23 @@ def test_inferencia_genera_propuesta_minima_si_llm_no_materializa_ninguna(
 
     monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: LLMFalso())
 
-    resultado = analista_tecnico.inferir_competencias_tecnicas([_registro()], _configuracion())
+    resultado = analista_tecnico.inferir_competencias_tecnicas(
+        [_registro()], _configuracion(), auditoria=auditoria
+    )
 
     assert llamadas == 2
-    assert len(resultado) == 1
-    assert resultado[0]["id_silabo"] == "SIL_1"
-    assert resultado[0]["nombre_competencia"] == "Competencia técnica de Arquitectura de software"
-    assert resultado[0]["logros"] == [
-        "Diseña arquitecturas de software.",
-        "Compara patrones arquitectónicos.",
+    assert resultado == []
+    assert auditoria == [
+        {
+            "codigo": "SILABO_PROPUESTA_TECNICA_NO_ABSTRACTA",
+            "id_silabo": "SIL_1",
+            "mensaje": (
+                "Se rechazó una propuesta técnica nueva porque su nombre o descripción "
+                "repite un resultado de aprendizaje y no se emitió esa respuesta "
+                "literal como competencia."
+            ),
+        }
     ]
-    assert resultado[0]["evidencia"] == [
-        {"fuente": "logro", "fragmento": "Diseña arquitecturas de software."},
-        {"fuente": "logro", "fragmento": "Compara patrones arquitectónicos."},
-    ]
-    assert resultado[0]["origen_propuesta"] == "FALLBACK_EVIDENCIA"
 
 
 def test_inferencia_registra_advertencia_para_evidencia_literal_invalida(
@@ -236,13 +255,16 @@ def test_inferencia_registra_advertencia_para_evidencia_literal_invalida(
         [_registro()], _configuracion(), auditoria=auditoria
     )
 
-    assert len(resultado) == 1
-    assert resultado[0]["origen_propuesta"] == "FALLBACK_EVIDENCIA"
-    assert resultado[0]["evidencia"] == [
-        {"fuente": "logro", "fragmento": "Diseña arquitecturas de software."},
-        {"fuente": "logro", "fragmento": "Compara patrones arquitectónicos."},
+    assert resultado == []
+    assert auditoria == [
+        {
+            "codigo": "SILABO_SIN_PROPUESTA_TECNICA",
+            "id_silabo": "SIL_1",
+            "mensaje": (
+                "El sílabo no produjo ninguna propuesta técnica con evidencia literal válida."
+            ),
+        }
     ]
-    assert auditoria == []
 
 
 def test_inferencia_conserva_propuestas_validas_de_otros_silabos(
@@ -283,10 +305,17 @@ def test_inferencia_conserva_propuestas_validas_de_otros_silabos(
         [_registro(), segundo], _configuracion(), auditoria=auditoria
     )
 
-    assert [fila["id_silabo"] for fila in resultado] == ["SIL_1", "SIL_2"]
-    assert resultado[0]["origen_propuesta"] == "FALLBACK_EVIDENCIA"
-    assert resultado[1]["origen_propuesta"] == "LLM_NUEVA"
-    assert auditoria == []
+    assert [fila["id_silabo"] for fila in resultado] == ["SIL_2"]
+    assert resultado[0]["origen_propuesta"] == "LLM_NUEVA"
+    assert auditoria == [
+        {
+            "codigo": "SILABO_SIN_PROPUESTA_TECNICA",
+            "id_silabo": "SIL_1",
+            "mensaje": (
+                "El sílabo no produjo ninguna propuesta técnica con evidencia literal válida."
+            ),
+        }
+    ]
 
 
 def test_inferencia_sin_logros_registra_advertencia_y_no_fabrica_propuesta(
@@ -452,6 +481,16 @@ def test_carga_catalogo_csv_separa_carreras_y_normaliza_match(tmp_path: Path) ->
     assert catalogo.hoja == "CSV"
 
 
+def test_guard_rechaza_echo_exacto_y_casi_literal_pero_acepta_abstraccion() -> None:
+    logro = "Diseña arquitecturas de software."
+
+    assert analista_tecnico._es_echo_de_logro(logro, logro)
+    assert analista_tecnico._es_echo_de_logro(
+        "Diseña arquitecturas de software para sistemas mantenibles.", logro
+    )
+    assert not analista_tecnico._es_echo_de_logro("Arquitectura de software", logro)
+
+
 def test_prompt_tecnico_separa_contexto_de_silabo_y_catalogo() -> None:
     candidatos_catalogo = (
         analista_tecnico.CandidatoTecnico(
@@ -543,6 +582,67 @@ def test_prompt_tecnico_separa_contexto_de_silabo_y_catalogo() -> None:
     )
 
 
+def test_inferencia_reintenta_y_acepta_abstraccion_despues_de_rechazo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    respuestas = [
+        {
+            "competencias": [
+                {
+                    "nombre_competencia": "Diseña arquitecturas de software.",
+                    "descripcion_breve_competencia": "Abstracción inicial inválida.",
+                    "evidencia": [
+                        {
+                            "fuente": "logro",
+                            "fragmento": "Diseña arquitecturas de software.",
+                        }
+                    ],
+                    "justificacion": "La primera respuesta repite el resultado.",
+                }
+            ]
+        },
+        {
+            "competencias": [
+                {
+                    "nombre_competencia": "Arquitectura de software",
+                    "descripcion_breve_competencia": (
+                        "Selecciona patrones según atributos de calidad."
+                    ),
+                    "evidencia": [
+                        {
+                            "fuente": "logro",
+                            "fragmento": "Compara patrones arquitectónicos.",
+                        }
+                    ],
+                    "justificacion": "La abstracción resume la capacidad demostrada.",
+                }
+            ]
+        },
+    ]
+
+    class AnalistaFalso:
+        def invoke(self, _mensajes: object) -> object:
+            return respuestas.pop(0)
+
+    class LLMFalso:
+        def with_structured_output(self, schema: object, *, method: str) -> object:
+            return AnalistaFalso()
+
+    monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: LLMFalso())
+    auditoria: list[dict[str, object]] = []
+
+    resultado = analista_tecnico.inferir_competencias_tecnicas(
+        [_registro()], _configuracion(), auditoria=auditoria
+    )
+
+    assert len(resultado) == 1
+    assert resultado[0]["nombre_competencia"] == "Arquitectura de software"
+    assert resultado[0]["origen_propuesta"] == "LLM_NUEVA"
+    assert len(respuestas) == 0
+    assert auditoria[0]["codigo"] == "SILABO_PROPUESTA_TECNICA_NO_ABSTRACTA"
+    assert auditoria[0]["id_silabo"] == "SIL_1"
+
+
 def test_system_prompt_tecnico_is_english_and_preserves_literal_candidate_rules() -> None:
     contexto = analista_tecnico.construir_contexto_tecnico(_registro())
     mensajes = analista_tecnico.construir_prompt_tecnico(contexto)
@@ -555,7 +655,10 @@ def test_system_prompt_tecnico_is_english_and_preserves_literal_candidate_rules(
     )
     assert "specific learning outcome copied literally" in system_message
     assert "literal evidence from a learning outcome" in system_message
-    assert "Do not summarize or paraphrase learning outcomes." in system_message
+    assert "do not summarize or paraphrase those evidence fields" in system_message
+    assert "concise semantic abstraction" in system_message
+    assert "not a full learning-outcome sentence" in system_message
+    assert "near-verbatim paraphrase" in system_message
     assert "The career catalog contains candidates, not facts" in system_message
     assert "guide the desired technical vocabulary" in system_message
     assert "choose a candidate only if the syllabus learning outcomes support it" in system_message
