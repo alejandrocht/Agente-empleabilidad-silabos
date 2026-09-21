@@ -266,9 +266,7 @@ def _lista_mapeos(valor: object) -> list[Mapping[str, object]]:
 def _programa_analitico_detalle(datos: Mapping[str, object]) -> list[dict[str, str]]:
     filas: list[dict[str, str]] = []
     for fila in _lista_mapeos(datos.get("programa_analitico_detalle")):
-        fila_reducida = {
-            campo: _texto(fila.get(campo)) for campo in ("semana", "tema", "contenido")
-        }
+        fila_reducida = {campo: _texto(fila.get(campo)) for campo in ("tema", "contenido")}
         if any(fila_reducida.values()):
             filas.append(fila_reducida)
     return filas
