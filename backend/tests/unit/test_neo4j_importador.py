@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import os
 import subprocess
@@ -167,6 +168,41 @@ def _manifest_tecnico(
         periodo_academico="2026-2",
     )
     return gestor, id_ejecucion
+
+
+def test_preview_detects_legacy_description_conflict_using_public_alias(
+    tmp_path: Path,
+) -> None:
+    gestor, id_ejecucion = _manifest_tecnico(tmp_path)
+    with (tmp_path / id_ejecucion / "salidas" / "catalogo_competencias.csv").open(
+        encoding="utf-8-sig", newline=""
+    ) as archivo:
+        id_competencia = next(csv.DictReader(archivo))["id_competencia"]
+    driver = FakeDriver(
+        graph={
+            "competencias": [
+                {
+                    "id_competencia": id_competencia,
+                    "descripcion_breve": "Descripción anterior.",
+                }
+            ]
+        }
+    )
+    importador = ImportadorNeo4j(gestor, driver_factory=lambda: driver)
+
+    preview = importador.previsualizar(id_ejecucion)
+
+    assert preview["puede_importar"] is False
+    conflicto = next(
+        conflicto
+        for conflicto in preview["conflictos"]
+        if conflicto["archivo"] == "catalogo_competencias.csv"
+    )
+    assert "descripcion_breve" in conflicto["mensaje"]
+    assert any(
+        "n.descripcion_breve_competencia AS descripcion_breve" in consulta
+        for consulta in driver.session_obj.queries
+    )
 
 
 def test_importa_grafo_tecnico_y_revierte_sus_creaciones(

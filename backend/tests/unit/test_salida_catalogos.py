@@ -65,6 +65,28 @@ def _leer_csv(ruta: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(archivo))
 
 
+def test_catalogo_competencias_emite_header_publico_y_conserva_descripcion(
+    tmp_path: Path,
+) -> None:
+    construir_catalogos_curriculares(
+        [_registro()],
+        tmp_path,
+        carrera="SISTEMAS",
+        periodo_academico="2026-2",
+    )
+
+    ruta = tmp_path / "catalogo_competencias.csv"
+    lineas = ruta.read_text(encoding="utf-8-sig").splitlines()
+    assert lineas[0] == (
+        "id_competencia,nombre_competencia,descripcion_breve,tipo_competencia,codigo_competencia"
+    )
+    filas = list(csv.DictReader(lineas))
+
+    assert filas
+    assert all(fila["descripcion_breve"] for fila in filas)
+    assert all("descripcion_breve_competencia" not in fila for fila in filas)
+
+
 def test_materializa_contrato_curricular_sin_herramientas(tmp_path: Path) -> None:
     registro = _registro()
     tecnica = {

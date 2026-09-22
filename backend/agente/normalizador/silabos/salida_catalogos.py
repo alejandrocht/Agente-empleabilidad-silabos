@@ -38,7 +38,7 @@ SILABOS_SCHEMA = (
 COMPETENCIAS_SCHEMA = (
     "id_competencia",
     "nombre_competencia",
-    "descripcion_breve_competencia",
+    "descripcion_breve",
     "tipo_competencia",
     "codigo_competencia",
 )
@@ -569,8 +569,14 @@ def construir_catalogos_curriculares(
         "cobertura_curricular.csv": list(coberturas.values()),
     }
     for nombre, columnas in ARCHIVOS_CATALOGO:
+        filas = filas_por_archivo[nombre]
+        if nombre == "catalogo_competencias.csv":
+            filas = [
+                {**fila, "descripcion_breve": fila["descripcion_breve_competencia"]}
+                for fila in filas
+            ]
         filas = sorted(
-            filas_por_archivo[nombre],
+            filas,
             key=lambda fila: tuple(fila.get(columna, "") for columna in columnas),
         )
         _escribir_csv(salida / nombre, columnas, filas)

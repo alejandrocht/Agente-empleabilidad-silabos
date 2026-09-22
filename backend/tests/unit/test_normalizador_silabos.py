@@ -153,7 +153,7 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
         "catalogo_competencias.csv": [
             "id_competencia",
             "nombre_competencia",
-            "descripcion_breve_competencia",
+            "descripcion_breve",
             "tipo_competencia",
             "codigo_competencia",
         ],

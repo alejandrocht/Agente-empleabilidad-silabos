@@ -366,7 +366,7 @@ class ImportadorNeo4j:
             "Competencia": (
                 "MATCH (n:Competencia) RETURN n.id_competencia AS id_competencia, "
                 "n.nombre_competencia AS nombre_competencia, "
-                "n.descripcion_breve_competencia AS descripcion_breve_competencia, "
+                "n.descripcion_breve_competencia AS descripcion_breve, "
                 "n.tipo_competencia AS tipo_competencia, n.codigo_competencia AS codigo_competencia"
             ),
             "Logro": "MATCH (n:Logro) RETURN n.id_logro AS id_logro, n.logro AS logro",
