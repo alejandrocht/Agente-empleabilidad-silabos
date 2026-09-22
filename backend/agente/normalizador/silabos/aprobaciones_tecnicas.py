@@ -581,8 +581,6 @@ def _validar_solicitudes(
             )
         if decision not in _DECISIONES_VALIDAS:
             raise DecisionCurricularInvalida(f"Decisión técnica inválida: {decision!r}.")
-        if decision == "DISCARD" and not reason:
-            raise DecisionCurricularInvalida("Descartar una propuesta técnica requiere un motivo.")
         if identificador in vistos:
             raise DecisionCurricularInvalida(f"La propuesta {identificador!r} aparece duplicada.")
         vistos.add(identificador)

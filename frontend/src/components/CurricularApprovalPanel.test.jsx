@@ -85,7 +85,7 @@ describe("aprobación técnica de propuestas", () => {
     );
   });
 
-  it("permite descartar una propuesta técnica con motivo auditable", async () => {
+  it("descarta una propuesta técnica con un solo clic y sin motivo", async () => {
     obtenerPendientesNormalizador
       .mockResolvedValueOnce(approvalResponse())
       .mockResolvedValueOnce(approvalResponse([]));
@@ -98,21 +98,13 @@ describe("aprobación técnica de propuestas", () => {
     fireEvent.click(
       within(card).getByRole("button", { name: "Descartar propuesta" }),
     );
-    fireEvent.change(screen.getByLabelText("Motivo del descarte"), {
-      target: { value: "No corresponde al resultado de aprendizaje." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar descarte" }));
 
+    expect(screen.queryByLabelText("Motivo del descarte")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirmar descarte" })).toBeNull();
     await waitFor(() =>
       expect(decidirPendientesNormalizador).toHaveBeenCalledWith(
         "NOR_DISCARD",
-        [
-          {
-            id_pendiente: "PROP_TEC_1",
-            decision: "DISCARD",
-            reason: "No corresponde al resultado de aprendizaje.",
-          },
-        ],
+        [{ id_pendiente: "PROP_TEC_1", decision: "DISCARD" }],
         "ejecutor",
         "rev-technical",
       ),

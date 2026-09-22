@@ -538,7 +538,7 @@ def inferir_competencias_tecnicas(
     catalogo = _resolver_catalogo(catalogo_tecnico)
     analista: Any | None = None
     resultado: list[dict[str, object]] = []
-    vistos: set[tuple[str, str]] = set()
+    vistos: set[str] = set()
     total_silabos = len(registros)
     for indice, registro in enumerate(registros, start=1):
         if cancelada is not None and cancelada():
@@ -620,9 +620,10 @@ def inferir_competencias_tecnicas(
 
         def materializar_respuesta(
             respuesta_actual: RespuestaCompetenciasTecnicas,
-        ) -> list[dict[str, object]]:
+        ) -> tuple[list[dict[str, object]], bool]:
             nonlocal abstraccion_rechazada
             filas: list[dict[str, object]] = []
+            materializable = False
             for propuesta in respuesta_actual.competencias:
                 if _propuesta_nueva_repite_logro(propuesta, contexto):
                     abstraccion_rechazada = True
@@ -636,18 +637,16 @@ def inferir_competencias_tecnicas(
                 )
                 if fila is None:
                     continue
-                clave = (
-                    _clave_texto(fila["id_silabo"]),
-                    _clave_texto(fila["nombre_competencia"]),
-                )
+                materializable = True
+                clave = clave_catalogo(fila["nombre_competencia"])
                 if clave in vistos:
                     continue
                 vistos.add(clave)
                 filas.append(fila)
-            return filas
+            return filas, materializable
 
-        propuestas_validas_filas = materializar_respuesta(respuesta)
-        if not propuestas_validas_filas:
+        propuestas_validas_filas, respuesta_materializable = materializar_respuesta(respuesta)
+        if not respuesta_materializable:
             if cancelada is not None and cancelada():
                 raise CancelacionSolicitada()
             respuesta_reintento = analista.invoke(
@@ -659,7 +658,7 @@ def inferir_competencias_tecnicas(
                 respuesta_reintento = RespuestaCompetenciasTecnicas.model_validate(
                     respuesta_reintento
                 )
-            propuestas_validas_filas = materializar_respuesta(respuesta_reintento)
+            propuestas_validas_filas, _ = materializar_respuesta(respuesta_reintento)
 
         propuestas_validas = len(propuestas_validas_filas)
         resultado.extend(propuestas_validas_filas)

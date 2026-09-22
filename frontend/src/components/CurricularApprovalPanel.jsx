@@ -27,11 +27,7 @@ import {
   textoBuscable,
   tipoDe,
 } from "./curricularApprovalUtils";
-import {
-  DecisionBar,
-  DiscardConfirmation,
-  ProposalCard,
-} from "./CurricularApprovalCards";
+import { DecisionBar, ProposalCard } from "./CurricularApprovalCards";
 
 export default function CurricularApprovalPanel({
   idEjecucion,
@@ -48,8 +44,6 @@ export default function CurricularApprovalPanel({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState(null);
-  const [propuestaADescartar, setPropuestaADescartar] = useState("");
-  const [motivoDescarte, setMotivoDescarte] = useState("");
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -158,7 +152,7 @@ export default function CurricularApprovalPanel({
     }
   };
 
-  const aplicarDecisionTecnica = async (idPendiente, decision, reason = "") => {
+  const aplicarDecisionTecnica = async (idPendiente, decision) => {
     if (guardando || !idPendiente) return false;
     if (!revision) {
       setError(
@@ -175,7 +169,6 @@ export default function CurricularApprovalPanel({
           {
             id_pendiente: idPendiente,
             decision,
-            ...(reason ? { reason } : {}),
           },
         ],
         "ejecutor",
@@ -200,18 +193,6 @@ export default function CurricularApprovalPanel({
     } finally {
       setGuardando(false);
     }
-  };
-
-  const descartarPropuesta = async () => {
-    if (guardando || !propuestaADescartar || !texto(motivoDescarte)) return;
-    const aplicado = await aplicarDecisionTecnica(
-      propuestaADescartar,
-      "DISCARD",
-      texto(motivoDescarte),
-    );
-    if (!aplicado) return;
-    setPropuestaADescartar("");
-    setMotivoDescarte("");
   };
 
   if (cargando && !filas) {
@@ -381,10 +362,8 @@ export default function CurricularApprovalPanel({
                         }
                         onDiscard={
                           tipoDe(fila) === "competencia_tecnica"
-                            ? (idPendiente) => {
-                                setPropuestaADescartar(idPendiente);
-                                setMotivoDescarte("");
-                              }
+                            ? (idPendiente) =>
+                                aplicarDecisionTecnica(idPendiente, "DISCARD")
                             : undefined
                         }
                         disabled={guardando}
@@ -405,17 +384,6 @@ export default function CurricularApprovalPanel({
           )}
 
           <div className="pb-24">
-            <DiscardConfirmation
-              proposalId={propuestaADescartar}
-              reason={motivoDescarte}
-              onReasonChange={setMotivoDescarte}
-              onCancel={() => {
-                setPropuestaADescartar("");
-                setMotivoDescarte("");
-              }}
-              onConfirm={descartarPropuesta}
-              disabled={guardando}
-            />
             <DecisionBar
               count={decisionesSeleccionadas}
               onSave={guardar}
