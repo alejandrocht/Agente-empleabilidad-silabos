@@ -78,7 +78,7 @@ The user supplied a post-fix screenshot showing two identical technical competen
 - [x] T4. Reproduce duplicate cards at the approval API boundary with normalized-equivalent names.
 - [x] T5. Canonicalize persisted technical proposals by normalized name, preserving the first proposal and keeping discarded duplicates audit-only.
 - [x] T6. Add API-boundary regression coverage and run focused verification.
-- [ ] T7. Commit and push only the scoped fix to `test/local-llm-technical-pipeline`.
+- [x] T7. Commit and push only the scoped fix to `test/local-llm-technical-pipeline`.
 
 ### Follow-up route
 
@@ -95,3 +95,5 @@ The user supplied a post-fix screenshot showing two identical technical competen
 - Focused Mypy: passed with exit code 0.
 - Scoped `git diff --check`: passed.
 - Independent verification found and then confirmed the correction for legacy journal decisions referencing hidden duplicates; genuine orphan IDs still return HTTP 422.
+- Work-unit commit `669674a` (`fix(normalizer): dedupe persisted proposals`) was pushed to `origin/test/local-llm-technical-pipeline`.
+- Native review was unavailable for this isolated commit because unrelated concurrent working-tree changes caused committed-range candidate projection drift; no lineage was created. Independent verification and focused checks passed.
