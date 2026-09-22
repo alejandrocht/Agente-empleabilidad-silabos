@@ -12,6 +12,13 @@ from typing import Any, Protocol
 _salida_catalogos = importlib.import_module("agente.normalizador.silabos.salida_catalogos")
 ARCHIVOS_CATALOGO: tuple[tuple[str, tuple[str, ...]], ...] = _salida_catalogos.ARCHIVOS_CATALOGO
 
+_COMPETENCIAS_NEO4J_CAMPOS = (
+    "nombre_competencia",
+    "descripcion_breve_competencia",
+    "tipo_competencia",
+    "codigo_competencia",
+)
+
 _ID_PATTERNS = {
     "id_curso": re.compile(r"CUR_[0-9a-f]{16}"),
     "id_silabo": re.compile(r"SIL_[0-9a-f]{16}"),
@@ -76,6 +83,17 @@ def _validar_ids(filas: Mapping[str, list[dict[str, str]]]) -> None:
             raise ValueError("Todo logro debe relacionarse con una competencia")
         if not fila["id_competencia"] and not fila["id_logro"]:
             raise ValueError("Una cobertura debe relacionar una competencia o un logro")
+
+
+def _traducir_competencias_para_neo4j(
+    filas: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    traducidas: list[dict[str, str]] = []
+    for fila in filas:
+        fila_neo4j = dict(fila)
+        fila_neo4j["descripcion_breve_competencia"] = fila_neo4j.pop("descripcion_breve")
+        traducidas.append(fila_neo4j)
+    return traducidas
 
 
 def _total(resultado: Iterable[Any]) -> int:
@@ -157,6 +175,7 @@ def escribir_catalogos(
         import_id,
         campos=list(_salida_catalogos.SILABOS_SCHEMA[1:]),
     )
+    competencias = _traducir_competencias_para_neo4j(filas["catalogo_competencias.csv"])
     _ejecutar_lote(
         tx,
         "UNWIND $rows AS row "
@@ -171,9 +190,9 @@ def escribir_catalogos(
         "competencia.codigo_competencia = row.codigo_competencia, "
         "competencia._ciar_import_id = $import_id, competencia._ciar_import_created = true "
         "RETURN count(competencia) AS total",
-        filas["catalogo_competencias.csv"],
+        competencias,
         import_id,
-        campos=list(_salida_catalogos.COMPETENCIAS_SCHEMA[1:]),
+        campos=list(_COMPETENCIAS_NEO4J_CAMPOS),
     )
     _ejecutar_lote(
         tx,

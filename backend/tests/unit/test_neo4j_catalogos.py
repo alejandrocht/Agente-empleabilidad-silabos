@@ -64,9 +64,45 @@ def _crear_catalogos(ruta: Path) -> None:
     )
 
 
+def test_importer_maps_public_description_to_existing_graph_property() -> None:
+    filas: dict[str, list[dict[str, str]]] = {
+        nombre: [] for nombre, _ in neo4j_catalogos.ARCHIVOS_CATALOGO
+    }
+    filas["catalogo_competencias.csv"] = [
+        {
+            "id_competencia": "COMP_1234567890abcdef",
+            "nombre_competencia": "Pensamiento sistémico",
+            "descripcion_breve": "Analiza sistemas.",
+            "tipo_competencia": "generica",
+            "codigo_competencia": "G1",
+        }
+    ]
+
+    tx = TransaccionFalsa()
+    neo4j_catalogos.escribir_catalogos(tx, filas, "IMP_1234567890abcdef")
+
+    consulta, parametros = next(
+        (consulta, parametros) for consulta, parametros in tx.llamadas if "Competencia" in consulta
+    )
+    filas_enviadas = parametros["rows"]
+    assert isinstance(filas_enviadas, list)
+    assert filas_enviadas[0]["descripcion_breve_competencia"] == "Analiza sistemas."
+    assert "descripcion_breve" not in filas_enviadas[0]
+    campos = parametros["campos"]
+    assert isinstance(campos, list)
+    assert "descripcion_breve_competencia" in campos
+    assert "existente[campo] <> row[campo]" in consulta
+    assert (
+        "competencia.descripcion_breve_competencia = row.descripcion_breve_competencia" in consulta
+    )
+
+
 def test_importa_nuevo_contrato_sin_habilidades_ni_herramientas(tmp_path: Path) -> None:
     _crear_catalogos(tmp_path)
     filas = neo4j_catalogos.leer_catalogos(tmp_path)
+    competencia = filas["catalogo_competencias.csv"][0]
+    assert competencia["descripcion_breve"] == "Analiza sistemas."
+    assert "descripcion_breve_competencia" not in competencia
     tx = TransaccionFalsa()
 
     neo4j_catalogos.escribir_catalogos(tx, filas, "IMP_1234567890abcdef")
