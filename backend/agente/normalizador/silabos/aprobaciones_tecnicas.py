@@ -6,7 +6,8 @@ import csv
 import hashlib
 import json
 import re
-from collections.abc import Mapping, Sequence
+import unicodedata
+from collections.abc import Collection, Mapping, Sequence
 from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
@@ -99,7 +100,34 @@ def _cargar_manifest(directorio: Path) -> dict[str, object]:
     return valor
 
 
-def _cargar_propuestas(directorio: Path) -> list[dict[str, object]]:
+def _clave_nombre_competencia(valor: object) -> str:
+    texto = " ".join(str(valor or "").split()).replace("_", " ")
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(caracter for caracter in texto if not unicodedata.combining(caracter))
+    return re.sub(r"[^a-z0-9]+", " ", texto.casefold()).strip()
+
+
+def _deduplicar_propuestas(
+    propuestas: Sequence[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Retain the first persisted proposal; leave later duplicates audit-only."""
+
+    resultado: list[dict[str, object]] = []
+    vistos: set[str] = set()
+    for propuesta in propuestas:
+        nombre = propuesta.get("nombre_competencia") or propuesta.get("nombre")
+        clave = _clave_nombre_competencia(nombre)
+        if clave and clave in vistos:
+            continue
+        if clave:
+            vistos.add(clave)
+        resultado.append(propuesta)
+    return resultado
+
+
+def _cargar_propuestas(
+    directorio: Path,
+) -> tuple[list[dict[str, object]], set[str]]:
     propuestas = _leer_jsonl(_reportes(directorio) / PROPUESTAS_ARCHIVO, requerido=True)
     ids: set[str] = set()
     for propuesta in propuestas:
@@ -111,7 +139,9 @@ def _cargar_propuestas(directorio: Path) -> list[dict[str, object]]:
                 f"La propuesta técnica {identificador!r} está duplicada."
             )
         ids.add(identificador)
-    return propuestas
+    activas = _deduplicar_propuestas(propuestas)
+    ids_activas = {str(propuesta.get("id_propuesta") or "") for propuesta in activas}
+    return activas, ids - ids_activas
 
 
 def _cargar_journal(directorio: Path) -> list[dict[str, object]]:
@@ -204,10 +234,12 @@ def _fila_api(
 def _filas_actuales(
     propuestas: Sequence[Mapping[str, object]],
     journal: Sequence[Mapping[str, object]],
+    *,
+    ids_descartados: Collection[str] = (),
 ) -> list[dict[str, object]]:
     decisiones = _decisiones_por_id(journal)
     ids = {str(propuesta.get("id_propuesta") or "") for propuesta in propuestas}
-    huérfanas = set(decisiones) - ids
+    huérfanas = set(decisiones) - ids - set(ids_descartados)
     if huérfanas:
         raise DecisionCurricularInvalida(
             f"El diario técnico referencia propuestas inexistentes: {sorted(huérfanas)!r}."
@@ -266,8 +298,10 @@ def _resumen(
     directorio: Path,
     propuestas: Sequence[Mapping[str, object]],
     journal: Sequence[Mapping[str, object]],
+    *,
+    ids_descartados: Collection[str] = (),
 ) -> dict[str, object]:
-    filas = _filas_actuales(propuestas, journal)
+    filas = _filas_actuales(propuestas, journal, ids_descartados=ids_descartados)
     decisiones = [str(fila.get("decision") or "") for fila in filas]
     pendientes = sum(decision in {"", "KEEP_PENDING"} for decision in decisiones)
     gate = _leer_gate(directorio)
@@ -308,14 +342,19 @@ def pendientes_para_api(
     manifest = _cargar_manifest(directorio)
     if not es_ejecucion_curricular(manifest):
         raise AprobacionNoPermitida("La ejecución no corresponde al pipeline curricular.")
-    propuestas = _cargar_propuestas(directorio)
+    propuestas, ids_descartados = _cargar_propuestas(directorio)
     journal = _cargar_journal(directorio)
-    filas = _filas_actuales(propuestas, journal)
+    filas = _filas_actuales(propuestas, journal, ids_descartados=ids_descartados)
     if incluir_resueltas:
         visibles = filas
     else:
         visibles = [fila for fila in filas if fila.get("decision") in {None, "KEEP_PENDING"}]
-    resumen = _resumen(directorio, propuestas, journal)
+    resumen = _resumen(
+        directorio,
+        propuestas,
+        journal,
+        ids_descartados=ids_descartados,
+    )
     return {
         "id_ejecucion": directorio.name,
         "total": len(visibles),
@@ -400,8 +439,9 @@ def _gate_tecnico(
     journal: Sequence[Mapping[str, object]],
     reconstruccion_ok: bool,
     error_estructural: str = "",
+    ids_descartados: Collection[str] = (),
 ) -> dict[str, object]:
-    filas = _filas_actuales(propuestas, journal)
+    filas = _filas_actuales(propuestas, journal, ids_descartados=ids_descartados)
     decisiones = [str(fila.get("decision") or "") for fila in filas]
     pendientes = sum(decision in {"", "KEEP_PENDING"} for decision in decisiones)
     checks_value = gate.get("checks")
@@ -503,6 +543,7 @@ def _materializar(
     manifest: Mapping[str, object],
     propuestas: Sequence[Mapping[str, object]],
     journal: Sequence[Mapping[str, object]],
+    ids_descartados: Collection[str] = (),
 ) -> dict[str, object]:
     parametros = manifest.get("parametros")
     parametros = parametros if isinstance(parametros, Mapping) else {}
@@ -545,6 +586,7 @@ def _materializar(
         propuestas=propuestas,
         journal=journal,
         reconstruccion_ok=True,
+        ids_descartados=ids_descartados,
     )
     _escribir_json_atomico(_reportes(directorio) / "release_gate.json", gate)
     return gate
@@ -614,15 +656,24 @@ def aplicar_decisiones(
         if not es_ejecucion_curricular(manifest):
             raise AprobacionNoPermitida("La ejecución no corresponde al pipeline curricular.")
         _validar_estado(manifest)
-        propuestas = _cargar_propuestas(directorio)
+        propuestas, ids_descartados = _cargar_propuestas(directorio)
         journal = _cargar_journal(directorio)
         validadas, revision_actual = _validar_solicitudes(decisiones, propuestas, journal, revision)
         if not validadas:
-            resumen = _resumen(directorio, propuestas, journal)
+            resumen = _resumen(
+                directorio,
+                propuestas,
+                journal,
+                ids_descartados=ids_descartados,
+            )
             return {
                 "estado": str(manifest.get("estado") or ""),
                 "aprobacion": resumen,
-                "filas": _filas_actuales(propuestas, journal),
+                "filas": _filas_actuales(
+                    propuestas,
+                    journal,
+                    ids_descartados=ids_descartados,
+                ),
                 "revision": revision_actual,
             }
 
@@ -653,13 +704,24 @@ def aplicar_decisiones(
         journal_candidato = [*journal, *nuevas]
         snapshot = _capturar_arbol(directorio)
         try:
-            gate = _materializar(directorio, manifest, propuestas, journal_candidato)
+            gate = _materializar(
+                directorio,
+                manifest,
+                propuestas,
+                journal_candidato,
+                ids_descartados=ids_descartados,
+            )
             if nuevas:
                 _escribir_journal_atomico(
                     _reportes(directorio) / DECISIONES_ARCHIVO,
                     journal_candidato,
                 )
-            resumen = _resumen(directorio, propuestas, journal_candidato)
+            resumen = _resumen(
+                directorio,
+                propuestas,
+                journal_candidato,
+                ids_descartados=ids_descartados,
+            )
             resumen["release_gate"] = gate
             _persistir_manifest(directorio, manifest, gate, resumen)
         except Exception:
@@ -676,16 +738,25 @@ def aplicar_decisiones(
         return {
             "estado": estado,
             "aprobacion": resumen,
-            "filas": _filas_actuales(propuestas, journal_candidato),
+            "filas": _filas_actuales(
+                propuestas,
+                journal_candidato,
+                ids_descartados=ids_descartados,
+            ),
             "revision": _revision(propuestas, journal_candidato),
         }
 
 
 def resumen_aprobacion_curricular(directorio_ejecucion: Path) -> dict[str, object]:
     directorio = _validar_directorio(directorio_ejecucion)
-    propuestas = _cargar_propuestas(directorio)
+    propuestas, ids_descartados = _cargar_propuestas(directorio)
     journal = _cargar_journal(directorio)
-    return _resumen(directorio, propuestas, journal)
+    return _resumen(
+        directorio,
+        propuestas,
+        journal,
+        ids_descartados=ids_descartados,
+    )
 
 
 def filas_para_presentacion_api(
