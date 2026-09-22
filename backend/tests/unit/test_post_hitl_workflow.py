@@ -205,3 +205,83 @@ def test_pending_technical_gate_remains_blocked_and_exposes_no_csvs(
         f"/normalizador/ejecuciones/{id_ejecucion}/outputs/{ARCHIVOS_TECNICOS[0]}"
     )
     assert descarga.status_code == 404
+
+
+def test_final_technical_add_uses_canonical_manifest_validation_scope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path)
+    manifest_path = directorio / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["parametros"]["carrera"] = "Ingeniería de Sistemas"
+    manifest["validacion_silabos"] = {
+        "carrera": "INGENIERIA_DE_SISTEMAS",
+        "periodo": "2026-2",
+        "valida": True,
+    }
+    registros_path = directorio / "limpios" / "silabos.jsonl"
+    registro = json.loads(registros_path.read_text(encoding="utf-8"))
+    registro["carrera"] = "INGENIERIA_DE_SISTEMAS"
+    registros_path.write_text(json.dumps(registro) + "\n", encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+    pendientes = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/pendientes")
+    response = cliente.post(
+        f"/normalizador/ejecuciones/{id_ejecucion}/pendientes/decidir",
+        json={
+            "decisiones": [{"id_pendiente": "PROP_TEC_1", "decision": "ADD"}],
+            "revision": pendientes.json()["revision"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["aprobacion"]["release_gate"]["decision"] == "ALLOW_IMPORT"
+
+
+def test_mixed_career_rejects_add_without_persisting_decision(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path)
+    manifest_path = directorio / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["validacion_silabos"] = {
+        "carrera": "SISTEMAS",
+        "periodo": "2026-2",
+        "valida": True,
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    registros_path = directorio / "limpios" / "silabos.jsonl"
+    registros = [json.loads(linea) for linea in registros_path.read_text().splitlines()]
+    registros.append(
+        {
+            **registros[0],
+            "id_curso": "CUR_2",
+            "id_silabo": "SIL_2",
+            "carrera": "OTRA_CARRERA",
+        }
+    )
+    registros_path.write_text(
+        "".join(json.dumps(registro) + "\n" for registro in registros), encoding="utf-8"
+    )
+    gate_path = directorio / "salidas" / "reportes" / "release_gate.json"
+    gate_before = gate_path.read_bytes()
+    manifest_before = manifest_path.read_bytes()
+
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+    pendientes = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/pendientes")
+    response = cliente.post(
+        f"/normalizador/ejecuciones/{id_ejecucion}/pendientes/decidir",
+        json={
+            "decisiones": [{"id_pendiente": "PROP_TEC_1", "decision": "ADD"}],
+            "revision": pendientes.json()["revision"],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "mezcla carreras" in response.json()["detail"]
+    assert not (directorio / "salidas" / "reportes" / "decisiones_tecnicas.jsonl").exists()
+    assert gate_path.read_bytes() == gate_before
+    assert manifest_path.read_bytes() == manifest_before

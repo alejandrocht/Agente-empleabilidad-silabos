@@ -138,6 +138,87 @@ def test_inferencia_estructurada_conserva_evidencia_y_relaciones(
     assert "No debe enviarse" not in str(llamadas["mensajes"])
 
 
+def test_inferencia_deduplica_por_nombre_y_conserva_primera_propuesta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    llamadas = 0
+    primer_logro = "Diseña arquitecturas de software."
+    segundo_logro = "Compara patrones arquitectónicos."
+    primera_evidencia = {"fuente": "logro", "fragmento": primer_logro}
+    segunda_evidencia = {"fuente": "logro", "fragmento": segundo_logro}
+    primera_justificacion = "La primera propuesta demuestra decisiones arquitectónicas."
+    segunda_justificacion = "La segunda propuesta demuestra decisiones arquitectónicas."
+    respuesta = {
+        "competencias": [
+            {
+                "catalogo_ref": "CATTEC_1",
+                "nombre_competencia": "Diseño técnico de arquitecturas",
+                "descripcion_breve_competencia": "Selecciona patrones según calidad técnica.",
+                "logros": [primer_logro],
+                "evidencia": [primera_evidencia],
+                "justificacion": primera_justificacion,
+            },
+            {
+                "catalogo_ref": "CATTEC_2",
+                "nombre_competencia": "Diseño técnico de arquitecturas",
+                "descripcion_breve_competencia": "Evalúa estructuras según calidad técnica.",
+                "logros": [segundo_logro],
+                "evidencia": [segunda_evidencia],
+                "justificacion": segunda_justificacion,
+            },
+            {
+                "catalogo_ref": "CATTEC_1",
+                "nombre_competencia": "Evaluación de atributos de calidad",
+                "descripcion_breve_competencia": "Evalúa atributos técnicos de arquitectura.",
+                "logros": [segundo_logro],
+                "evidencia": [segunda_evidencia],
+                "justificacion": "La tercera propuesta demuestra evaluación técnica.",
+            },
+        ]
+    }
+
+    def materializar_sin_catalogo(
+        propuesta: Any, contexto: Any, _candidatos: Any, **_kwargs: Any
+    ) -> dict[str, object]:
+        return {
+            "id_silabo": contexto["id_silabo"],
+            "catalogo_ref": propuesta.catalogo_ref or "",
+            "nombre_competencia": propuesta.nombre_competencia,
+            "descripcion_breve_competencia": propuesta.descripcion_breve_competencia,
+            "logros": list(propuesta.logros),
+            "evidencia": [item.model_dump(mode="json") for item in propuesta.evidencia],
+            "justificacion": propuesta.justificacion,
+        }
+
+    class AnalistaFalso:
+        def invoke(self, _mensajes: object) -> object:
+            nonlocal llamadas
+            llamadas += 1
+            return respuesta
+
+    class LLMFalso:
+        def with_structured_output(self, schema: object, *, method: str) -> object:
+            return AnalistaFalso()
+
+    monkeypatch.setattr(analista_tecnico, "_materializar_propuesta", materializar_sin_catalogo)
+    monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: LLMFalso())
+    trazas: list[Any] = []
+
+    resultado = analista_tecnico.inferir_competencias_tecnicas(
+        [_registro()], _configuracion(), al_actualizar_progreso_silabo=trazas.append
+    )
+
+    assert llamadas == 1
+    assert len(resultado) == 2
+    assert resultado[0]["catalogo_ref"] == "CATTEC_1"
+    assert resultado[0]["logros"] == [primer_logro]
+    assert resultado[0]["evidencia"] == [primera_evidencia]
+    assert resultado[0]["justificacion"] == primera_justificacion
+    assert resultado[1]["nombre_competencia"] == "Evaluación de atributos de calidad"
+    assert resultado[1]["catalogo_ref"] == "CATTEC_1"
+    assert trazas[-1].propuestas_validas == 2
+
+
 def test_inferencia_acepta_abstraccion_concisa_con_evidencia_literal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

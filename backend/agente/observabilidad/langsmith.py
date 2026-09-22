@@ -13,6 +13,7 @@ se intenta capturar chain-of-thought privado.
 from __future__ import annotations
 
 import inspect
+import os
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar
 
@@ -25,9 +26,9 @@ _ESQUEMA = "normalizador-curricular/langsmith-v1"
 
 
 def tracing_activo() -> bool:
-    """Indica si la aplicación solicitó explícitamente trazas LangSmith."""
+    """Indica si LangSmith está explícitamente habilitado y autenticado."""
 
-    return booleano("LANGSMITH_TRACING", False)
+    return booleano("LANGSMITH_TRACING", False) and bool(os.getenv("LANGSMITH_API_KEY", "").strip())
 
 
 def envolver_cliente_openai(
