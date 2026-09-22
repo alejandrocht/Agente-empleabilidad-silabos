@@ -285,3 +285,127 @@ def test_mixed_career_rejects_add_without_persisting_decision(
     assert not (directorio / "salidas" / "reportes" / "decisiones_tecnicas.jsonl").exists()
     assert gate_path.read_bytes() == gate_before
     assert manifest_path.read_bytes() == manifest_before
+
+
+def test_pending_api_deduplicates_persisted_proposals_by_normalized_name(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path)
+    reportes = directorio / "salidas" / "reportes"
+    propuestas = [
+        {
+            "id_propuesta": "PROP_TEC_1",
+            "id_silabo": "SIL_1",
+            "nombre_competencia": "Configurar redes informáticas.",
+            "descripcion": "First proposal must win.",
+            "catalogo_ref": "NET-001",
+            "logros": ["Diseña servicios mantenibles."],
+        },
+        {
+            "id_propuesta": "PROP_TEC_2",
+            "id_silabo": "SIL_2",
+            "nombre_competencia": " configurar   redes INFORMATICAS ",
+            "descripcion": "Duplicate proposal must remain audit-only.",
+            "catalogo_ref": "NET-001",
+            "logros": ["Duplicate outcome"],
+        },
+        {
+            "id_propuesta": "PROP_TEC_3",
+            "id_silabo": "SIL_1",
+            "nombre_competencia": "Monitorear redes informáticas",
+            "descripcion": "Distinct name must remain visible.",
+            "catalogo_ref": "NET-001",
+            "logros": ["Diseña servicios mantenibles."],
+        },
+    ]
+    (reportes / "propuestas_tecnicas.jsonl").write_text(
+        "".join(json.dumps(propuesta) + "\n" for propuesta in propuestas),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    response = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/pendientes")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [fila["id_pendiente"] for fila in payload["filas"]] == [
+        "PROP_TEC_1",
+        "PROP_TEC_3",
+    ]
+    assert payload["filas"][0]["descripcion"] == "First proposal must win."
+    assert payload["aprobacion"]["total"] == 2
+
+    decision = cliente.post(
+        f"/normalizador/ejecuciones/{id_ejecucion}/pendientes/decidir",
+        json={
+            "decisiones": [
+                {"id_pendiente": "PROP_TEC_1", "decision": "ADD"},
+                {"id_pendiente": "PROP_TEC_3", "decision": "ADD"},
+            ],
+            "revision": payload["revision"],
+        },
+    )
+
+    assert decision.status_code == 200
+    assert decision.json()["aprobacion"]["release_gate"]["decision"] == "ALLOW_IMPORT"
+    journal = (reportes / "decisiones_tecnicas.jsonl").read_text(encoding="utf-8")
+    assert "PROP_TEC_2" not in journal
+    assert "PROP_TEC_2" in (reportes / "propuestas_tecnicas.jsonl").read_text(encoding="utf-8")
+
+
+def test_pending_api_ignores_duplicate_journal_rows_but_rejects_true_orphans(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path)
+    reportes = directorio / "salidas" / "reportes"
+    propuestas = [
+        {
+            "id_propuesta": "PROP_TEC_1",
+            "id_silabo": "SIL_1",
+            "nombre_competencia": "Configurar redes informáticas.",
+            "descripcion": "Retained proposal.",
+        },
+        {
+            "id_propuesta": "PROP_TEC_2",
+            "id_silabo": "SIL_2",
+            "nombre_competencia": " configurar redes INFORMATICAS ",
+            "descripcion": "Deduplicated proposal.",
+        },
+    ]
+    (reportes / "propuestas_tecnicas.jsonl").write_text(
+        "".join(json.dumps(propuesta) + "\n" for propuesta in propuestas),
+        encoding="utf-8",
+    )
+    journal_path = reportes / "decisiones_tecnicas.jsonl"
+    journal_path.write_text(
+        json.dumps({"id_propuesta": "PROP_TEC_2", "decision": "DISCARD"}) + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    duplicate_journal_response = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/pendientes")
+
+    assert duplicate_journal_response.status_code == 200
+    assert [fila["id_pendiente"] for fila in duplicate_journal_response.json()["filas"]] == [
+        "PROP_TEC_1"
+    ]
+    assert duplicate_journal_response.json()["filas"][0]["decision"] is None
+
+    journal_path.write_text(
+        "".join(
+            json.dumps(fila) + "\n"
+            for fila in [
+                {"id_propuesta": "PROP_TEC_2", "decision": "DISCARD"},
+                {"id_propuesta": "PROP_TEC_ORPHAN", "decision": "DISCARD"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    orphan_response = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/pendientes")
+
+    assert orphan_response.status_code == 422
+    assert "PROP_TEC_ORPHAN" in orphan_response.json()["detail"]

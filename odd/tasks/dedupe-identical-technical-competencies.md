@@ -69,6 +69,29 @@ The same technical competency can be proposed by different syllabi/courses in on
 - Concurrent `botones fix` surfaces remain excluded; no commit or push is performed here.
 - Engram mirror: pending because the local Engram provider is unavailable.
 
-## Next step
+## Reopened: persisted proposal boundary
 
-The user should rerun the extraction after this correction is committed and the backend process is restarted; the duplicate name must produce only one card.
+The user supplied a post-fix screenshot showing two identical technical competency cards under different courses. The analyzer regression remains green, but a screenshot-equivalent probe against `_filas_actuales` fails because the approval boundary trusts duplicate persisted rows.
+
+### Follow-up tasks
+
+- [x] T4. Reproduce duplicate cards at the approval API boundary with normalized-equivalent names.
+- [x] T5. Canonicalize persisted technical proposals by normalized name, preserving the first proposal and keeping discarded duplicates audit-only.
+- [x] T6. Add API-boundary regression coverage and run focused verification.
+- [ ] T7. Commit and push only the scoped fix to `test/local-llm-technical-pipeline`.
+
+### Follow-up route
+
+- Low-cost Gemini delegation was attempted but unavailable in this environment; the bounded fix proceeds inline.
+- Scoped files: `backend/agente/normalizador/silabos/aprobaciones_tecnicas.py`, `backend/tests/unit/test_post_hitl_workflow.py`, and this task document.
+- The concurrent analyzer/settings work reported by another session does not overlap these files.
+
+### Follow-up verification evidence
+
+- Red probe before the fix: `_filas_actuales` exposed two cards for normalized-equivalent persisted names.
+- Focused API regressions: `2 passed in 2.21s`.
+- Full post-HITL suite: `6 passed in 2.26s`.
+- Focused Ruff: passed.
+- Focused Mypy: passed with exit code 0.
+- Scoped `git diff --check`: passed.
+- Independent verification found and then confirmed the correction for legacy journal decisions referencing hidden duplicates; genuine orphan IDs still return HTTP 422.
