@@ -2,17 +2,17 @@
 
 ## Objective
 
-Ensure the technical LLM pipeline emits at most one proposal for each competency name within a syllabus.
+Ensure the technical LLM pipeline emits at most one proposal for each normalized competency name across the complete execution.
 
 ## Problem
 
-A single syllabus/content can legitimately produce multiple technical competencies, including multiple proposals associated with the same `catalogo_ref`. The only invalid duplicate is a repeated competency name; catalog reference, description, learning outcomes, evidence, and justification must not prevent removal of that repeated name.
+The same technical competency can be proposed by different syllabi/courses in one extraction. Including `id_silabo` in the deduplication key allowed repeated names such as `Configurar redes informáticas.` to appear as separate cards. A single content may still produce multiple distinct competency names, including names sharing a `catalogo_ref`.
 
 ## Scope
 
-- Make the existing analyzer deduplication key use only the normalized syllabus identity and competency name.
-- Preserve the first-seen proposal and existing cross-syllabus behavior.
-- Add focused regression coverage for repeated names and for multiple distinct names sharing a catalog reference.
+- Make the existing analyzer deduplication key use only the normalized competency name globally for the execution.
+- Preserve the first-seen proposal across syllabi and prevent a duplicate-only response from triggering an unnecessary LLM retry.
+- Add focused regression coverage for cross-syllabus repeated names and multiple distinct names sharing a catalog reference.
 
 ## Constraints
 
@@ -22,16 +22,16 @@ A single syllabus/content can legitimately produce multiple technical competenci
 
 ## Tasks
 
-- [x] T1. Make analyzer deduplication use only normalized `id_silabo` and competency name.
-- [x] T2. Replace the regression test with repeated-name and same-catalog-reference/different-name cases.
+- [x] T1. Make analyzer deduplication global by normalized competency name and suppress duplicate-only retries.
+- [x] T2. Replace the regression test with cross-syllabus repeated-name and same-catalog-reference/different-name cases.
 - [x] T3. Run focused static and behavioral checks; record results and leave unrelated concurrent changes untouched.
 
 ## Acceptance criteria
 
-1. Two valid LLM proposals with the same normalized name in one syllabus produce exactly one returned proposal.
+1. Two valid LLM proposals with the same normalized name across different syllabi produce exactly one returned proposal.
 2. The retained proposal is the first-seen row, including its supporting data and justification.
 3. Two different competency names remain separate even when they share a `catalogo_ref`.
-4. The model is not retried when valid proposals remain after deduplication.
+4. A response containing only an already-seen competency does not trigger a clarification retry.
 5. Existing analyzer tests continue to pass.
 
 ## Verification
@@ -47,8 +47,10 @@ A single syllabus/content can legitimately produce multiple technical competenci
 - The concurrent session confirmed it does not share the analyzer or analyzer-test files.
 - A prior attempt incorrectly made only `logros` order-insensitive; the user clarified that repeated competency names are the only duplicates to remove.
 - A single syllabus may produce multiple competencies from one content and multiple competencies may share `catalogo_ref`.
-- The corrected identity must use only normalized `id_silabo` and `nombre_competencia`; description and all supporting data do not distinguish duplicates.
-- The first materialized proposal is retained; a later repeated name is discarded before counts and persistence.
+- The screenshot confirms the real duplicate occurs across different courses/syllabi, so `id_silabo` must not participate in the duplicate identity.
+- The corrected identity must use only the normalized `nombre_competencia`; description and all supporting data do not distinguish duplicates.
+- The first materialized proposal is retained globally; a later repeated name is discarded before counts and persistence.
+- Duplicate-only responses are valid model output after filtering and must not trigger the semantic clarification retry.
 - Engram mirror: pending because the local Engram provider is unavailable.
 
 ## Route
@@ -58,15 +60,15 @@ A single syllabus/content can legitimately produce multiple technical competenci
 
 ## Verification evidence
 
-- Independent verifier: `cd backend && .venv/bin/python -m pytest tests/unit/test_analista_tecnico.py -q` — 18 passed.
-- Independent verifier: focused Ruff — passed.
-- Independent verifier: focused strict Mypy — passed with no output.
-- Independent verifier: scoped `git diff --check` — passed.
-- Parent spot check: focused analyzer pytest — 18 passed.
-- Native ASSESS was unavailable with empty native output; RDD therefore treated the candidate as unassessable/high and required independent verification, which passed.
+- The supplied screenshot is the concrete reproduction: identical `Configurar redes informáticas.` cards appear under different courses.
+- Parent fallback verification: `cd backend && .venv/bin/python -m pytest tests/unit/test_analista_tecnico.py -q` — 18 passed.
+- Parent fallback verification: focused Ruff — passed.
+- Parent fallback verification: focused strict Mypy — passed with no output.
+- Parent fallback verification: scoped `git diff --check` — passed.
+- Three independent verifier launches, including a retry after the user reported the agent fixed, were unavailable because the Pi runtime still has a duplicate `ask_user_question` extension registration; this is an environment limitation, not a code failure.
 - Concurrent `botones fix` surfaces remain excluded; no commit or push is performed here.
 - Engram mirror: pending because the local Engram provider is unavailable.
 
 ## Next step
 
-No further code changes are pending. The user may stage and commit/push each session's files selectively.
+The user should rerun the extraction after this correction is committed and the backend process is restarted; the duplicate name must produce only one card.

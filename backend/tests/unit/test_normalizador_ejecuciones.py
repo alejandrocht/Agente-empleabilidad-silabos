@@ -77,20 +77,26 @@ def _salidas_curriculares() -> tuple[dict[str, object], ...]:
     )
 
 
-def test_decision_tecnica_discard_requiere_motivo_y_normaliza_la_razon() -> None:
+def test_decision_tecnica_discard_acepta_sin_motivo_y_normaliza_la_razon() -> None:
     propuestas = [{"id_propuesta": "PROP_TEC_1"}]
     revision = aprobaciones_tecnicas._revision(propuestas)
 
-    with pytest.raises(
-        errores_tecnicos.DecisionCurricularInvalida,
-        match="requiere un motivo",
-    ):
-        aprobaciones_tecnicas._validar_solicitudes(
-            [{"id_pendiente": "PROP_TEC_1", "decision": "DISCARD"}],
-            propuestas,
-            [],
-            revision,
-        )
+    validadas, revision_actual = aprobaciones_tecnicas._validar_solicitudes(
+        [{"id_pendiente": "PROP_TEC_1", "decision": "DISCARD"}],
+        propuestas,
+        [],
+        revision,
+    )
+
+    assert revision_actual == revision
+    assert validadas == [
+        {
+            "id_pendiente": "PROP_TEC_1",
+            "decision": "DISCARD",
+            "reason": "",
+            "id_propuesta": "PROP_TEC_1",
+        }
+    ]
 
     validadas, revision_actual = aprobaciones_tecnicas._validar_solicitudes(
         [
