@@ -57,6 +57,8 @@ sesión del navegador y sus cookies viven en el directorio temporal de la ejecuc
 finalizar. Si Cactus entrega una cobertura parcial, los archivos se conservan como evidencia,
 pero `EXTRACTION_COVERAGE_INCOMPLETE` bloquea la publicación.
 
+Cada ejecución usa `hitl=1` por defecto y puede cambiarse a `hitl=0` solo para esa corrida; en 0 las propuestas técnicas válidas se registran automáticamente como `ADD` y la decisión queda en el diario de auditoría. La publicación y la descarga/importación siguen requiriendo que todos los controles del release gate permitan `ALLOW_IMPORT`.
+
 El extractor requiere Playwright y un navegador Chromium instalado en el entorno del backend:
 
 ```powershell

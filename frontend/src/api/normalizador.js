@@ -1,8 +1,14 @@
-export async function iniciarNormalizadorSilabos(archivo, carrera, periodo) {
+export async function iniciarNormalizadorSilabos(
+  archivo,
+  carrera,
+  periodo,
+  hitl = 1,
+) {
   const formulario = new FormData();
   formulario.append("archivo", archivo);
   formulario.append("carrera", carrera);
   formulario.append("periodo", periodo);
+  formulario.append("hitl", String(hitl));
 
   const respuesta = await fetch("/api/normalizador/silabos", {
     method: "POST",
@@ -22,11 +28,12 @@ export async function iniciarNormalizadorSilabosCactus(
   periodo,
   usuario,
   contrasena,
+  hitl = 1,
 ) {
   const respuesta = await fetch("/api/normalizador/silabos/cactus", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ carrera, periodo, usuario, contrasena }),
+    body: JSON.stringify({ carrera, periodo, usuario, contrasena, hitl }),
   });
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok) {

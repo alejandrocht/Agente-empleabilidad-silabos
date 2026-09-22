@@ -27,6 +27,17 @@ DECISIONES_ARCHIVO = "decisiones_tecnicas.jsonl"
 _ID_EJECUCION = re.compile(r"NOR_[0-9a-f]{16}")
 _DECISIONES_VALIDAS = frozenset({"ADD", "DISCARD", "KEEP_PENDING"})
 _ESTADOS_TERMINALES = frozenset({"limpiado", "limpiado_con_advertencias", "no_publicado"})
+_BLOQUEOS_RECONSTRUIDOS = frozenset(
+    {
+        "DETERMINISTIC_OUTPUT_INCOMPLETE",
+        "TECHNICAL_ANALYSIS_INCOMPLETE",
+        "TECHNICAL_ANALYSIS_FAILED",
+        "UNLINKED_SOURCE_OUTCOME",
+        "PENDING_TECHNICAL_APPROVAL",
+        "TECHNICAL_RECONSTRUCTION_FAILED",
+        "STRUCTURAL_VALIDATION_FAILED",
+    }
+)
 _LOCK = RLock()
 
 
@@ -538,6 +549,56 @@ def _persistir_manifest(
     _escribir_json_atomico(directorio / "manifest.json", actualizado)
 
 
+def _conservar_gate_previo(
+    gate: Mapping[str, object],
+    gate_previo: Mapping[str, object],
+) -> dict[str, object]:
+    """Retain only external blockers and failed validation checks."""
+
+    resultado = dict(gate)
+    blockers_value = gate.get("blockers")
+    blockers = (
+        {str(item) for item in blockers_value if item}
+        if isinstance(blockers_value, list)
+        else set()
+    )
+    previos_value = gate_previo.get("blockers")
+    previos = (
+        {str(item) for item in previos_value if item} if isinstance(previos_value, list) else set()
+    )
+    checks_previos = gate_previo.get("checks")
+    checks: dict[str, object] = dict(checks_previos) if isinstance(checks_previos, Mapping) else {}
+    checks_nuevos = gate.get("checks")
+    if isinstance(checks_nuevos, Mapping):
+        checks.update(checks_nuevos)
+
+    source_extraction = checks.get("source_extraction")
+    structural = checks.get("structural_validation")
+    if not isinstance(structural, Mapping):
+        structural = checks.get("structural_errors")
+    source_failed = isinstance(source_extraction, Mapping) and not bool(
+        source_extraction.get("ok", True)
+    )
+    structural_failed = isinstance(structural, Mapping) and not bool(structural.get("ok", True))
+    for blocker in previos:
+        if blocker == "EXTRACTION_COVERAGE_INCOMPLETE":
+            if source_failed:
+                blockers.add(blocker)
+        elif blocker == "STRUCTURAL_VALIDATION_FAILED":
+            if structural_failed:
+                blockers.add(blocker)
+        elif blocker not in _BLOQUEOS_RECONSTRUIDOS:
+            blockers.add(blocker)
+    if source_failed:
+        blockers.add("EXTRACTION_COVERAGE_INCOMPLETE")
+    if structural_failed:
+        blockers.add("STRUCTURAL_VALIDATION_FAILED")
+    resultado["blockers"] = sorted(blockers)
+    if checks:
+        resultado["checks"] = checks
+    return resultado
+
+
 def _materializar(
     directorio: Path,
     manifest: Mapping[str, object],
@@ -556,6 +617,14 @@ def _materializar(
         periodo = normalizar_periodo(parametros.get("periodo"))
     if not carrera or not periodo:
         raise DecisionCurricularInvalida("La ejecución técnica no tiene carrera y periodo.")
+    gate_previo = _leer_gate(directorio)
+    gates_manifest: list[object] = [manifest.get("release_gate")]
+    limpieza_manifest = manifest.get("limpieza_silabos")
+    if isinstance(limpieza_manifest, Mapping):
+        gates_manifest.append(limpieza_manifest.get("release_gate"))
+    for gate_manifest in gates_manifest:
+        if isinstance(gate_manifest, Mapping):
+            gate_previo = _conservar_gate_previo(gate_previo, gate_manifest)
     decisiones = _decisiones_por_id(journal)
     aprobadas = [
         {**dict(propuesta), "estado_aprobacion": "APROBADA"}
@@ -582,7 +651,7 @@ def _materializar(
     except ValueError as exc:
         raise DecisionCurricularInvalida(str(exc)) from exc
     gate = _gate_tecnico(
-        resultado.release_gate,
+        _conservar_gate_previo(resultado.release_gate, gate_previo),
         propuestas=propuestas,
         journal=journal,
         reconstruccion_ok=True,

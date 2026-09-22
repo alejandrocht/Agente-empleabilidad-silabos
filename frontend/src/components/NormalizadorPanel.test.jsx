@@ -136,6 +136,43 @@ describe("panel del normalizador", () => {
     obtenerCuarentenaNormalizador.mockResolvedValue({ total: 0, filas: [] });
   });
 
+  it("expone el switch HITL por ejecución con estado 1 por defecto y permite cambiarlo a 0", async () => {
+    await renderPanelAfterRecovery();
+
+    const switchControl = screen.getByRole("switch", { name: "HITL técnico" });
+    expect(switchControl.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText(/HITL técnico: 1/)).toBeTruthy();
+    expect(
+      screen.getByText(/Con 0 se agregan automáticamente las propuestas técnicas válidas/),
+    ).toBeTruthy();
+
+    fireEvent.click(switchControl);
+
+    expect(switchControl.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText(/HITL técnico: 0/)).toBeTruthy();
+  });
+
+  it("restablece HITL a 1 al preparar una nueva ejecución", async () => {
+    const { container } = await renderPanelAfterRecovery();
+    fireEvent.click(screen.getByRole("button", { name: /Cargar archivo manual/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), {
+      target: { value: "Marketing" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), {
+      target: { value: "2026-1" },
+    });
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: {
+        files: [new File(["zip"], "curriculo.zip", { type: "application/zip" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("switch", { name: "HITL técnico" }));
+    fireEvent.click(screen.getByRole("button", { name: "Nueva fuente" }));
+
+    expect(screen.getByRole("switch", { name: "HITL técnico" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText(/HITL técnico: 1/)).toBeTruthy();
+  });
+
   it("inicia la extracción Cactus con carrera, periodo y credenciales", async () => {
     iniciarNormalizadorSilabosCactus.mockResolvedValue({
       id_ejecucion: "NOR_cactus12345678",
@@ -177,6 +214,7 @@ describe("panel del normalizador", () => {
     fireEvent.change(screen.getByLabelText("Contraseña ULima"), {
       target: { value: "secreto" },
     });
+    fireEvent.click(screen.getByRole("switch", { name: "HITL técnico" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Extraer y normalizar sílabos" }),
     );
@@ -187,6 +225,7 @@ describe("panel del normalizador", () => {
         "2026-1",
         "usuario.ulima",
         "secreto",
+        0,
       ),
     );
     expect(navigation.push).toHaveBeenCalledWith("/NOR_cactus12345678");
@@ -206,7 +245,7 @@ describe("panel del normalizador", () => {
           id_ejecucion: idEjecucion,
           tipo: "silabos",
           archivo: "marketing.zip",
-          parametros: { carrera: "Marketing", periodo: "2026-1" },
+          parametros: { carrera: "Marketing", periodo: "2026-1", hitl: 0 },
           estado: "limpiando",
           actualizada_en: "2026-08-18T12:00:00+00:00",
         },
@@ -228,7 +267,7 @@ describe("panel del normalizador", () => {
       id_ejecucion: idEjecucion,
       tipo: "silabos",
       archivo: "marketing.zip",
-      parametros: { carrera: "Marketing", periodo: "2026-1" },
+      parametros: { carrera: "Marketing", periodo: "2026-1", hitl: 0 },
       estado: "limpiando",
       validacion_silabos: {
         valida: true,
@@ -267,6 +306,10 @@ describe("panel del normalizador", () => {
     expect(screen.getByRole("combobox", { name: "Periodo" }).value).toBe(
       "2026-1",
     );
+    expect(
+      screen.getByRole("switch", { name: "HITL técnico" }).getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(screen.getByText(/HITL técnico: 0/)).toBeTruthy();
     expect(screen.getByText(/Procesamos los sílabos por lotes/)).toBeTruthy();
     expect(
       screen
@@ -281,7 +324,7 @@ describe("panel del normalizador", () => {
       id_ejecucion: idEjecucion,
       tipo: "silabos",
       archivo: "marketing.zip",
-      parametros: { carrera: "Marketing", periodo: "2026-1" },
+      parametros: { carrera: "Marketing", periodo: "2026-1", hitl: 0 },
       estado: "limpiando",
       validacion_silabos: { valida: true, archivos: [] },
       outputs: [],
@@ -349,6 +392,7 @@ describe("panel del normalizador", () => {
     fireEvent.change(container.querySelector('input[type="file"]'), {
       target: { files: [archivo] },
     });
+    fireEvent.click(screen.getByRole("switch", { name: "HITL técnico" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Iniciar limpieza curricular" }),
     );
@@ -374,6 +418,7 @@ describe("panel del normalizador", () => {
       archivo,
       "Marketing",
       "2026-1",
+      0,
     );
   });
 
