@@ -11,7 +11,7 @@ Add a per-execution HITL switch to the syllabus normalizer. `HITL=1` (default) k
 - Reuse the existing technical decision journal and approval/materialization path; retain an auditable system actor/reason.
 - HITL off does not disable LLM analysis or weaken structural, extraction-coverage, evidence, or import checks. CSV publication/download still requires `ALLOW_IMPORT`.
 - If automatic approval fails, fail closed and leave pending proposals available for manual recovery.
-- Preserve all unrelated worktree changes. Do not edit the peer-owned CSV/importer paths. Do not commit, push, or start native review for this feature.
+- Preserve all unrelated worktree changes. Do not edit the peer-owned CSV/importer paths. The user later authorized pushing this feature branch; do not include unrelated worktree changes. Native review remains unnecessary.
 
 ## Tasks
 
@@ -33,7 +33,8 @@ Add a per-execution HITL switch to the syllabus normalizer. `HITL=1` (default) k
 
 ## Progress
 
-- HITL-1, HITL-2, and HITL-3 are complete; all changes remain uncommitted and unpushed by request.
+- Work-unit commit: `040c893` (`feat(normalizer): add per-run HITL switch`).
+- HITL-1, HITL-2, and HITL-3 are complete; implementation commit 040c893 is created and pending push. Unrelated worktree changes remain untouched.
 - The focused backend API contract (6 tests), post-HITL workflow (10 tests), frontend API/component tests (23 tests), Ruff, scoped diff checks, and Next production build passed.
 - Engram mirror writes failed because the configured local Engram service cannot resolve its identity; this file remains the task source of truth.
 
