@@ -171,22 +171,34 @@ ENTITY_CONTRACTS: Mapping[str, EntityContract] = {
         canonical_prefix="PUE_",
         supported_relationships=("OFRECE", "DEFIINE"),
     ),
-    "habilidad_id": EntityContract(
-        parameter="habilidad_id",
-        label="Habilidad",
+    "competencia_tecnica_id": EntityContract(
+        parameter="competencia_tecnica_id",
+        label="competencia_tecnica",
         identifier="id_habilidad",
         names=("nombre_habilidad",),
-        parameter_aliases=("habilidad_id", "habilidad", "skill_id", "skill"),
-        allowed_id_prefixes=("HAB_",),
-        canonical_prefix="HAB_",
-        supported_relationships=("REQUIERE",),
+        parameter_aliases=(
+            "competencia_tecnica_id",
+            "competencia_tecnica",
+            "competencia_id",
+            "competencia",
+            "habilidad_id",
+            "habilidad",
+            "skill_id",
+            "skill",
+        ),
+        allowed_id_prefixes=("COMP_TEC_", "HAB_"),
+        canonical_prefix="COMP_TEC_",
+        supported_relationships=("REQUIERE", "CUBRE", "DECLARA", "DESARROLLA"),
     ),
-    "herramienta_id": EntityContract(
-        parameter="herramienta_id",
-        label="Herramienta",
+    "logro_id": EntityContract(
+        parameter="logro_id",
+        label="Logros",
         identifier="id_herramienta",
         names=("nombre_herramienta",),
         parameter_aliases=(
+            "logro_id",
+            "logro",
+            "logros",
             "herramienta_id",
             "herramienta",
             "tool_id",
@@ -194,23 +206,7 @@ ENTITY_CONTRACTS: Mapping[str, EntityContract] = {
         ),
         allowed_id_prefixes=("HER_", "HERR_"),
         canonical_prefix="HER_",
-        supported_relationships=("REQUIERE",),
-    ),
-    "competencia_id": EntityContract(
-        parameter="competencia_id",
-        label="Competencia",
-        identifier="id_competencia",
-        names=("nombre_competencia",),
-        parameter_aliases=(
-            "competencia_id",
-            "competencia",
-            "competencia_texto",
-            "competency_id",
-            "competency",
-        ),
-        allowed_id_prefixes=("COMP_", "COM_"),
-        canonical_prefix="COMP_",
-        supported_relationships=("REQUIERE",),
+        supported_relationships=("CUBRE",),
     ),
     "curso_id": EntityContract(
         parameter="curso_id",
@@ -693,8 +689,34 @@ def _singular_token(token: str) -> str:
     return token
 
 
+_MORPHOLOGICAL_SUFFIX_FAMILIES = (
+    ("ico", "ica"),
+    ("ivo", "iva"),
+    ("oso", "osa"),
+    ("ario", "aria"),
+)
+
+
+def _token_forms(token: str) -> frozenset[str]:
+    """Return conservative Spanish lexical forms for one display-name token."""
+    singular = _singular_token(token)
+    forms = {token, singular}
+    for suffix_family in _MORPHOLOGICAL_SUFFIX_FAMILIES:
+        if any(
+            singular.endswith(suffix) and len(singular) - len(suffix) >= 4
+            for suffix in suffix_family
+        ):
+            stem = next(
+                singular[: -len(suffix)]
+                for suffix in suffix_family
+                if singular.endswith(suffix)
+            )
+            forms.add(stem)
+    return frozenset(forms)
+
+
 def _equivalent_name_tokens(left: str, right: str) -> bool:
-    return left == right or _singular_token(left) == _singular_token(right)
+    return bool(_token_forms(left) & _token_forms(right))
 
 
 def _matches_singular_plural_name(candidate: str, names: tuple[str, ...]) -> bool:
@@ -704,7 +726,7 @@ def _matches_singular_plural_name(candidate: str, names: tuple[str, ...]) -> boo
     return any(
         all(
             any(
-                _equivalent_name_tokens(candidate_token, name_token)
+                _singular_token(candidate_token) == _singular_token(name_token)
                 for name_token in name_tokens
             )
             for candidate_token in candidate_tokens
@@ -759,14 +781,15 @@ def _resolution_query(contract: EntityContract) -> str:
     )
 
 
-def _catalog_query(contract: EntityContract) -> str:
+def _catalog_query(contract: EntityContract, *, offset: int = 0) -> str:
     """Return a deterministic, bounded catalog for the Python fuzzy fallback."""
     name_projection = ", ".join(f"n.{name}" for name in contract.names)
+    skip = f" SKIP {offset}" if offset else ""
     return (
         f"MATCH (n:{contract.label}) "
         f"RETURN n.{contract.identifier} AS entity_id, "
         f"[{name_projection}] AS entity_names "
-        f"ORDER BY n.{contract.identifier} ASC LIMIT {ENTITY_MATCH_LIMIT}"
+        f"ORDER BY n.{contract.identifier} ASC{skip} LIMIT {ENTITY_MATCH_LIMIT}"
     )
 
 
@@ -904,6 +927,34 @@ def _has_single_adjacent_transposition(candidate: str, name: str) -> bool:
     )
 
 
+def _matches_morphological_name(candidate: str, names: tuple[str, ...]) -> bool:
+    """Match reordered names when every token belongs to the same lexical form."""
+    candidate_tokens = _normalized_text(candidate).split()
+    if len(candidate_tokens) < 2:
+        return False
+    for name in names:
+        name_tokens = _normalized_text(name).split()
+        if len(candidate_tokens) != len(name_tokens):
+            continue
+        remaining = list(name_tokens)
+        for candidate_token in candidate_tokens:
+            match_index = next(
+                (
+                    index
+                    for index, name_token in enumerate(remaining)
+                    if _equivalent_name_tokens(candidate_token, name_token)
+                ),
+                None,
+            )
+            if match_index is None:
+                break
+            remaining.pop(match_index)
+        else:
+            if not remaining:
+                return True
+    return False
+
+
 def _fuzzy_result(
     candidate: str,
     rows: Sequence[object],
@@ -928,6 +979,8 @@ def _fuzzy_result(
         seen.add(resolution.identifier)
         names = _row_names(row)
         score = _fuzzy_score(candidate, resolution, names)
+        if _matches_morphological_name(candidate, names):
+            score = max(score, FUZZY_MIN_SCORE)
         if _matches_singular_plural_name(candidate, names):
             score = max(score, FUZZY_MIN_SCORE)
         if any(_has_single_adjacent_transposition(candidate, name) for name in names):
@@ -1079,7 +1132,12 @@ async def resolve_entity_result(
             status: ResolutionStatus = "unique" if len(matches) == 1 else "multiple"
             return EntityResolutionResult(status, contract.parameter, contract.label, matches)
 
-        catalog_rows = await lookup(catalog_cypher, {})
+        catalog_rows: list[dict[str, Any]] = []
+        for offset in range(0, TEXT_SEARCH_MAX_CANDIDATES, ENTITY_MATCH_LIMIT):
+            page = await lookup(_catalog_query(contract, offset=offset), {})
+            catalog_rows.extend(page)
+            if len(page) < ENTITY_MATCH_LIMIT:
+                break
         exact_catalog_matches: list[tuple[int, EntityResolution]] = []
         catalog_seen: set[str | int] = set()
         for row in catalog_rows:

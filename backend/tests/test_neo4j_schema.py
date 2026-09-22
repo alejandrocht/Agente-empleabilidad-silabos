@@ -64,3 +64,38 @@ def test_schema_loader_preserves_the_live_ciar_offer_label(
         "Oferta_Laboral",
     }
     assert graph.closed is True
+
+
+def test_runtime_schema_loader_uses_the_static_ciar_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        neo4j_schema,
+        "create_schema_graph",
+        lambda: (_ for _ in ()).throw(AssertionError("live schema must not load")),
+    )
+
+    snapshot = neo4j_schema.get_cached_neo4j_schema(force_refresh=True)
+
+    assert set(snapshot.structured["node_props"]) == {
+        "Facultad",
+        "Carrera",
+        "Logros",
+        "Curso",
+        "Cobertura_Curricular",
+        "Industria",
+        "Oferta_Laboral",
+        "competencia_tecnica",
+        "Requerimiento_Laboral",
+        "Puesto",
+        "Empresa",
+        "Silabo",
+    }
+    assert {
+        (item["start"], item["type"], item["end"])
+        for item in snapshot.structured["relationships"]
+    } >= {
+        ("Cobertura_Curricular", "CUBRE", "Logros"),
+        ("Cobertura_Curricular", "CUBRE", "competencia_tecnica"),
+        ("Curso", "DESARROLLA", "competencia_tecnica"),
+    }

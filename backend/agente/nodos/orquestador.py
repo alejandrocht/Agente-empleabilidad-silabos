@@ -33,7 +33,8 @@ _GRAPH_TERMS = frozenset(
         "docente", "docentes", "profesor", "profesora", "profesores",
         "profesoras", "ensena", "dicta", "dictan",
         "empresa", "empresas", "empleabilidad", "herramienta", "herramientas",
-        "habilidad", "habilidades", "laboral", "laborales", "mercado",
+        "habilidad", "habilidades", "competencia", "competencias", "tecnica", "tecnicas",
+        "logro", "logros", "laboral", "laborales", "mercado",
         "oferta", "ofertas", "puesto", "puestos", "requerimiento",
         "requerimientos", "salario", "salarios", "silabo", "silabos",
         "trabajo", "trabajos", "vacante", "vacantes",
@@ -44,7 +45,7 @@ _SCHEMA_REQUEST_TERMS = frozenset(
         "que", "cual", "cuales", "cuanto", "cuantos", "cuantas", "quien",
         "donde", "como", "hay", "existe", "existen", "lista", "listar",
         "contar", "comparar", "relacionar", "ofrece", "publica", "requiere",
-        "tiene", "coordina", "ensena", "dicta",
+        "tiene", "coordina", "ensena", "dicta", "desarrolla", "declara", "cubre",
     }
 )
 _IDENTITY_TERMS = frozenset(

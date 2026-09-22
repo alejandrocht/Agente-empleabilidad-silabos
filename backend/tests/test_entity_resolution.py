@@ -22,6 +22,7 @@ from agente.utils.entity_resolver import (
     resolve_plan_parameters,
     resolve_plan_parameters_result,
 )
+from agente.utils.schema_ciar import static_schema
 
 
 class FakeGateway:
@@ -342,6 +343,29 @@ def test_resolver_accepts_bounded_singular_plural_name_alias() -> None:
 
     assert result.status == "unique"
     assert result.matches[0].identifier == "INDU_2f544767eba03474"
+
+
+def test_resolver_matches_reordered_morphological_competencia_name() -> None:
+    gateway = FakeGateway(
+        [
+            {
+                "entity_id": "COMP_TEC_0015",
+                "entity_names": ["Analizar logística procesos."],
+            }
+        ]
+    )
+
+    result = asyncio.run(
+        resolve_entity_result(
+            "competencia_tecnica_id",
+            "analizar procesos logísticos",
+            query_gateway=gateway,
+            schema=static_schema(),
+        )
+    )
+
+    assert result.status == "unique"
+    assert result.matches[0].identifier == "COMP_TEC_0015"
 
 
 def test_resolver_accepts_live_herramienta_canonical_prefix() -> None:

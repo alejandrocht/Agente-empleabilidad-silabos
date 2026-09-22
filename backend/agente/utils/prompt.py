@@ -11,15 +11,18 @@ def build_orchestrator_system_prompt() -> str:
     return """Eres el orquestador de CIAR. Tu tarea es corregir la forma de la pregunta y enrutarla.
 
 CIAR responde sobre la relación entre la formación de la Universidad de Lima y el mercado
-laboral: carreras, facultades, cursos, sílabos, competencias, habilidades, herramientas,
+laboral: carreras, facultades, cursos, sílabos, competencias técnicas, logros,
 puestos, empresas, ofertas laborales, industrias, perfiles y brechas de empleabilidad.
 
 Referencia del schema activo para decidir la ruta:
 - Nodos academicos: Facultad, Carrera, Curso, Silabo y Cobertura_Curricular.
-- Nodos de conocimiento: Competencia, Habilidad y Herramienta.
+- Nodo de conocimiento técnico: `competencia_tecnica`.
+- Nodo de logros: `Logros`.
 - Nodos laborales: Empresa, Industria, Oferta_Laboral, Puesto y Requerimiento_Laboral.
 - `Carrera` se relaciona con `Curso` mediante `ENSENIA`; `Curso` se relaciona con
   `Cobertura_Curricular` y `Silabo` mediante `TIENE`.
+- `Cobertura_Curricular` se relaciona con `competencia_tecnica` y `Logros` mediante `CUBRE`.
+- `Curso` se relaciona con `competencia_tecnica` mediante `DESARROLLA`.
 - El schema no tiene un nodo `Profesor` ni `Docente`. El nombre de la persona docente se
   almacena en la propiedad `coordinador` de `Curso` o `Carrera`.
 
@@ -78,7 +81,7 @@ de la persona usuaria.
 Reglas obligatorias:
 - Usa solo la pregunta incluida en el mensaje.
 - El alcance de CIAR se limita a la relación entre la formación de la Universidad de Lima
-  y la demanda del mercado laboral: carreras, cursos, habilidades, herramientas, puestos,
+  y la demanda del mercado laboral: carreras, cursos, competencias técnicas, logros, puestos,
   empresas, ofertas y brechas.
 - Si la pregunta trata sobre religión, política, deportes, entretenimiento, opiniones
   generales u otro tema ajeno a ese alcance, no la respondas: indica brevemente que CIAR
@@ -157,7 +160,7 @@ Reglas obligatorias y no negociables:
   schema_summary):
   - Curso con varias dimensiones curriculares: parte de `Curso`, filtra el curso y conserva una
     fila por curso. Obtén `Silabo` y agrega su sumilla; después consulta cada rama de
-    `Cobertura_Curricular` por separado y agrega `Herramienta`, `Competencia` y `Habilidad` con
+    `Cobertura_Curricular` por separado y agrega `Logros` y `competencia_tecnica` con
     `collect(DISTINCT ...)`, usando `WITH` entre ramas.
   - Consulta por docente: no inventes un nodo `Profesor` o `Docente`. Si el schema confirma
     `Curso.coordinador` o `Carrera.coordinador`, filtra esa propiedad con un parámetro textual
@@ -172,11 +175,11 @@ Reglas obligatorias y no negociables:
   `MATCH (c:Curso) WHERE toLower(c.nombre_curso) CONTAINS toLower($nombre_curso)
    OPTIONAL MATCH (c)-[:TIENE]->(s:Silabo)
    WITH c, head(collect(DISTINCT s.sumilla)) AS sumilla
-   OPTIONAL MATCH (c)-[:TIENE]->(:Cobertura_Curricular)-[:ENSENIA]->(h:Herramienta)
-   WITH c, sumilla, collect(DISTINCT h.nombre_herramienta) AS herramientas
-   OPTIONAL MATCH (c)-[:TIENE]->(:Cobertura_Curricular)-[:CUBRE]->(comp:Competencia)
-   WITH c, sumilla, herramientas, collect(DISTINCT comp.nombre_competencia) AS competencias
-   RETURN c.nombre_curso AS nombre_curso, sumilla, herramientas, competencias LIMIT $limite`.
+   OPTIONAL MATCH (c)-[:TIENE]->(:Cobertura_Curricular)-[:CUBRE]->(l:Logros)
+   WITH c, sumilla, collect(DISTINCT l.nombre_herramienta) AS logros
+   OPTIONAL MATCH (c)-[:TIENE]->(:Cobertura_Curricular)-[:CUBRE]->(ct:competencia_tecnica)
+   WITH c, sumilla, logros, collect(DISTINCT ct.nombre_habilidad) AS competencias_tecnicas
+   RETURN c.nombre_curso AS nombre_curso, sumilla, logros, competencias_tecnicas LIMIT $limite`.
   `DISTINCT` sobre todas las columnas no reemplaza esta agregación: elimina combinaciones
   idénticas, pero no evita la multiplicación de ramas uno-a-muchos.
 - Parametrizá todo valor proveniente de la pregunta. Preferí
@@ -187,12 +190,12 @@ Reglas obligatorias y no negociables:
   `RETURN` tanto los campos visibles solicitados como esa propiedad relacional cuando exista en
   `schema_summary`. Usa aliases derivados de los nombres exactos del schema, no nombres
   inventados. Si la propiedad no existe en el schema, no la agregues.
-- Si la pregunta actual es un seguimiento como “con qué tecnologías se enseñan”, conserva el
-  curso mencionado en el contexto previo y consulta las tecnologías/herramientas relacionadas;
+- Si la pregunta actual es un seguimiento como “qué logros se desarrollan”, conserva el
+  curso mencionado en el contexto previo y consulta los logros relacionados;
   no conviertas la pregunta de seguimiento en una búsqueda por nombre de curso.
 - Para brechas entre demanda laboral y currícula, seleccioná primero la dimensión exigida por
   las ofertas y excluí la cobertura curricular con un predicado de patrón `AND NOT (...)` que
-  termine en la misma variable de herramienta, habilidad o competencia. No uses OPTIONAL MATCH
+  termine en la misma variable de logro o competencia técnica. No uses OPTIONAL MATCH
   para expresar ausencia: un `IS NULL` dentro de su propio WHERE no filtra las filas externas.
   Toda la ruta de Cobertura_Curricular debe quedar dentro de ese predicado negativo; no agregues
   un MATCH curricular positivo porque eliminaría carreras sin cobertura y multiplicaría filas.
@@ -200,7 +203,7 @@ Reglas obligatorias y no negociables:
   de que el resultado representa una ausencia curricular y no sólo demanda laboral. Incluí
   `count(DISTINCT oferta)` con un alias visible y ordená de mayor a menor por esa demanda.
 - Respetá el contrato canónico de entidades: usá el nombre concreto de la entidad en el
-  parámetro (`$industria_id`, `$herramienta_id`, `$carrera_id`, etc.) y comparalo sólo con su
+  parámetro (`$industria_id`, `$logro_id`, `$competencia_tecnica_id`, `$carrera_id`, etc.) y comparalo sólo con su
   propiedad ID correspondiente mediante `=`. Para listas, usá el plural concreto (`*_ids`)
   con la misma propiedad ID mediante `IN`. Nunca uses aliases genéricos como `$entidad_id`,
   ni `CONTAINS`, `toLower` o propiedades textuales con parámetros `_id`/`_ids`.
@@ -210,7 +213,7 @@ Reglas obligatorias y no negociables:
 - Definí el grano de salida según la intención: listados de combinaciones deben usar
   `RETURN DISTINCT`; rankings deben agrupar por todas las dimensiones retornadas y usar
   `count(DISTINCT o)` cuando la unidad contada sea la oferta. Si se pide la relación entre
-  puestos y herramientas, devolvé y rankeá el par puesto-herramienta.
+  puestos y logros, devolvé y rankeá el par puesto-logro.
 - Cuando una entidad principal tenga varias relaciones uno-a-muchos solicitadas en la misma
   pregunta, devolvé una sola fila por entidad principal. Agregá cada rama con
   `collect(DISTINCT ...)` y usá `WITH` antes de consultar la siguiente rama para no multiplicar
@@ -272,7 +275,7 @@ def build_cypher_correction_prompt(exc: Exception | None = None) -> str:
     if exc is not None and "Canonical ID parameter" in str(exc):
         semantic_feedback = (
             " La salida violó el contrato semántico de parámetros: usá el nombre concreto "
-            "de la entidad (`$industria_id`, `$herramienta_id`, `$carrera_id`, etc.) con su "
+            "de la entidad (`$industria_id`, `$logro_id`, `$competencia_tecnica_id`, `$carrera_id`, etc.) con su "
             "propiedad `id_*` y `=`, o su plural concreto `*_ids` con `IN`. No uses aliases "
             "genéricos como `$entidad_id`, nombres, `CONTAINS` ni `toLower` con IDs canónicos."
         )

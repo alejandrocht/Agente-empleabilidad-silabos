@@ -13,6 +13,8 @@ from agente.config.settings import (
     ConfiguracionNormalizadorCurricular,
     decimal,
     entero,
+    modelo_dev,
+    modo_dev,
     texto,
 )
 
@@ -38,6 +40,8 @@ def _modelo_para_rol(
     configuracion_curricular: ConfiguracionNormalizadorCurricular | None,
 ) -> str:
     """Obtiene el modelo del snapshot curricular o la cascada no curricular."""
+    if modo_dev():
+        return modelo_dev()
     if rol in _ROLES_CURRICULARES:
         if configuracion_curricular is None:
             raise ValueError(
@@ -58,7 +62,11 @@ def obtener_llm(
     configuracion_curricular: ConfiguracionNormalizadorCurricular | None = None,
 ) -> ChatOpenAI:
     """Crea un ChatOpenAI; los roles curriculares requieren su snapshot explícito."""
-    api_key = texto("OPENAI_API_KEY")
+    api_key = (
+        texto("DEV_API_KEY", "dev-not-needed")
+        if modo_dev()
+        else texto("OPENAI_API_KEY")
+    )
     if not api_key:
         raise ValueError("OPENAI_API_KEY no está definida en backend/.env")
     if rol in _ROLES_CURRICULARES and configuracion_curricular is None:
@@ -86,6 +94,10 @@ def obtener_llm(
             else entero("LLM_MAX_RETRIES", 2)
         ),
     }
+    if modo_dev():
+        dev_base_url = texto("DEV_BASE_URL")
+        if dev_base_url:
+            kwargs["base_url"] = dev_base_url
     if configuracion is not None:
         kwargs["reasoning_effort"] = configuracion.esfuerzo_para_rol(rol)
     return ChatOpenAI(**kwargs)

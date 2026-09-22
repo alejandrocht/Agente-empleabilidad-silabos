@@ -1,4 +1,4 @@
-"""Read and cache the structured Neo4j schema used by dynamic Cypher."""
+"""Load the versioned static Neo4j schema used by Cypher generation."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ from dotenv import load_dotenv
 from langchain_neo4j import Neo4jGraph
 
 from agente.utils.logger import log_event
+from agente.utils.schema_ciar import SCHEMA_VERSION, static_schema
 
 load_dotenv()
 
-DEFAULT_SCHEMA_CACHE_TTL_SECONDS = 900.0
 _schema_cache_lock = RLock()
 _schema_cache_snapshot: Neo4jSchemaSnapshot | None = None
 _schema_cache_created_at = 0.0
@@ -24,7 +24,7 @@ _schema_cache_created_at = 0.0
 
 @dataclass(frozen=True, slots=True)
 class Neo4jSchemaSnapshot:
-    """Text and structured metadata for one Neo4j schema snapshot."""
+    """Text and structured metadata for the active schema contract."""
 
     text: str
     structured: dict[str, Any]
@@ -41,20 +41,6 @@ class Neo4jSchemaMismatchError(ValueError):
         )
 
 
-def _configured_cache_ttl() -> float:
-    """Return the configured cache TTL, defaulting to fifteen minutes."""
-    raw_value = os.getenv("NEO4J_SCHEMA_CACHE_TTL_SECONDS")
-    if raw_value is None:
-        return DEFAULT_SCHEMA_CACHE_TTL_SECONDS
-    try:
-        ttl = float(raw_value)
-    except ValueError as exc:
-        raise ValueError("NEO4J_SCHEMA_CACHE_TTL_SECONDS must be numeric") from exc
-    if ttl < 0:
-        raise ValueError("NEO4J_SCHEMA_CACHE_TTL_SECONDS cannot be negative")
-    return ttl
-
-
 def create_schema_graph() -> Neo4jGraph:
     """Create a Neo4jGraph configured from the project's existing variables."""
     return Neo4jGraph(
@@ -68,7 +54,7 @@ def create_schema_graph() -> Neo4jGraph:
 
 
 def extract_neo4j_schema() -> Neo4jSchemaSnapshot:
-    """Read the live schema and return only representations consumed downstream."""
+    """Read the live schema for explicit diagnostics, not conversational runtime."""
     started_at = time.perf_counter()
     log_event("neo4j_schema", "extraction_started")
     graph = create_schema_graph()
@@ -99,57 +85,37 @@ def get_cached_neo4j_schema(
     force_refresh: bool = False,
     ttl_seconds: float | None = None,
 ) -> Neo4jSchemaSnapshot:
-    """Return a cached schema snapshot and refresh it only when required."""
+    """Return the repository's versioned static schema contract."""
+    del ttl_seconds  # Kept for compatibility with existing callers.
     global _schema_cache_created_at, _schema_cache_snapshot
 
-    ttl = _configured_cache_ttl() if ttl_seconds is None else ttl_seconds
-    if ttl < 0:
-        raise ValueError("ttl_seconds cannot be negative")
-
     with _schema_cache_lock:
-        now = time.monotonic()
-        cache_age_ms = (
-            round(max(0.0, (now - _schema_cache_created_at) * 1000), 2)
-            if _schema_cache_snapshot is not None
-            else 0.0
-        )
-        cache_is_fresh = (
-            _schema_cache_snapshot is not None
-            and now - _schema_cache_created_at < ttl
-        )
-        if force_refresh or not cache_is_fresh:
-            log_event(
-                "neo4j_schema",
-                "cache_refresh",
-                reason=(
-                    "miss"
-                    if _schema_cache_snapshot is None
-                    else "forced"
-                    if force_refresh
-                    else "expired"
+        if force_refresh or _schema_cache_snapshot is None:
+            payload = static_schema()
+            _schema_cache_snapshot = Neo4jSchemaSnapshot(
+                text=(
+                    f"ONTOLOGÍA CIAR ESTÁTICA {SCHEMA_VERSION}\n"
+                    f"labels: {', '.join(sorted(payload['node_props']))}\n"
+                    f"relationships: {len(payload['relationships'])}"
                 ),
-                cache_state="miss" if _schema_cache_snapshot is None else "expired",
-                cache_age_ms=cache_age_ms,
-                cache_ttl_seconds=ttl,
+                structured=payload,
             )
-            _schema_cache_snapshot = extract_neo4j_schema()
-            _schema_cache_created_at = now
-        else:
+            _schema_cache_created_at = time.monotonic()
             log_event(
                 "neo4j_schema",
-                "cache_lookup",
-                cache_state="hit",
-                cache_age_ms=cache_age_ms,
-                cache_ttl_seconds=ttl,
+                "static_contract_loaded",
+                schema_version=SCHEMA_VERSION,
+                schema_nodes=len(payload["node_props"]),
+                schema_relationships=len(payload["relationships"]),
             )
 
         if _schema_cache_snapshot is None:  # Defensive narrowing for type checkers.
-            raise RuntimeError("Neo4j schema cache could not be initialized")
+            raise RuntimeError("Static Neo4j schema could not be initialized")
         return deepcopy(_schema_cache_snapshot)
 
 
 def invalidate_schema_cache() -> None:
-    """Clear the snapshot so the next access reloads the live Neo4j schema."""
+    """Clear the in-process copy so the next access reloads the static contract."""
     global _schema_cache_created_at, _schema_cache_snapshot
 
     with _schema_cache_lock:

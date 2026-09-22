@@ -10,6 +10,10 @@ from typing import Any
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
+from agente.config.settings import cargar_entorno, modelo_dev, modo_dev
+
+cargar_entorno()
+
 ChatOpenAIConstructor = Callable[..., Any]
 
 
@@ -73,6 +77,8 @@ ANALYST_CHAT_PROFILE = ChatOpenAIProfile(
 
 
 def _model_for_profile(profile: ChatOpenAIProfile) -> str:
+    if modo_dev():
+        return modelo_dev()
     configured = os.getenv(profile.model_env)
     if profile.strip_model_env and configured is not None:
         configured = configured.strip()
@@ -110,6 +116,12 @@ def build_chat_openai(
         "model": _model_for_profile(profile),
         "temperature": 0,
     }
+    if modo_dev():
+        # OpenAI-compatible local servers usually ignore this placeholder.
+        kwargs["api_key"] = os.getenv("DEV_API_KEY", "dev-not-needed")
+        dev_base_url = os.getenv("DEV_BASE_URL", "").strip()
+        if dev_base_url:
+            kwargs["base_url"] = dev_base_url
     if profile.streaming:
         kwargs["streaming"] = True
     if profile.use_responses_api_env is not None:

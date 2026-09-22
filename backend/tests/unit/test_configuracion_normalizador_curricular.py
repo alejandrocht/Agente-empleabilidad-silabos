@@ -17,6 +17,8 @@ from agente.normalizador.modelos import ResultadoLimpiezaSilabos, ResultadoValid
 
 def _entorno(**overrides: str) -> dict[str, str]:
     values = {
+        "DEV": "0",
+        "DEV_MODEL": "qwen3.8b",
         "NORMALIZADOR_CURRICULAR_LLM": "true",
         "NORMALIZADOR_CURRICULAR_ANALYST_MODEL": "analyst-model",
         "NORMALIZADOR_CURRICULAR_ANALYST_REASONING_EFFORT": "medium",
@@ -57,6 +59,14 @@ def test_configuracion_curricular_prefiere_el_proceso_sobre_backend_dotenv(
 
     assert configuracion.modelo_analista == "process-analyst"
     assert configuracion.timeout_llm_seconds == 37
+
+
+def test_configuracion_curricular_en_dev_usa_el_modelo_local() -> None:
+    configuracion = settings.configuracion_normalizador_curricular(
+        _entorno(DEV="1", DEV_MODEL="qwen3.8b")
+    )
+
+    assert configuracion.modelo_analista == "qwen3.8b"
 
 
 @pytest.mark.parametrize(

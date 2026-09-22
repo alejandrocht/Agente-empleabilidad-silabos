@@ -15,6 +15,9 @@ os.environ["CIAR_LOG_SCOPE"] = "all"
 os.environ["CIAR_NODE_LOG_VALUES"] = "0"
 os.environ["CIAR_LOG_FORMAT"] = "json"
 os.environ["NORMALIZADOR_CURRICULAR_LLM"] = "false"
+# Unit tests remain deterministic even when the developer's ignored .env enables
+# the local model; dedicated dev-mode tests override this value explicitly.
+os.environ["DEV"] = "0"
 os.environ["NORMALIZADOR_CATALOGOS_DIR"] = str(
     Path(__file__).resolve().parent / "fixtures" / "catalogos"
 )

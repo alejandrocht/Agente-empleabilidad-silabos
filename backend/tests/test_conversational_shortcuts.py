@@ -173,6 +173,23 @@ def test_orchestrator_routes_domain_question_to_guarded_graph() -> None:
     }
 
 
+def test_orchestrator_routes_new_ontology_question_to_guarded_graph() -> None:
+    question = "¿Qué logros desarrolla la carrera de Marketing?"
+
+    result = asyncio.run(
+        orquestador(
+            question,
+            ORCHESTRATOR_PROMPT,
+            orchestrator_runnable=FakeOrchestrator(
+                "conversacion",
+                pregunta_mejorada=question,
+            ),
+        )
+    )
+
+    assert result == {"ruta": "cypher", "pregunta_mejorada": question}
+
+
 def test_orchestrator_corrects_conversation_route_for_schema_identity_question() -> None:
     result = asyncio.run(
         orquestador(

@@ -61,6 +61,19 @@ def booleano(clave: str, default: bool = False) -> bool:
     )
 
 
+def modo_dev() -> bool:
+    """Indica si las llamadas LLM deben usar el modelo local de desarrollo."""
+    return booleano("DEV", False)
+
+
+def modelo_dev() -> str:
+    """Devuelve el modelo local requerido cuando ``DEV=1``."""
+    modelo = texto("DEV_MODEL")
+    if not modelo:
+        raise ValueError("DEV_MODEL debe definirse cuando DEV=1")
+    return modelo
+
+
 @dataclass(frozen=True, slots=True)
 class ConfiguracionNormalizadorCurricular:
     """Snapshot inmutable, sin secretos, para una ejecución curricular."""
@@ -216,9 +229,16 @@ def configuracion_normalizador_curricular(
         raise ValueError(
             "NORMALIZADOR_CURRICULAR_EMBEDDING_MIN_SIMILARITY debe estar entre 0 y menor que 1"
         )
+    modelo_analista = _requerir_texto(entorno, "NORMALIZADOR_CURRICULAR_ANALYST_MODEL")
+    dev_habilitado = (
+        _booleano_curricular(entorno, "DEV") if "DEV" in entorno else False
+    )
+    if dev_habilitado:
+        modelo_analista = _requerir_texto(entorno, "DEV_MODEL")
+
     return ConfiguracionNormalizadorCurricular(
         usar_llm=_booleano_curricular(entorno, "NORMALIZADOR_CURRICULAR_LLM"),
-        modelo_analista=_requerir_texto(entorno, "NORMALIZADOR_CURRICULAR_ANALYST_MODEL"),
+        modelo_analista=modelo_analista,
         esfuerzo_analista=_esfuerzo_curricular(
             entorno, "NORMALIZADOR_CURRICULAR_ANALYST_REASONING_EFFORT"
         ),

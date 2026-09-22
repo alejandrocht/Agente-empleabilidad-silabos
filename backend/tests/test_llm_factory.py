@@ -73,6 +73,25 @@ def test_conversational_roles_keep_shared_model_fallback(
     assert calls["model"] == "shared-model"
 
 
+def test_dev_mode_routes_all_conversational_roles_to_local_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: dict[str, Any] = {}
+    monkeypatch.setenv("DEV", "1")
+    monkeypatch.setenv("DEV_MODEL", "qwen3.8b")
+    monkeypatch.setenv("DEV_BASE_URL", "http://127.0.0.1:11434/v1")
+    monkeypatch.setenv("OPENAI_MODEL_ORQUESTADOR", "production-orchestrator")
+
+    build_chat_openai(
+        ORCHESTRATOR_CHAT_PROFILE,
+        constructor=lambda **kwargs: calls.update(kwargs) or object(),
+    )
+
+    assert calls["model"] == "qwen3.8b"
+    assert calls["api_key"] == "dev-not-needed"
+    assert calls["base_url"] == "http://127.0.0.1:11434/v1"
+
+
 def test_orchestrator_and_generator_profiles_stream_model_tokens() -> None:
     assert ORCHESTRATOR_CHAT_PROFILE.streaming is True
     assert GENERATED_QUERY_CHAT_PROFILE.streaming is True

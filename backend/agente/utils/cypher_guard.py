@@ -11,7 +11,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from agente.utils.entity_semantics import CANONICAL_ENTITY_PARAMETERS, canonical_id_contract
+from agente.utils.entity_semantics import (
+    CANONICAL_ENTITY_PARAMETERS,
+    canonical_entity_parameter,
+    canonical_id_contract,
+)
 
 MAX_QUERY_LIMIT = 100
 
@@ -405,11 +409,7 @@ def validate_entity_parameter_semantics(
         contract.id_property: contract
         for contract in CANONICAL_ENTITY_PARAMETERS.values()
     }
-    polymorphic_element_properties = {
-        "id_competencia",
-        "id_habilidad",
-        "id_herramienta",
-    }
+    polymorphic_element_properties = {"id_habilidad", "id_herramienta"}
     for name, property_name, operator, wrapped in all_comparisons:
         if not (name.endswith("_id") or name.endswith("_ids")):
             continue
@@ -418,8 +418,13 @@ def validate_entity_parameter_semantics(
             expected_operator = "IN" if name.endswith("_ids") else "="
             id_shaped_property = property_name.startswith("id_") or property_name.endswith("_id")
             if wrapped or operator != expected_operator or not id_shaped_property:
+                error_prefix = (
+                    "Canonical ID parameter"
+                    if name in canonical
+                    else "ID-like parameter"
+                )
                 raise CypherGuardError(
-                    f"ID-like parameter ${name} must use {expected_operator} directly with "
+                    f"{error_prefix} ${name} must use {expected_operator} directly with "
                     "an ID-shaped property"
                 )
             continue
@@ -434,7 +439,12 @@ def validate_entity_parameter_semantics(
             and operator == "="
             and not wrapped
         )
-        if name != expected_parameter and not is_dashboard_polymorphic_alias:
+        canonical_name = canonical_entity_parameter(name)
+        if (
+            canonical_name != expected_parameter
+            and canonical_name != property_contract.plural_parameter
+            and not is_dashboard_polymorphic_alias
+        ):
             raise CypherGuardError(
                 f"Canonical ID parameter ${property_contract.parameter} is required for "
                 f".{property_name} using {operator}"

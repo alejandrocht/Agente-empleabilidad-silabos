@@ -24,6 +24,8 @@ def test_conversational_prompt_builders_cover_all_llm_roles() -> None:
     assert "corregir la forma de la pregunta y enrutarla" in orchestrator_prompt
     assert "pregunta_mejorada" in orchestrator_prompt
     assert "Referencia del schema activo" in orchestrator_prompt
+    assert "competencia_tecnica" in orchestrator_prompt
+    assert "Logros" in orchestrator_prompt
     assert "Curso.coordinador" in orchestrator_prompt
     assert "no tiene un nodo `Profesor`" in orchestrator_prompt
     assert "Mayhua" in orchestrator_prompt
@@ -38,6 +40,12 @@ def test_conversational_prompt_builders_cover_all_llm_roles() -> None:
     )
     assert "una sola consulta de lectura" in build_cypher_system_prompt()
     cypher_prompt = build_cypher_system_prompt()
+    assert "competencia_tecnica" in cypher_prompt
+    assert "Logros" in cypher_prompt
+    assert "[:CUBRE]->(l:Logros)" in cypher_prompt
+    assert "[:CUBRE]->(ct:competencia_tecnica)" in cypher_prompt
+    assert "`Herramienta`" not in cypher_prompt
+    assert "`Competencia`" not in cypher_prompt
     assert "WITH" in cypher_prompt
     assert "collect(DISTINCT ...)" in cypher_prompt
     assert "head(collect(DISTINCT ...))" in cypher_prompt
