@@ -344,6 +344,100 @@ class GestorEjecuciones:
             # El estado cancelado debe persistir aunque el disco no permita el detalle.
             return
 
+    def _manifest_hitl_cero(self, ejecucion: Ejecucion) -> bool:
+        try:
+            manifest = json.loads(
+                (ejecucion.directorio / "manifest.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            return False
+        parametros = manifest.get("parametros") if isinstance(manifest, dict) else None
+        return isinstance(parametros, dict) and str(parametros.get("hitl") or "") == "0"
+
+    def _auto_aprobar_tecnicas(self, ejecucion: Ejecucion) -> None:
+        """Aprueba propuestas pendientes solo en ejecuciones terminales con HITL=0."""
+
+        if (
+            ejecucion.tipo != "silabos"
+            or ejecucion.estado
+            not in {
+                "limpiado",
+                "limpiado_con_advertencias",
+                "no_publicado",
+            }
+            or not self._manifest_hitl_cero(ejecucion)
+        ):
+            return
+        propuestas = ejecucion.directorio / "salidas" / "reportes" / "propuestas_tecnicas.jsonl"
+        if not propuestas.is_file():
+            return
+
+        try:
+            modulo = import_module("agente.normalizador.silabos.aprobaciones_tecnicas")
+            pendientes = modulo.pendientes_para_api(
+                ejecucion.directorio,
+                incluir_resueltas=True,
+            )
+            filas = pendientes.get("filas")
+            total = pendientes.get("total")
+            if isinstance(total, int) and isinstance(filas, list) and total > len(filas):
+                pendientes = modulo.pendientes_para_api(
+                    ejecucion.directorio,
+                    desde=0,
+                    limite=total,
+                    incluir_resueltas=True,
+                )
+                filas = pendientes.get("filas")
+            decisiones = (
+                [
+                    {
+                        "id_pendiente": fila["id_pendiente"],
+                        "decision": "ADD",
+                        "reason": 'Aprobación automática por manifest hitl="0".',
+                    }
+                    for fila in filas
+                    if isinstance(fila, dict) and not fila.get("decision")
+                ]
+                if isinstance(filas, list)
+                else []
+            )
+            if not decisiones:
+                return
+            resultado = modulo.aplicar_decisiones(
+                ejecucion.directorio,
+                decisiones,
+                actor="automatico_hitl_0",
+                revision=str(pendientes.get("revision") or ""),
+            )
+            gate = resultado.get("aprobacion", {}).get("release_gate", {})
+            if not isinstance(gate, dict):
+                raise ValueError("La aprobación automática no devolvió un release gate válido.")
+            materializacion = resultado.get("aprobacion", {}).get("materializacion", {})
+            outputs = (
+                materializacion.get("outputs", []) if isinstance(materializacion, dict) else []
+            )
+            if ejecucion.limpieza_silabos is not None:
+                ejecucion.limpieza_silabos = replace(
+                    ejecucion.limpieza_silabos,
+                    outputs=tuple(output for output in outputs if isinstance(output, dict)),
+                    pendientes=int(resultado["aprobacion"].get("remaining_pending", 0)),
+                    publicable=gate.get("decision") == "ALLOW_IMPORT",
+                    release_gate=dict(gate),
+                )
+            ejecucion.estado = cast(EstadoEjecucion, resultado["estado"])
+        except Exception as exc:
+            ejecucion.hallazgos.append(
+                Hallazgo(
+                    codigo="AUTO_APROBACION_TECNICA_FALLIDA",
+                    severidad="warning",
+                    mensaje=(
+                        "La aprobación técnica automática falló; las propuestas siguen "
+                        "disponibles para recuperación manual."
+                    ),
+                    detalle=f"{type(exc).__name__}: {str(exc)[:300]}",
+                )
+            )
+
     def _finalizar(self, ejecucion: Ejecucion) -> None:
         """Cierra el manifest, purga temporales y aplica la retención."""
 
@@ -351,6 +445,10 @@ class GestorEjecuciones:
             self._purgar_temporales(ejecucion)
         ejecucion.actualizada_en = _ahora()
         self._persistir(ejecucion)
+        if self._manifest_hitl_cero(ejecucion):
+            self._auto_aprobar_tecnicas(ejecucion)
+            ejecucion.actualizada_en = _ahora()
+            self._persistir(ejecucion)
         self._persistencia.aplicar_retencion()
 
     def _purgar_temporales(self, ejecucion: Ejecucion) -> None:

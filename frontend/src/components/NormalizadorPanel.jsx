@@ -110,6 +110,10 @@ function esEstadoTerminal(ejecucion) {
   ).has(ejecucion.estado);
 }
 
+function valorHitl(parametros) {
+  return Number(parametros?.hitl) === 0 ? 0 : 1;
+}
+
 const ETIQUETAS_ESTADO = {
   recibido: "Recibido",
   extrayendo: "Extrayendo desde Cactus",
@@ -660,6 +664,7 @@ export default function NormalizadorPanel() {
   const [modo, setModo] = useState("silabos");
   const [archivo, setArchivo] = useState(null);
   const [fuenteSilabos, setFuenteSilabos] = useState("cactus");
+  const [hitl, setHitl] = useState(1);
   const [carrera, setCarrera] = useState("");
   const [periodo, setPeriodo] = useState("");
   const [usuario, setUsuario] = useState("");
@@ -711,6 +716,7 @@ export default function NormalizadorPanel() {
         router.replace(`/${encodeURIComponent(ejecucionActiva.id_ejecucion)}`);
         const parametros = ejecucionActiva.parametros || {};
         setModo("silabos");
+        setHitl(valorHitl(parametros));
         setFuenteSilabos(parametros.fuente === "cactus" ? "cactus" : "manual");
         setCarrera(String(parametros.carrera || ""));
         setPeriodo(String(parametros.periodo || ""));
@@ -721,6 +727,7 @@ export default function NormalizadorPanel() {
         if (puedeAplicar()) {
           const parametrosDetalle = detalle?.parametros || parametros;
           setModo("silabos");
+          setHitl(valorHitl(parametrosDetalle));
           setFuenteSilabos(
             parametrosDetalle.fuente === "cactus" ? "cactus" : "manual",
           );
@@ -794,11 +801,13 @@ export default function NormalizadorPanel() {
               periodo.trim(),
               usuario.trim(),
               contrasena,
+              hitl,
             )
           : await iniciarNormalizadorSilabos(
               archivo,
               carrera.trim(),
               periodo.trim(),
+              hitl,
             );
       if (fuenteSilabos === "cactus") setContrasena("");
       setEjecucion(datos);
@@ -849,6 +858,7 @@ export default function NormalizadorPanel() {
     setAprobacionCurricular(null);
     setPollingDetenido(false);
     setRecuperando(false);
+    setHitl(1);
     setFuenteSilabos("cactus");
     setUsuario("");
     setContrasena("");
@@ -1068,6 +1078,41 @@ export default function NormalizadorPanel() {
                   className={`ml-auto h-2.5 w-2.5 shrink-0 rounded-full border transition ${modo === "silabos" ? "border-ulima bg-ulima" : "border-line bg-paper"}`}
                   aria-hidden="true"
                 />
+              </button>
+            </div>
+          </section>
+
+          <section
+            className="mt-4 rounded-2xl border border-line bg-paper p-4 shadow-sm sm:p-5"
+            aria-label="Control HITL técnico"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-body text-[10px] font-bold uppercase tracking-[0.18em] text-muted">
+                  Control por ejecución
+                </p>
+                <p className="mt-1 text-sm font-extrabold text-ink">
+                  HITL técnico: {hitl}
+                </p>
+                <p className="mt-1 max-w-3xl text-xs leading-5 text-muted">
+                  Con 0 se agregan automáticamente las propuestas técnicas válidas (ADD); las demás validaciones del release gate siguen controlando la descarga e importación.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-label="HITL técnico"
+                aria-checked={hitl === 1}
+                disabled={controlesBloqueados}
+                onClick={() => setHitl((actual) => (actual === 1 ? 0 : 1))}
+                className={`relative inline-flex h-11 min-h-11 w-20 shrink-0 cursor-pointer items-center rounded-full border px-1 transition focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-50 ${hitl === 1 ? "border-ulima bg-ulima hover:bg-ulima/90" : "border-line bg-ash hover:border-ulima/60"}`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`grid h-9 w-9 place-items-center rounded-full bg-white text-[11px] font-extrabold shadow-sm transition-transform ${hitl === 1 ? "translate-x-9 text-ulima" : "translate-x-0 text-muted"}`}
+                >
+                  {hitl}
+                </span>
               </button>
             </div>
           </section>

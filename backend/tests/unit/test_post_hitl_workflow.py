@@ -25,14 +25,13 @@ ARCHIVOS_TECNICOS = (
 
 
 def _preparar_ejecucion(
-    tmp_path: Path, *, estado: str = "no_publicado"
+    tmp_path: Path, *, estado: str = "no_publicado", hitl: str | None = None
 ) -> tuple[GestorEjecuciones, str, Path]:
     gestor = GestorEjecuciones(tmp_path)
-    id_ejecucion, directorio = gestor.crear(
-        "silabos",
-        "entrada.zip",
-        {"carrera": "SISTEMAS", "periodo": "2026-2"},
-    )
+    parametros = {"carrera": "SISTEMAS", "periodo": "2026-2"}
+    if hitl is not None:
+        parametros["hitl"] = hitl
+    id_ejecucion, directorio = gestor.crear("silabos", "entrada.zip", parametros)
     reportes = directorio / "salidas" / "reportes"
     reportes.mkdir(parents=True, exist_ok=True)
     (reportes / "propuestas_tecnicas.jsonl").write_text(
@@ -116,6 +115,114 @@ def _assert_metadata_matches_csv(directorio: Path, output: dict[str, object]) ->
     assert output["sha256"] == hashlib.sha256(ruta.read_bytes()).hexdigest()
     with ruta.open(encoding="utf-8-sig", newline="") as archivo:
         assert output["registros"] == sum(1 for _ in csv.DictReader(archivo))
+
+
+def test_hitl_zero_auto_adds_pending_technical_proposals_at_terminal_execution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path, hitl="0")
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    gestor._finalizar(ejecucion)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    estado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}")
+
+    assert estado.status_code == 200
+    assert estado.json()["release_gate"]["decision"] == "ALLOW_IMPORT"
+    journal = (directorio / "salidas" / "reportes" / "decisiones_tecnicas.jsonl").read_text(
+        encoding="utf-8"
+    )
+    decision = json.loads(journal)
+    assert decision["id_propuesta"] == "PROP_TEC_1"
+    assert decision["decision"] == "ADD"
+    assert decision["actor"] == "automatico_hitl_0"
+
+
+def test_hitl_one_keeps_pending_technical_proposals_for_manual_recovery(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path, hitl="1")
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    gestor._finalizar(ejecucion)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    estado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()
+    pendientes = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/pendientes").json()
+
+    assert estado["release_gate"]["decision"] == "BLOCK_IMPORT"
+    assert pendientes["filas"][0]["decision"] is None
+    assert not (directorio / "salidas" / "reportes" / "decisiones_tecnicas.jsonl").exists()
+
+
+def test_hitl_zero_auto_add_drops_stale_derived_release_gate_blocker(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path, hitl="0")
+    (directorio / "salidas" / "reportes" / "release_gate.json").write_text(
+        json.dumps(
+            {
+                "version": "curricular-release-gate/v1",
+                "decision": "BLOCK_IMPORT",
+                "blockers": [
+                    "PENDING_TECHNICAL_APPROVAL",
+                    "UNLINKED_SOURCE_OUTCOME",
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    gestor._finalizar(ejecucion)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    estado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()
+
+    assert estado["release_gate"]["decision"] == "ALLOW_IMPORT"
+    assert "UNLINKED_SOURCE_OUTCOME" not in estado["release_gate"]["blockers"]
+
+
+def test_hitl_zero_auto_add_preserves_unrelated_release_gate_blockers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path, hitl="0")
+    gate = {
+        "version": "curricular-release-gate/v1",
+        "decision": "BLOCK_IMPORT",
+        "blockers": [
+            "PENDING_TECHNICAL_APPROVAL",
+            "EXTRACTION_COVERAGE_INCOMPLETE",
+            "STRUCTURAL_VALIDATION_FAILED",
+        ],
+        "checks": {
+            "source_extraction": {"ok": False},
+            "structural_validation": {"ok": False, "error": "invalid shape"},
+        },
+    }
+    (directorio / "salidas" / "reportes" / "release_gate.json").write_text(
+        json.dumps(gate), encoding="utf-8"
+    )
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    gestor._finalizar(ejecucion)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    estado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()
+
+    assert estado["release_gate"]["decision"] == "BLOCK_IMPORT"
+    assert {
+        "EXTRACTION_COVERAGE_INCOMPLETE",
+        "STRUCTURAL_VALIDATION_FAILED",
+    } <= set(estado["release_gate"]["blockers"])
+    assert estado["release_gate"]["checks"]["source_extraction"]["ok"] is False
+    assert estado["release_gate"]["checks"]["structural_validation"]["ok"] is False
+    assert estado["outputs"] == []
+    descarga = cliente.get(
+        f"/normalizador/ejecuciones/{id_ejecucion}/outputs/{ARCHIVOS_TECNICOS[0]}"
+    )
+    assert descarga.status_code == 404
 
 
 def test_final_technical_add_reconciles_manifest_active_api_and_csv_metadata(

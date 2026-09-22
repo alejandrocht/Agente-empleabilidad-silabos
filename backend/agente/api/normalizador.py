@@ -88,6 +88,7 @@ class IniciarSilabosCactusIn(BaseModel):
     carrera: str = Field(..., min_length=1, max_length=200)
     periodo: str = Field(..., min_length=1, max_length=20)
     usuario: str = Field(..., min_length=1, max_length=200)
+    hitl: Literal[0, 1] = Field(default=1)
     # La longitud se valida en la ruta para que los errores de Pydantic no hagan
     # eco de una contraseña enviada en el campo `input` de la respuesta 422.
     contrasena: SecretStr
@@ -98,11 +99,16 @@ def iniciar_silabos(
     archivo: UploadFile = File(...),
     carrera: str = Form(..., min_length=1, max_length=200),
     periodo: str = Form(..., min_length=1, max_length=20),
+    hitl: int = Form(default=1, ge=0, le=1),
 ) -> dict[str, object]:
     """Recibe un ZIP, DOCX o PDF curricular junto con carrera y periodo declarados."""
 
     nombre = Path(archivo.filename or "entrada.zip").name or "entrada.zip"
-    parametros = {"carrera": carrera.strip(), "periodo": periodo.strip()}
+    parametros = {
+        "carrera": carrera.strip(),
+        "periodo": periodo.strip(),
+        "hitl": str(hitl),
+    }
     id_ejecucion, directorio = gestor_ejecuciones.crear("silabos", nombre, parametros)
     ruta_entrada = directorio / "entrada" / nombre
     try:
@@ -146,7 +152,12 @@ def iniciar_silabos_cactus(solicitud: IniciarSilabosCactusIn) -> dict[str, objec
             detail="La contraseña de ULima debe tener entre 1 y 200 caracteres.",
         )
     nombre = "cactus.zip"
-    parametros = {"carrera": carrera, "periodo": periodo, "fuente": "cactus"}
+    parametros = {
+        "carrera": carrera,
+        "periodo": periodo,
+        "fuente": "cactus",
+        "hitl": str(solicitud.hitl),
+    }
     id_ejecucion, _directorio = gestor_ejecuciones.crear("silabos", nombre, parametros)
     gestor_ejecuciones.iniciar_extraccion_silabos(
         id_ejecucion,

@@ -200,6 +200,63 @@ def test_ruta_de_empleabilidad_no_existe(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert list(tmp_path.iterdir()) == []
 
 
+def test_inicia_silabos_persiste_hitl_por_defecto(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    monkeypatch.setattr(gestor, "iniciar_validacion_silabos", lambda *_args: None)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    respuesta = cliente.post(
+        "/normalizador/silabos",
+        files={"archivo": ("silabo.zip", b"contenido", "application/zip")},
+        data={"carrera": "Marketing", "periodo": "2026-1"},
+    )
+
+    assert respuesta.status_code == 202
+    assert respuesta.json()["parametros"] == {
+        "carrera": "Marketing",
+        "periodo": "2026-1",
+        "hitl": "1",
+    }
+
+
+def test_inicia_silabos_persiste_hitl_explicito_cero(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    monkeypatch.setattr(gestor, "iniciar_validacion_silabos", lambda *_args: None)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    respuesta = cliente.post(
+        "/normalizador/silabos",
+        files={"archivo": ("silabo.zip", b"contenido", "application/zip")},
+        data={"carrera": "Marketing", "periodo": "2026-1", "hitl": "0"},
+    )
+
+    assert respuesta.status_code == 202
+    assert respuesta.json()["parametros"]["hitl"] == "0"
+
+
+def test_inicia_silabos_rechaza_hitl_invalido(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    respuesta = cliente.post(
+        "/normalizador/silabos",
+        files={"archivo": ("silabo.zip", b"contenido", "application/zip")},
+        data={"carrera": "Marketing", "periodo": "2026-1", "hitl": "2"},
+    )
+
+    assert respuesta.status_code == 422
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_inicia_y_consulta_ejecucion_de_silabos(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -451,9 +508,55 @@ def test_inicia_extraccion_cactus_sin_persistir_credenciales(
         "carrera": "Marketing",
         "periodo": "2026-1",
         "fuente": "cactus",
+        "hitl": "1",
     }
     assert "usuario@ulima.edu.pe" not in respuesta.text
     assert "secreto-no-persistir" not in respuesta.text
+
+
+def test_inicia_extraccion_cactus_persiste_hitl_explicito_cero(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    monkeypatch.setattr(gestor, "iniciar_extraccion_silabos", lambda *_args: None)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    respuesta = cliente.post(
+        "/normalizador/silabos/cactus",
+        json={
+            "carrera": "Marketing",
+            "periodo": "2026-1",
+            "usuario": "usuario@ulima.edu.pe",
+            "contrasena": "secreto-no-persistir",
+            "hitl": 0,
+        },
+    )
+
+    assert respuesta.status_code == 202
+    assert respuesta.json()["parametros"]["hitl"] == "0"
+
+
+def test_inicia_extraccion_cactus_rechaza_hitl_invalido(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    respuesta = cliente.post(
+        "/normalizador/silabos/cactus",
+        json={
+            "carrera": "Marketing",
+            "periodo": "2026-1",
+            "usuario": "usuario@ulima.edu.pe",
+            "contrasena": "secreto-no-persistir",
+            "hitl": 2,
+        },
+    )
+
+    assert respuesta.status_code == 422
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_valida_longitud_de_contrasena_sin_hacer_echo_del_secreto(
