@@ -18,7 +18,7 @@ Expose the competency description column in `catalogo_competencias.csv` as `desc
 - [x] T1. Add a regression asserting the exact `catalogo_competencias.csv` header uses `descripcion_breve`.
 - [x] T2. Update CSV row materialization and Neo4j import translation without changing analyzer inputs.
 - [x] T3. Run focused tests and static checks.
-- [ ] T4. Commit only the scoped work on `test/local-llm-technical-pipeline`; push remains a user decision.
+- [x] T4. Commit only the scoped work on `test/local-llm-technical-pipeline`; push remains a user decision.
 
 ## Acceptance criteria
 
@@ -57,3 +57,4 @@ Expose the competency description column in `catalogo_competencias.csv` as `desc
 - Independent verification: 44 focused tests passed; no remaining runtime consumer blocker.
 - `backend/README.md` still shows the old output header, but it already contains unrelated local edits and is intentionally excluded from this scoped commit.
 - Native review could not isolate this candidate from unrelated concurrent working-tree changes; no lineage was started. Independent verification passed.
+- Work-unit commit: `a6d4e66` (`fix(normalizer): rename competency description`). Push remains pending user authorization.
