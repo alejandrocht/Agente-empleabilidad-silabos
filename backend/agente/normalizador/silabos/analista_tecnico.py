@@ -538,7 +538,7 @@ def inferir_competencias_tecnicas(
     catalogo = _resolver_catalogo(catalogo_tecnico)
     analista: Any | None = None
     resultado: list[dict[str, object]] = []
-    vistos: set[tuple[str, str, tuple[str, ...]]] = set()
+    vistos: set[tuple[str, str]] = set()
     total_silabos = len(registros)
     for indice, registro in enumerate(registros, start=1):
         if cancelada is not None and cancelada():
@@ -637,9 +637,8 @@ def inferir_competencias_tecnicas(
                 if fila is None:
                     continue
                 clave = (
-                    _texto(fila["id_silabo"]),
-                    _texto(fila["catalogo_ref"]) or _clave_texto(fila["nombre_competencia"]),
-                    tuple(fila["logros"]) if isinstance(fila["logros"], list) else (),
+                    _clave_texto(fila["id_silabo"]),
+                    _clave_texto(fila["nombre_competencia"]),
                 )
                 if clave in vistos:
                     continue

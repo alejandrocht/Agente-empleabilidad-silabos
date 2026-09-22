@@ -13,6 +13,7 @@ from pathlib import Path
 from threading import RLock
 
 from agente.normalizador.silabos import salida_catalogos
+from agente.normalizador.silabos.entrada import normalizar_carrera, normalizar_periodo
 from agente.normalizador.silabos.salida_catalogos import construir_salidas_tecnicas
 
 errores_tecnicos = import_module("agente.normalizador.silabos.errores_tecnicos")
@@ -505,8 +506,13 @@ def _materializar(
 ) -> dict[str, object]:
     parametros = manifest.get("parametros")
     parametros = parametros if isinstance(parametros, Mapping) else {}
-    carrera = str(parametros.get("carrera") or "").strip()
-    periodo = str(parametros.get("periodo") or "").strip()
+    validacion = manifest.get("validacion_silabos")
+    if isinstance(validacion, Mapping):
+        carrera = str(validacion.get("carrera") or "").strip()
+        periodo = str(validacion.get("periodo") or "").strip()
+    else:
+        carrera = normalizar_carrera(parametros.get("carrera"))
+        periodo = normalizar_periodo(parametros.get("periodo"))
     if not carrera or not periodo:
         raise DecisionCurricularInvalida("La ejecución técnica no tiene carrera y periodo.")
     decisiones = _decisiones_por_id(journal)
@@ -522,15 +528,18 @@ def _materializar(
         in {"", "KEEP_PENDING"}
     ]
     analisis = _leer_json(_reportes(directorio) / "analisis_tecnico.json")
-    resultado = construir_salidas_tecnicas(
-        _leer_registros(directorio),
-        directorio / "salidas",
-        carrera=carrera,
-        periodo_academico=periodo,
-        propuestas_tecnicas=pendientes,
-        propuestas_aprobadas=aprobadas,
-        analisis_tecnico=analisis or {"estado": "COMPLETADO"},
-    )
+    try:
+        resultado = construir_salidas_tecnicas(
+            _leer_registros(directorio),
+            directorio / "salidas",
+            carrera=carrera,
+            periodo_academico=periodo,
+            propuestas_tecnicas=pendientes,
+            propuestas_aprobadas=aprobadas,
+            analisis_tecnico=analisis or {"estado": "COMPLETADO"},
+        )
+    except ValueError as exc:
+        raise DecisionCurricularInvalida(str(exc)) from exc
     gate = _gate_tecnico(
         resultado.release_gate,
         propuestas=propuestas,
