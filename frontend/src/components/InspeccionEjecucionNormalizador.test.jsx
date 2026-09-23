@@ -71,6 +71,56 @@ function reporteTecnico({
 }
 
 describe("inspección de ejecución normalizada", () => {
+  it("mantiene la navegación al normalizador mientras carga", () => {
+    obtenerReporteEjecucionNormalizador.mockImplementationOnce(
+      () => new Promise(() => {}),
+    );
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_LOADING" />);
+
+    const navegacion = screen.getByRole("navigation", {
+      name: "Navegación de ejecución",
+    });
+    const enlace = within(navegacion).getByRole("link", {
+      name: "Volver al normalizador",
+    });
+    expect(enlace.getAttribute("href")).toBe("/normalizador");
+  });
+
+  it("mantiene la navegación al normalizador cuando falla la carga", async () => {
+    obtenerReporteEjecucionNormalizador.mockRejectedValueOnce(
+      new Error("No se pudo cargar"),
+    );
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_ERROR" />);
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    const navegacion = screen.getByRole("navigation", {
+      name: "Navegación de ejecución",
+    });
+    expect(
+      within(navegacion)
+        .getByRole("link", { name: "Volver al normalizador" })
+        .getAttribute("href"),
+    ).toBe("/normalizador");
+  });
+
+  it("mantiene la navegación al normalizador después de cargar", async () => {
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_READY" />);
+
+    await screen.findByRole("heading", {
+      name: "Inspección técnica curricular",
+    });
+    const navegacion = screen.getByRole("navigation", {
+      name: "Navegación de ejecución",
+    });
+    expect(
+      within(navegacion)
+        .getByRole("link", { name: "Volver al normalizador" })
+        .getAttribute("href"),
+    ).toBe("/normalizador");
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     obtenerReporteEjecucionNormalizador.mockResolvedValue({
