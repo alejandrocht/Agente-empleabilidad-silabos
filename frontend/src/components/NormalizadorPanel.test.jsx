@@ -55,7 +55,9 @@ vi.mock("../api/normalizador", () => ({
 async function renderPanelAfterRecovery() {
   const rendered = render(<NormalizadorPanel />);
   await waitFor(() =>
-    expect(screen.queryByText("Recuperando ejecución")).toBeNull(),
+    expect(screen.getByRole("switch", { name: "HITL técnico" }).disabled).toBe(
+      false,
+    ),
   );
   return rendered;
 }
@@ -136,23 +138,56 @@ describe("panel del normalizador", () => {
     obtenerCuarentenaNormalizador.mockResolvedValue({ total: 0, filas: [] });
   });
 
-  it("expone el switch HITL por ejecución con estado 1 por defecto y permite cambiarlo a 0", async () => {
+  it("omite la tarjeta de progreso de la normalización en el panel principal", async () => {
     await renderPanelAfterRecovery();
 
-    const switchControl = screen.getByRole("switch", { name: "HITL técnico" });
-    expect(switchControl.getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByText(/HITL técnico: 1/)).toBeTruthy();
     expect(
-      screen.getByText(/Con 0 se agregan automáticamente las propuestas técnicas válidas/),
+      screen.queryByRole("region", { name: "Seguimiento del flujo" }),
+    ).toBeNull();
+  });
+
+  it("deja que Carga de fuente ocupe todo el ancho disponible", async () => {
+    await renderPanelAfterRecovery();
+
+    const sourcePanelWrapper = document.querySelector("#panel-fuente");
+    expect(sourcePanelWrapper.className).not.toMatch(/\bgrid\b/);
+    expect(sourcePanelWrapper.className).not.toContain("lg:grid-cols-");
+  });
+
+  it("ubica el switch HITL dentro de Carga de fuente y permite alternar los modos", async () => {
+    await renderPanelAfterRecovery();
+
+    const sourcePanel = screen.getByRole("region", { name: "Carga de fuente" });
+    const switchControl = within(sourcePanel).getByRole("switch", {
+      name: "HITL técnico",
+    });
+    expect(switchControl.getAttribute("aria-checked")).toBe("true");
+    expect(within(sourcePanel).getByText("Revisión técnica manual")).toBeTruthy();
+    expect(
+      within(sourcePanel).getByText(
+        "Las propuestas técnicas esperan tu revisión antes de agregarse.",
+      ),
     ).toBeTruthy();
+    expect(screen.queryByText(/HITL técnico:\s*[01]/)).toBeNull();
+    expect(screen.queryByText(/Con 0/)).toBeNull();
 
     fireEvent.click(switchControl);
 
     expect(switchControl.getAttribute("aria-checked")).toBe("false");
-    expect(screen.getByText(/HITL técnico: 0/)).toBeTruthy();
+    expect(
+      within(sourcePanel).getByText("Aprobación técnica automática"),
+    ).toBeTruthy();
+    expect(
+      within(sourcePanel).getByText(
+        "Las propuestas técnicas válidas se agregan automáticamente (ADD).",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/HITL técnico:\s*[01]/)).toBeNull();
+    expect(iniciarNormalizadorSilabos).not.toHaveBeenCalled();
+    expect(iniciarNormalizadorSilabosCactus).not.toHaveBeenCalled();
   });
 
-  it("restablece HITL a 1 al preparar una nueva ejecución", async () => {
+  it("restablece HITL al modo de revisión manual al preparar una nueva ejecución", async () => {
     const { container } = await renderPanelAfterRecovery();
     fireEvent.click(screen.getByRole("button", { name: /Cargar archivo manual/ }));
     fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), {
@@ -170,7 +205,7 @@ describe("panel del normalizador", () => {
     fireEvent.click(screen.getByRole("button", { name: "Nueva fuente" }));
 
     expect(screen.getByRole("switch", { name: "HITL técnico" }).getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByText(/HITL técnico: 1/)).toBeTruthy();
+    expect(screen.getByText("Revisión técnica manual")).toBeTruthy();
   });
 
   it("inicia la extracción Cactus con carrera, periodo y credenciales", async () => {
@@ -229,7 +264,6 @@ describe("panel del normalizador", () => {
       ),
     );
     expect(navigation.push).toHaveBeenCalledWith("/NOR_cactus12345678");
-    expect(screen.getByText("Extrayendo desde Cactus")).toBeTruthy();
     expect(screen.getByLabelText("Progreso de extracción Cactus")).toBeTruthy();
   });
 
@@ -256,7 +290,9 @@ describe("panel del normalizador", () => {
 
     render(<NormalizadorPanel />);
 
-    expect(screen.getByText("Recuperando ejecución")).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "HITL técnico" }).disabled).toBe(
+      true,
+    );
     expect(screen.getByRole("tab", { name: "Sílabos" }).disabled).toBe(true);
     await waitFor(() =>
       expect(obtenerEjecucionNormalizador).toHaveBeenCalledWith(idEjecucion),
@@ -292,9 +328,9 @@ describe("panel del normalizador", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByText("Limpiando datos")).toBeTruthy(),
+      expect(screen.getByLabelText("Progreso de limpieza LLM")).toBeTruthy(),
     );
-    expect(screen.queryByText("Recibido")).toBeNull();
+    expect(screen.queryByText("Progreso de la normalización")).toBeNull();
     expect(
       screen
         .getByRole("tab", { name: "Sílabos" })
@@ -309,13 +345,8 @@ describe("panel del normalizador", () => {
     expect(
       screen.getByRole("switch", { name: "HITL técnico" }).getAttribute("aria-checked"),
     ).toBe("false");
-    expect(screen.getByText(/HITL técnico: 0/)).toBeTruthy();
-    expect(screen.getByText(/Procesamos los sílabos por lotes/)).toBeTruthy();
-    expect(
-      screen
-        .getByRole("progressbar", { name: "Progreso del flujo" })
-        .getAttribute("aria-valuetext"),
-    ).toMatch(/50%/);
+    expect(screen.getByText("Aprobación técnica automática")).toBeTruthy();
+    expect(screen.getByLabelText("Progreso de limpieza LLM")).toBeTruthy();
   });
 
   it("limpia el polling al desmontar una ejecución restaurada", async () => {
@@ -338,7 +369,7 @@ describe("panel del normalizador", () => {
 
     const { unmount } = render(<NormalizadorPanel />);
     await waitFor(() =>
-      expect(screen.getByText("Limpiando datos")).toBeTruthy(),
+      expect(screen.getByLabelText("Registro de actividad")).toBeTruthy(),
     );
     const llamadasAntesDeDesmontar =
       obtenerEjecucionNormalizador.mock.calls.length;
@@ -398,7 +429,7 @@ describe("panel del normalizador", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText("Limpiando datos")).toBeTruthy(),
+      expect(screen.getByLabelText("Registro de actividad")).toBeTruthy(),
     );
     expect(screen.getByRole("tab", { name: "Sílabos" }).disabled).toBe(true);
     expect(screen.getByRole("combobox", { name: "Carrera" }).disabled).toBe(
@@ -488,7 +519,7 @@ describe("panel del normalizador", () => {
       ),
     );
     await waitFor(
-      () => expect(screen.getByText("Procesamiento cancelado")).toBeTruthy(),
+      () => expect(screen.getByLabelText("Registro de actividad")).toBeTruthy(),
       { timeout: 1600 },
     );
     expect(confirmacion).toHaveBeenCalledWith(

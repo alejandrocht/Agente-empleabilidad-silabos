@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
-  CircleDashed,
   Clock3,
   Database,
   BookOpen,
@@ -114,32 +113,6 @@ function valorHitl(parametros) {
   return Number(parametros?.hitl) === 0 ? 0 : 1;
 }
 
-const ETIQUETAS_ESTADO = {
-  recibido: "Recibido",
-  extrayendo: "Extrayendo desde Cactus",
-  validando: "Validando estructura",
-  validado: "Estructura validada",
-  validado_con_advertencias: "Validada con advertencias",
-  limpiando: "Limpiando datos",
-  limpiado: "CSV técnicos listos",
-  limpiado_con_advertencias: "CSV técnicos con advertencias",
-  normalizando: "Procesando resultados técnicos",
-  normalizado: "Listo para publicar",
-  normalizado_con_advertencias: "Listo con advertencias",
-  no_publicado: "No publicado",
-  rechazado: "Entrada rechazada",
-  error: "Error de ejecución",
-  cancelado: "Procesamiento cancelado",
-};
-
-const PASOS_SILABOS = [
-  { id: "entrada", label: "Fuente" },
-  { id: "extraccion", label: "Extracción" },
-  { id: "validacion", label: "Validación" },
-  { id: "limpieza", label: "Limpieza" },
-  { id: "resultado", label: "CSV técnicos" },
-];
-
 const CARRERAS_ULIMA = [
   "Administración",
   "Arquitectura",
@@ -220,50 +193,6 @@ function salidaCurricularAuditable(output) {
     TIPOS_OUTPUT_AUDITABLES.has(String(output?.tipo || "")) ||
     String(output?.archivo || "").includes("/reportes/")
   );
-}
-
-function tipoFlujo() {
-  return "silabos";
-}
-
-function pasosPara() {
-  return PASOS_SILABOS;
-}
-
-function pasoActivo(estado, paso) {
-  if (["recibido", "rechazado"].includes(estado)) return paso === "entrada";
-  if (estado === "extrayendo") return paso === "extraccion";
-  if (["validando", "validado", "validado_con_advertencias"].includes(estado))
-    return paso === "validacion";
-  if (estado === "limpiando") return paso === "limpieza";
-  return false;
-}
-
-function pasoCompletado(estado, indice) {
-  const orden = {
-    recibido: 0,
-    extrayendo: 1,
-    validando: 2,
-    validado: 2,
-    validado_con_advertencias: 2,
-    limpiando: 3,
-    limpiado: 5,
-    limpiado_con_advertencias: 5,
-    no_publicado: 5,
-    rechazado: 0,
-    error: 0,
-    cancelado: 0,
-  };
-  return (orden[estado] ?? 0) > indice;
-}
-
-function progresoFlujo(estado) {
-  const pasos = PASOS_SILABOS;
-  const completados = pasos.reduce(
-    (total, _, indice) => total + (pasoCompletado(estado, indice) ? 1 : 0),
-    0,
-  );
-  return Math.min(100, Math.round((completados / (pasos.length - 1)) * 100));
 }
 
 function detalleHallazgo(hallazgo) {
@@ -867,8 +796,6 @@ export default function NormalizadorPanel() {
 
   const estado = recuperando ? "recuperando" : ejecucion?.estado || "recibido";
   const esFinal = esEstadoTerminal(ejecucion);
-  const flujo = tipoFlujo();
-  const pasos = pasosPara();
   const controlesBloqueados = recuperando || cargando || Boolean(ejecucion);
   const fuenteLista =
     fuenteSilabos === "cactus"
@@ -915,33 +842,6 @@ export default function NormalizadorPanel() {
     : minutosSinActividad(ejecucion?.actualizada_en);
   const ultimaActualizacion = fechaLegible(ejecucion?.actualizada_en);
   const IconoFuente = BookOpen;
-  const progresoManifest =
-    progresoLimpiezaLLM && progresoLimpiezaLLM.chunksTotales > 0
-      ? progresoLimpiezaLLM.porcentaje
-      : null;
-  const progreso = recuperando
-    ? null
-    : (progresoManifest ??
-      (ejecucion ? (esFinal ? progresoFlujo(estado) : null) : 0));
-  const detalleSeguimiento = recuperando
-    ? "Comprobando si existe una ejecución activa para recuperar su seguimiento."
-    : !ejecucion && !cargando
-      ? "Selecciona una fuente y presiona el botón de inicio para comenzar."
-      : esFinal
-        ? "La estructura quedó registrada y ya puedes revisar sus hallazgos."
-        : cancelacionEnviada
-          ? estado === "extrayendo"
-            ? "Cancelación solicitada. La navegación o descarga actual puede terminar antes de cerrar la ejecución."
-            : "Cancelación solicitada. El lote actual puede terminar, pero no se enviarán nuevos lotes al LLM."
-          : estado === "extrayendo"
-            ? "Cactus está navegando el periodo seleccionado y descargando los sílabos de la carrera."
-            : "Procesamos los sílabos por lotes, conservamos las evidencias y hallazgos de cada etapa, y habilitaremos los CSV y la inspección al completar el ETL.";
-  const tituloEstado = recuperando
-    ? "Recuperando ejecución"
-    : aprobacionPendiente &&
-        (["limpiado", "limpiado_con_advertencias"].includes(estado) || esFinal)
-      ? "Revisión técnica pendiente"
-      : ETIQUETAS_ESTADO[estado] || "Preparando ejecución";
   const outputs = Array.isArray(ejecucion?.outputs) ? ejecucion.outputs : [];
   const outputsCurricularesCanonicos = outputs.filter(salidaCurricularCanonica);
   const outputsCurricularesAuditables = outputs.filter(
@@ -1083,43 +983,8 @@ export default function NormalizadorPanel() {
           </section>
 
           <section
-            className="mt-4 rounded-2xl border border-line bg-paper p-4 shadow-sm sm:p-5"
-            aria-label="Control HITL técnico"
-          >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-body text-[10px] font-bold uppercase tracking-[0.18em] text-muted">
-                  Control por ejecución
-                </p>
-                <p className="mt-1 text-sm font-extrabold text-ink">
-                  HITL técnico: {hitl}
-                </p>
-                <p className="mt-1 max-w-3xl text-xs leading-5 text-muted">
-                  Con 0 se agregan automáticamente las propuestas técnicas válidas (ADD); las demás validaciones del release gate siguen controlando la descarga e importación.
-                </p>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-label="HITL técnico"
-                aria-checked={hitl === 1}
-                disabled={controlesBloqueados}
-                onClick={() => setHitl((actual) => (actual === 1 ? 0 : 1))}
-                className={`relative inline-flex h-11 min-h-11 w-20 shrink-0 cursor-pointer items-center rounded-full border px-1 transition focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-50 ${hitl === 1 ? "border-ulima bg-ulima hover:bg-ulima/90" : "border-line bg-ash hover:border-ulima/60"}`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`grid h-9 w-9 place-items-center rounded-full bg-white text-[11px] font-extrabold shadow-sm transition-transform ${hitl === 1 ? "translate-x-9 text-ulima" : "translate-x-0 text-muted"}`}
-                >
-                  {hitl}
-                </span>
-              </button>
-            </div>
-          </section>
-
-          <section
             id="panel-fuente"
-            className="mt-4 grid gap-4 lg:grid-cols-[.88fr_1.12fr]"
+            className="mt-4"
             role="tabpanel"
           >
             <section
@@ -1142,6 +1007,46 @@ export default function NormalizadorPanel() {
                   <IconoFuente size={21} />
                 </span>
               </div>
+
+              <section
+                className="mt-4 rounded-xl border border-line bg-fondo p-3.5"
+                aria-label="Control HITL técnico"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-body text-[10px] font-bold uppercase tracking-[0.18em] text-muted">
+                      Control por ejecución
+                    </p>
+                    <p className="mt-1 text-sm font-extrabold text-ink">
+                      {hitl === 1
+                        ? "Revisión técnica manual"
+                        : "Aprobación técnica automática"}
+                    </p>
+                    <p className="mt-1 max-w-3xl text-xs leading-5 text-muted">
+                      {hitl === 1
+                        ? "Las propuestas técnicas esperan tu revisión antes de agregarse."
+                        : "Las propuestas técnicas válidas se agregan automáticamente (ADD)."}
+                    </p>
+                    <p className="mt-1 max-w-3xl text-xs leading-5 text-muted">
+                      El release gate continúa controlando la descarga e importación.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-label="HITL técnico"
+                    aria-checked={hitl === 1}
+                    disabled={controlesBloqueados}
+                    onClick={() => setHitl((actual) => (actual === 1 ? 0 : 1))}
+                    className={`relative inline-flex h-11 min-h-11 w-20 shrink-0 cursor-pointer items-center rounded-full border px-1 transition focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-50 ${hitl === 1 ? "border-ulima bg-ulima hover:bg-ulima/90" : "border-line bg-ash hover:border-ulima/60"}`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`grid h-9 w-9 place-items-center rounded-full bg-white shadow-sm transition-transform ${hitl === 1 ? "translate-x-9" : "translate-x-0"}`}
+                    />
+                  </button>
+                </div>
+              </section>
 
               {modo === "silabos" ? (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -1352,202 +1257,6 @@ export default function NormalizadorPanel() {
               ) : null}
             </section>
 
-            <section
-              className="rounded-2xl border border-line bg-paper p-4 shadow-sm sm:p-5"
-              aria-label="Seguimiento del flujo"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-body text-[10px] font-bold uppercase tracking-[0.18em] text-muted">
-                    02 / seguimiento
-                  </p>
-                  <h2 className="mt-1.5 text-xl font-extrabold tracking-[-0.025em]">
-                    Progreso de la normalización
-                  </h2>
-                </div>
-                <span
-                  className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${ejecucionActiva ? "border-ulima/30 bg-[#FFF5F1] text-ulima" : "border-line bg-fondo text-muted"}`}
-                >
-                  {ejecucionActiva ? (
-                    <LoaderCircle className="animate-girar" size={20} />
-                  ) : (
-                    <CircleDashed size={20} />
-                  )}
-                </span>
-              </div>
-
-              <div
-                className="mt-5"
-                role="progressbar"
-                aria-label="Progreso del flujo"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                aria-valuenow={progreso ?? undefined}
-                aria-valuetext={
-                  recuperando
-                    ? "Recuperando la ejecución activa"
-                    : progreso === null
-                      ? "Procesamiento en curso; porcentaje pendiente de datos del manifest"
-                      : `${progreso}% completado${progresoManifest === null ? "" : " según el manifest"}`
-                }
-              >
-                <div className="mb-2.5 flex items-center justify-between font-body text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                  <span>Flujo curricular</span>
-                  <span className="text-ulima">
-                    {recuperando
-                      ? "Recuperando…"
-                      : progreso === null
-                        ? "En curso"
-                        : `${progreso}%`}
-                  </span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-ash">
-                  <div
-                    className="h-full rounded-full bg-ulima transition-[width] duration-700 ease-out"
-                    style={{ width: `${progreso ?? 0}%` }}
-                  />
-                </div>
-              </div>
-
-              {[
-                "extrayendo",
-                "validando",
-                "limpiando",
-                "normalizando",
-              ].includes(estado) && !cancelacionEnviada ? (
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={cancelar}
-                    disabled={cancelando}
-                    className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-extrabold text-red-700 transition hover:border-red-300 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 disabled:cursor-wait disabled:opacity-60"
-                  >
-                    {cancelando ? (
-                      <LoaderCircle className="animate-girar" size={14} />
-                    ) : (
-                      <XCircle size={14} />
-                    )}
-                    {cancelando ? "Cancelando…" : "Cancelar procesamiento"}
-                  </button>
-                </div>
-              ) : null}
-
-              <div
-                className={`mt-5 grid ${flujo === "silabos" ? "grid-cols-5" : "grid-cols-4"}`}
-                aria-label="Etapas del flujo"
-              >
-                {pasos.map((paso, indice) => {
-                  const completado = pasoCompletado(estado, indice);
-                  const activo = pasoActivo(estado, paso.id);
-                  const siguienteCompletado =
-                    indice < pasos.length - 1 &&
-                    pasoCompletado(estado, indice + 1);
-                  return (
-                    <div
-                      key={paso.id}
-                      className="relative flex min-w-0 flex-col items-center text-center"
-                    >
-                      {indice > 0 ? (
-                        <span
-                          className={`absolute left-0 right-1/2 top-4 h-px transition-colors duration-500 ${completado ? "bg-ulima" : "bg-line"}`}
-                          aria-hidden="true"
-                        />
-                      ) : null}
-                      {indice < pasos.length - 1 ? (
-                        <span
-                          className={`absolute left-1/2 right-0 top-4 h-px transition-colors duration-500 ${siguienteCompletado ? "bg-ulima" : "bg-line"}`}
-                          aria-hidden="true"
-                        />
-                      ) : null}
-                      <span
-                        className={`relative z-10 grid h-8 w-8 place-items-center rounded-full border-2 bg-paper transition-all duration-500 ${completado ? "border-ulima bg-ulima text-white" : activo ? "border-ulima text-ulima shadow-[0_0_0_5px_rgba(255,81,23,0.10)]" : "border-line text-muted"}`}
-                      >
-                        {completado ? (
-                          <Check size={14} strokeWidth={3} />
-                        ) : (
-                          <span className="font-body text-[10px] font-extrabold">
-                            {String(indice + 1).padStart(2, "0")}
-                          </span>
-                        )}
-                      </span>
-                      <p
-                        className={`mt-2 w-full truncate px-1 font-body text-[10px] font-bold uppercase tracking-[0.08em] ${activo || completado ? "text-ink" : "text-muted"}`}
-                      >
-                        {paso.label}
-                      </p>
-                      <p
-                        className={`mt-1 w-full truncate px-1 font-body text-[9px] uppercase tracking-[0.08em] ${completado ? "text-ulima" : activo ? "text-ink" : "text-muted/70"}`}
-                      >
-                        {completado
-                          ? "listo"
-                          : activo
-                            ? "en curso"
-                            : "pendiente"}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-5 flex items-start gap-3 rounded-xl border border-line bg-fondo px-3.5 py-3">
-                <div
-                  className={`mt-0.5 shrink-0 ${ejecucionActiva ? "text-ulima" : esFinal ? "text-emerald-600" : "text-muted"}`}
-                >
-                  {ejecucionActiva ? (
-                    <LoaderCircle className="animate-girar" size={17} />
-                  ) : esFinal ? (
-                    <Check size={17} />
-                  ) : (
-                    <CircleDashed size={17} />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="font-body text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                    {recuperando
-                      ? "Recuperando seguimiento"
-                      : ejecucionActiva
-                        ? "Proceso en curso"
-                        : esFinal
-                          ? "Proceso registrado"
-                          : "Esperando fuente"}
-                  </p>
-                  <p className="mt-1 text-sm leading-5 text-muted">
-                    {detalleSeguimiento}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 border-t border-line pt-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-3">
-                  <div>
-                    <p className="font-body text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-                      Estado actual
-                    </p>
-                    <p className="mt-1.5 text-2xl font-extrabold tracking-[-0.035em]">
-                      {tituloEstado}
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded-full px-2.5 py-1 font-body text-[10px] font-bold uppercase tracking-[0.08em] ${esFinal ? (resultadoListo ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700") : ejecucionActiva ? "bg-[#FFF5F1] text-ulima" : "bg-ash text-muted"}`}
-                  >
-                    {recuperando
-                      ? "Recuperando"
-                      : esFinal
-                        ? resultadoListo
-                          ? "Revisado"
-                          : "Requiere atención"
-                        : ejecucionActiva
-                          ? "En curso"
-                          : "Sin iniciar"}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm leading-6 text-muted">
-                  {ejecucion
-                    ? `Ejecución ${ejecucion.id_ejecucion} · ${ejecucion.archivo}`
-                    : "La ejecución aparecerá aquí cuando cargues una fuente."}
-                </p>
-              </div>
-            </section>
           </section>
 
           {ejecucion ? (
@@ -1574,6 +1283,26 @@ export default function NormalizadorPanel() {
                     : "Sin marca de actualización"}
                 </div>
               </div>
+
+              {["extrayendo", "validando", "limpiando", "normalizando"].includes(
+                estado,
+              ) && !cancelacionEnviada ? (
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={cancelar}
+                    disabled={cancelando}
+                    className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-extrabold text-red-700 transition hover:border-red-300 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {cancelando ? (
+                      <LoaderCircle className="animate-girar" size={14} />
+                    ) : (
+                      <XCircle size={14} />
+                    )}
+                    {cancelando ? "Cancelando…" : "Cancelar procesamiento"}
+                  </button>
+                </div>
+              ) : null}
 
               {minutosInactivo ? (
                 <div
