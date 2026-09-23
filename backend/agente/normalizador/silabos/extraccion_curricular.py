@@ -315,12 +315,11 @@ def _extraer_docx(
             "coordinador": _primer_metadata(metadata, ("coordinador", "coordinador_del_curso")),
             "creditos": _primer_metadata(metadata, ("creditos", "creditos_academicos")),
             "nivel": nivel,
-            "tipo_curso": _normalizar_modalidad(
-                _primer_metadata(
-                    metadata,
-                    ("modalidad", "modalidad_de_estudios", "modalidad_de_ensenanza"),
-                )
+            "tipo_curso": _primer_metadata(
+                metadata,
+                ("tipo_de_asignatura", "tipo_asignatura"),
             ),
+            "naturaleza": _primer_metadata(metadata, ("naturaleza",)),
             "codigo_curso": _primer_metadata(
                 metadata,
                 ("codigo_del_curso", "codigo", "cod_asignatura"),

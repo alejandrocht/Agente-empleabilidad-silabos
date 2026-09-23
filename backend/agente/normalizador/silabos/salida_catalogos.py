@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,7 @@ CURSOS_SCHEMA = (
     "creditos",
     "nivel",
     "tipo_curso",
+    "naturaleza",
     "codigo_curso",
     "id_carrera",
 )
@@ -42,18 +44,21 @@ COMPETENCIAS_SCHEMA = (
     "tipo_competencia",
     "codigo_competencia",
 )
+HABILIDADES_SCHEMA = ("id_habilidad", "id_carrera", "nombre_habilidad", "desc_breve")
 LOGROS_SCHEMA = ("id_logro", "logro")
 COBERTURA_SCHEMA = (
-    "id_cob_curricular",
+    "id_cobertura_curricular",
     "id_curso",
     "id_silabo",
     "id_competencia",
+    "id_habilidad",
     "id_logro",
 )
 ARCHIVOS_CATALOGO = (
     ("curso.csv", CURSOS_SCHEMA),
     ("silabo.csv", SILABOS_SCHEMA),
     ("catalogo_competencias.csv", COMPETENCIAS_SCHEMA),
+    ("catalogo_habilidades.csv", HABILIDADES_SCHEMA),
     ("catalogo_logros.csv", LOGROS_SCHEMA),
     ("cobertura_curricular.csv", COBERTURA_SCHEMA),
 )
@@ -66,9 +71,10 @@ class ResultadoCatalogosTecnicos:
     publicable: bool
     relaciones: int
     competencias: int
-    pendientes: int
     outputs: tuple[dict[str, object], ...]
     release_gate: dict[str, object]
+    habilidades: int = 0
+    pendientes: int = 0
     hallazgos: tuple[Hallazgo, ...] = ()
     cuarentena: tuple[dict[str, object], ...] = ()
 
@@ -113,13 +119,17 @@ def _cobertura(
     id_curso: str,
     id_silabo: str,
     id_competencia: str,
+    id_habilidad: str,
     id_logro: str,
 ) -> dict[str, str]:
     return {
-        "id_cob_curricular": _hash_id("COB_CUR", id_curso, id_silabo, id_competencia, id_logro),
+        "id_cobertura_curricular": _hash_id(
+            "COB_CUR", id_curso, id_silabo, id_competencia, id_habilidad, id_logro
+        ),
         "id_curso": id_curso,
         "id_silabo": id_silabo,
         "id_competencia": id_competencia,
+        "id_habilidad": id_habilidad,
         "id_logro": id_logro,
     }
 
@@ -253,6 +263,7 @@ def construir_salidas_tecnicas(
         "observability": {
             "source_records": len(registros),
             "canonical_competencies": conteos["catalogo_competencias.csv"],
+            "canonical_skills": conteos["catalogo_habilidades.csv"],
             "canonical_relations": conteos["cobertura_curricular.csv"],
             "pending_records": pendientes,
         },
@@ -275,6 +286,7 @@ def construir_salidas_tecnicas(
         publicable=bool(registros) and not blockers,
         relaciones=conteos["cobertura_curricular.csv"],
         competencias=conteos["catalogo_competencias.csv"],
+        habilidades=conteos["catalogo_habilidades.csv"],
         pendientes=pendientes,
         outputs=outputs,
         release_gate=gate,
@@ -309,6 +321,7 @@ def construir_catalogos_curriculares(
     cursos: dict[str, dict[str, str]] = {}
     silabos: dict[str, dict[str, str]] = {}
     competencias: dict[str, dict[str, str]] = {}
+    habilidades: dict[str, dict[str, str]] = {}
     logros: dict[str, dict[str, str]] = {}
     coberturas: dict[str, dict[str, str]] = {}
     hallazgos: list[Hallazgo] = []
@@ -337,6 +350,7 @@ def construir_catalogos_curriculares(
                 "creditos": _texto(datos.get("creditos")),
                 "nivel": _texto(datos.get("nivel") or datos.get("ciclo")),
                 "tipo_curso": _texto(datos.get("tipo_curso")),
+                "naturaleza": _texto(datos.get("naturaleza")),
                 "codigo_curso": codigo_curso,
                 "id_carrera": id_carrera,
             },
@@ -402,8 +416,8 @@ def construir_catalogos_curriculares(
                     }
                 )
             for id_competencia in ids_competencias_silabo:
-                fila = _cobertura(id_curso, id_silabo, id_competencia, id_logro)
-                coberturas[fila["id_cob_curricular"]] = fila
+                fila = _cobertura(id_curso, id_silabo, id_competencia, "", id_logro)
+                coberturas[fila["id_cobertura_curricular"]] = fila
 
         for especifico in _lista_mapeos(datos.get("logros_especificos")):
             texto_logro = _texto(especifico.get("descripcion") or especifico.get("logro"))
@@ -438,13 +452,12 @@ def construir_catalogos_curriculares(
                     }
                 )
             for id_competencia in sorted(ids_competencia):
-                fila = _cobertura(id_curso, id_silabo, id_competencia, id_logro)
-                coberturas[fila["id_cob_curricular"]] = fila
+                fila = _cobertura(id_curso, id_silabo, id_competencia, "", id_logro)
+                coberturas[fila["id_cobertura_curricular"]] = fila
         logros_por_silabo[id_silabo] = logros_silabo
 
     inferencias: list[dict[str, object]] = []
     curso_por_silabo = {fila["id_silabo"]: fila["id_curso"] for fila in silabos.values()}
-    contador_tecnico: dict[str, int] = {}
     for tecnica in competencias_tecnicas:
         if tecnica.get("estado_aprobacion") != "APROBADA":
             raise ValueError(
@@ -456,31 +469,25 @@ def construir_catalogos_curriculares(
         descripcion = _texto(
             tecnica.get("descripcion_breve_competencia") or tecnica.get("descripcion")
         )
+        catalogo_ref = _texto(tecnica.get("catalogo_ref")).upper()
+        coincidencia = re.fullmatch(r"COMP_TEC_(\d{4})", catalogo_ref)
+        if not coincidencia:
+            raise ValueError(
+                "La competencia técnica aprobada requiere catalogo_ref con formato "
+                "COMP_TEC_#### para publicar una habilidad segura"
+            )
         if not id_curso or not nombre or not descripcion:
             raise ValueError("Una competencia técnica no referencia un sílabo válido")
-        contador_tecnico[id_silabo] = contador_tecnico.get(id_silabo, 0) + 1
-        codigo = _texto(tecnica.get("codigo_competencia")).upper() or (
-            f"T{contador_tecnico[id_silabo]}"
-        )
-        if not codigo.startswith("T"):
-            raise ValueError("Las competencias técnicas deben usar códigos T")
-        id_competencia = _hash_id(
-            "COMP",
-            "tecnica",
-            _texto(tecnica.get("catalogo_ref")) or nombre,
-            nombre,
-            descripcion,
-        )
+        id_habilidad = f"HAB_TEC_{coincidencia.group(1)}"
         _agregar_unico(
-            competencias,
+            habilidades,
             {
-                "id_competencia": id_competencia,
-                "nombre_competencia": nombre,
-                "descripcion_breve_competencia": descripcion,
-                "tipo_competencia": "tecnica",
-                "codigo_competencia": codigo,
+                "id_habilidad": id_habilidad,
+                "id_carrera": id_carrera,
+                "nombre_habilidad": nombre,
+                "desc_breve": descripcion,
             },
-            "id_competencia",
+            "id_habilidad",
             variantes_canonicas=True,
         )
         logros_disponibles = logros_por_silabo.get(id_silabo, {})
@@ -523,16 +530,14 @@ def construir_catalogos_curriculares(
                 f"La competencia técnica aprobada debe referenciar un logro de {id_silabo}"
             )
         for id_logro in ids_logro:
-            fila = _cobertura(id_curso, id_silabo, id_competencia, id_logro)
-            coberturas[fila["id_cob_curricular"]] = fila
+            fila = _cobertura(id_curso, id_silabo, "", id_habilidad, id_logro)
+            coberturas[fila["id_cobertura_curricular"]] = fila
         inferencias.append(
             {
                 **dict(tecnica),
                 "id_curso": id_curso,
                 "id_silabo": id_silabo,
-                "id_competencia": id_competencia,
-                "codigo_competencia": codigo,
-                "tipo_competencia": "tecnica",
+                "id_habilidad": id_habilidad,
             }
         )
 
@@ -565,6 +570,7 @@ def construir_catalogos_curriculares(
         "curso.csv": list(cursos.values()),
         "silabo.csv": list(silabos.values()),
         "catalogo_competencias.csv": list(competencias.values()),
+        "catalogo_habilidades.csv": list(habilidades.values()),
         "catalogo_logros.csv": list(logros.values()),
         "cobertura_curricular.csv": list(coberturas.values()),
     }
