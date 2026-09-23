@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import {
   AlertTriangle,
+  ArrowLeft,
   ChevronRight,
   CheckCircle2,
   ExternalLink,
@@ -1317,6 +1319,18 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
   return (
     <main className="h-[100dvh] min-h-screen overflow-y-auto overscroll-y-contain bg-fondo px-4 pb-24 pt-6 font-body text-ink sm:px-8 sm:pb-32 sm:pt-8">
       <div className="mx-auto max-w-7xl">
+        <nav
+          aria-label="Navegación de ejecución"
+          className="mb-4 rounded-2xl border border-line bg-paper px-3 py-2 shadow-sm sm:px-4"
+        >
+          <Link
+            href="/normalizador"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-bold text-ink transition hover:bg-fondo hover:text-ulima focus:outline-none focus-visible:ring-2 focus-visible:ring-ulima/40"
+          >
+            <ArrowLeft size={16} aria-hidden="true" />
+            Volver al normalizador
+          </Link>
+        </nav>
         <header className="rounded-2xl border border-line border-t-4 border-t-ulima bg-paper p-5 shadow-sm sm:p-7">
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div className="min-w-0">
