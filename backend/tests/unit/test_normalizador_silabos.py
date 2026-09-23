@@ -140,6 +140,7 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
             "creditos",
             "nivel",
             "tipo_curso",
+            "naturaleza",
             "codigo_curso",
             "id_carrera",
         ],
@@ -159,10 +160,11 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
         ],
         "catalogo_logros.csv": ["id_logro", "logro"],
         "cobertura_curricular.csv": [
-            "id_cob_curricular",
+            "id_cobertura_curricular",
             "id_curso",
             "id_silabo",
             "id_competencia",
+            "id_habilidad",
             "id_logro",
         ],
     }
@@ -174,7 +176,7 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
 def test_extrae_metadatos_estructurados_docx_y_conserva_coordinadores(tmp_path: Path) -> None:
     fuente = tmp_path / "metadatos.docx"
     documento = Document()
-    metadata = documento.add_table(rows=8, cols=2)
+    metadata = documento.add_table(rows=9, cols=2)
     for fila, etiqueta, valor in (
         (0, "Asignatura", "Arquitectura de software"),
         (1, "Coordinador", "Ana Pérez"),
@@ -182,8 +184,9 @@ def test_extrae_metadatos_estructurados_docx_y_conserva_coordinadores(tmp_path: 
         (3, "Créditos", "4"),
         (4, "Nivel", "Sexto"),
         (5, "Tipo de asignatura", "Obligatorio"),
-        (6, "Modalidad", "Híbrida"),
-        (7, "Código", "SIS601"),
+        (6, "Naturaleza", "Taller"),
+        (7, "Modalidad", "Híbrida"),
+        (8, "Código", "SIS601"),
     ):
         metadata.cell(fila, 0).text = etiqueta
         metadata.cell(fila, 1).text = valor
@@ -195,17 +198,25 @@ def test_extrae_metadatos_estructurados_docx_y_conserva_coordinadores(tmp_path: 
     assert datos["curso"] == "Arquitectura de software"
     assert datos["ciclo"] == "Sexto"
     assert datos["codigo_curso"] == "SIS601"
-    campos = ("nombre_curso", "coordinador", "creditos", "nivel", "tipo_curso")
+    campos = (
+        "nombre_curso",
+        "coordinador",
+        "creditos",
+        "nivel",
+        "tipo_curso",
+        "naturaleza",
+    )
     assert {campo: datos[campo] for campo in campos} == {
         "nombre_curso": "Arquitectura de software",
         "coordinador": "Ana Pérez | Bruno Díaz",
         "creditos": "4",
         "nivel": "Sexto",
-        "tipo_curso": "Híbrido",
+        "tipo_curso": "Obligatorio",
+        "naturaleza": "Taller",
     }
 
 
-def test_modalidad_no_se_infiere_de_tipo_de_asignatura_o_naturaleza(tmp_path: Path) -> None:
+def test_extrae_tipo_y_naturaleza_sin_extraer_modalidad(tmp_path: Path) -> None:
     fuente = tmp_path / "curso-sin-modalidad.docx"
     documento = Document()
     metadata = documento.add_table(rows=3, cols=2)
@@ -221,7 +232,9 @@ def test_modalidad_no_se_infiere_de_tipo_de_asignatura_o_naturaleza(tmp_path: Pa
     datos = _extraer_docx(fuente, fuente.name, "PRUEBA", "2031-2")["datos"]
 
     assert isinstance(datos, dict)
-    assert datos["tipo_curso"] == ""
+    assert datos["tipo_curso"] == "Electiva"
+    assert datos["naturaleza"] == "Obligatoria"
+    assert "modalidad" not in datos
 
 
 def test_extrae_programa_docx_con_y_sin_celdas_combinadas_horizontalmente(
@@ -714,6 +727,7 @@ def test_extrae_pdf_layout_i_vi_y_conserva_vii_viii_solo_en_fuente(
     I.      Información general
     Asignatura                      Sistemas de Inteligencia Empresarial
     Tipo de asignatura              Obligatorio
+    Naturaleza                      Taller
     Modalidad                       Presencial
     Código                          650062
     Nivel                           Séptimo
@@ -755,8 +769,8 @@ def test_extrae_pdf_layout_i_vi_y_conserva_vii_viii_solo_en_fuente(
         (
             "I. Información general Asignatura Sistemas de Inteligencia Empresarial",
             (
-                "Tipo de asignatura Obligatorio Código 650062 Nivel Séptimo Créditos 4 "
-                "Coordinador Ana Pérez Bruno Díaz"
+                "Tipo de asignatura Obligatorio Naturaleza Taller Código 650062 Nivel Séptimo "
+                "Créditos 4 Coordinador Ana Pérez Bruno Díaz"
             ),
             "II. Sumilla III. Competencias Competencias genéricas",
             "Solución creativa de problemas Toma decisiones estratégicas para generar",
@@ -797,7 +811,8 @@ def test_extrae_pdf_layout_i_vi_y_conserva_vii_viii_solo_en_fuente(
     assert isinstance(datos, dict)
     assert datos["curso"] == "Sistemas de Inteligencia Empresarial"
     assert datos["nombre_curso"] == "Sistemas de Inteligencia Empresarial"
-    assert datos["tipo_curso"] == "Presencial"
+    assert datos["tipo_curso"] == "Obligatorio"
+    assert datos["naturaleza"] == "Taller"
     assert datos["codigo_curso"] == "650062"
     assert datos["nivel"] == "Séptimo"
     assert datos["creditos"] == "4"

@@ -26,6 +26,7 @@ def _registro() -> dict[str, object]:
             "creditos": "4",
             "nivel": "Séptimo",
             "tipo_curso": "Obligatorio",
+            "naturaleza": "Taller",
             "codigo_curso": "650062",
             "sumilla": "Diseño de sistemas de software.",
             "competencias_declaradas": [
@@ -92,6 +93,7 @@ def test_materializa_contrato_curricular_sin_herramientas(tmp_path: Path) -> Non
     tecnica = {
         "id_silabo": registro["id_silabo"],
         "estado_aprobacion": "APROBADA",
+        "catalogo_ref": "COMP_TEC_0007",
         "nombre_competencia": "Diseño técnico de arquitecturas",
         "descripcion_breve_competencia": (
             "Selecciona estructuras y patrones según atributos de calidad."
@@ -136,10 +138,17 @@ def test_materializa_contrato_curricular_sin_herramientas(tmp_path: Path) -> Non
     assert {fila["tipo_competencia"] for fila in competencias} == {
         "generica",
         "especifica",
-        "tecnica",
     }
-    tecnica_csv = next(fila for fila in competencias if fila["tipo_competencia"] == "tecnica")
-    assert tecnica_csv["codigo_competencia"] == "T1"
+    habilidades = _leer_csv(tmp_path / "catalogo_habilidades.csv")
+    assert habilidades == [
+        {
+            "id_habilidad": "HAB_TEC_0007",
+            "id_carrera": "CAR_3658c834b24e31a0",
+            "nombre_habilidad": "Diseño técnico de arquitecturas",
+            "desc_breve": "Selecciona estructuras y patrones según atributos de calidad.",
+        }
+    ]
+    tecnica_csv = habilidades[0]
 
     logros = _leer_csv(tmp_path / "catalogo_logros.csv")
     assert {fila["logro"] for fila in logros} == {
@@ -159,9 +168,13 @@ def test_materializa_contrato_curricular_sin_herramientas(tmp_path: Path) -> Non
         fila["id_competencia"] for fila in competencias if fila["tipo_competencia"] != "tecnica"
     }
     assert {fila["id_competencia"] for fila in relaciones_generales} == (competencias_declaradas)
-    assert all(fila["id_competencia"] for fila in cobertura if fila["id_logro"])
+    assert all(
+        fila["id_competencia"] or fila["id_habilidad"] for fila in cobertura if fila["id_logro"]
+    )
     assert any(
-        fila["id_competencia"] == tecnica_csv["id_competencia"] and fila["id_logro"]
+        fila["id_habilidad"] == tecnica_csv["id_habilidad"]
+        and not fila["id_competencia"]
+        and fila["id_logro"]
         for fila in cobertura
     )
 
@@ -169,8 +182,27 @@ def test_materializa_contrato_curricular_sin_herramientas(tmp_path: Path) -> Non
     inferencia = json.loads(
         (tmp_path / "inferencias_tecnicas.jsonl").read_text(encoding="utf-8").strip()
     )
-    assert inferencia["id_competencia"] == tecnica_csv["id_competencia"]
+    assert inferencia["id_habilidad"] == tecnica_csv["id_habilidad"]
     assert inferencia["evidencia"][0]["numero_semana"] == "1"
+
+
+def test_rechaza_tecnica_aprobada_sin_catalogo_ref_seguro(tmp_path: Path) -> None:
+    tecnica = {
+        "id_silabo": "SIL_1234567890abcdef",
+        "estado_aprobacion": "APROBADA",
+        "nombre_competencia": "Diseño técnico de arquitecturas",
+        "descripcion_breve_competencia": "Selecciona estructuras técnicas.",
+        "logros": ["Diseña una arquitectura de software mantenible."],
+    }
+
+    with pytest.raises(ValueError, match="catalogo_ref.*COMP_TEC_####"):
+        construir_catalogos_curriculares(
+            [_registro()],
+            tmp_path,
+            carrera="SISTEMAS",
+            periodo_academico="2026-2",
+            competencias_tecnicas=[tecnica],
+        )
 
 
 def test_materializa_tecnica_aprobada_sin_competencia_declarada(
@@ -184,6 +216,7 @@ def test_materializa_tecnica_aprobada_sin_competencia_declarada(
     tecnica = {
         "id_silabo": registro["id_silabo"],
         "estado_aprobacion": "APROBADA",
+        "catalogo_ref": "COMP_TEC_0007",
         "nombre_competencia": "Diseño técnico de arquitecturas",
         "descripcion_breve_competencia": (
             "Selecciona estructuras y patrones según atributos de calidad."
@@ -204,9 +237,12 @@ def test_materializa_tecnica_aprobada_sin_competencia_declarada(
     assert resultado.cuarentena == ()
     assert resultado.release_gate["decision"] == "ALLOW_IMPORT"
     competencias = _leer_csv(tmp_path / "catalogo_competencias.csv")
-    assert [fila for fila in competencias if fila["tipo_competencia"] == "tecnica"]
+    assert not [fila for fila in competencias if fila["tipo_competencia"] == "tecnica"]
+    habilidades = _leer_csv(tmp_path / "catalogo_habilidades.csv")
+    assert habilidades[0]["id_habilidad"] == "HAB_TEC_0007"
     cobertura = _leer_csv(tmp_path / "cobertura_curricular.csv")
     assert len(cobertura) == 1
+    assert cobertura[0]["id_habilidad"] == "HAB_TEC_0007"
 
 
 def test_rechaza_lotes_que_mezclan_carreras_o_periodos(tmp_path: Path) -> None:
@@ -288,6 +324,7 @@ def test_materializacion_rechaza_relacion_tecnica_sin_logro_valido(tmp_path: Pat
                     "nombre_competencia": "Diseño técnico de arquitecturas",
                     "descripcion_breve_competencia": "Selecciona estructuras técnicas.",
                     "estado_aprobacion": "APROBADA",
+                    "catalogo_ref": "COMP_TEC_0007",
                     "logros": ["Este logro no existe en el sílabo."],
                 }
             ],
