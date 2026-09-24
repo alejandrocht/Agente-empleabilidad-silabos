@@ -182,7 +182,7 @@ def configuracion_normalizador_curricular(
     El argumento ``proceso`` existe para pruebas aisladas; producción lo omite.
     """
     entorno = _entorno_curricular(proceso)
-    ruta_catalogo_tecnico = str(BASE_DIR / "catalogos" / "catalogo_competencias_tecnicas.xlsx")
+    ruta_catalogo_tecnico = str(BASE_DIR / "catalogos" / "carrera_competencia_oficial.csv")
     timeout = _decimal_curricular(entorno, "NORMALIZADOR_CURRICULAR_LLM_TIMEOUT_SECONDS")
     reintentos = _entero_curricular(entorno, "NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES")
     tamano_lote = _entero_curricular(entorno, "NORMALIZADOR_CURRICULAR_LLM_BATCH_SIZE")

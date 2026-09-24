@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 from pathlib import Path
@@ -582,6 +583,142 @@ def test_carga_catalogo_csv_separa_carreras_y_normaliza_match(tmp_path: Path) ->
     assert len(catalogo.para_carrera("INGENIERIA_DE_SISTEMAS")) == 0
     assert catalogo.para_carrera("sistemas") == candidatos
     assert catalogo.hoja == "CSV"
+
+
+def _crear_xlsx_descripciones(ruta: Path, filas: list[list[str]]) -> None:
+    from openpyxl import Workbook
+
+    libro = Workbook()
+    hoja = libro.worksheets[0]
+    hoja.title = "Catalogo"
+    hoja.append(["Carrera", "Habilidad tecnica", "Descripcion"])
+    for fila in filas:
+        hoja.append(fila)
+    libro.save(ruta)
+
+
+def _crear_mapa_oficial(ruta: Path, filas: list[str], encabezado: str | None = None) -> None:
+    prefijo = "\ufeff" if encabezado is None else ""
+    encabezado = encabezado or "id_carrera,nombre_carrera,id_habilidad,nombre_habilidad"
+    ruta.write_text(prefijo + encabezado + "\n" + "\n".join(filas) + "\n", encoding="utf-8")
+
+
+def test_carga_mapa_oficial_real_conserva_ids_y_une_descripciones() -> None:
+    ruta = Path(__file__).resolve().parents[2] / "catalogos" / "carrera_competencia_oficial.csv"
+
+    catalogo = analista_tecnico.cargar_catalogo_tecnico(ruta)
+
+    assert len(catalogo.candidatos) == 277
+    assert len({candidato.referencia for candidato in catalogo.candidatos}) == 222
+    assert len({candidato.carrera for candidato in catalogo.candidatos}) == 14
+    candidato = next(
+        candidato for candidato in catalogo.candidatos if candidato.referencia == "COMP_TEC_0009"
+    )
+    assert candidato.carrera == "Administración"
+    assert candidato.nombre == ("Analizar datos para informar decisiones o actividades operativas.")
+    assert candidato.descripcion
+    assert "+catalogo_competencias_tecnicas.xlsx" in catalogo.origen
+    assert len(catalogo.sha256) == 64
+    assert catalogo.sha256 != hashlib.sha256(ruta.read_bytes()).hexdigest()
+
+
+def test_carga_mapa_bom_safe_une_por_carrera_y_nombre_y_preserva_id(tmp_path: Path) -> None:
+    ruta_mapa = tmp_path / "carrera_competencia_oficial.csv"
+    ruta_xlsx = tmp_path / "catalogo_competencias_tecnicas.xlsx"
+    _crear_mapa_oficial(
+        ruta_mapa,
+        ["CAR_1,Ingeniería de Sistemas,COMP_TEC_1,Diseñar arquitecturas de software"],
+    )
+    _crear_xlsx_descripciones(
+        ruta_xlsx,
+        [
+            [
+                "Ingeniería de Sistemas",
+                "Diseñar arquitecturas de software",
+                "Seleccionar estructuras y patrones técnicos.",
+            ]
+        ],
+    )
+
+    catalogo = analista_tecnico.cargar_catalogo_tecnico(ruta_mapa)
+
+    assert catalogo.candidatos == (
+        analista_tecnico.CandidatoTecnico(
+            "COMP_TEC_1",
+            "Ingeniería de Sistemas",
+            "Diseñar arquitecturas de software",
+            "Seleccionar estructuras y patrones técnicos.",
+            2,
+        ),
+    )
+    assert catalogo.hoja == "Catalogo"
+
+
+@pytest.mark.parametrize(
+    ("filas", "mensaje"),
+    [
+        (
+            [
+                "CAR_1,Marketing,COMP_TEC_1,Diseñar campañas",
+                "CAR_1,Marketing,COMP_TEC_1,Diseñar campañas",
+            ],
+            "duplicada",
+        ),
+        (
+            [
+                "CAR_1,Marketing,COMP_TEC_1,Diseñar campañas",
+                "CAR_1,Marketing,COMP_TEC_2,Diseñar campañas",
+            ],
+            "conflict",
+        ),
+    ],
+)
+def test_carga_mapa_rechaza_filas_duplicadas_o_conflictivas(
+    tmp_path: Path, filas: list[str], mensaje: str
+) -> None:
+    ruta_mapa = tmp_path / "carrera_competencia_oficial.csv"
+    _crear_mapa_oficial(ruta_mapa, filas)
+    _crear_xlsx_descripciones(
+        tmp_path / "catalogo_competencias_tecnicas.xlsx",
+        [["Marketing", "Diseñar campañas", "Planificar campañas medibles."]],
+    )
+
+    with pytest.raises(ValueError, match=mensaje):
+        analista_tecnico.cargar_catalogo_tecnico(ruta_mapa)
+
+
+def test_carga_mapa_rechaza_esquema_malformado_y_union_faltante(tmp_path: Path) -> None:
+    ruta_mapa = tmp_path / "carrera_competencia_oficial.csv"
+    ruta_xlsx = tmp_path / "catalogo_competencias_tecnicas.xlsx"
+    _crear_mapa_oficial(
+        ruta_mapa,
+        ["CAR_1,Marketing,COMP_TEC_1,Diseñar campañas"],
+        "id_carrera,nombre_carrera",
+    )
+    _crear_xlsx_descripciones(ruta_xlsx, [])
+
+    with pytest.raises(ValueError, match="Esquema inválido"):
+        analista_tecnico.cargar_catalogo_tecnico(ruta_mapa)
+
+    _crear_mapa_oficial(ruta_mapa, ["CAR_1,Marketing,COMP_TEC_1,Diseñar campañas"])
+    _crear_xlsx_descripciones(ruta_xlsx, [["Marketing", "Otra habilidad", "Descripción"]])
+    with pytest.raises(ValueError, match="sin correspondencia"):
+        analista_tecnico.cargar_catalogo_tecnico(ruta_mapa)
+
+
+def test_carga_mapa_rechaza_union_ambigua_en_catalogo_descripciones(tmp_path: Path) -> None:
+    ruta_mapa = tmp_path / "carrera_competencia_oficial.csv"
+    _crear_mapa_oficial(ruta_mapa, ["CAR_1,Marketing,COMP_TEC_1,Diseñar campañas"])
+    _crear_xlsx_descripciones(
+        tmp_path / "catalogo_competencias_tecnicas.xlsx",
+        [
+            ["Marketing", "Diseñar campañas", "Planificar campañas medibles."],
+            ["MARKETING", "diseñar campañas", "Medir campañas con indicadores."],
+        ],
+    )
+
+    with pytest.raises(ValueError, match="ambigua"):
+        analista_tecnico.cargar_catalogo_tecnico(ruta_mapa)
 
 
 def test_guard_rechaza_echo_exacto_y_casi_literal_pero_acepta_abstraccion() -> None:
