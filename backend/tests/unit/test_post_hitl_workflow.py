@@ -290,7 +290,27 @@ def test_hitl_zero_auto_add_preserves_unrelated_release_gate_blockers(
     descarga = cliente.get(
         f"/normalizador/ejecuciones/{id_ejecucion}/outputs/{ARCHIVOS_TECNICOS[0]}"
     )
-    assert descarga.status_code == 404
+    assert descarga.status_code == 200
+    assert descarga.content
+
+
+def test_manifest_allow_does_not_promote_state_when_public_gate_blocks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path)
+    manifest_path = directorio / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["estado"] = "limpiado"
+    manifest["release_gate"] = {"decision": "ALLOW_IMPORT"}
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    payload = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()
+
+    assert payload["estado"] == "no_publicado"
+    assert payload["release_gate"]["decision"] == "BLOCK_IMPORT"
+    assert payload["outputs"] == []
 
 
 def test_final_technical_add_reconciles_manifest_active_api_and_csv_metadata(
@@ -346,11 +366,14 @@ def test_final_technical_add_reconciles_manifest_active_api_and_csv_metadata(
     assert validacion.json()["puede_importar"] is True
 
     manifest = json.loads((directorio / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["estado"] == payload["estado"]
+    assert gestor._obtener_objeto(id_ejecucion).estado == "no_publicado"
+    assert manifest["estado"] in {"limpiado", "limpiado_con_advertencias"}
+    assert payload["estado"] == manifest["estado"]
+    assert gestor.obtener(id_ejecucion)["estado"] == payload["estado"]
     assert manifest["outputs"] == outputs
 
 
-def test_pending_technical_gate_remains_blocked_and_exposes_no_csvs(
+def test_pending_technical_gate_blocks_import_but_keeps_csv_draft_downloadable(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path)
@@ -379,7 +402,8 @@ def test_pending_technical_gate_remains_blocked_and_exposes_no_csvs(
     descarga = cliente.get(
         f"/normalizador/ejecuciones/{id_ejecucion}/outputs/{ARCHIVOS_TECNICOS[0]}"
     )
-    assert descarga.status_code == 404
+    assert descarga.status_code == 200
+    assert descarga.content
 
 
 def test_final_technical_add_uses_canonical_manifest_validation_scope(

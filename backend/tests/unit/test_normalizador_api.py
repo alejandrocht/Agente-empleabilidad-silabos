@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-import time
+import json
 from collections.abc import AsyncIterator
+from concurrent.futures import Future
 from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
@@ -260,9 +261,18 @@ def test_inicia_silabos_rechaza_hitl_invalido(
 def test_inicia_y_consulta_ejecucion_de_silabos(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """La fuente curricular produce los cinco CSV del contrato."""
+    """La fuente curricular completa la limpieza y expone sus outputs."""
 
     gestor = GestorEjecuciones(tmp_path)
+    futuros: list[Future[object]] = []
+    enviar = gestor._executor.submit
+
+    def capturar_futuro(*args: Any, **kwargs: Any) -> Future[object]:
+        futuro = enviar(*args, **kwargs)
+        futuros.append(futuro)
+        return futuro
+
+    monkeypatch.setattr(gestor._executor, "submit", capturar_futuro)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
     cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
 
@@ -280,21 +290,23 @@ def test_inicia_y_consulta_ejecucion_de_silabos(
 
     assert respuesta.status_code == 202
     id_ejecucion = respuesta.json()["id_ejecucion"]
-    estado = respuesta.json()["estado"]
-    for _ in range(100):
-        estado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()["estado"]
-        if estado in {
-            "limpiado",
-            "limpiado_con_advertencias",
-            "no_publicado",
-            "rechazado",
-            "error",
-        }:
-            break
-        time.sleep(0.01)
+    assert len(futuros) == 1
+    futuros[0].result(timeout=30)
 
-    assert estado in {"limpiado", "limpiado_con_advertencias"}
-    ejecucion = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()
+    objeto = gestor._obtener_objeto(id_ejecucion)
+    manifest = json.loads((objeto.directorio / "manifest.json").read_text(encoding="utf-8"))
+    respuesta_get = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()
+    diagnostico = (
+        objeto.estado,
+        manifest["estado"],
+        respuesta_get["estado"],
+        respuesta_get["release_gate"]["decision"],
+    )
+    assert diagnostico[:3] == (objeto.estado,) * 3, (
+        f"Estados tras completar Future: {diagnostico!r}"
+    )
+    assert diagnostico[0] in {"limpiado", "limpiado_con_advertencias"}
+    ejecucion = respuesta_get
     assert ejecucion["validacion_silabos"]["valida"] is True
     assert not {"validacion", "limpieza", "normalizacion"} & ejecucion.keys()
     assert ejecucion["limpieza_silabos"]["registros"] == 1
@@ -304,6 +316,7 @@ def test_inicia_y_consulta_ejecucion_de_silabos(
         "salidas/curso.csv",
         "salidas/silabo.csv",
         "salidas/catalogo_competencias.csv",
+        "salidas/catalogo_habilidades.csv",
         "salidas/catalogo_logros.csv",
         "salidas/cobertura_curricular.csv",
     }
@@ -736,6 +749,13 @@ def test_persiste_progreso_llm_en_el_manifest_durante_limpieza(
 ) -> None:
     gestor = GestorEjecuciones(tmp_path)
     id_ejecucion, directorio = gestor.crear("silabos", "paquete.zip")
+    reportes = directorio / "salidas" / "reportes"
+    reportes.mkdir(parents=True, exist_ok=True)
+    (reportes / "release_gate.json").write_text(
+        json.dumps({"decision": "ALLOW_IMPORT"}), encoding="utf-8"
+    )
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
     ejecucion = gestor._obtener_objeto(id_ejecucion)
     validacion = ResultadoValidacionSilabos(
         archivo="paquete.zip",
@@ -776,8 +796,16 @@ def test_persiste_progreso_llm_en_el_manifest_durante_limpieza(
                 reporte_final="disponible",
             )
         )
-        en_polling = gestor.obtener(id_ejecucion)
-        assert en_polling["estado"] == "limpiando"
+        en_polling = cast(Any, gestor.obtener(id_ejecucion))
+        manifest_polling = json.loads((directorio / "manifest.json").read_text(encoding="utf-8"))
+        api_polling = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()
+        assert (
+            en_polling["estado"],
+            manifest_polling["estado"],
+            api_polling["estado"],
+        ) == ("limpiando",) * 3
+        assert en_polling["release_gate"]["decision"] == "ALLOW_IMPORT"
+        assert api_polling["release_gate"]["decision"] == "ALLOW_IMPORT"
         assert en_polling["progreso_llm"] == {
             "fase": "completado",
             "chunks_completados": 2,

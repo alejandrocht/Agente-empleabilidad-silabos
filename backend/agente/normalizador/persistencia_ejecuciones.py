@@ -291,17 +291,21 @@ class RepositorioEjecucionesPersistidas:
         )
 
         estado_publico: object = ejecucion.estado
-        if ejecucion.tipo == "silabos" and gate_permite_salidas_tecnicas(release_gate):
+        if ejecucion.tipo == "silabos" and ejecucion.estado == "no_publicado":
             try:
-                manifest_persistido = json.loads(
+                manifest = json.loads(
                     (ejecucion.directorio / "manifest.json").read_text(encoding="utf-8")
                 )
             except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-                manifest_persistido = None
-            if isinstance(manifest_persistido, dict):
-                estado_persistido = manifest_persistido.get("estado")
-                if isinstance(estado_persistido, str):
-                    estado_publico = estado_persistido
+                manifest = None
+            if isinstance(manifest, dict):
+                estado_manifest = manifest.get("estado")
+                if (
+                    gate_permite_salidas_tecnicas(manifest.get("release_gate"))
+                    and gate_permite_salidas_tecnicas(release_gate)
+                    and estado_manifest in {"limpiado", "limpiado_con_advertencias"}
+                ):
+                    estado_publico = estado_manifest
 
         limpieza_silabos = limpieza_actual.a_dict() if limpieza_actual else None
         if ejecucion.tipo == "silabos":
