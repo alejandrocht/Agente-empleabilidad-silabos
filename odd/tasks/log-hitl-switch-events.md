@@ -1,6 +1,6 @@
 # Log technical HITL switch changes
 
-Status: complete (authorized delivery in progress)
+Status: committed locally; native review and authorized push pending
 Repository: `Agente-empleabilidad-silabos`
 
 ## Goal
@@ -68,7 +68,7 @@ Emit a backend event immediately whenever the user toggles the technical HITL sw
 - Independent verification: frontend focused suite 29/29; backend Ruff `All checks passed!`; scoped tracked `git diff --check` clean. Backend focused HTTP suite passed 4/4 twice, including invalid-mode and remote-peer coverage.
 - The next-run payload remains the selected `hitl` value (existing Cactus test verifies `hitl=0`); no inference or auto-ADD implementation was changed.
 - Native ASSESS returned `unassessable` because an unrelated untracked worktrees directory was present; it prescribed independent verification, which completed successfully.
-- Engram mirror is unavailable in this session; commit/push are authorized for exactly this seven-path slice but remain pending native review.
+- Engram mirror is unavailable in this session. Commit `dee7c85` (`feat(normalizer): log HITL switch changes`) was created locally for exactly this seven-path slice; native review and authorized push remain pending.
 - Latest authorized frontend regression asserts exactly one logging call per click and verifies that after logging failure, the next Cactus run still submits `hitl=0`.
 - Latest verification: backend focused HTTP suite — 4 passed; scoped Ruff — all checks passed; frontend API+panel suite — 29 passed across 2 files; scoped `git diff --check` — clean.
 - LSP error scan found 0 diagnostics. Three frontend LSP results remain unconfirmed because the server did not publish on clean re-check; the frontend tests passed.
