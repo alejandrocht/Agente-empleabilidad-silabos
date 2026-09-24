@@ -238,16 +238,16 @@ def test_snapshot_incluye_todas_las_selecciones_operativas_sin_secretos() -> Non
         "temperatura_llm": 0.25,
         "modo_analista": "technical",
         "ruta_catalogo_tecnico": str(
-            settings.BASE_DIR / "catalogos" / "catalogo_competencias_tecnicas.xlsx"
+            settings.BASE_DIR / "catalogos" / "carrera_competencia_oficial.csv"
         ),
     }
 
 
-def test_curriculum_configuration_uses_repository_catalog() -> None:
+def test_curriculum_configuration_uses_official_career_competency_map() -> None:
     configuracion = settings.configuracion_normalizador_curricular(_entorno())
 
     assert configuracion.ruta_catalogo_tecnico == str(
-        settings.BASE_DIR / "catalogos" / "catalogo_competencias_tecnicas.xlsx"
+        settings.BASE_DIR / "catalogos" / "carrera_competencia_oficial.csv"
     )
 
 

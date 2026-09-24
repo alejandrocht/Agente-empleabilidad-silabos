@@ -23,6 +23,12 @@ from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import ProgresoSilaboLLM
 
 COLUMNAS_CATALOGO_TECNICO_XLSX = ("Carrera", "Habilidad tecnica", "Descripcion")
+COLUMNAS_MAPA_CARRERA_COMPETENCIA = (
+    "id_carrera",
+    "nombre_carrera",
+    "id_habilidad",
+    "nombre_habilidad",
+)
 COLUMNAS_CATALOGO_TECNICO_CSV = (
     "id_competencia",
     "nombre_competencia",
@@ -139,6 +145,119 @@ def _materializar_candidatos(filas: Iterable[_FilaCatalogo]) -> tuple[CandidatoT
     return tuple(candidatos)
 
 
+def _cargar_descripciones_xlsx(
+    origen: Path,
+) -> tuple[dict[tuple[str, str], list[tuple[str, int]]], str]:
+    libro = load_workbook(origen, read_only=True, data_only=True)
+    try:
+        if not libro.worksheets:
+            raise ValueError("El catálogo técnico no contiene hojas")
+        hoja = libro.worksheets[0]
+        filas_xlsx = hoja.iter_rows(values_only=True)
+        encabezado = tuple(_texto(valor) for valor in (next(filas_xlsx, ()) or ()))
+        if encabezado != COLUMNAS_CATALOGO_TECNICO_XLSX:
+            raise ValueError(
+                "Esquema inválido para el catálogo técnico: "
+                f"esperado={COLUMNAS_CATALOGO_TECNICO_XLSX}; recibido={encabezado}"
+            )
+        descripciones: dict[tuple[str, str], list[tuple[str, int]]] = {}
+        for numero_fila, fila in enumerate(filas_xlsx, start=2):
+            valores = tuple(fila or ())
+            if not any(_texto(valor) for valor in valores):
+                continue
+            if len(valores) != len(COLUMNAS_CATALOGO_TECNICO_XLSX):
+                raise ValueError(f"Fila {numero_fila} con número de columnas inválido")
+            carrera_cruda, nombre, descripcion = (_texto(valor) for valor in valores)
+            if not carrera_cruda or not nombre or not descripcion:
+                raise ValueError(f"Fila {numero_fila} incompleta en el catálogo técnico")
+            carreras = tuple(
+                dict.fromkeys(
+                    carrera
+                    for fragmento in carrera_cruda.split(";")
+                    if (carrera := _texto(fragmento))
+                )
+            )
+            for carrera in carreras:
+                clave = (clave_catalogo(carrera), clave_catalogo(nombre))
+                descripciones.setdefault(clave, []).append((descripcion, numero_fila))
+        return descripciones, hoja.title
+    finally:
+        libro.close()
+
+
+def _cargar_mapa_carrera(
+    origen: Path, descripciones_origen: Path
+) -> tuple[tuple[CandidatoTecnico, ...], str]:
+    descripciones, hoja = _cargar_descripciones_xlsx(descripciones_origen)
+    candidatos: list[CandidatoTecnico] = []
+    pares_vistos: dict[tuple[str, str], int] = {}
+    nombres_por_id: dict[str, tuple[str, int]] = {}
+    with origen.open(encoding="utf-8-sig", newline="") as archivo:
+        lector = csv.DictReader(archivo)
+        encabezado = tuple(lector.fieldnames or ())
+        if encabezado != COLUMNAS_MAPA_CARRERA_COMPETENCIA:
+            raise ValueError(
+                "Esquema inválido para el mapa carrera-competencia: "
+                f"esperado={COLUMNAS_MAPA_CARRERA_COMPETENCIA}; recibido={encabezado}"
+            )
+        for fila in lector:
+            numero_fila = lector.line_num
+            if None in fila:
+                raise ValueError(f"Fila {numero_fila} con número de columnas inválido")
+            id_carrera = _texto(fila["id_carrera"])
+            carrera = _texto(fila["nombre_carrera"])
+            id_habilidad = _texto(fila["id_habilidad"])
+            nombre = _texto(fila["nombre_habilidad"])
+            if not all((id_carrera, carrera, id_habilidad, nombre)):
+                raise ValueError(f"Fila {numero_fila} incompleta en el mapa carrera-competencia")
+            clave = (clave_catalogo(carrera), clave_catalogo(nombre))
+            anterior = pares_vistos.get(clave)
+            if anterior is not None:
+                if nombres_por_id.get(id_habilidad, ("", 0))[0] == clave[1]:
+                    raise ValueError(
+                        "Fila "
+                        f"{numero_fila} duplicada para carrera y habilidad; "
+                        f"fila anterior={anterior}"
+                    )
+                raise ValueError(
+                    "Fila "
+                    f"{numero_fila} conflictiva para carrera y habilidad; "
+                    f"fila anterior={anterior}"
+                )
+            id_anterior = nombres_por_id.get(id_habilidad)
+            if id_anterior is not None and id_anterior[0] != clave[1]:
+                raise ValueError(
+                    f"Fila {numero_fila} conflictiva: {id_habilidad} cambia de nombre; "
+                    f"fila anterior={id_anterior[1]}"
+                )
+            pares_vistos[clave] = numero_fila
+            nombres_por_id[id_habilidad] = (clave[1], numero_fila)
+            coincidencias = descripciones.get(clave, [])
+            if not coincidencias:
+                raise ValueError(
+                    f"Fila {numero_fila} sin correspondencia en el catálogo de descripciones: "
+                    f"carrera={carrera!r}, habilidad={nombre!r}"
+                )
+            if len(coincidencias) != 1:
+                filas = ", ".join(str(fila) for _descripcion, fila in coincidencias)
+                raise ValueError(
+                    f"Fila {numero_fila} con unión ambigua en el catálogo de descripciones; "
+                    f"filas={filas}"
+                )
+            candidatos.append(
+                CandidatoTecnico(
+                    referencia=id_habilidad,
+                    carrera=carrera,
+                    nombre=nombre,
+                    descripcion=coincidencias[0][0],
+                    fila=numero_fila,
+                )
+            )
+    if not candidatos:
+        raise ValueError("El mapa carrera-competencia no contiene filas de datos")
+    return tuple(candidatos), hoja
+
+
 def _cargar_filas_csv(origen: Path) -> tuple[tuple[CandidatoTecnico, ...], str]:
     with origen.open(encoding="utf-8-sig", newline="") as archivo:
         lector = csv.DictReader(archivo)
@@ -198,11 +317,40 @@ def cargar_catalogo_tecnico(ruta: Path | str) -> CatalogoTecnico:
     origen = Path(ruta).expanduser().resolve()
     if not origen.is_file():
         raise FileNotFoundError(f"No existe el catálogo técnico: {origen}")
-    digest = hashlib.sha256(origen.read_bytes()).hexdigest()
     if origen.suffix.casefold() == ".csv":
+        with origen.open(encoding="utf-8-sig", newline="") as archivo:
+            encabezado = tuple(next(csv.reader(archivo), ()))
+        if encabezado == COLUMNAS_MAPA_CARRERA_COMPETENCIA:
+            descripciones_origen = origen.with_name("catalogo_competencias_tecnicas.xlsx")
+            if not descripciones_origen.is_file():
+                raise FileNotFoundError(
+                    "No existe el catálogo de descripciones requerido para el mapa: "
+                    f"{descripciones_origen}"
+                )
+            candidatos, hoja = _cargar_mapa_carrera(origen, descripciones_origen)
+            mapa_digest = hashlib.sha256(origen.read_bytes()).hexdigest()
+            descripciones_digest = hashlib.sha256(descripciones_origen.read_bytes()).hexdigest()
+            digest = hashlib.sha256(
+                "\x1f".join(
+                    (
+                        origen.name,
+                        mapa_digest,
+                        descripciones_origen.name,
+                        descripciones_digest,
+                    )
+                ).encode("utf-8")
+            ).hexdigest()
+            return CatalogoTecnico(
+                candidatos,
+                f"{origen.name}+{descripciones_origen.name}",
+                digest,
+                hoja,
+            )
         candidatos, hoja = _cargar_filas_csv(origen)
+        digest = hashlib.sha256(origen.read_bytes()).hexdigest()
     elif origen.suffix.casefold() == ".xlsx":
         candidatos, hoja = _cargar_filas_xlsx(origen)
+        digest = hashlib.sha256(origen.read_bytes()).hexdigest()
     else:
         raise ValueError("El catálogo técnico debe ser un archivo CSV o XLSX")
     return CatalogoTecnico(candidatos, origen.name, digest, hoja)

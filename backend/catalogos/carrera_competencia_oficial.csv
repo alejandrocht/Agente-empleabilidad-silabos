@@ -1,0 +1,278 @@
+﻿id_carrera,nombre_carrera,id_habilidad,nombre_habilidad
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0009,Analizar datos para informar decisiones o actividades operativas.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0017,Analizar registros financieros para mejorar la eficiencia.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0044,Contratar personal.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0061,Desarrollar objetivos organizacionales.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0063,Desarrollar planes o estrategias de marketing.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0064,Desarrollar políticas o programas organizacionales.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0074,Determinar precios o monetario políticas.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0075,Determinar recurso necesidades.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0077,Dirigir actividades de ventas marketing o servicio al cliente.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0081,Dirigir operaciones financieras.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0082,"Dirigir operaciones, proyectos o servicios organizacionales."
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0117,Gestionar actividades de construcción.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0119,Gestionar proyectos de sostenibilidad ambiental.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0123,Implementar cambios en procesos o políticas organizacionales.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0148,Planificar distribuciones o diseños de instalaciones.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0151,Preparar cronogramas del personal o asignaciones de trabajo.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0173,Proporcionar información básica para huéspedes visitantes o clientes.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0186,Realizar programas de capacitación para empleados.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0187,Recomendar organizacional cambios de procesos o políticas.
+CAR_6e80dd213abf5387,Administración,COMP_TEC_0210,Supervisar el desempeño de miembros o socios de la organización.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0005,Analizar costos y beneficios de propuestos diseños o proyectos.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0011,Analizar diseños o planes con clientes.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0052,Crear representaciones gráficas de estructuras o landscapes.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0080,Dirigir diseñar o desarrollo actividades.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0083,Diseñar agua conservación sistemas.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0087,Diseñar estructuras o instalaciones.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0092,Documento detalles del diseño técnico.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0125,Incorporar elementos sostenibles en el diseño de estructuras o instalaciones.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0128,Inspeccionar instalaciones o sitios para verificar el cumplimiento de especificaciones o estándares.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0132,Investigar el impacto ambiental de proyectos.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0150,Preparar contratos disclosures o aplicaciones.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0152,Preparar detallado trabajo planes.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0154,Preparar documentos de procedimiento.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0167,Probar characteristics de materiales o estructuras.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0185,Realizar marketing actividades.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0217,Supervisar personal de ingeniería u otras áreas técnicas.
+CAR_111a0990206bc8b3,Arquitectura,COMP_TEC_0220,Verificar alignment de estructuras o equipos.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0032,Capacitar otros.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0035,Colaborar con otros en marketing actividades.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0037,Comunicar con gestión o otro personal para resolver problems.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0047,Coordinar logística para productions o events.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0057,Desarrollar estrategias o planes promocionales.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0067,Desarrollar relaciones comerciales.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0068,Desarrollar relaciones de colaboración entre departamentos u organizaciones externas.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0095,Editar written materiales.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0126,Informar espectadores oyentes o audiencias.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0137,Mantener contingency planes para disaster recovery.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0171,Promover productos actividades u organizaciones.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0174,Proporcionar información educativa al público.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0183,Realizar investigación de mercados.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0197,Redactar material informativo.
+CAR_4d6a43f8b2199298,Comunicación,COMP_TEC_0198,Redactar material publicitario o promocional.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0007,Analizar datos empresariales o financieros.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0012,Analizar empresarial estrategias prácticas o políticas con gerentes.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0014,Analizar información financiera.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0016,Analizar presupuestario o contable datos.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0023,Asesorar otros sobre asuntos empresariales u operativos.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0024,Asesorar otros sobre asuntos financieros.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0026,Asesorar otros sobre temas de recursos humanos.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0029,Calcular información tributaria.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0045,Coordinar documentación regulatoria actividades.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0070,Desarrollar sistemas de información empresarial o financiera.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0108,Evaluar eficacia de personal políticas o prácticas.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0111,Evaluar situación financiera de clientes.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0113,Examinar registros financieros o procesos.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0114,Examinar registros financieros.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0127,Informar información para gerentes o otro personal.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0133,Investigar legal problemas.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0142,Negociar acuerdos financieros.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0146,Pagar cargos fees o impuestos.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0155,Preparar documentos financieros informes o budgets.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0156,Preparar documentos financieros.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0162,Preparar operativo budgets.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0175,Proporcionar legal advice para clientes.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0180,Realizar auditorías financieras o regulatorias.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0190,Recopilar evidencia para procesos legales.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0199,Representar los intereses de clientes en procesos legales.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0213,Supervisar empresarial procesos.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0221,Verificar precisión de información financiera.
+CAR_99a34caf515305d2,Contabilidad y Finanzas,COMP_TEC_0222,Verificar precisión de registros.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0020,Arbitrar controversias entre las partes para resolver conflictos legales.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0082,"Dirigir operaciones, proyectos o servicios organizacionales."
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0098,Entrevistar claimants para get información relacionados para procesos legales.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0110,Evaluar información relacionados para asuntos legales en público o personal registros.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0118,Gestionar operaciones investigar o logística proyectos.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0121,Identificar implicancias para casos a partir de precedentes legales u otra información jurídica.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0134,Investigar relevant materiales jurídicos para aid decisión making.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0143,Negociar compras o contratos.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0144,Negociar contratos con clientes o servicio proveedores.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0153,Preparar documentation de procesos legales.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0157,Preparar documentos legales.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0175,Proporcionar legal advice para clientes.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0179,Realizar administrative o clerical tasks.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0196,Redactar legislation o regulaciones.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0199,Representar los intereses de clientes en procesos legales.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0201,Reunirse con individuals involved en legal procesos para proporcionar información y clarify problemas.
+CAR_47207a6890ade34e,Derecho,COMP_TEC_0209,Supervisar actividades de otro legal personal.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0022,Asesorar otros sobre asuntos de políticas públicas.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0023,Asesorar otros sobre asuntos empresariales u operativos.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0100,Establecer estándares para productos procesos o procedimientos.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0116,Explicar regulaciones políticas o procedimientos.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0129,Instruir universitarios estudiantes en social sciences o humanities disciplines.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0149,Preparar científico o informes técnicos o presentaciones.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0166,Presentar información al público.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0172,Pronosticar económico political o social tendencias.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0184,Realizar investigar sobre temas sociales.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0202,Revisar documentos registros o otro files para garantizar precisión.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0203,Revisar profesional literature para mantener profesional conocimiento.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0204,Revisar técnico documentos para planificar trabajo.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0216,Supervisar participantes.
+CAR_9077b7a6987f9551,Economía,COMP_TEC_0219,Testificar at legal o legislative procesos.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0003,Adquisición materiales equipos o otro recursos.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0025,Asesorar otros sobre prácticas sostenibles o asuntos ambientales.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0028,Asistir engineers o scientists con investigar.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0034,Capacitar personal sobre proper operativo procedimientos.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0041,Consultar con otro personal para resolver problemas de diseño u operativos.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0043,Consultar con técnico personal para preparar diseños o planes operativos.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0060,Desarrollar métodos o procesos técnicos.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0072,Determinar criterios o especificaciones operativas.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0078,Dirigir ambiental desarrollo actividades.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0084,Diseñar ambiental control sistemas.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0096,Embalar materiales para transporte.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0097,Enseñar estándares de seguridad o cumplimiento ambiental métodos.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0115,Explicar los detalles del proyecto al público general.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0128,Inspeccionar instalaciones o sitios para verificar el cumplimiento de especificaciones o estándares.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0130,Intercambiar información con colegas.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0132,Investigar el impacto ambiental de proyectos.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0138,Mantener registros operativos o sistemas de registro.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0147,Participar en conferences o workshops para mantener profesional conocimiento.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0152,Preparar detallado trabajo planes.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0154,Preparar documentos de procedimiento.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0159,Preparar informes operativos.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0160,Preparar informes técnicos u operativos.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0161,Preparar investigar o informes técnicos sobre ambiental problemas.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0163,Preparar presupuestos de proyectos.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0167,Probar characteristics de materiales o estructuras.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0194,Redactar informes o evaluations.
+CAR_c0897e5905e882b2,Ingeniería Ambiental,COMP_TEC_0208,Supervisar actividades affecting calidad ambiental.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0048,Coordinar seguridad o cumplimiento normativo actividades.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0051,Crear representaciones gráficas de civil estructuras.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0060,Desarrollar métodos o procesos técnicos.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0076,Dirigir actividades de construcción.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0091,Diseñar sistemas para reduce nocivo emisiones.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0101,Estimar costos operativos.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0103,Estimar requisitos técnicos o de recursos para desarrollo o producción proyectos.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0105,Evaluar datos técnicos para determinar effect sobre diseños o planes.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0115,Explicar los detalles del proyecto al público general.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0124,Implementar mejoras de diseño o de procesos.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0125,Incorporar elementos sostenibles en el diseño de estructuras o instalaciones.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0128,Inspeccionar instalaciones o sitios para verificar el cumplimiento de especificaciones o estándares.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0132,Investigar el impacto ambiental de proyectos.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0136,Levantar información sobre terreno o bodies de agua para medir o determinar features.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0164,Preparar proposal documentos.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0167,Probar characteristics de materiales o estructuras.
+CAR_e73c545a530d9196,Ingeniería Civil,COMP_TEC_0188,Recomendar técnico cambios de diseño o de procesos para mejorar eficiencia calidad o desempeño.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0006,Analizar datos del proyecto para determinar especificaciones o requisitos.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0008,Analizar datos para identificar o resolver problemas operativos.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0019,Aplicar tecnologías de la información para solve empresarial o otro applied problems.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0031,Capacitar otros en informático interface o software uso.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0036,Colaborar con otros para determinar especificaciones de diseño o detalles.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0039,Configurar redes informáticas.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0049,Coordinar software o hardware instalación.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0055,Desarrollar diagramas o flujogramas del funcionamiento de sistemas.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0069,Desarrollar rutinas o procedimientos de prueba.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0090,Diseñar sistemas informáticos integrados.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0093,Documento diseñar o desarrollo procedimientos.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0102,Estimar recursos de tiempo o dinero necesarios para complete proyectos.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0112,Evaluar utility de software o hardware technologies.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0120,Gestionar proyectos de tecnologías de la información o actividades de sistemas.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0122,Identificar requisitos de recursos para proyectos de tecnologías de la información.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0135,Leer documentos para recopilar información técnica.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0141,Modificar software programas para mejorar desempeño.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0169,Probar rendimiento del software.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0176,Proporcionar recommendations para otros sobre informático hardware.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0178,Proporcionar técnico support para mantenimiento o uso de software.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0189,Recopilar datos sobre necesidades de los clientes.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0195,Redactar informático programming code.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0200,Resolver problemas de problemas con aplicaciones informáticas o sistemas.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0206,Seleccionar materiales de entrada para producción.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0214,Supervisar informático sistema desempeño para garantizar proper operación.
+CAR_0b67601df35edaa1,Ingeniería de Sistemas,COMP_TEC_0218,Supervisar tecnologías de la información personal.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0006,Analizar datos del proyecto para determinar especificaciones o requisitos.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0010,Analizar diseñar o requisitos información para equipos o sistemas mecánicos.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0011,Analizar diseños o planes con clientes.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0038,Comunicar información técnica para proveedores contratistas o regulatorio entidades.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0043,Consultar con técnico personal para preparar diseños o planes operativos.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0054,Crear representaciones gráficas de sistemas de producción industrial.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0060,Desarrollar métodos o procesos técnicos.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0073,Determinar métodos operativos.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0079,Dirigir control de calidad actividades.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0088,Diseñar protocolos de investigación o prueba.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0092,Documento detalles del diseño técnico.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0101,Estimar costos operativos.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0107,Evaluar diseños o especificaciones para garantizar calidad.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0124,Implementar mejoras de diseño o de procesos.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0150,Preparar contratos disclosures o aplicaciones.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0154,Preparar documentos de procedimiento.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0159,Preparar informes operativos.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0170,Programar operativo actividades.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0188,Recomendar técnico cambios de diseño o de procesos para mejorar eficiencia calidad o desempeño.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0204,Revisar técnico documentos para planificar trabajo.
+CAR_a001374c09239410,Ingeniería Industrial,COMP_TEC_0217,Supervisar personal de ingeniería u otras áreas técnicas.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0010,Analizar diseñar o requisitos información para equipos o sistemas mecánicos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0030,Calibrar científico o técnico equipos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0034,Capacitar personal sobre proper operativo procedimientos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0050,Crear modelos físicos o prototipos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0053,Crear representaciones gráficas de mechanical equipos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0060,Desarrollar métodos o procesos técnicos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0071,Desarrollar software o aplicaciones informáticas.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0084,Diseñar ambiental control sistemas.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0085,Diseñar control sistemas para mechanical o otro equipos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0086,Diseñar equipos o sistemas electromecánicos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0089,Diseñar sistemas de procesamiento industrial.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0094,Documento diseñar o operativo probar results.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0101,Estimar costos operativos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0103,Estimar requisitos técnicos o de recursos para desarrollo o producción proyectos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0124,Implementar mejoras de diseño o de procesos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0131,Investigar aplicaciones de ingeniería de tecnologías emergentes.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0138,Mantener registros operativos o sistemas de registro.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0168,Probar desempeño de electrical electronic mechanical o integrated sistemas o equipos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0177,Proporcionar técnico guidance para otro personal.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0188,Recomendar técnico cambios de diseño o de procesos para mejorar eficiencia calidad o desempeño.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0205,Seleccionar herramientas equipos o technologies para uso en operaciones o proyectos.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0207,Seleccionar materiales del proyecto.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0215,Supervisar la productividad o eficiencia de operaciones industriales.
+CAR_5aadf8cdc9fff575,Ingeniería Mecatrónica,COMP_TEC_0217,Supervisar personal de ingeniería u otras áreas técnicas.
+CAR_a286075043d42dcd,Marketing,COMP_TEC_0004,Analizar condiciones o tendencias del mercado.
+CAR_a286075043d42dcd,Marketing,COMP_TEC_0012,Analizar empresarial estrategias prácticas o políticas con gerentes.
+CAR_a286075043d42dcd,Marketing,COMP_TEC_0013,Analizar industria tendencias.
+CAR_a286075043d42dcd,Marketing,COMP_TEC_0018,Analizar tendencias de consumo.
+CAR_a286075043d42dcd,Marketing,COMP_TEC_0056,Desarrollar estrategias empresariales o de mercado.
+CAR_a286075043d42dcd,Marketing,COMP_TEC_0099,Establecer empresarial gestión métodos.
+CAR_a286075043d42dcd,Marketing,COMP_TEC_0140,Medir eficacia de empresarial estrategias o prácticas.
+CAR_a286075043d42dcd,Marketing,COMP_TEC_0158,Preparar informes de investigación.
+CAR_a286075043d42dcd,Marketing,COMP_TEC_0182,Realizar encuestas en organizaciones.
+CAR_a286075043d42dcd,Marketing,COMP_TEC_0193,Recopilar organizacional desempeño información.
+CAR_a286075043d42dcd,Marketing,COMP_TEC_0211,Supervisar empleados.
+CAR_a286075043d42dcd,Marketing,COMP_TEC_0212,Supervisar empresarial indicators.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0001,Actualizar profesional conocimiento.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0007,Analizar datos empresariales o financieros.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0015,Analizar logística procesos.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0021,Asesorar otros sobre analytical techniques.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0027,Asignar recursos físicos dentro de organizaciones.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0042,Consultar con personal para coordinar operaciones empresariales.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0045,Coordinar documentación regulatoria actividades.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0046,Coordinar logística o otro operaciones empresariales.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0058,Desarrollar materiales de capacitación.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0062,Desarrollar planes financieros o de negocio.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0067,Desarrollar relaciones comerciales.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0070,Desarrollar sistemas de información empresarial o financiera.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0118,Gestionar operaciones investigar o logística proyectos.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0127,Informar información para gerentes o otro personal.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0140,Medir eficacia de empresarial estrategias o prácticas.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0164,Preparar proposal documentos.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0165,Presentar empresarial-relacionados información para audiencias.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0189,Recopilar datos sobre necesidades de los clientes.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0191,Recopilar información de clientes o productos para determinar necesidades de los clientes.
+CAR_20520c374235596d,Negocios Internacionales,COMP_TEC_0211,Supervisar empleados.
+CAR_567781f437142904,Psicología,COMP_TEC_0002,Administrar pruebas físicas o psicológicas estandarizadas.
+CAR_567781f437142904,Psicología,COMP_TEC_0023,Asesorar otros sobre asuntos empresariales u operativos.
+CAR_567781f437142904,Psicología,COMP_TEC_0033,Capacitar personal en técnico o científico procedimientos.
+CAR_567781f437142904,Psicología,COMP_TEC_0040,Consultar con clientes para intercambiar información.
+CAR_567781f437142904,Psicología,COMP_TEC_0059,Desarrollar métodos de investigación social o económica.
+CAR_567781f437142904,Psicología,COMP_TEC_0065,Desarrollar programas educativos o de capacitación.
+CAR_567781f437142904,Psicología,COMP_TEC_0066,Desarrollar programas educativos.
+CAR_567781f437142904,Psicología,COMP_TEC_0104,Evaluar capabilities o capacitación necesidades.
+CAR_567781f437142904,Psicología,COMP_TEC_0106,Evaluar desempeño de postulantes participantes o empleados.
+CAR_567781f437142904,Psicología,COMP_TEC_0109,Evaluar empleado desempeño.
+CAR_567781f437142904,Psicología,COMP_TEC_0123,Implementar cambios en procesos o políticas organizacionales.
+CAR_567781f437142904,Psicología,COMP_TEC_0139,Mediar controversias.
+CAR_567781f437142904,Psicología,COMP_TEC_0145,Orientar clientes sobre mental health o personal achievement.
+CAR_567781f437142904,Psicología,COMP_TEC_0149,Preparar científico o informes técnicos o presentaciones.
+CAR_567781f437142904,Psicología,COMP_TEC_0181,Realizar científico investigar de comportamiento organizacional o procesos.
+CAR_567781f437142904,Psicología,COMP_TEC_0187,Recomendar organizacional cambios de procesos o políticas.
+CAR_567781f437142904,Psicología,COMP_TEC_0192,Recopilar información de personas mediante observación entrevistas o encuestas.
+CAR_567781f437142904,Psicología,COMP_TEC_0203,Revisar profesional literature para mantener profesional conocimiento.
+CAR_567781f437142904,Psicología,COMP_TEC_0219,Testificar at legal o legislative procesos.
