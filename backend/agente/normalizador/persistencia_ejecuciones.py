@@ -113,6 +113,45 @@ def _actualizar_metadatos_outputs(
     return resultado
 
 
+def _reconciliar_draft_outputs(
+    directorio: Path,
+    estado: dict[str, object],
+) -> dict[str, object]:
+    """Expose existing canonical CSVs as drafts without changing the import gate."""
+
+    if (
+        estado.get("tipo") != "silabos"
+        or estado.get("estado") != "no_publicado"
+        or gate_permite_salidas_tecnicas(estado.get("release_gate"))
+    ):
+        return estado
+
+    raiz = directorio.resolve()
+    borradores: list[dict[str, object]] = []
+    for nombre, _columnas in ARCHIVOS_CATALOGO:
+        archivo = f"salidas/{nombre}"
+        ruta = directorio / archivo
+        try:
+            if ruta.is_symlink() or not ruta.is_file() or raiz not in ruta.resolve().parents:
+                continue
+            with ruta.open(encoding="utf-8-sig", newline="") as contenido:
+                registros = sum(1 for _ in csv.DictReader(contenido))
+        except (OSError, UnicodeDecodeError, csv.Error):
+            continue
+        borradores.append(
+            {
+                "tipo": "csv_curricular_borrador",
+                "archivo": archivo,
+                "registros": registros,
+                "borrador": True,
+            }
+        )
+
+    actualizado = dict(estado)
+    actualizado["draft_outputs"] = _actualizar_metadatos_outputs(directorio, borradores)
+    return actualizado
+
+
 def _reconciliar_outputs_tecnicos(
     directorio: Path,
     estado: dict[str, object],
@@ -354,7 +393,10 @@ class RepositorioEjecucionesPersistidas:
             if not isinstance(datos, dict):
                 raise ValueError("El manifest de la ejecución no tiene un objeto raíz.")
             estado = filtrar_estado_publico(cast(dict[str, object], datos))
-        return _reconciliar_outputs_tecnicos(directorio, estado)
+        return _reconciliar_outputs_tecnicos(
+            directorio,
+            _reconciliar_draft_outputs(directorio, estado),
+        )
 
     def obtener_reporte(self, id_ejecucion: str) -> dict[str, object]:
         estado = self.obtener(id_ejecucion)

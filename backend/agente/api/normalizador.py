@@ -23,6 +23,7 @@ from agente.normalizador.ejecuciones import (
     gestor_ejecuciones,
 )
 from agente.normalizador.modelos import Hallazgo
+from agente.normalizador.silabos.salida_catalogos import ARCHIVOS_CATALOGO
 from agente.observabilidad.logger import log_paso
 
 aprobaciones_tecnicas = import_module("agente.normalizador.silabos.aprobaciones_tecnicas")
@@ -291,6 +292,18 @@ def descargar_output(id_ejecucion: str, ruta_salida: str) -> FileResponse:
         for salida in salidas:
             if isinstance(salida, dict) and isinstance(salida.get("archivo"), str):
                 permitidos.add(Path(salida["archivo"]).as_posix())
+    if ejecucion.get("tipo") == "silabos" and ejecucion.get("estado") == "no_publicado":
+        borradores = ejecucion.get("draft_outputs")
+        canonicales = {f"salidas/{nombre}" for nombre, _columnas in ARCHIVOS_CATALOGO}
+        if isinstance(borradores, list):
+            for borrador in borradores:
+                archivo = borrador.get("archivo") if isinstance(borrador, dict) else None
+                if (
+                    isinstance(archivo, str)
+                    and archivo in canonicales
+                    and bool(borrador.get("borrador"))
+                ):
+                    permitidos.add(archivo)
 
     ruta_normalizada = relativa.as_posix()
     if ruta_normalizada not in permitidos:
