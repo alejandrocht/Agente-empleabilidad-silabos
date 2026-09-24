@@ -16,6 +16,7 @@ import {
   iniciarNormalizadorSilabos,
   iniciarNormalizadorSilabosCactus,
   listarEjecucionesNormalizador,
+  registrarCambioHitlNormalizador,
   obtenerCuarentenaNormalizador,
   obtenerEjecucionNormalizador,
   obtenerErroresNormalizador,
@@ -36,6 +37,7 @@ vi.mock("../api/normalizador", () => ({
   iniciarNormalizadorSilabos: vi.fn(),
   iniciarNormalizadorSilabosCactus: vi.fn(),
   listarEjecucionesNormalizador: vi.fn(),
+  registrarCambioHitlNormalizador: vi.fn().mockResolvedValue(undefined),
   decidirPendientesNormalizador: vi.fn(),
   obtenerReporteEjecucionNormalizador: vi.fn(),
   obtenerUrlReporteEjecucionNormalizador: vi.fn(
@@ -182,9 +184,99 @@ describe("panel del normalizador", () => {
         "Las propuestas técnicas válidas se agregan automáticamente (ADD).",
       ),
     ).toBeTruthy();
+    await waitFor(() => {
+      expect(registrarCambioHitlNormalizador).toHaveBeenCalledWith(0);
+      expect(registrarCambioHitlNormalizador).toHaveBeenCalledTimes(1);
+    });
     expect(screen.queryByText(/HITL técnico:\s*[01]/)).toBeNull();
     expect(iniciarNormalizadorSilabos).not.toHaveBeenCalled();
     expect(iniciarNormalizadorSilabosCactus).not.toHaveBeenCalled();
+
+    fireEvent.click(switchControl);
+
+    await waitFor(() => {
+      expect(registrarCambioHitlNormalizador).toHaveBeenCalledWith(1);
+      expect(registrarCambioHitlNormalizador).toHaveBeenCalledTimes(2);
+    });
+    expect(switchControl.getAttribute("aria-checked")).toBe("true");
+    expect(iniciarNormalizadorSilabos).not.toHaveBeenCalled();
+    expect(iniciarNormalizadorSilabosCactus).not.toHaveBeenCalled();
+  });
+
+  it("muestra un error accesible y conserva el valor elegido si falla el registro HITL", async () => {
+    registrarCambioHitlNormalizador.mockRejectedValueOnce(
+      new Error("detalle backend privado"),
+    );
+
+    await renderPanelAfterRecovery();
+    const switchControl = screen.getByRole("switch", {
+      name: "HITL técnico",
+    });
+    fireEvent.click(switchControl);
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta.textContent).toContain(
+      "No se pudo registrar el cambio del control HITL. Intenta nuevamente.",
+    );
+    expect(alerta.textContent).not.toContain("detalle backend privado");
+    expect(screen.queryByText("detalle backend privado")).toBeNull();
+    expect(switchControl.getAttribute("aria-checked")).toBe("false");
+    expect(iniciarNormalizadorSilabos).not.toHaveBeenCalled();
+    expect(iniciarNormalizadorSilabosCactus).not.toHaveBeenCalled();
+
+    iniciarNormalizadorSilabosCactus.mockResolvedValue({
+      id_ejecucion: "NOR_cactus12345678",
+      tipo: "silabos",
+      archivo: "cactus.zip",
+      estado: "extrayendo",
+      parametros: { carrera: "Marketing", periodo: "2026-1", fuente: "cactus" },
+    });
+    obtenerEjecucionNormalizador.mockResolvedValue({
+      id_ejecucion: "NOR_cactus12345678",
+      tipo: "silabos",
+      archivo: "cactus.zip",
+      estado: "extrayendo",
+      parametros: { carrera: "Marketing", periodo: "2026-1", fuente: "cactus" },
+      fuente: { tipo: "cactus", estado: "extrayendo" },
+      progreso_fuente: {
+        fase: "autenticando",
+        cursos_encontrados: 0,
+        cursos_procesados: 0,
+        archivos_descargados: 0,
+        errores: 0,
+        mensaje: "Abriendo una sesión autenticada en Cactus.",
+      },
+      outputs: [],
+      hallazgos: [],
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Sílabos" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), {
+      target: { value: "Marketing" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), {
+      target: { value: "2026-1" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Usuario ULima" }), {
+      target: { value: "usuario.ulima" },
+    });
+    fireEvent.change(screen.getByLabelText("Contraseña ULima"), {
+      target: { value: "secreto" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Extraer y normalizar sílabos" }),
+    );
+
+    await waitFor(() =>
+      expect(iniciarNormalizadorSilabosCactus).toHaveBeenCalledWith(
+        "Marketing",
+        "2026-1",
+        "usuario.ulima",
+        "secreto",
+        0,
+      ),
+    );
+    expect(screen.queryByText("detalle backend privado")).toBeNull();
   });
 
   it("restablece HITL al modo de revisión manual al preparar una nueva ejecución", async () => {

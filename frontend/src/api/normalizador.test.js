@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   iniciarNormalizadorSilabos,
   iniciarNormalizadorSilabosCactus,
+  registrarCambioHitlNormalizador,
 } from "./normalizador";
 
 describe("iniciarNormalizadorSilabos", () => {
@@ -40,6 +41,54 @@ describe("iniciarNormalizadorSilabos", () => {
 
     const [, request] = fetchMock.mock.calls[0];
     expect(request.body.get("hitl")).toBe("0");
+  });
+});
+
+describe("registrarCambioHitlNormalizador", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("registra el valor seleccionado con POST y JSON en el endpoint de eventos", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 204,
+      ok: true,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await registrarCambioHitlNormalizador(0);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/normalizador/eventos/hitl",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hitl: 0 }),
+      },
+    );
+  });
+
+  it("acepta una respuesta 204 sin intentar leer un cuerpo", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 204,
+      ok: true,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(registrarCambioHitlNormalizador(1)).resolves.toBeUndefined();
+  });
+
+  it("rechaza respuestas no OK sin propagar el detalle del backend", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 500,
+      ok: false,
+      json: vi.fn().mockResolvedValue({ detail: "detalle interno" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(registrarCambioHitlNormalizador(1)).rejects.toThrow(
+      "No se pudo registrar el cambio del control HITL.",
+    );
   });
 });
 
