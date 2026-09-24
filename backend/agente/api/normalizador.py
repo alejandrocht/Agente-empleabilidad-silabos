@@ -23,6 +23,7 @@ from agente.normalizador.ejecuciones import (
     gestor_ejecuciones,
 )
 from agente.normalizador.modelos import Hallazgo
+from agente.observabilidad.logger import log_paso
 
 aprobaciones_tecnicas = import_module("agente.normalizador.silabos.aprobaciones_tecnicas")
 errores_tecnicos = import_module("agente.normalizador.silabos.errores_tecnicos")
@@ -92,6 +93,25 @@ class IniciarSilabosCactusIn(BaseModel):
     # La longitud se valida en la ruta para que los errores de Pydantic no hagan
     # eco de una contraseña enviada en el campo `input` de la respuesta 422.
     contrasena: SecretStr
+
+
+class EventoHitlIn(BaseModel):
+    """Cambio explícito del modo HITL, independiente de una ejecución."""
+
+    hitl: Literal[0, 1]
+
+
+@router.post("/eventos/hitl", status_code=204)
+def registrar_evento_hitl(solicitud: EventoHitlIn) -> Response:
+    """Registra el modo HITL seleccionado sin crear ni modificar ejecuciones."""
+
+    modo = "aprobacion_automatica" if solicitud.hitl == 0 else "revision_humana"
+    log_paso(
+        "normalizador",
+        "hitl_cambiado",
+        data={"hitl": str(solicitud.hitl), "modo": modo},
+    )
+    return Response(status_code=204)
 
 
 @router.post("/silabos", status_code=202)

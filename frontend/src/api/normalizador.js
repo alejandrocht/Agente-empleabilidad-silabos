@@ -44,6 +44,17 @@ export async function iniciarNormalizadorSilabosCactus(
   return datos;
 }
 
+export async function registrarCambioHitlNormalizador(hitl) {
+  const respuesta = await fetch("/api/normalizador/eventos/hitl", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hitl: Number(hitl) === 0 ? 0 : 1 }),
+  });
+  if (!respuesta.ok) {
+    throw new Error("No se pudo registrar el cambio del control HITL.");
+  }
+}
+
 export async function obtenerEjecucionNormalizador(idEjecucion) {
   const respuesta = await fetch(`/api/normalizador/ejecuciones/${idEjecucion}`);
   const datos = await respuesta.json().catch(() => ({}));

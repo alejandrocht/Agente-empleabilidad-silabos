@@ -26,6 +26,7 @@ import {
   obtenerErroresNormalizador,
   obtenerUrlOutputNormalizador,
   listarEjecucionesNormalizador,
+  registrarCambioHitlNormalizador,
 } from "../api/normalizador";
 import Neo4jImportPanel from "./Neo4jImportPanel";
 import CurricularApprovalPanel from "./CurricularApprovalPanel";
@@ -143,6 +144,8 @@ const PERIODOS_SILABOS = [
 ];
 
 const INACTIVIDAD_RECIENTE_MS = 5 * 60 * 1000;
+const MENSAJE_ERROR_HITL =
+  "No se pudo registrar el cambio del control HITL. Intenta nuevamente.";
 
 const ETIQUETAS_SEVERIDAD = {
   error: "Error",
@@ -603,6 +606,7 @@ export default function NormalizadorPanel() {
   const [errores, setErrores] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [errorRed, setErrorRed] = useState("");
+  const [errorHitl, setErrorHitl] = useState("");
   const [cancelando, setCancelando] = useState(false);
   const [cancelacionEnviada, setCancelacionEnviada] = useState(false);
   const [, setAprobacionCurricular] = useState(null);
@@ -694,6 +698,15 @@ export default function NormalizadorPanel() {
     return () => window.clearInterval(timer);
   }, [consultar, ejecucion, pollingDetenido]);
 
+  const cambiarHitl = () => {
+    const siguiente = hitl === 1 ? 0 : 1;
+    setHitl(siguiente);
+    setErrorHitl("");
+    Promise.resolve(registrarCambioHitlNormalizador(siguiente)).catch(() =>
+      setErrorHitl(MENSAJE_ERROR_HITL),
+    );
+  };
+
   const iniciar = async () => {
     const requiereArchivo = fuenteSilabos === "manual";
     if (requiereArchivo && !archivo) return;
@@ -701,6 +714,7 @@ export default function NormalizadorPanel() {
     setRecuperando(false);
     setCargando(true);
     setErrorRed("");
+    setErrorHitl("");
     setEjecucion(null);
     setCuarentena(null);
     setErrores([]);
@@ -782,6 +796,7 @@ export default function NormalizadorPanel() {
     setCuarentena(null);
     setErrores([]);
     setErrorRed("");
+    setErrorHitl("");
     setCancelando(false);
     setCancelacionEnviada(false);
     setAprobacionCurricular(null);
@@ -1037,7 +1052,7 @@ export default function NormalizadorPanel() {
                     aria-label="HITL técnico"
                     aria-checked={hitl === 1}
                     disabled={controlesBloqueados}
-                    onClick={() => setHitl((actual) => (actual === 1 ? 0 : 1))}
+                    onClick={cambiarHitl}
                     className={`relative inline-flex h-11 min-h-11 w-20 shrink-0 cursor-pointer items-center rounded-full border px-1 transition focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-50 ${hitl === 1 ? "border-ulima bg-ulima hover:bg-ulima/90" : "border-line bg-ash hover:border-ulima/60"}`}
                   >
                     <span
@@ -1047,6 +1062,16 @@ export default function NormalizadorPanel() {
                   </button>
                 </div>
               </section>
+
+              {errorHitl ? (
+                <p
+                  role="alert"
+                  aria-live="assertive"
+                  className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold leading-5 text-amber-900"
+                >
+                  {errorHitl}
+                </p>
+              ) : null}
 
               {modo === "silabos" ? (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
