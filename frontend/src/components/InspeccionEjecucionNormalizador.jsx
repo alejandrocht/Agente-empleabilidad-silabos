@@ -13,8 +13,10 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  cancelarEjecucionNormalizador,
   obtenerReporteEjecucionNormalizador,
   obtenerUrlOutputNormalizador,
+  obtenerUrlReporteEjecucionNormalizador,
 } from "../api/normalizador";
 import CurricularApprovalPanel from "./CurricularApprovalPanel";
 import Neo4jImportPanel from "./Neo4jImportPanel";
@@ -26,6 +28,7 @@ const CSV_PREVIEW_NAMES_TECNICOS = new Set([
   "curso.csv",
   "silabo.csv",
   "catalogo_competencias.csv",
+  "catalogo_habilidades.csv",
   "catalogo_logros.csv",
   "cobertura_curricular.csv",
 ]);
@@ -176,7 +179,11 @@ function parametrosDe(manifest) {
 }
 
 function salidasDe(manifest) {
-  const fuentes = [manifest?.outputs, manifest?.limpieza_silabos?.outputs];
+  const fuentes = [
+    manifest?.outputs,
+    manifest?.limpieza_silabos?.outputs,
+    manifest?.draft_outputs,
+  ];
   const salidas = [];
   const vistas = new Set();
   for (const fuente of fuentes) {
@@ -568,6 +575,11 @@ function conteosDe(manifest) {
       valor: registrosDe("catalogo_competencias.csv"),
     },
     {
+      clave: "habilidades",
+      etiqueta: "habilidades técnicas",
+      valor: registrosDe("catalogo_habilidades.csv"),
+    },
+    {
       clave: "logros",
       etiqueta: "logros",
       valor: registrosDe("catalogo_logros.csv"),
@@ -580,8 +592,18 @@ function conteosDe(manifest) {
   ];
 }
 
-const ESTADOS_ACTIVOS = new Set([
+const ESTADOS_POLLING = new Set([
   "recibido",
+  "extrayendo",
+  "validando",
+  "validado",
+  "validado_con_advertencias",
+  "limpiando",
+  "normalizando",
+]);
+const ESTADOS_CANCELABLES = new Set([
+  "recibido",
+  "extrayendo",
   "validando",
   "limpiando",
   "normalizando",
@@ -595,7 +617,11 @@ function estadoNormalizado(estado) {
 }
 
 function esEstadoActivo(estado) {
-  return ESTADOS_ACTIVOS.has(estadoNormalizado(estado));
+  return ESTADOS_POLLING.has(estadoNormalizado(estado));
+}
+
+function esEstadoCancelable(estado) {
+  return ESTADOS_CANCELABLES.has(estadoNormalizado(estado));
 }
 
 function estadoLegible(estado, contexto = {}) {
@@ -615,6 +641,7 @@ function estadoLegible(estado, contexto = {}) {
   return (
     {
       recibido: "Ejecución recibida",
+      extrayendo: "Extrayendo sílabos",
       validando: "Validando estructura",
       validado: "Validación completada",
       validado_con_advertencias: "Validación completada con advertencias",
@@ -656,6 +683,110 @@ function progresoActivoDe(manifest) {
           ),
         )
       : 0,
+  };
+}
+
+function cursoActualDe(progreso) {
+  const fase = progreso?.fase;
+  const campoEstado =
+    fase === "analista" || fase === "analista_residual"
+      ? "estado_analisis"
+      : fase === "extrayendo"
+        ? "estado_extraccion"
+        : null;
+  if (!campoEstado || !Array.isArray(progreso?.silabos)) return null;
+  const activos = progreso.silabos.filter(
+    (silabo) => silabo?.[campoEstado] === "procesando",
+  );
+  return activos.length === 1 ? activos[0] : null;
+}
+
+function etiquetaFaseLLM(fase) {
+  return (
+    {
+      preparando: "Preparando limpieza LLM",
+      extrayendo: "Extrayendo texto de sílabos",
+      analista: "Analizando sílabos",
+      analista_residual: "Analizando sílabos restantes",
+      finalizando: "Finalizando limpieza LLM",
+      completado: "Limpieza LLM completada",
+      error: "Error en limpieza LLM",
+      cancelado: "Limpieza LLM cancelada",
+    }[fase] || "Fase LLM no disponible"
+  );
+}
+
+function progresoFuenteResumen(progreso) {
+  if (!progreso || typeof progreso !== "object") return null;
+  const contadores = [
+    ["cursos_encontrados", "cursos encontrados"],
+    ["cursos_procesados", "cursos procesados"],
+    ["archivos_descargados", "archivos descargados"],
+    ["sin_silabo", "sin sílabo"],
+    ["fetch_fallidos", "descargas fallidas"],
+    ["sesiones_fallidas", "sesiones fallidas"],
+    ["archivos_no_soportados", "archivos no compatibles"],
+    ["errores", "errores"],
+  ]
+    .map(([clave, etiqueta]) => {
+      const valor = numeroNoNegativo(progreso[clave]);
+      return valor === null ? null : `${valor} ${etiqueta}`;
+    })
+    .filter(Boolean);
+  return {
+    fase: textoParametro(progreso.fase, "Etapa no disponible"),
+    contadores,
+  };
+}
+
+function resumenLlmDe(progreso) {
+  if (!progreso || typeof progreso !== "object") return null;
+  const curso = cursoActualDe(progreso);
+  const labelCurso = curso
+    ? String(
+        curso.curso ||
+          (typeof curso.archivo === "string" && curso.archivo.trim()
+            ? nombreArchivo(curso.archivo)
+            : "") ||
+          "",
+      ).trim()
+    : "";
+  const evento = Array.isArray(progreso.eventos)
+    ? [...progreso.eventos]
+        .reverse()
+        .find(
+          (item) =>
+            typeof item?.mensaje === "string" && item.mensaje.trim(),
+        )
+    : null;
+  const detalle = evento?.mensaje;
+  return {
+    fase: etiquetaFaseLLM(progreso.fase),
+    curso: curso
+      ? {
+          etiqueta: labelCurso || "Nombre aún no disponible",
+          indice: numeroNoNegativo(curso.indice),
+          total: numeroNoNegativo(curso.total),
+          logrosProcesados: numeroNoNegativo(curso.logros_procesados),
+          logrosTotales: numeroNoNegativo(curso.logros_totales),
+        }
+      : null,
+    chunksCompletados: numeroNoNegativo(progreso.chunks_completados),
+    chunksTotales: numeroNoNegativo(progreso.chunks_totales),
+    logrosProcesados: numeroNoNegativo(progreso.logros_procesados),
+    logrosTotales: numeroNoNegativo(progreso.logros_totales),
+    silabosProcesados: numeroNoNegativo(progreso.silabos_procesados),
+    silabosTotales: numeroNoNegativo(progreso.silabos_totales),
+    reintentos: numeroNoNegativo(progreso.reintentos),
+    cache: numeroNoNegativo(progreso.decisiones_cacheadas),
+    reporte:
+      typeof progreso.reporte_final === "string"
+        ? progreso.reporte_final
+        : null,
+    detalle:
+      typeof detalle === "string" && detalle.trim()
+        ? detalle.trim().slice(0, 240)
+        : null,
   };
 }
 
@@ -963,6 +1094,7 @@ function CsvOutputsPanel({
   ejecucionActiva,
   csvCanonicosListos,
 }) {
+  const hayBorradores = csvs.some((salida) => salida.borrador === true);
   return (
     <section
       className="rounded-2xl border border-line bg-paper p-5 shadow-sm sm:p-6"
@@ -971,13 +1103,13 @@ function CsvOutputsPanel({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-            Salidas publicadas
+            {hayBorradores ? "Salidas en borrador" : "Salidas publicadas"}
           </p>
           <h2
             id="csv-outputs-title"
             className="mt-2 text-xl font-extrabold tracking-[-0.025em]"
           >
-            Archivos CSV
+            {hayBorradores ? "Borradores CSV" : "Archivos CSV"}
           </h2>
         </div>
         <span className="font-mono text-xs font-bold text-muted">
@@ -992,7 +1124,13 @@ function CsvOutputsPanel({
         </p>
       ) : csvs.length ? (
         <div className="mt-5 space-y-4">
-          {csvCanonicosListos ? null : (
+          {hayBorradores ? (
+            <p className="rounded-xl border border-ulima/25 bg-ulima/5 px-3.5 py-3 text-sm text-ink">
+              Estos CSV son borradores descargables para inspección y no son
+              importables a Neo4j. El release gate mantiene bloqueada la
+              publicación.
+            </p>
+          ) : csvCanonicosListos ? null : (
             <p className="rounded-xl border border-ulima/25 bg-ulima/5 px-3.5 py-3 text-sm text-ink">
               Los archivos declarados se muestran para inspección, pero el
               release gate aún no permite publicarlos en Neo4j.
@@ -1015,9 +1153,11 @@ function CsvOutputsPanel({
                       {nombre}
                     </h3>
                     <p className="mt-1 font-mono text-[10px] text-muted">
-                      {Number.isFinite(Number(salida.registros))
-                        ? `${Number(salida.registros).toLocaleString("es-PE")} registros`
-                        : salida.tipo || "CSV"}
+                      {salida.borrador === true
+                        ? "Borrador · no importable"
+                        : Number.isFinite(Number(salida.registros))
+                          ? `${Number(salida.registros).toLocaleString("es-PE")} registros`
+                          : salida.tipo || "CSV"}
                     </p>
                   </div>
                   <a
@@ -1136,6 +1276,11 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
   });
   const [revisionReporte, setRevisionReporte] = useState(0);
   const [activeTab, setActiveTab] = useState("progreso");
+  const [cancelandoId, setCancelandoId] = useState(null);
+  const [cancelacionesEnviadas, setCancelacionesEnviadas] = useState(
+    () => new Set(),
+  );
+  const [errorCancelacion, setErrorCancelacion] = useState(null);
   const faseAutomaticaRef = useRef("");
 
   useEffect(() => {
@@ -1289,6 +1434,8 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
   const validacion = manifest.validacion_silabos || manifest.validacion;
   const ejecucionActiva = esEstadoActivo(manifest.estado);
   const progresoActivo = progresoActivoDe(manifest);
+  const progresoFuente = progresoFuenteResumen(manifest.progreso_fuente);
+  const resumenLlm = resumenLlmDe(manifest.progreso_llm);
   const estadoActual = estadoNormalizado(manifest.estado);
   const estadoError = ["error", "rechazado"].includes(estadoActual);
   const requiereAuditoria = estadoError || estadoActual === "no_publicado";
@@ -1309,6 +1456,42 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
     csvCanonicosListos,
     cantidadErrores: errores.length,
   });
+  const puedeCancelar = esEstadoCancelable(manifest.estado);
+  const cancelando = cancelandoId === idEjecucion;
+  const cancelacionPendiente =
+    Boolean(manifest.cancelacion_solicitada) ||
+    cancelacionesEnviadas.has(idEjecucion);
+  const mensajeErrorCancelacion =
+    errorCancelacion?.id === idEjecucion ? errorCancelacion.mensaje : "";
+
+  async function solicitarCancelacion() {
+    if (
+      cancelando ||
+      cancelacionPendiente ||
+      !puedeCancelar ||
+      !window.confirm(
+        "¿Solicitar la cancelación de esta ejecución? El procesamiento puede tardar en detenerse.",
+      )
+    )
+      return;
+    setCancelandoId(idEjecucion);
+    setErrorCancelacion(null);
+    try {
+      await cancelarEjecucionNormalizador(idEjecucion);
+      setCancelacionesEnviadas((anteriores) =>
+        new Set(anteriores).add(idEjecucion),
+      );
+    } catch (error) {
+      setErrorCancelacion({
+        id: idEjecucion,
+        mensaje: error.message || "No se pudo solicitar la cancelación.",
+      });
+    } finally {
+      setCancelandoId((actual) =>
+        actual === idEjecucion ? null : actual,
+      );
+    }
+  }
 
   useEffect(() => {
     if (!estado.reporte || faseAutomaticaRef.current === faseAutomatica) return;
@@ -1349,6 +1532,23 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
               <p className="mt-2 break-all font-mono text-xs text-muted">
                 {idEjecucion}
               </p>
+              {manifest.parametros?.hitl === 1 ||
+              manifest.parametros?.hitl === "1" ? (
+                <p
+                  className="mt-3 rounded-xl border border-ulima/30 bg-ulima/5 px-3.5 py-2.5 text-sm font-semibold text-ink"
+                  aria-label="Estado de revisión técnica humana"
+                >
+                  Revisión técnica humana: activa.
+                </p>
+              ) : manifest.parametros?.hitl === 0 ||
+                manifest.parametros?.hitl === "0" ? (
+                <p
+                  className="mt-3 rounded-xl border border-line bg-fondo px-3.5 py-2.5 text-sm font-semibold text-ink"
+                  aria-label="Estado de revisión técnica humana"
+                >
+                  Revisión técnica humana: desactivada; decisiones técnicas automáticas.
+                </p>
+              ) : null}
               {estado.reporte ? (
                 <section
                   aria-label="Parámetros de la ejecución"
@@ -1446,6 +1646,45 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
                       </span>
                     ) : null}
                   </div>
+                  {progresoFuente || resumenLlm ? (
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {progresoFuente ? (
+                        <section className="rounded-xl border border-line bg-paper/80 px-3.5 py-3" aria-label="Progreso de extracción Cactus">
+                          <h3 className="text-sm font-extrabold">Fuente Cactus · {progresoFuente.fase}</h3>
+                          <p className="mt-1 text-xs text-muted">
+                            {progresoFuente.contadores.length ? progresoFuente.contadores.join(" · ") : "Contadores no disponibles."}
+                          </p>
+                        </section>
+                      ) : null}
+                      {resumenLlm ? (
+                        <section className="rounded-xl border border-line bg-paper/80 px-3.5 py-3" aria-label="Progreso de limpieza LLM">
+                          <h3 className="text-sm font-extrabold">{resumenLlm.fase}</h3>
+                          <p className="mt-1 text-xs text-muted">
+                            {[resumenLlm.chunksCompletados !== null && resumenLlm.chunksTotales !== null ? `${resumenLlm.chunksCompletados}/${resumenLlm.chunksTotales} chunks` : null,
+                              resumenLlm.logrosProcesados !== null && resumenLlm.logrosTotales !== null ? `${resumenLlm.logrosProcesados}/${resumenLlm.logrosTotales} logros` : null,
+                              resumenLlm.silabosProcesados !== null && resumenLlm.silabosTotales !== null ? `${resumenLlm.silabosProcesados}/${resumenLlm.silabosTotales} sílabos` : null,
+                              resumenLlm.reintentos !== null ? `${resumenLlm.reintentos} reintentos` : null,
+                              resumenLlm.cache !== null ? `${resumenLlm.cache} decisiones en caché` : null,
+                              resumenLlm.reporte ? `Reporte: ${resumenLlm.reporte}` : null]
+                              .filter(Boolean).join(" · ") || "Contadores no disponibles."}
+                          </p>
+                          <p className="mt-2 text-xs font-semibold text-ink">
+                            {resumenLlm.curso
+                              ? <>Limpiando ahora: {resumenLlm.curso.etiqueta}{resumenLlm.curso.indice !== null && resumenLlm.curso.total !== null ? ` (${resumenLlm.curso.indice}/${resumenLlm.curso.total})` : ""}{resumenLlm.curso.logrosProcesados !== null && resumenLlm.curso.logrosTotales !== null ? ` · ${resumenLlm.curso.logrosProcesados}/${resumenLlm.curso.logrosTotales} logros` : ""}</>
+                              : "No se puede identificar un único sílabo en procesamiento ahora."}
+                          </p>
+                          {resumenLlm.detalle ? <p className="mt-2 line-clamp-2 text-xs text-muted">Último evento: {resumenLlm.detalle}</p> : null}
+                        </section>
+                      ) : ejecucionActiva ? (
+                        <section className="rounded-xl border border-line bg-paper/80 px-3.5 py-3" aria-label="Progreso de limpieza LLM">
+                          <h3 className="text-sm font-extrabold">Fase de limpieza LLM no disponible</h3>
+                          <p className="mt-2 text-xs font-semibold text-ink">
+                            No se puede identificar un único sílabo en procesamiento ahora.
+                          </p>
+                        </section>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {progresoActivo?.chunksTotales ? (
                     <div
                       className="mt-4 h-2 overflow-hidden rounded-full bg-ulima/10"
@@ -1470,6 +1709,34 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
                         : "El procesamiento continúa y el avance se actualizará automáticamente."}{" "}
                     Las salidas se habilitarán al finalizar.
                   </p>
+                  {puedeCancelar ? (
+                    <>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        {cancelacionPendiente ? (
+                          <p className="text-sm font-semibold text-ulima" role="status">
+                            Se solicitó cancelar esta ejecución. El estado se actualizará automáticamente.
+                          </p>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={solicitarCancelacion}
+                            disabled={cancelando}
+                            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-300 bg-paper px-4 py-2 text-sm font-bold text-red-800 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50 disabled:cursor-wait disabled:opacity-60"
+                          >
+                            {cancelando ? "Enviando solicitud…" : "Cancelar ejecución"}
+                          </button>
+                        )}
+                      </div>
+                      {mensajeErrorCancelacion ? (
+                        <p
+                          className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm font-semibold text-red-700"
+                          role="alert"
+                        >
+                          {mensajeErrorCancelacion}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : null}
                 </section>
               ) : null}
 
@@ -1565,7 +1832,7 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
                     Valores reportados por el manifest
                   </span>
                 </div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
                   {conteos.map((conteo) => (
                     <article
                       key={conteo.clave}
@@ -1663,6 +1930,18 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
               hidden={activeTab !== "auditoria"}
               className="mt-5 space-y-5 outline-none focus-visible:ring-2 focus-visible:ring-ulima/30"
             >
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-paper px-4 py-3">
+                <p className="text-sm font-semibold text-ink">
+                  Reporte consolidado de la ejecución
+                </p>
+                <a
+                  href={obtenerUrlReporteEjecucionNormalizador(idEjecucion)}
+                  download
+                  className="inline-flex items-center gap-1.5 text-sm font-bold text-ulima underline underline-offset-4"
+                >
+                  Descargar reporte <ExternalLink size={14} aria-hidden="true" />
+                </a>
+              </div>
               <FindingsDetail
                 grupos={gruposHallazgos}
                 total={hallazgosAccionables.length}
