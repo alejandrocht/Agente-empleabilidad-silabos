@@ -24,6 +24,7 @@ _ID_PATTERNS = {
     "id_silabo": re.compile(r"SIL_[0-9a-f]{16}"),
     "id_competencia": re.compile(r"COMP_[0-9a-f]{16}"),
     "id_logro": re.compile(r"LOGRO_[0-9a-f]{16}"),
+    "id_cobertura_curricular": re.compile(r"COB_CUR_[0-9a-f]{16}"),
     "id_cob_curricular": re.compile(r"COB_CUR_[0-9a-f]{16}"),
     "id_carrera": re.compile(r"CAR_[0-9a-f]{16}"),
 }
@@ -53,6 +54,9 @@ def leer_catalogos(directorio: Path) -> dict[str, list[dict[str, str]]]:
             ]
         if len(contenido) > 100_000:
             raise ValueError(f"{nombre} excede el límite de filas")
+        if nombre == "cobertura_curricular.csv":
+            for fila in contenido:
+                fila["id_cob_curricular"] = fila["id_cobertura_curricular"]
         filas[nombre] = contenido
     _validar_ids(filas)
     return filas

@@ -215,6 +215,7 @@ def test_importa_grafo_tecnico_y_revierte_sus_creaciones(
     preview = importador.previsualizar(id_ejecucion)
 
     assert preview["puede_importar"] is True
+    assert preview["resumen"]["nuevas_coberturas"] > 0
     assert {archivo["archivo"] for archivo in preview["archivos"]} == {
         "curso.csv",
         "silabo.csv",

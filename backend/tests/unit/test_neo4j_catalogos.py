@@ -103,11 +103,26 @@ def test_importa_nuevo_contrato_sin_habilidades_ni_herramientas(tmp_path: Path) 
     competencia = filas["catalogo_competencias.csv"][0]
     assert competencia["descripcion_breve"] == "Analiza sistemas."
     assert "descripcion_breve_competencia" not in competencia
+    cobertura = filas["cobertura_curricular.csv"][0]
+    assert cobertura["id_cobertura_curricular"] == cobertura["id_cob_curricular"]
     tx = TransaccionFalsa()
 
     neo4j_catalogos.escribir_catalogos(tx, filas, "IMP_1234567890abcdef")
 
     cypher = "\n".join(consulta for consulta, _ in tx.llamadas)
+    coberturas_enviadas: list[dict[str, object]] = []
+    for consulta, parametros in tx.llamadas:
+        if "CoberturaCurricular" not in consulta:
+            continue
+        filas_enviadas = parametros["rows"]
+        assert isinstance(filas_enviadas, list)
+        assert all(isinstance(fila, dict) for fila in filas_enviadas)
+        coberturas_enviadas.extend(filas_enviadas)
+    assert coberturas_enviadas
+    assert all(
+        fila.get("id_cob_curricular") == fila.get("id_cobertura_curricular")
+        for fila in coberturas_enviadas
+    )
     assert "Silabo" in cypher
     assert "Logro" in cypher
     assert "ContenidoSemanal" not in cypher
