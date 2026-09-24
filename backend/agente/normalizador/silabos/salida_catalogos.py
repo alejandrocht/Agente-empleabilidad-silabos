@@ -18,6 +18,7 @@ from typing import cast
 
 from agente.normalizador.modelos import Hallazgo
 from agente.normalizador.silabos.extraccion_curricular import _hash_id
+from agente.normalizador.silabos.registro_habilidades import RegistroHabilidades
 
 CURSOS_SCHEMA = (
     "id_curso",
@@ -166,6 +167,7 @@ def construir_salidas_tecnicas(
     propuestas_tecnicas: Sequence[Mapping[str, object]] = (),
     propuestas_aprobadas: Sequence[Mapping[str, object]] = (),
     analisis_tecnico: Mapping[str, object] | None = None,
+    registro_habilidades: RegistroHabilidades | None = None,
 ) -> ResultadoCatalogosTecnicos:
     """Build the technical package from extracted records and approved proposals only."""
 
@@ -178,6 +180,7 @@ def construir_salidas_tecnicas(
             {**dict(propuesta), "estado_aprobacion": "APROBADA"}
             for propuesta in propuestas_aprobadas
         ],
+        registro_habilidades=registro_habilidades,
     )
     hallazgos = tuple(
         hallazgo
@@ -302,6 +305,7 @@ def construir_catalogos_curriculares(
     carrera: str,
     periodo_academico: str,
     competencias_tecnicas: Sequence[Mapping[str, object]] = (),
+    registro_habilidades: RegistroHabilidades | None = None,
 ) -> dict[str, object]:
     """Construye catálogos para un único lote carrera-periodo.
 
@@ -469,16 +473,24 @@ def construir_catalogos_curriculares(
         descripcion = _texto(
             tecnica.get("descripcion_breve_competencia") or tecnica.get("descripcion")
         )
-        catalogo_ref = _texto(tecnica.get("catalogo_ref")).upper()
-        coincidencia = re.fullmatch(r"COMP_TEC_(\d{4})", catalogo_ref)
-        if not coincidencia:
-            raise ValueError(
-                "La competencia técnica aprobada requiere catalogo_ref con formato "
-                "COMP_TEC_#### para publicar una habilidad segura"
-            )
+        catalogo_ref = _texto(tecnica.get("catalogo_ref")).upper() or None
         if not id_curso or not nombre or not descripcion:
             raise ValueError("Una competencia técnica no referencia un sílabo válido")
-        id_habilidad = f"HAB_TEC_{coincidencia.group(1)}"
+        if registro_habilidades is None:
+            coincidencia = re.fullmatch(r"COMP_TEC_(\d{4})", catalogo_ref or "")
+            if not coincidencia:
+                raise ValueError(
+                    "La competencia técnica aprobada requiere catalogo_ref con formato "
+                    "COMP_TEC_####, o un catálogo oficial utilizable con un registro "
+                    "de habilidades activo"
+                )
+            id_habilidad = f"HAB_TEC_{coincidencia.group(1)}"
+        else:
+            id_habilidad = registro_habilidades.resolve_id(
+                catalogo_ref,
+                nombre,
+                descripcion,
+            )
         _agregar_unico(
             habilidades,
             {

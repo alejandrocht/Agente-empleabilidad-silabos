@@ -8,13 +8,17 @@ import json
 import re
 import unicodedata
 from collections.abc import Collection, Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
 from threading import RLock
 
+from agente.config.settings import BASE_DIR
 from agente.normalizador.silabos import salida_catalogos
+from agente.normalizador.silabos.analista_tecnico import cargar_catalogo_tecnico
 from agente.normalizador.silabos.entrada import normalizar_carrera, normalizar_periodo
+from agente.normalizador.silabos.registro_habilidades import RegistroHabilidades
 from agente.normalizador.silabos.salida_catalogos import construir_salidas_tecnicas
 
 errores_tecnicos = import_module("agente.normalizador.silabos.errores_tecnicos")
@@ -599,12 +603,51 @@ def _conservar_gate_previo(
     return resultado
 
 
+def _registro_para_ejecucion(
+    directorio: Path,
+    manifest: Mapping[str, object],
+    propuestas: Sequence[Mapping[str, object]],
+    journal: Sequence[Mapping[str, object]],
+) -> AbstractContextManager[RegistroHabilidades | None]:
+    decisiones = _decisiones_por_id(journal)
+    aprobadas = [
+        propuesta
+        for propuesta in propuestas
+        if str(decisiones.get(str(propuesta.get("id_propuesta")), {}).get("decision") or "")
+        == "ADD"
+    ]
+    if not aprobadas:
+        return nullcontext(None)
+
+    referencias = {
+        " ".join(str(propuesta.get("catalogo_ref") or "").split()).upper()
+        for propuesta in aprobadas
+    }
+    requiere_registro = any(
+        not re.fullmatch(r"COMP_TEC_(\d{4})", referencia) for referencia in referencias
+    )
+    configuracion = manifest.get("configuracion_curricular")
+    ruta_valor = (
+        configuracion.get("ruta_catalogo_tecnico") if isinstance(configuracion, Mapping) else None
+    )
+    ruta_catalogo = str(ruta_valor or "").strip()
+    db_path = directorio.parent / "catalogos" / "habilidades.sqlite3"
+    if not ruta_catalogo:
+        if not requiere_registro:
+            return nullcontext(None)
+        ruta_catalogo = str(BASE_DIR / "catalogos" / "carrera_competencia_oficial.csv")
+
+    catalogo = cargar_catalogo_tecnico(ruta_catalogo)
+    return RegistroHabilidades(db_path, catalogo)
+
+
 def _materializar(
     directorio: Path,
     manifest: Mapping[str, object],
     propuestas: Sequence[Mapping[str, object]],
     journal: Sequence[Mapping[str, object]],
     ids_descartados: Collection[str] = (),
+    registro_habilidades: RegistroHabilidades | None = None,
 ) -> dict[str, object]:
     parametros = manifest.get("parametros")
     parametros = parametros if isinstance(parametros, Mapping) else {}
@@ -647,8 +690,9 @@ def _materializar(
             propuestas_tecnicas=pendientes,
             propuestas_aprobadas=aprobadas,
             analisis_tecnico=analisis or {"estado": "COMPLETADO"},
+            registro_habilidades=registro_habilidades,
         )
-    except ValueError as exc:
+    except (KeyError, ValueError) as exc:
         raise DecisionCurricularInvalida(str(exc)) from exc
     gate = _gate_tecnico(
         _conservar_gate_previo(resultado.release_gate, gate_previo),
@@ -773,26 +817,33 @@ def aplicar_decisiones(
         journal_candidato = [*journal, *nuevas]
         snapshot = _capturar_arbol(directorio)
         try:
-            gate = _materializar(
+            with _registro_para_ejecucion(
                 directorio,
                 manifest,
                 propuestas,
                 journal_candidato,
-                ids_descartados=ids_descartados,
-            )
-            if nuevas:
-                _escribir_journal_atomico(
-                    _reportes(directorio) / DECISIONES_ARCHIVO,
+            ) as registro_habilidades:
+                gate = _materializar(
+                    directorio,
+                    manifest,
+                    propuestas,
                     journal_candidato,
+                    ids_descartados=ids_descartados,
+                    registro_habilidades=registro_habilidades,
                 )
-            resumen = _resumen(
-                directorio,
-                propuestas,
-                journal_candidato,
-                ids_descartados=ids_descartados,
-            )
-            resumen["release_gate"] = gate
-            _persistir_manifest(directorio, manifest, gate, resumen)
+                if nuevas:
+                    _escribir_journal_atomico(
+                        _reportes(directorio) / DECISIONES_ARCHIVO,
+                        journal_candidato,
+                    )
+                resumen = _resumen(
+                    directorio,
+                    propuestas,
+                    journal_candidato,
+                    ids_descartados=ids_descartados,
+                )
+                resumen["release_gate"] = gate
+                _persistir_manifest(directorio, manifest, gate, resumen)
         except Exception:
             _restaurar_arbol(directorio, snapshot)
             raise

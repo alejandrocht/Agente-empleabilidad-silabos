@@ -75,12 +75,13 @@ NORMALIZADOR_CACTUS_DOWNLOAD_WORKERS=3
 
 El corte curricular valida el paquete y extrae cada sílabo una sola vez, incluyendo metadatos,
 sumilla, logros y programa analítico. El JSONL de limpieza es staging interno y no se ofrece como salida
-de negocio. La ejecución técnica conserva exactamente cinco CSV:
+de negocio. La ejecución técnica conserva exactamente seis CSV:
 
 ```text
 salidas/curso.csv
 salidas/silabo.csv
 salidas/catalogo_competencias.csv
+salidas/catalogo_habilidades.csv
 salidas/catalogo_logros.csv
 salidas/cobertura_curricular.csv
 ```
@@ -89,7 +90,13 @@ El analista técnico recibe carrera, nombre del curso, resultados de aprendizaje
 `programa_analitico_detalle` (`semana`, `tema`, `contenido`) y candidatos del catálogo técnico. No recibe
 IDs, periodo, sumilla, competencias declaradas, herramientas ni relaciones del grafo.
 
-La cobertura conecta curso, sílabo, logro y competencia con IDs generados por Python. La proveniencia
+La cobertura conecta curso y sílabo con un logro y exactamente una competencia declarada o una habilidad técnica. Las habilidades aprobadas usan el catálogo público `catalogo_habilidades.csv`; las referencias oficiales `COMP_TEC_####` se publican como `HAB_TEC_####` y las propuestas técnicas aprobadas sin referencia de catálogo también reciben un ID `HAB_TEC_####`.
+
+Los IDs `HAB_TEC_####` son globales: la identidad de una habilidad es el par nombre normalizado + descripción normalizada, independiente de la carrera. Si el catálogo oficial repite `COMP_TEC_####` en varias carreras para el mismo contenido, todas las filas conservan un único `HAB_TEC_####`. `id_carrera` permanece en el CSV por contrato y como metadato de procedencia, pero no forma parte de la identidad de `Habilidad`. El contexto de carrera se obtiene por `Curso` → `CoberturaCurricular` → `Habilidad`; no se crean relaciones directas `Carrera`–`Habilidad`.
+
+El registro persistente vive en `catalogos/habilidades.sqlite3` bajo la raíz de ejecución compartida, junto a los directorios `NOR_*`; no forma parte de los catálogos oficiales. Al inicializarlo, cada sufijo oficial `COMP_TEC_####` reserva su correspondiente `HAB_TEC_####`. Una propuesta sin referencia reutiliza el ID de la misma identidad normalizada o recibe el siguiente sufijo libre, sin colisionar con sufijos oficiales ni registrados. La resolución y la materialización son transaccionales: ante un error se revierte el registro SQLite junto con los CSV materializados, el diario de decisiones y el `manifest.json`.
+
+La proveniencia
 y las propuestas técnicas se conservan en `salidas/reportes/`, principalmente
 `analisis_tecnico.json`, `propuestas_tecnicas.jsonl` y `decisiones_tecnicas.jsonl`. Cada propuesta tiene
 evidencia literal de un logro y queda `PENDIENTE_APROBACION` hasta que la revisión técnica registra
@@ -106,9 +113,13 @@ por el mismo extractor curricular y cada sílabo se analiza una sola vez.
 
 ### Analista técnico LLM
 
-El normalizador curricular usa un único contrato técnico. El catálogo canónico vive en
-`backend/catalogos/catalogo_competencias_tecnicas.xlsx` y la configuración siempre fija
-`modo_analista=technical`:
+El normalizador curricular usa un único contrato técnico. La configuración siempre fija
+`modo_analista=technical` y carga el mapa oficial carrera-competencia desde
+`backend/catalogos/carrera_competencia_oficial.csv`. Ese CSV aporta `id_carrera`,
+`nombre_carrera`, `id_habilidad` y `nombre_habilidad`; el cargador une cada fila por carrera y
+nombre normalizados con `backend/catalogos/catalogo_competencias_tecnicas.xlsx`, que continúa
+siendo la fuente de descripciones y compatibilidad para los formatos anteriores. La unión es
+estricta: no usa fuzzy matching ni búsquedas aproximadas.
 
 ```dotenv
 NORMALIZADOR_CURRICULAR_LLM=true
@@ -141,19 +152,21 @@ huérfanas mantienen `BLOCK_IMPORT`.
 
 ### Contrato técnico y esquemas CSV
 
-El paquete candidato técnico tiene exactamente estos cinco archivos:
+El paquete candidato técnico tiene exactamente estos seis archivos:
 
 ```text
 curso.csv:
-id_curso,nombre_curso,coordinador,creditos,nivel,tipo_curso,codigo_curso,id_carrera
+id_curso,nombre_curso,coordinador,creditos,nivel,tipo_curso,naturaleza,codigo_curso,id_carrera
 silabo.csv:
 id_silabo,codigo_silabo,sumilla,id_curso,periodo_academico
 catalogo_competencias.csv:
-id_competencia,nombre_competencia,descripcion_breve_competencia,tipo_competencia,codigo_competencia
+id_competencia,nombre_competencia,descripcion_breve,tipo_competencia,codigo_competencia
+catalogo_habilidades.csv:
+id_habilidad,id_carrera,nombre_habilidad,desc_breve
 catalogo_logros.csv:
 id_logro,logro
 cobertura_curricular.csv:
-id_cob_curricular,id_curso,id_silabo,id_competencia,id_logro
+id_cobertura_curricular,id_curso,id_silabo,id_competencia,id_habilidad,id_logro
 ```
 
 La proveniencia y las decisiones no amplían el contrato CSV: son reportes auditables fuera del paquete
