@@ -49,7 +49,7 @@ class CompetenciaCatalogFallbackGateway:
             return []
         return [
             {
-                "entity_id": "COMP_6546a71d727fc690",
+                "entity_id": "COMP_TEC_6546a71d727fc690",
                 "entity_names": ["Pensamiento cr\u00edtico"],
             }
         ]
@@ -103,10 +103,7 @@ class PagedTextValueGateway(TextValueGateway):
         self.calls.append((cypher, dict(parameters or {})))
         match = re.search(r"\bSKIP\s+(\d+)", cypher)
         offset = int(match.group(1)) if match else 0
-        return [
-            {"value": value}
-            for value in self.values[offset : offset + 64]
-        ]
+        return [{"value": value} for value in self.values[offset : offset + 64]]
 
 
 class FullTextGateway(TextValueGateway):
@@ -159,9 +156,8 @@ ALL_ENTITY_SCHEMA = {
         "Empresa": ["id_empresa", "nombre", "razon_social"],
         "Industria": ["id_industria", "nombre"],
         "Puesto": ["id_puesto", "nombre"],
-        "Habilidad": ["id_habilidad", "nombre_habilidad"],
-        "Herramienta": ["id_herramienta", "nombre_herramienta"],
-        "Competencia": ["id_competencia", "nombre_competencia"],
+        "competencia_tecnica": ["id_habilidad", "nombre_habilidad"],
+        "Logros": ["id_herramienta", "nombre_herramienta"],
         "Curso": ["id_curso", "nombre_curso"],
         "Facultad": ["id_facultad", "nombre_facultad"],
     },
@@ -177,9 +173,8 @@ ALL_ENTITY_SCHEMA = {
         ("industria_id", "INDU_1", "Tecnología"),
         ("carrera_id", "CAR_1", "Ingeniería de Sistemas"),
         ("puesto_id", "PUE_1", "Analista de Datos"),
-        ("habilidad_id", "HAB_1", "Comunicación"),
-        ("herramienta_id", "HER_1", "Python"),
-        ("competencia_id", "COM_1", "Pensamiento crítico"),
+        ("competencia_tecnica_id", "COMP_TEC_1", "Comunicación"),
+        ("logro_id", "HER_1", "Python"),
         ("curso_id", "CUR_1", "Bases de Datos"),
         ("facultad_id", "FAC_1", "Facultad de Ingeniería"),
     ],
@@ -219,13 +214,13 @@ def test_entity_contracts_expose_canonical_policy_and_schema_gates_optional_enti
     assert "curso_id" not in without_optional
     assert "facultad_id" not in without_optional
     assert ENTITY_CONTRACTS["industria_id"].canonical_prefix == "INDU_"
+    assert ENTITY_CONTRACTS["competencia_tecnica_id"].label == "competencia_tecnica"
+    assert ENTITY_CONTRACTS["logro_id"].label == "Logros"
     assert "IND_" not in ENTITY_CONTRACTS["industria_id"].allowed_id_prefixes
 
 
 def test_resolver_accepts_unique_alias_and_normalizes_accents_punctuation_and_spaces() -> None:
-    gateway = FakeGateway(
-        [{"entity_id": "CAR_7", "entity_name": "Ingeniería de Sistemas"}]
-    )
+    gateway = FakeGateway([{"entity_id": "CAR_7", "entity_name": "Ingeniería de Sistemas"}])
 
     result = asyncio.run(
         resolve_entity(
@@ -244,9 +239,7 @@ def test_resolver_accepts_unique_alias_and_normalizes_accents_punctuation_and_sp
 def test_resolver_normalizes_upstream_sentence_punctuation_before_lookup(
     candidate: str,
 ) -> None:
-    gateway = FakeGateway(
-        [{"entity_id": "CAR_7", "entity_names": ["Ingeniería de Sistemas"]}]
-    )
+    gateway = FakeGateway([{"entity_id": "CAR_7", "entity_names": ["Ingeniería de Sistemas"]}])
 
     result = asyncio.run(
         resolve_entity(
@@ -269,9 +262,8 @@ def test_resolver_normalizes_upstream_sentence_punctuation_before_lookup(
         ("empresa_id", "EMP_1", "Compañía Ñandú"),
         ("industria_id", "INDU_1", "Tecnología e Innovación"),
         ("puesto_id", "PUE_1", "Diseño UX"),
-        ("habilidad_id", "HAB_1", "Comunicación"),
-        ("herramienta_id", "HER_1", "Café"),
-        ("competencia_id", "COM_1", "Pensamiento crítico"),
+        ("competencia_tecnica_id", "COMP_TEC_1", "Comunicación"),
+        ("logro_id", "HER_1", "Café"),
     ],
 )
 def test_confirmed_contracts_normalize_full_accented_names_with_trailing_punctuation(
@@ -279,9 +271,7 @@ def test_confirmed_contracts_normalize_full_accented_names_with_trailing_punctua
     identifier: str,
     name: str,
 ) -> None:
-    gateway = FakeGateway(
-        [{"entity_id": identifier, "entity_names": [name]}]
-    )
+    gateway = FakeGateway([{"entity_id": identifier, "entity_names": [name]}])
 
     result = asyncio.run(
         resolve_entity(
@@ -337,9 +327,7 @@ def test_resolver_accepts_bounded_singular_plural_name_alias() -> None:
         ]
     )
 
-    result = asyncio.run(
-        resolve_entity_result("industria_id", "financiera", query_gateway=gateway)
-    )
+    result = asyncio.run(resolve_entity_result("industria_id", "financiera", query_gateway=gateway))
 
     assert result.status == "unique"
     assert result.matches[0].identifier == "INDU_2f544767eba03474"
@@ -384,9 +372,7 @@ def test_resolver_accepts_live_herramienta_canonical_prefix() -> None:
 
 
 def test_resolver_matches_empresa_alternate_name_without_matching_null_name() -> None:
-    gateway = FakeGateway(
-        [{"entity_id": "EMP_7", "entity_names": [None, "Banco de Prueba"]}]
-    )
+    gateway = FakeGateway([{"entity_id": "EMP_7", "entity_names": [None, "Banco de Prueba"]}])
 
     result = asyncio.run(
         resolve_entity(
@@ -495,9 +481,7 @@ def test_plan_parameter_resolution_canonicalizes_aliases() -> None:
 
 
 def test_plan_parameter_resolution_canonicalizes_generated_text_alias() -> None:
-    gateway = FakeGateway(
-        [{"entity_id": "CAR_7", "entity_name": "Ingeniería de Sistemas"}]
-    )
+    gateway = FakeGateway([{"entity_id": "CAR_7", "entity_name": "Ingeniería de Sistemas"}])
 
     resolved = asyncio.run(
         resolve_plan_parameters(
@@ -515,7 +499,7 @@ def test_resolver_matches_unaccented_competencia_text_against_catalog_fallback()
 
     result = asyncio.run(
         resolve_entity_result(
-            "competencia_texto",
+            "competencia_tecnica_texto",
             "pensamiento critico",
             query_gateway=gateway,
             schema=ALL_ENTITY_SCHEMA,
@@ -523,22 +507,22 @@ def test_resolver_matches_unaccented_competencia_text_against_catalog_fallback()
     )
 
     assert result.status == "unique"
-    assert result.matches[0].identifier == "COMP_6546a71d727fc690"
+    assert result.matches[0].identifier == "COMP_TEC_6546a71d727fc690"
     assert len(gateway.calls) == 2
 
 
 def test_generic_name_parameter_is_resolved_without_term_specific_replacements() -> None:
     gateway = CompetenciaCatalogFallbackGateway()
     cypher = (
-        "MATCH (c:Curso)-[:TIENE]->(cc:Cobertura_Curricular)-[:CUBRE]->(co:Competencia) "
-        "WHERE toLower(co.nombre_competencia) CONTAINS toLower($texto) "
+        "MATCH (c:Curso)-[:TIENE]->(cc:Cobertura_Curricular)-[:CUBRE]->(co:competencia_tecnica) "
+        "WHERE toLower(co.nombre_habilidad) CONTAINS toLower($competencia_tecnica_texto) "
         "RETURN DISTINCT c.nombre_curso AS curso LIMIT $limite"
     )
     result = asyncio.run(
         resuelve_entidades(
             {
                 "cypher": cypher,
-                "parameters": {"texto": "PENSAMIENTO CRITICO", "limite": 10},
+                "parameters": {"competencia_tecnica_texto": "PENSAMIENTO CRITICO", "limite": 10},
                 "schema": type("Snapshot", (), {"structured": ALL_ENTITY_SCHEMA})(),
             },
             entity_gateway=gateway,
@@ -547,16 +531,16 @@ def test_generic_name_parameter_is_resolved_without_term_specific_replacements()
 
     assert result["error"] is None
     assert result["parameters"] == {
-        "competencia_id": "COMP_6546a71d727fc690",
+        "competencia_tecnica_id": "COMP_TEC_6546a71d727fc690",
         "limite": 10,
     }
-    assert "co.id_competencia = $competencia_id" in result["cypher"]
+    assert "co.id_habilidad = $competencia_tecnica_id" in result["cypher"]
 
 
 def test_generic_name_parameter_normalization_is_schema_driven() -> None:
     cypher = (
-        "MATCH (co:Competencia) WHERE toLower(co.nombre_competencia) "
-        "CONTAINS toLower($texto) RETURN co.nombre_competencia LIMIT $limite"
+        "MATCH (co:competencia_tecnica) WHERE toLower(co.nombre_habilidad) "
+        "CONTAINS toLower($texto) RETURN co.nombre_habilidad LIMIT $limite"
     )
 
     normalized_cypher, normalized_parameters = normalize_entity_text_parameters(
@@ -565,10 +549,10 @@ def test_generic_name_parameter_normalization_is_schema_driven() -> None:
         ALL_ENTITY_SCHEMA,
     )
 
-    assert "$competencia_texto" in normalized_cypher
+    assert "$competencia_tecnica_texto" in normalized_cypher
     assert "$texto" not in normalized_cypher
     assert normalized_parameters == {
-        "competencia_texto": "PENSAMIENTO CRITICO",
+        "competencia_tecnica_texto": "PENSAMIENTO CRITICO",
         "limite": 10,
     }
 
@@ -591,9 +575,7 @@ def test_generic_schema_text_parameter_resolves_accented_property_value() -> Non
                     (),
                     {
                         "structured": {
-                            "node_props": {
-                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
-                            }
+                            "node_props": {"Curso": ["id_curso", "nombre_curso", "coordinador"]}
                         }
                     },
                 )(),
@@ -627,9 +609,7 @@ def test_generic_schema_text_parameter_uses_conservative_fuzzy_fallback() -> Non
                     (),
                     {
                         "structured": {
-                            "node_props": {
-                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
-                            }
+                            "node_props": {"Curso": ["id_curso", "nombre_curso", "coordinador"]}
                         }
                     },
                 )(),
@@ -643,9 +623,7 @@ def test_generic_schema_text_parameter_uses_conservative_fuzzy_fallback() -> Non
 
 
 def test_generic_schema_text_parameter_matches_reordered_name_with_extra_tokens() -> None:
-    gateway = TextValueGateway(
-        ["Mayhua Quispe Angela Gabriela", "Carlos Pérez"]
-    )
+    gateway = TextValueGateway(["Mayhua Quispe Angela Gabriela", "Carlos Pérez"])
     cypher = (
         "MATCH (c:Curso) WHERE c.coordinador IS NOT NULL "
         "AND toLower(c.coordinador) CONTAINS toLower($coordinador) "
@@ -662,9 +640,7 @@ def test_generic_schema_text_parameter_matches_reordered_name_with_extra_tokens(
                     (),
                     {
                         "structured": {
-                            "node_props": {
-                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
-                            }
+                            "node_props": {"Curso": ["id_curso", "nombre_curso", "coordinador"]}
                         }
                     },
                 )(),
@@ -698,9 +674,7 @@ def test_generic_schema_text_parameter_uses_fulltext_before_catalog_fallback() -
                     (),
                     {
                         "structured": {
-                            "node_props": {
-                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
-                            }
+                            "node_props": {"Curso": ["id_curso", "nombre_curso", "coordinador"]}
                         }
                     },
                 )(),
@@ -740,9 +714,7 @@ def test_generic_schema_text_parameter_falls_back_when_fulltext_procedure_fails(
                     (),
                     {
                         "structured": {
-                            "node_props": {
-                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
-                            }
+                            "node_props": {"Curso": ["id_curso", "nombre_curso", "coordinador"]}
                         }
                     },
                 )(),
@@ -804,9 +776,7 @@ def test_generic_schema_text_parameter_pages_catalog_past_first_page() -> None:
                     (),
                     {
                         "structured": {
-                            "node_props": {
-                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
-                            }
+                            "node_props": {"Curso": ["id_curso", "nombre_curso", "coordinador"]}
                         }
                     },
                 )(),
@@ -868,9 +838,7 @@ def test_generic_schema_text_parameter_preserves_ambiguous_accent_fold() -> None
                     (),
                     {
                         "structured": {
-                            "node_props": {
-                                "Curso": ["id_curso", "nombre_curso", "coordinador"]
-                            }
+                            "node_props": {"Curso": ["id_curso", "nombre_curso", "coordinador"]}
                         }
                     },
                 )(),
@@ -885,17 +853,17 @@ def test_generic_schema_text_parameter_preserves_ambiguous_accent_fold() -> None
 
 def test_reconcile_rewrites_competencia_text_to_imported_canonical_id() -> None:
     cypher, parameters = reconcile_entity_parameters(
-        "MATCH (comp:Competencia) WHERE toLower(comp.nombre_competencia) "
-        "CONTAINS toLower($competencia_texto) "
-        "RETURN comp.nombre_competencia AS competencia LIMIT $limite",
-        {"competencia_texto": "pensamiento critico", "limite": 20},
-        {"competencia_id": "COMP_6546a71d727fc690", "limite": 20},
+        "MATCH (comp:competencia_tecnica) WHERE toLower(comp.nombre_habilidad) "
+        "CONTAINS toLower($competencia_tecnica_texto) "
+        "RETURN comp.nombre_habilidad AS competencia LIMIT $limite",
+        {"competencia_tecnica_texto": "pensamiento critico", "limite": 20},
+        {"competencia_tecnica_id": "COMP_TEC_6546a71d727fc690", "limite": 20},
         cardinality="one",
     )
 
-    assert "comp.id_competencia = $competencia_id" in cypher
+    assert "comp.id_habilidad = $competencia_tecnica_id" in cypher
     assert "CONTAINS" not in cypher
-    assert parameters == {"competencia_id": "COMP_6546a71d727fc690", "limite": 20}
+    assert parameters == {"competencia_tecnica_id": "COMP_TEC_6546a71d727fc690", "limite": 20}
     assert guard_cypher(cypher, parameters).limit == 20
 
 
@@ -977,17 +945,17 @@ def test_reconcile_maps_entity_alias_to_canonical_one_parameter() -> None:
 
 def test_reconcile_maps_entity_alias_to_canonical_many_parameter() -> None:
     cypher, parameters = reconcile_entity_parameters(
-        "MATCH (h:Herramienta) WHERE h.id_herramienta IN $herramienta "
+        "MATCH (h:Logros) WHERE h.id_herramienta IN $herramienta "
         "RETURN h.nombre_herramienta AS herramienta LIMIT $limite",
         {"herramienta": "Python", "limite": 20},
-        {"herramienta_ids": ["HER_1", "HER_2"], "limite": 20},
+        {"logro_ids": ["HER_1", "HER_2"], "limite": 20},
         cardinality="many",
     )
 
-    assert "$herramienta_ids" in cypher
+    assert "$logro_ids" in cypher
     assert "$herramienta " not in cypher
     assert parameters == {
-        "herramienta_ids": ["HER_1", "HER_2"],
+        "logro_ids": ["HER_1", "HER_2"],
         "limite": 20,
     }
 
@@ -1009,17 +977,17 @@ def test_reconcile_rewrites_text_predicate_to_canonical_one_id_contract() -> Non
 
 def test_reconcile_rewrites_text_predicate_to_canonical_many_id_contract() -> None:
     cypher, parameters = reconcile_entity_parameters(
-        "MATCH (h:Herramienta) WHERE h.nombre_herramienta CONTAINS $herramienta "
+        "MATCH (h:Logros) WHERE h.nombre_herramienta CONTAINS $herramienta "
         "RETURN h.nombre_herramienta AS herramienta LIMIT $limite",
         {"herramienta": "Python", "limite": 20},
-        {"herramienta_ids": ["HERR_1", "HERR_2"], "limite": 20},
+        {"logro_ids": ["HERR_1", "HERR_2"], "limite": 20},
         cardinality="many",
     )
 
-    assert "h.id_herramienta IN $herramienta_ids" in cypher
+    assert "h.id_herramienta IN $logro_ids" in cypher
     assert "CONTAINS" not in cypher
     assert parameters == {
-        "herramienta_ids": ["HERR_1", "HERR_2"],
+        "logro_ids": ["HERR_1", "HERR_2"],
         "limite": 20,
     }
     assert guard_cypher(cypher, parameters).limit == 20
@@ -1061,9 +1029,7 @@ def test_rich_resolver_exposes_explicit_cardinality_states(
     )
 
     assert result.status == expected_status
-    assert [match.identifier for match in result.matches] == [
-        row["entity_id"] for row in rows
-    ]
+    assert [match.identifier for match in result.matches] == [row["entity_id"] for row in rows]
 
 
 def test_resolver_prefers_unique_exact_match_over_contains_variants() -> None:
@@ -1105,9 +1071,7 @@ def test_rich_resolver_ignores_invalid_rows_but_keeps_valid_match() -> None:
 def test_rich_resolver_rejects_invalid_canonical_id_and_non_matching_name() -> None:
     invalid_id_gateway = FakeGateway([])
     invalid_id = asyncio.run(
-        resolve_entity_result(
-            "industria_id", "IND_1", query_gateway=invalid_id_gateway
-        )
+        resolve_entity_result("industria_id", "IND_1", query_gateway=invalid_id_gateway)
     )
     non_matching = asyncio.run(
         resolve_entity_result(
@@ -1147,7 +1111,7 @@ def test_many_plan_resolution_propagates_all_ids_to_stable_plural_parameter() ->
     )
 
     assert result.status == "multiple"
-    assert result.parameters == {"herramienta_ids": ["HER_1", "HER_2"]}
+    assert result.parameters == {"logro_ids": ["HER_1", "HER_2"]}
 
 
 def test_many_plan_resolution_preserves_canonical_plural_ids_without_gateway_calls() -> None:
@@ -1155,7 +1119,7 @@ def test_many_plan_resolution_preserves_canonical_plural_ids_without_gateway_cal
 
     result = asyncio.run(
         resolve_plan_parameters_result(
-            {"herramienta_ids": ["HER_2", "HER_1"]},
+            {"logro_ids": ["HER_2", "HER_1"]},
             cardinality="many",
             query_gateway=gateway,
             schema=ALL_ENTITY_SCHEMA,
@@ -1163,7 +1127,7 @@ def test_many_plan_resolution_preserves_canonical_plural_ids_without_gateway_cal
     )
 
     assert result.status == "unique"
-    assert result.parameters == {"herramienta_ids": ["HER_2", "HER_1"]}
+    assert result.parameters == {"logro_ids": ["HER_2", "HER_1"]}
     assert gateway.calls == []
 
 
@@ -1175,7 +1139,7 @@ def test_many_plan_resolution_rejects_invalid_canonical_plural_ids(
 
     result = asyncio.run(
         resolve_plan_parameters_result(
-            {"herramienta_ids": values},
+            {"logro_ids": values},
             cardinality="many",
             query_gateway=gateway,
             schema=ALL_ENTITY_SCHEMA,
@@ -1192,7 +1156,7 @@ def test_canonical_plural_ids_require_many_cardinality() -> None:
 
     result = asyncio.run(
         resolve_plan_parameters_result(
-            {"herramienta_ids": ["HER_1"]},
+            {"logro_ids": ["HER_1"]},
             cardinality="one",
             query_gateway=gateway,
             schema=ALL_ENTITY_SCHEMA,
@@ -1211,14 +1175,12 @@ def test_many_wrapper_remains_scalar_compatible_and_accepts_multiple_explicitly(
         ]
     )
 
+    assert (
+        asyncio.run(resolve_plan_parameters({"herramienta": "SAP"}, query_gateway=gateway)) is None
+    )
     assert asyncio.run(
-        resolve_plan_parameters({"herramienta": "SAP"}, query_gateway=gateway)
-    ) is None
-    assert asyncio.run(
-        resolve_plan_parameters(
-            {"herramienta": "SAP"}, cardinality="many", query_gateway=gateway
-        )
-    ) == {"herramienta_ids": ["HER_1", "HER_2"]}
+        resolve_plan_parameters({"herramienta": "SAP"}, cardinality="many", query_gateway=gateway)
+    ) == {"logro_ids": ["HER_1", "HER_2"]}
 
 
 def test_resolver_returns_no_result_for_ambiguous_match() -> None:
@@ -1292,9 +1254,7 @@ def test_entity_lookup_explain_failure_logs_safe_classification_without_payload_
     assert "$candidate" not in output
     assert "$limit" not in output
     events = [json.loads(line) for line in output.splitlines() if line]
-    failed = next(
-        event for event in events if event["event"] == "lookup_explain_failed"
-    )
+    failed = next(event for event in events if event["event"] == "lookup_explain_failed")
     context = failed["context"]
     assert context["stage"] == "entity_resolution"
     assert context["contract_label"] == "Carrera"
@@ -1322,9 +1282,8 @@ def test_resolver_rejects_short_input_before_any_fuzzy_lookup() -> None:
         ("empresa_id", "EMP_1", "Banco de Crédito", "Banco de Creditoo"),
         ("industria_id", "INDU_1", "Tecnología", "Tecnolgia"),
         ("puesto_id", "PUE_1", "Analista de Datos", "Analista de Daatos"),
-        ("habilidad_id", "HAB_1", "Comunicación", "Comunicacoin"),
-        ("herramienta_id", "HER_1", "Python", "Pythno"),
-        ("competencia_id", "COM_1", "Pensamiento crítico", "Pensaminto critico"),
+        ("competencia_tecnica_id", "COMP_TEC_1", "Comunicación", "Comunicacoin"),
+        ("logro_id", "HER_1", "Python", "Pythno"),
         ("curso_id", "CUR_1", "Bases de Datos", "Bases de Dtaos"),
         ("facultad_id", "FAC_1", "Facultad de Ingeniería", "Facultad de Ingenieriaa"),
     ],
@@ -1335,9 +1294,7 @@ def test_resolver_uses_conservative_fuzzy_fallback_for_one_character_typos(
     canonical_name: str,
     typo: str,
 ) -> None:
-    gateway = FakeGateway(
-        [{"entity_id": identifier, "entity_names": [canonical_name]}]
-    )
+    gateway = FakeGateway([{"entity_id": identifier, "entity_names": [canonical_name]}])
 
     result = asyncio.run(
         resolve_entity_result(
@@ -1390,9 +1347,7 @@ def test_resolver_does_not_hide_three_exact_candidates_behind_old_limit() -> Non
 
 
 def test_resolver_accepts_one_adjacent_transposition_in_a_long_token() -> None:
-    gateway = FakeGateway(
-        [{"entity_id": "HER_1", "entity_names": ["Python"]}]
-    )
+    gateway = FakeGateway([{"entity_id": "HER_1", "entity_names": ["Python"]}])
 
     result = asyncio.run(
         resolve_entity_result(

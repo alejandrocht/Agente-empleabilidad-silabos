@@ -179,6 +179,7 @@ ENTITY_CONTRACTS: Mapping[str, EntityContract] = {
         parameter_aliases=(
             "competencia_tecnica_id",
             "competencia_tecnica",
+            "competencia_tecnica_texto",
             "competencia_id",
             "competencia",
             "habilidad_id",
@@ -439,9 +440,7 @@ def _fulltext_search_query(candidate: str) -> str | None:
     tokens = tuple(token for token in normalized.split() if len(token) >= 3)
     if not tokens:
         return None
-    return " AND ".join(
-        f"{token}~{'2' if len(token) >= 5 else '1'}" for token in tokens
-    )
+    return " AND ".join(f"{token}~{'2' if len(token) >= 5 else '1'}" for token in tokens)
 
 
 def _matches_complete_name(candidate: str, value: str) -> bool:
@@ -476,11 +475,7 @@ def _matches_name_token_subset(candidate: str, value: str) -> bool:
     """
     candidate_tokens = _normalized_text(candidate).split()
     value_tokens = _normalized_text(value).split()
-    if (
-        len(candidate_tokens) < 2
-        or len(candidate_tokens) >= len(value_tokens)
-        or not value_tokens
-    ):
+    if len(candidate_tokens) < 2 or len(candidate_tokens) >= len(value_tokens) or not value_tokens:
         return False
     remaining = list(value_tokens)
     for candidate_token in candidate_tokens:
@@ -535,9 +530,11 @@ def _unordered_name_token_score(candidate: str, value: str) -> float:
 
 def _select_text_value(candidate: str, rows: Sequence[object]) -> str | None:
     """Choose one canonical stored value, or return ``None`` when unsafe."""
-    values = tuple(dict.fromkeys(
-        value for value in (_text_value_from_row(row) for row in rows) if value is not None
-    ))
+    values = tuple(
+        dict.fromkeys(
+            value for value in (_text_value_from_row(row) for row in rows) if value is not None
+        )
+    )
     if not values:
         return None
 
@@ -707,9 +704,7 @@ def _token_forms(token: str) -> frozenset[str]:
             for suffix in suffix_family
         ):
             stem = next(
-                singular[: -len(suffix)]
-                for suffix in suffix_family
-                if singular.endswith(suffix)
+                singular[: -len(suffix)] for suffix in suffix_family if singular.endswith(suffix)
             )
             forms.add(stem)
     return frozenset(forms)
@@ -740,8 +735,7 @@ def _contains_non_latin_text(value: str) -> bool:
     """Reject homoglyphs and opaque Unicode controls before any database call."""
     decomposed = unicodedata.normalize("NFKD", value)
     return any(
-        ord(character) > 127 and not unicodedata.combining(character)
-        for character in decomposed
+        ord(character) > 127 and not unicodedata.combining(character) for character in decomposed
     )
 
 
@@ -768,8 +762,7 @@ def _identifier_sort_key(value: str | int) -> tuple[int, str]:
 def _resolution_query(contract: EntityContract) -> str:
     """Build a static query from the schema allow-list, never from user input."""
     name_conditions = " OR ".join(
-        f"toLower(n.{name}) CONTAINS toLower($candidate)"
-        for name in contract.names
+        f"toLower(n.{name}) CONTAINS toLower($candidate)" for name in contract.names
     )
     name_projection = ", ".join(f"n.{name}" for name in contract.names)
     return (
@@ -798,9 +791,7 @@ def _row_names(row: Mapping[str, Any]) -> tuple[str, ...]:
         raw_names = row.get("entity_names")
         if not isinstance(raw_names, (list, tuple)):
             return ()
-        return tuple(
-            name.strip() for name in raw_names if isinstance(name, str) and name.strip()
-        )
+        return tuple(name.strip() for name in raw_names if isinstance(name, str) and name.strip())
     name = row.get("entity_name")
     return (name.strip(),) if isinstance(name, str) and name.strip() else ()
 
@@ -1123,9 +1114,7 @@ async def resolve_entity_result(
                 continue
             seen.add(resolution.identifier)
             exact_matches.append((_name_match_kind(lookup_candidate, _row_names(row)), resolution))
-        exact_matches.sort(
-            key=lambda item: (-item[0], _identifier_sort_key(item[1].identifier))
-        )
+        exact_matches.sort(key=lambda item: (-item[0], _identifier_sort_key(item[1].identifier)))
         if exact_matches and exact_matches[0][0] > 0:
             best_score = exact_matches[0][0]
             matches = tuple(item[1] for item in exact_matches if item[0] == best_score)
@@ -1153,9 +1142,7 @@ async def resolve_entity_result(
         )
         if exact_catalog_matches:
             best_score = exact_catalog_matches[0][0]
-            matches = tuple(
-                item[1] for item in exact_catalog_matches if item[0] == best_score
-            )
+            matches = tuple(item[1] for item in exact_catalog_matches if item[0] == best_score)
             status = "unique" if len(matches) == 1 else "multiple"
             return EntityResolutionResult(status, contract.parameter, contract.label, matches)
 
@@ -1181,9 +1168,7 @@ def _entity_parameter_aliases(
 ) -> dict[str, str]:
     """Build the trusted alias-to-canonical parameter map for one cardinality."""
     canonical = (
-        contract.parameter
-        if cardinality == "one"
-        else _plural_entity_parameter(contract.parameter)
+        contract.parameter if cardinality == "one" else _plural_entity_parameter(contract.parameter)
     )
     aliases = set(contract.parameter_aliases)
     if cardinality == "many":
@@ -1272,11 +1257,7 @@ def reconcile_entity_parameters(
     replacements = {
         name: aliases[name]
         for name in referenced
-        if (
-            name in aliases
-            and name != aliases[name]
-            and aliases[name] in resolved_parameters
-        )
+        if (name in aliases and name != aliases[name] and aliases[name] in resolved_parameters)
     }
     reconciled_cypher = cypher
     contracts_by_alias = {
@@ -1368,11 +1349,7 @@ async def resolve_plan_parameters_result(
             continue
 
         contract = next(
-            (
-                item
-                for item in available.values()
-                if parameter in item.parameter_aliases
-            ),
+            (item for item in available.values() if parameter in item.parameter_aliases),
             None,
         )
         if contract is None:
@@ -1400,9 +1377,7 @@ async def resolve_plan_parameters_result(
             ]
             continue
         if cardinality == "many":
-            resolved[_plural_entity_parameter(contract.parameter)] = [
-                entity.matches[0].identifier
-            ]
+            resolved[_plural_entity_parameter(contract.parameter)] = [entity.matches[0].identifier]
         else:
             resolved[contract.parameter] = entity.matches[0].identifier
 
