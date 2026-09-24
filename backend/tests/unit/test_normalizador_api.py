@@ -386,11 +386,85 @@ def test_silabos_bloqueado_no_expone_outputs_curriculares_y_conserva_revision(
 
     assert estado.status_code == 200
     assert estado.json()["outputs"] == []
+    assert "draft_outputs" not in estado.json()
     assert cobertura.status_code == 404
     assert candidatos.status_code == 404
     assert cuarentena.status_code == 200
     assert cuarentena.json()["filas"] == [{"motivo": "revisar"}]
     assert no_permitida.status_code == 404
+
+
+def test_silabos_bloqueado_archivado_expone_solo_borradores_csv_canonicos(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+    id_ejecucion, directorio = gestor.crear("silabos", "entrada.zip")
+    nombres = (
+        "curso.csv",
+        "silabo.csv",
+        "catalogo_competencias.csv",
+        "catalogo_habilidades.csv",
+        "catalogo_logros.csv",
+        "cobertura_curricular.csv",
+    )
+    salida_dir = directorio / "salidas"
+    salida_dir.mkdir(parents=True)
+    for nombre in nombres:
+        (salida_dir / nombre).write_text("id\nuno\n", encoding="utf-8")
+    reporte = salida_dir / "reportes" / "candidatos_curriculares.json"
+    reporte.parent.mkdir()
+    reporte.write_text("{}", encoding="utf-8")
+    arbitrario = salida_dir / "otro.csv"
+    arbitrario.write_text("id\nprivado\n", encoding="utf-8")
+
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    ejecucion.estado = "no_publicado"
+    ejecucion.limpieza_silabos = ResultadoLimpiezaSilabos(
+        registros=74,
+        outputs=(),
+        hallazgos=(),
+        release_gate={
+            "decision": "BLOCK_IMPORT",
+            "blockers": ["TECHNICAL_ANALYSIS_INCOMPLETE", "UNLINKED_SOURCE_OUTCOME"],
+        },
+    )
+    gestor._persistir(ejecucion)
+    gestor = GestorEjecuciones(tmp_path)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+
+    estado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()
+    descargas = {
+        nombre: cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/outputs/salidas/{nombre}")
+        for nombre in nombres
+    }
+
+    assert estado["estado"] == "no_publicado"
+    assert estado["outputs"] == []
+    assert estado["limpieza_silabos"]["outputs"] == []
+    assert estado["release_gate"]["decision"] == "BLOCK_IMPORT"
+    assert [salida["archivo"] for salida in estado["draft_outputs"]] == [
+        f"salidas/{nombre}" for nombre in nombres
+    ]
+    assert all(salida["bytes"] == len("id\nuno\n") for salida in estado["draft_outputs"])
+    assert all(
+        salida["sha256"] == hashlib.sha256(b"id\nuno\n").hexdigest()
+        for salida in estado["draft_outputs"]
+    )
+    assert all(descarga.status_code == 200 for descarga in descargas.values())
+    assert (
+        cliente.get(
+            f"/normalizador/ejecuciones/{id_ejecucion}/outputs/salidas/otro.csv"
+        ).status_code
+        == 404
+    )
+    assert (
+        cliente.get(
+            f"/normalizador/ejecuciones/{id_ejecucion}/outputs/salidas/reportes/candidatos_curriculares.json"
+        ).status_code
+        == 404
+    )
 
 
 def test_silabos_aprobado_expone_outputs_curriculares(
