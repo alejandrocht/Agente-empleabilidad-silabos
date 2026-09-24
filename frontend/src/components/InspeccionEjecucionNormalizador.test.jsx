@@ -12,13 +12,16 @@ import InspeccionEjecucionNormalizador, {
   parseCsvPreview,
 } from "./InspeccionEjecucionNormalizador";
 import {
+  cancelarEjecucionNormalizador,
   decidirPendientesNormalizador,
   obtenerPendientesNormalizador,
   obtenerReporteEjecucionNormalizador,
   obtenerUrlOutputNormalizador,
+  obtenerUrlReporteEjecucionNormalizador,
 } from "../api/normalizador";
 
 vi.mock("../api/normalizador", () => ({
+  cancelarEjecucionNormalizador: vi.fn(),
   decidirPendientesNormalizador: vi.fn(),
   obtenerPendientesNormalizador: vi.fn(),
   obtenerReporteEjecucionNormalizador: vi.fn(),
@@ -39,6 +42,7 @@ const ARCHIVOS_TECNICOS = [
   "curso.csv",
   "silabo.csv",
   "catalogo_competencias.csv",
+  "catalogo_habilidades.csv",
   "catalogo_logros.csv",
   "cobertura_curricular.csv",
 ];
@@ -49,6 +53,21 @@ function salidasTecnicas(archivos = ARCHIVOS_TECNICOS) {
     tipo: "csv_curricular",
     registros: 1,
   }));
+}
+
+function reporteEnCurso(id, hitl) {
+  return {
+    manifest: {
+      id_ejecucion: id,
+      estado: "normalizando",
+      parametros: {
+        carrera: "Marketing",
+        periodo: "2026-1",
+        ...(hitl === undefined ? {} : { hitl }),
+      },
+    },
+    reportes: {},
+  };
 }
 
 function reporteTecnico({
@@ -121,6 +140,99 @@ describe("inspección de ejecución normalizada", () => {
     ).toBe("/normalizador");
   });
 
+  it.each([1, "1"])(
+    "indica de forma accesible que la revisión técnica humana está activa para HITL=%s",
+    async (hitl) => {
+      obtenerReporteEjecucionNormalizador.mockResolvedValueOnce(
+        reporteEnCurso("NOR_HITL_ON", hitl),
+      );
+
+      render(<InspeccionEjecucionNormalizador idEjecucion="NOR_HITL_ON" />);
+
+      expect(
+        (await screen.findByLabelText("Estado de revisión técnica humana"))
+          .textContent,
+      ).toBe("Revisión técnica humana: activa.");
+    },
+  );
+
+  it.each([0, "0"])(
+    "indica cuando las decisiones técnicas son automáticas para HITL=%s",
+    async (hitl) => {
+      obtenerReporteEjecucionNormalizador.mockResolvedValueOnce(
+        reporteEnCurso("NOR_HITL_OFF", hitl),
+      );
+
+      render(<InspeccionEjecucionNormalizador idEjecucion="NOR_HITL_OFF" />);
+
+      expect(
+        (await screen.findByLabelText("Estado de revisión técnica humana"))
+          .textContent,
+      ).toBe(
+        "Revisión técnica humana: desactivada; decisiones técnicas automáticas.",
+      );
+    },
+  );
+
+  it.each([undefined, null, 2, "2", " 1"])(
+    "no inventa un estado HITL para el valor %s",
+    async (hitl) => {
+      obtenerReporteEjecucionNormalizador.mockResolvedValueOnce(
+        reporteEnCurso("NOR_HITL_UNKNOWN", hitl),
+      );
+
+      render(
+        <InspeccionEjecucionNormalizador idEjecucion="NOR_HITL_UNKNOWN" />,
+      );
+
+      await screen.findByRole("heading", {
+        name: "Inspección técnica curricular",
+      });
+      expect(
+        screen.queryByLabelText("Estado de revisión técnica humana"),
+      ).toBeNull();
+    },
+  );
+
+  it("no deja que una cancelación pendiente de A oculte la acción de B", async () => {
+    let resolverCancelacion;
+    cancelarEjecucionNormalizador.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolverCancelacion = resolve;
+        }),
+    );
+    obtenerReporteEjecucionNormalizador.mockImplementation((id) =>
+      Promise.resolve(reporteEnCurso(id, 0)),
+    );
+
+    const { rerender } = render(
+      <InspeccionEjecucionNormalizador idEjecucion="NOR_A" />,
+    );
+    const botonCancelarA = await screen.findByRole("button", {
+      name: "Cancelar ejecución",
+    });
+    fireEvent.click(botonCancelarA);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Enviando solicitud…" }).disabled,
+      ).toBe(true),
+    );
+
+    rerender(<InspeccionEjecucionNormalizador idEjecucion="NOR_B" />);
+
+    const botonCancelarB = await screen.findByRole("button", {
+      name: "Cancelar ejecución",
+    });
+    expect(botonCancelarB.disabled).toBe(false);
+    resolverCancelacion({ cancelacion_solicitada: true });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Cancelar ejecución" }).disabled,
+      ).toBe(false),
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     obtenerReporteEjecucionNormalizador.mockResolvedValue({
@@ -157,6 +269,13 @@ describe("inspección de ejecución normalizada", () => {
       aprobacion: null,
     });
     decidirPendientesNormalizador.mockResolvedValue({ aprobacion: null });
+    cancelarEjecucionNormalizador.mockResolvedValue({
+      cancelacion_solicitada: true,
+    });
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    );
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation(async (_url) => ({
@@ -168,12 +287,12 @@ describe("inspección de ejecución normalizada", () => {
     );
   });
 
-  it("reconoce el contrato técnico de cinco CSV antes de habilitar Neo4j", async () => {
+  it("reconoce el contrato técnico de seis CSV antes de habilitar Neo4j", async () => {
     obtenerReporteEjecucionNormalizador.mockResolvedValueOnce(reporteTecnico());
 
     render(<InspeccionEjecucionNormalizador idEjecucion="NOR_TECHNICAL" />);
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(5));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(6));
     expect(
       screen.getByRole("heading", { name: "Inspección técnica curricular" }),
     ).toBeTruthy();
@@ -184,6 +303,10 @@ describe("inspección de ejecución normalizada", () => {
     );
     expect(screen.getByText("curso.csv")).toBeTruthy();
     expect(screen.getByText("silabo.csv")).toBeTruthy();
+    expect(screen.getByText("catalogo_habilidades.csv")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Descargar catalogo_habilidades.csv" }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Progreso" }));
     expect(screen.getByText("cursos")).toBeTruthy();
     expect(screen.getByText("competencias técnicas")).toBeTruthy();
@@ -191,6 +314,50 @@ describe("inspección de ejecución normalizada", () => {
     expect(
       await screen.findByRole("button", { name: "Subir datos a Neo4j" }),
     ).toBeTruthy();
+  });
+
+  it("bloquea Neo4j cuando falta catalogo_habilidades.csv aunque existan los otros cinco", async () => {
+    const idEjecucion = "NOR_MISSING_SKILLS";
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce(
+      reporteTecnico({ id: idEjecucion, outputs: salidasTecnicas(ARCHIVOS_TECNICOS.filter((archivo) => archivo !== "catalogo_habilidades.csv")) }),
+    );
+
+    render(<InspeccionEjecucionNormalizador idEjecucion={idEjecucion} />);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(5));
+    fireEvent.click(await screen.findByRole("tab", { name: "Neo4j" }));
+    expect(screen.queryByRole("button", { name: "Subir datos a Neo4j" })).toBeNull();
+    expect(screen.getByText(/release gate todavía no certifica/i)).toBeTruthy();
+  });
+
+  it("muestra borradores CSV descargables sin habilitar importación cuando no_publicado", async () => {
+    const idEjecucion = "NOR_BLOCKED_DRAFTS";
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: {
+        id_ejecucion: idEjecucion,
+        tipo: "silabos",
+        estado: "no_publicado",
+        outputs: [],
+        draft_outputs: salidasTecnicas().map((salida) => ({ ...salida, borrador: true })),
+        release_gate: {
+          decision: "BLOCK_IMPORT",
+          blockers: ["TECHNICAL_ANALYSIS_INCOMPLETE", "UNLINKED_SOURCE_OUTCOME"],
+        },
+      },
+      reportes: {},
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion={idEjecucion} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "CSV" }));
+
+    expect(await screen.findByText(/borradores.*no son\s+importables/i)).toBeTruthy();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(6));
+    expect(screen.getAllByRole("columnheader", { name: "id_requerimiento" })).toHaveLength(6);
+    for (const nombre of ARCHIVOS_TECNICOS) {
+      expect(screen.getByRole("link", { name: `Descargar ${nombre}` })).toBeTruthy();
+    }
+    fireEvent.click(screen.getByRole("tab", { name: "Neo4j" }));
+    expect(screen.queryByRole("button", { name: "Subir datos a Neo4j" })).toBeNull();
   });
 
   it("explica el bloqueo técnico sin inventar decisiones humanas pendientes", async () => {
@@ -302,7 +469,7 @@ describe("inspección de ejecución normalizada", () => {
 
     render(<InspeccionEjecucionNormalizador idEjecucion={idEjecucion} />);
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(5));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(6));
     await waitFor(() =>
       expect(
         screen.getByRole("tab", { name: "CSV" }).getAttribute("aria-selected"),
@@ -667,8 +834,9 @@ describe("inspección de ejecución normalizada", () => {
       .getByRole("heading", { name: "Conteos de la normalización" })
       .closest("section");
     expect(within(conteos).getByText("cursos")).toBeTruthy();
-    expect(within(conteos).getAllByText("1", { exact: true })).toHaveLength(5);
+    expect(within(conteos).getAllByText("1", { exact: true })).toHaveLength(6);
     expect(within(conteos).getByText("relaciones de cobertura")).toBeTruthy();
+    expect(within(conteos).getByText("habilidades técnicas")).toBeTruthy();
     const progreso = screen.getByRole("tabpanel", { name: "Progreso" });
     expect(within(progreso).queryByText("Salidas generadas")).toBeNull();
     expect(within(progreso).queryByText("Decisiones LLM aceptadas")).toBeNull();
@@ -696,6 +864,13 @@ describe("inspección de ejecución normalizada", () => {
     expect(
       within(warnings).getByText("Se omitió un archivo accesorio."),
     ).toBeTruthy();
+    const reporte = within(warnings).getByRole("link", {
+      name: /Descargar reporte/,
+    });
+    expect(reporte.getAttribute("href")).toBe("/reports/NOR_0123456789abcdef");
+    expect(obtenerUrlReporteEjecucionNormalizador).toHaveBeenCalledWith(
+      "NOR_0123456789abcdef",
+    );
     fireEvent.click(screen.getByRole("tab", { name: "CSV" }));
     const csv = screen.getByRole("tabpanel", { name: "CSV" });
     expect(within(csv).getByText("curso.csv")).toBeTruthy();
@@ -715,6 +890,153 @@ describe("inspección de ejecución normalizada", () => {
       screen.getByRole("button", { name: "Subir datos a Neo4j" }),
     ).toBeTruthy();
     expect(obtenerUrlOutputNormalizador).toHaveBeenCalled();
+  });
+
+  it("muestra solo el sílabo procesando en fase analista y oculta los demás", async () => {
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: {
+        id_ejecucion: "NOR_CURRENT_ANALYSIS",
+        estado: "limpiando",
+        progreso_llm: {
+          fase: "analista",
+          chunks_completados: 4,
+          chunks_totales: 9,
+          logros_procesados: 12,
+          logros_totales: 20,
+          silabos_procesados: 1,
+          silabos_totales: 3,
+          reintentos: 2,
+          decisiones_cacheadas: 5,
+          reporte_final: "pendiente",
+          eventos: [{ mensaje: "Se analiza el curso activo." }],
+          silabos: [
+            { curso: "Curso completado", estado_analisis: "completado" },
+            { curso: "Curso actual", estado_analisis: "procesando", indice: 2, total: 3, logros_procesados: 3, logros_totales: 8 },
+            { curso: "Curso en cola", estado_analisis: "pendiente" },
+          ],
+        },
+      },
+      reportes: {},
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_CURRENT_ANALYSIS" />);
+
+    const progreso = await screen.findByRole("region", { name: "Progreso de limpieza LLM" });
+    expect(within(progreso).getByText(/Limpiando ahora: Curso actual \(2\/3\) · 3\/8 logros/)).toBeTruthy();
+    expect(within(progreso).queryByText(/Curso completado|Curso en cola/)).toBeNull();
+    expect(within(progreso).getByText(/4\/9 chunks · 12\/20 logros · 1\/3 sílabos · 2 reintentos · 5 decisiones en caché · Reporte: pendiente/)).toBeTruthy();
+    expect(within(progreso).getByText("Último evento: Se analiza el curso activo.")).toBeTruthy();
+  });
+
+  it("muestra el fallback cuando el sílabo procesando no tiene curso ni archivo", async () => {
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: {
+        id_ejecucion: "NOR_CURRENT_UNNAMED",
+        estado: "limpiando",
+        progreso_llm: {
+          fase: "analista",
+          silabos: [
+            { curso: "", archivo: "", estado_analisis: "procesando" },
+          ],
+        },
+      },
+      reportes: {},
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_CURRENT_UNNAMED" />);
+
+    const progreso = await screen.findByRole("region", { name: "Progreso de limpieza LLM" });
+    expect(within(progreso).getByText("Limpiando ahora: Nombre aún no disponible")).toBeTruthy();
+    expect(within(progreso).queryByText(/Salida sin nombre/)).toBeNull();
+  });
+
+  it("identifica por nombre de archivo el sílabo en extracción mientras curso todavía no se conoce", async () => {
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: {
+        id_ejecucion: "NOR_CURRENT_EXTRACTION",
+        estado: "limpiando",
+        progreso_llm: {
+          fase: "extrayendo",
+          silabos: [
+            { curso: "", archivo: "fuentes/actual.pdf", estado_extraccion: "procesando" },
+            { curso: "Anterior", archivo: "anterior.pdf", estado_extraccion: "completado" },
+          ],
+        },
+      },
+      reportes: {},
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_CURRENT_EXTRACTION" />);
+
+    const progreso = await screen.findByRole("region", { name: "Progreso de limpieza LLM" });
+    expect(within(progreso).getByText("Limpiando ahora: actual.pdf")).toBeTruthy();
+    expect(within(progreso).queryByText(/Anterior|anterior\.pdf/)).toBeNull();
+  });
+
+  it.each([
+    { fase: "analista", silabos: [{ curso: "Pendiente", estado_analisis: "pendiente" }] },
+    { fase: "analista", silabos: [{ curso: "Uno", estado_analisis: "procesando" }, { curso: "Dos", estado_analisis: "procesando" }] },
+    { fase: "finalizando", silabos: [{ curso: "Terminado", estado_analisis: "completado" }] },
+  ])("no inventa un sílabo actual si no hay un único activo en la fase $fase", async ({ fase, silabos }) => {
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: { id_ejecucion: "NOR_NO_UNIQUE_CURRENT", estado: "limpiando", progreso_llm: { fase, silabos } },
+      reportes: {},
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_NO_UNIQUE_CURRENT" />);
+
+    const progreso = await screen.findByRole("region", { name: "Progreso de limpieza LLM" });
+    expect(within(progreso).getByText("No se puede identificar un único sílabo en procesamiento ahora.")).toBeTruthy();
+    expect(within(progreso).queryByText(/Limpiando ahora:/)).toBeNull();
+  });
+
+  it("muestra contadores Cactus sin tratar el mensaje de última descarga como curso actual", async () => {
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: {
+        id_ejecucion: "NOR_CACTUS_PROGRESS",
+        estado: "extrayendo",
+        progreso_fuente: {
+          fase: "descargando",
+          cursos_encontrados: 6,
+          cursos_procesados: 2,
+          archivos_descargados: 2,
+          mensaje: "Última descarga completada: Curso anterior",
+        },
+      },
+      reportes: {},
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_CACTUS_PROGRESS" />);
+
+    const fuente = await screen.findByRole("region", { name: "Progreso de extracción Cactus" });
+    expect(within(fuente).getByText("Fuente Cactus · descargando")).toBeTruthy();
+    expect(within(fuente).getByText("6 cursos encontrados · 2 cursos procesados · 2 archivos descargados")).toBeTruthy();
+    expect(within(fuente).queryByText(/Curso anterior/)).toBeNull();
+    expect(screen.getByText("No se puede identificar un único sílabo en procesamiento ahora.")).toBeTruthy();
+  });
+
+  it("actualiza el sílabo actual cuando el polling recibe una nueva fase activa", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    obtenerReporteEjecucionNormalizador.mockReset();
+    const reporteActivo = (curso) => ({
+      manifest: {
+        id_ejecucion: "NOR_CURRENT_POLL",
+        estado: "limpiando",
+        progreso_llm: { fase: "analista", silabos: [{ curso, estado_analisis: "procesando" }] },
+      },
+      reportes: {},
+    });
+    obtenerReporteEjecucionNormalizador
+      .mockResolvedValueOnce(reporteActivo("Curso uno"))
+      .mockResolvedValueOnce(reporteActivo("Curso dos"));
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_CURRENT_POLL" />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByText("Limpiando ahora: Curso uno")).toBeTruthy();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(screen.getByText("Limpiando ahora: Curso dos")).toBeTruthy();
+    expect(screen.queryByText("Limpiando ahora: Curso uno")).toBeNull();
   });
 
   it("muestra el progreso activo, no trata la ausencia temporal de CSV como fallo y hace polling hasta el estado terminal", async () => {
@@ -793,6 +1115,176 @@ describe("inspección de ejecución normalizada", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("solicita una cancelación confirmada una sola vez y evita duplicados durante el request", async () => {
+    obtenerReporteEjecucionNormalizador.mockResolvedValue({
+      manifest: {
+        id_ejecucion: "NOR_CANCEL_ACTIVE",
+        estado: "limpiando",
+        cancelacion_solicitada: false,
+      },
+      reportes: {},
+    });
+    let resolverCancelacion;
+    cancelarEjecucionNormalizador.mockImplementation(
+      () => new Promise((resolve) => { resolverCancelacion = resolve; }),
+    );
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_CANCEL_ACTIVE" />);
+    const cancelar = await screen.findByRole("button", { name: "Cancelar ejecución" });
+    fireEvent.click(cancelar);
+
+    expect(confirm).toHaveBeenCalledWith(
+      "¿Solicitar la cancelación de esta ejecución? El procesamiento puede tardar en detenerse.",
+    );
+    expect(cancelarEjecucionNormalizador).toHaveBeenCalledTimes(1);
+    expect(cancelarEjecucionNormalizador).toHaveBeenCalledWith("NOR_CANCEL_ACTIVE");
+    expect(cancelar.disabled).toBe(true);
+    expect(cancelar.textContent).toContain("Enviando solicitud");
+    fireEvent.click(cancelar);
+    expect(cancelarEjecucionNormalizador).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolverCancelacion({ cancelacion_solicitada: true });
+    });
+    expect(await screen.findByText(/Se solicitó cancelar esta ejecución/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cancelar ejecución" })).toBeNull();
+  });
+
+  it("no solicita cancelación si se rechaza la confirmación", async () => {
+    confirm.mockReturnValue(false);
+    obtenerReporteEjecucionNormalizador.mockResolvedValue({
+      manifest: { id_ejecucion: "NOR_CANCEL_DENIED", estado: "validando" },
+      reportes: {},
+    });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_CANCEL_DENIED" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar ejecución" }));
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(cancelarEjecucionNormalizador).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Cancelar ejecución" }).disabled).toBe(false);
+  });
+
+  it("muestra una solicitud persistida tras cargar y no ofrece cancelar en estado terminal", async () => {
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: {
+        id_ejecucion: "NOR_CANCEL_PERSISTED",
+        estado: "normalizando",
+        cancelacion_solicitada: true,
+      },
+      reportes: {},
+    });
+    const { rerender } = render(
+      <InspeccionEjecucionNormalizador idEjecucion="NOR_CANCEL_PERSISTED" />,
+    );
+    expect(await screen.findByText(/Se solicitó cancelar esta ejecución/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cancelar ejecución" })).toBeNull();
+
+    obtenerReporteEjecucionNormalizador.mockResolvedValueOnce({
+      manifest: { id_ejecucion: "NOR_CANCEL_TERMINAL", estado: "cancelado" },
+      reportes: {},
+    });
+    rerender(<InspeccionEjecucionNormalizador idEjecucion="NOR_CANCEL_TERMINAL" />);
+    await waitFor(() =>
+      expect(
+        screen.getByText("Procesamiento cancelado"),
+      ).toBeTruthy(),
+    );
+    expect(screen.queryByRole("button", { name: "Cancelar ejecución" })).toBeNull();
+  });
+
+  it.each(["validado", "validado_con_advertencias"])(
+    "continúa el polling en %s sin ofrecer ni solicitar cancelación",
+    async (estado) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      obtenerReporteEjecucionNormalizador.mockReset();
+      const reporte = () => ({
+        manifest: { id_ejecucion: "NOR_VALIDATED_POLL", estado },
+        reportes: {},
+      });
+      obtenerReporteEjecucionNormalizador
+        .mockResolvedValueOnce(reporte())
+        .mockResolvedValueOnce(reporte());
+
+      render(
+        <InspeccionEjecucionNormalizador idEjecucion="NOR_VALIDATED_POLL" />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(
+        screen.getByText(
+          estado === "validado"
+            ? "Validación completada"
+            : "Validación completada con advertencias",
+          { selector: "p" },
+        ),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: "Cancelar ejecución" }),
+      ).toBeNull();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(obtenerReporteEjecucionNormalizador).toHaveBeenCalledTimes(2);
+      expect(cancelarEjecucionNormalizador).not.toHaveBeenCalled();
+      expect(
+        screen.queryByRole("button", { name: "Cancelar ejecución" }),
+      ).toBeNull();
+    },
+  );
+
+  it("mantiene extrayendo como estado activo cancelable y continúa el polling", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    obtenerReporteEjecucionNormalizador.mockReset();
+    obtenerReporteEjecucionNormalizador
+      .mockResolvedValueOnce({
+        manifest: { id_ejecucion: "NOR_EXTRAYENDO", estado: "extrayendo" },
+        reportes: {},
+      })
+      .mockResolvedValueOnce({
+        manifest: { id_ejecucion: "NOR_EXTRAYENDO", estado: "cancelado" },
+        reportes: {},
+      });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_EXTRAYENDO" />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Extrayendo sílabos", { selector: "p" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancelar ejecución" })).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(obtenerReporteEjecucionNormalizador).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("button", { name: "Cancelar ejecución" })).toBeNull();
+  });
+
+  it("permite reintentar si falla la solicitud y conserva el estado de ejecución", async () => {
+    obtenerReporteEjecucionNormalizador.mockResolvedValue({
+      manifest: { id_ejecucion: "NOR_CANCEL_RETRY", estado: "limpiando" },
+      reportes: {},
+    });
+    cancelarEjecucionNormalizador
+      .mockRejectedValueOnce(new Error("Cancelación no disponible."))
+      .mockResolvedValueOnce({ cancelacion_solicitada: true });
+
+    render(<InspeccionEjecucionNormalizador idEjecucion="NOR_CANCEL_RETRY" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar ejecución" }));
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Cancelación no disponible.",
+    );
+    expect(screen.getByText("Limpiando datos", { selector: "p" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancelar ejecución" }).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar ejecución" }));
+    expect(await screen.findByText(/Se solicitó cancelar esta ejecución/)).toBeTruthy();
+    expect(cancelarEjecucionNormalizador).toHaveBeenCalledTimes(2);
   });
 
   it("parsea celdas CSV con comillas y respeta el límite solicitado", () => {
