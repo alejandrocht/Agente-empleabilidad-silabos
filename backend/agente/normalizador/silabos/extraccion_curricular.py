@@ -240,7 +240,12 @@ def _extraer_docx(
                     )
         if "logro_de_aprendizaje_general" in encabezado:
             if len(filas) > 1 and filas[1]:
-                logro_general = filas[1][0]
+                primera_fila = filas[1]
+                logro_general = (
+                    primera_fila[1]
+                    if len(primera_fila) > 1 and re.fullmatch(r"L\d+", primera_fila[0], re.I)
+                    else primera_fila[0]
+                )
             for valores in filas[1:]:
                 if len(valores) >= 3 and re.fullmatch(r"L\d+", valores[0], re.I):
                     logros.append(
