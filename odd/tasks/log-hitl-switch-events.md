@@ -1,6 +1,6 @@
 # Log technical HITL switch changes
 
-Status: committed locally; native review and authorized push pending
+Status: committed locally; independent verification passed; native review declined
 Repository: `Agente-empleabilidad-silabos`
 
 ## Goal
@@ -68,7 +68,7 @@ Emit a backend event immediately whenever the user toggles the technical HITL sw
 - Independent verification: frontend focused suite 29/29; backend Ruff `All checks passed!`; scoped tracked `git diff --check` clean. Backend focused HTTP suite passed 4/4 twice, including invalid-mode and remote-peer coverage.
 - The next-run payload remains the selected `hitl` value (existing Cactus test verifies `hitl=0`); no inference or auto-ADD implementation was changed.
 - Native ASSESS returned `unassessable` because an unrelated untracked worktrees directory was present; it prescribed independent verification, which completed successfully.
-- Engram mirror is unavailable in this session. Commit `dee7c85` (`feat(normalizer): log HITL switch changes`) was created locally for exactly this seven-path slice; native review and authorized push remain pending.
+- Engram mirror is unavailable in this session. Local commits for the exact seven-path scope: `dee7c85` (`feat(normalizer): log HITL switch changes`) and `eefaf09` (`docs(odd): record HITL logging commit`). Native consent was declined for this candidate. Separate independent verification of the exact committed range `e6798eb` through `eefaf09` passed: backend 4/4, frontend 29/29, Ruff passed, and diff-check was clean. No blocking correctness or security issue was found. Rapid toggles/out-of-order responses and production proxy behavior remain unverified. The user explicitly authorized pushing only these seven paths.
 - Latest authorized frontend regression asserts exactly one logging call per click and verifies that after logging failure, the next Cactus run still submits `hitl=0`.
 - Latest verification: backend focused HTTP suite — 4 passed; scoped Ruff — all checks passed; frontend API+panel suite — 29 passed across 2 files; scoped `git diff --check` — clean.
 - LSP error scan found 0 diagnostics. Three frontend LSP results remain unconfirmed because the server did not publish on clean re-check; the frontend tests passed.
