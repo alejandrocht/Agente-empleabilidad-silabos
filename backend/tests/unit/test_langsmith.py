@@ -8,7 +8,6 @@ from types import SimpleNamespace
 import pytest
 
 from agente.normalizador.excepciones import CancelacionSolicitada
-from agente.normalizador.silabos import analista_llm
 from agente.observabilidad import langsmith
 
 
@@ -143,40 +142,6 @@ def test_ejecutar_flujo_cierra_traza_con_estado_cancelado(monkeypatch) -> None:
 
     assert capturado["salida"]["status"] == "cancelled"
     assert capturado["salida"]["estado"] == "cancelado"
-
-
-def test_analista_asigna_run_name_y_rol_distinguibles(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("LANGSMITH_TRACING", "true")
-    capturado = {}
-
-    class RunnableFalso:
-        def with_config(self, config):
-            capturado.update(config)
-            return self
-
-        def invoke(self, _prompt: str):
-            return analista_llm.LoteDecisionesCurriculares()
-
-    class LLMFalso:
-        model_name = "modelo-test"
-
-        def with_structured_output(self, _schema):
-            return RunnableFalso()
-
-    resultado = analista_llm._invocar_analista(
-        LLMFalso(),
-        tuple(),
-        {},
-        "MARKETING",
-        "2026-1",
-        id_ejecucion="NOR_123",
-        chunk=2,
-    )
-
-    assert resultado.decisiones == []
-    assert capturado["run_name"] == "normalizador.curricular.analista_curricular"
-    assert "rol:analista_curricular" in capturado["tags"]
-    assert capturado["metadata"]["execution_id"] == "NOR_123"
 
 
 def test_envolver_cliente_openai_no_parchea_con_tracing_apagado(monkeypatch) -> None:

@@ -23,9 +23,7 @@ SCHEMA = {
         ],
     },
     "rel_props": {"PUBLICA": []},
-    "relationships": [
-        {"start": "Empresa", "type": "PUBLICA", "end": "Oferta_Laboral"}
-    ],
+    "relationships": [{"start": "Empresa", "type": "PUBLICA", "end": "Oferta_Laboral"}],
 }
 
 
@@ -38,14 +36,10 @@ def test_generated_query_contract_rejects_non_json_parameters() -> None:
 
 
 def test_corrector_changes_only_a_schema_proven_inverse_direction() -> None:
-    reverse = (
-        "MATCH (o:Oferta_Laboral)-[:PUBLICA]->(e:Empresa) "
-        "RETURN o.cargo AS cargo LIMIT 10"
-    )
+    reverse = "MATCH (o:Oferta_Laboral)-[:PUBLICA]->(e:Empresa) RETURN o.cargo AS cargo LIMIT 10"
 
     assert correct_relationship_direction(reverse, SCHEMA) == (
-        "MATCH (o:Oferta_Laboral)<-[:PUBLICA]-(e:Empresa) "
-        "RETURN o.cargo AS cargo LIMIT 10"
+        "MATCH (o:Oferta_Laboral)<-[:PUBLICA]-(e:Empresa) RETURN o.cargo AS cargo LIMIT 10"
     )
 
 
@@ -75,6 +69,7 @@ def test_build_generated_runnable_uses_role_specific_structured_output(
     assert model_calls == {
         "model": "generator-test-model",
         "temperature": 0,
+        "streaming": True,
         "use_responses_api": True,
         "reasoning_effort": "high",
     }
@@ -83,7 +78,6 @@ def test_build_generated_runnable_uses_role_specific_structured_output(
 
 def test_schema_validator_accepts_known_reverse_written_pattern() -> None:
     validate_generated_schema(
-        "MATCH (o:Oferta_Laboral)<-[:PUBLICA]-(e:Empresa) "
-        "RETURN o.cargo AS cargo LIMIT 10",
+        "MATCH (o:Oferta_Laboral)<-[:PUBLICA]-(e:Empresa) RETURN o.cargo AS cargo LIMIT 10",
         SCHEMA,
     )

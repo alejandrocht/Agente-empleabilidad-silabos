@@ -73,4 +73,3 @@ The parallel `botones fix` session owns `backend/agente/normalizador/silabos/apr
 - Delegated writer completed TPA-1 through TPA-3; reported 17 focused analyzer tests passing and `git diff --check` passing.
 - Parent reread the post-writer source/test diff; the parallel session's files remain outside this feature's edit surface.
 - TPA-4 complete. Work-unit commit `f4ed287` (`fix(normalizer): reject literal proposal echoes`) contains only this feature's analyzer, tests, and task document; the user's parallel `botones fix` session remains outside its edit surface.
-
