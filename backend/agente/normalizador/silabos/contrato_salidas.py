@@ -9,6 +9,7 @@ ARCHIVOS_CURRICULARES_TECNICOS = frozenset(
         "salidas/curso.csv",
         "salidas/silabo.csv",
         "salidas/catalogo_competencias.csv",
+        "salidas/catalogo_habilidades.csv",
         "salidas/catalogo_logros.csv",
         "salidas/cobertura_curricular.csv",
     }

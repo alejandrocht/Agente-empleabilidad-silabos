@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import sqlite3
 from pathlib import Path
 from typing import cast
 
@@ -14,11 +15,13 @@ from fastapi.testclient import TestClient
 from agente.api import neo4j_importacion, normalizador, servidor
 from agente.normalizador.ejecuciones import GestorEjecuciones
 from agente.normalizador.modelos import EstadoEjecucion, ResultadoLimpiezaSilabos
+from agente.normalizador.silabos import aprobaciones_tecnicas
 
 ARCHIVOS_TECNICOS = (
     "salidas/curso.csv",
     "salidas/silabo.csv",
     "salidas/catalogo_competencias.csv",
+    "salidas/catalogo_habilidades.csv",
     "salidas/catalogo_logros.csv",
     "salidas/cobertura_curricular.csv",
 )
@@ -42,7 +45,7 @@ def _preparar_ejecucion(
                 "nombre_competencia": "Arquitectura de APIs",
                 "descripcion": "Diseña APIs mantenibles.",
                 "codigo_competencia": "T1",
-                "catalogo_ref": "APIS",
+                "catalogo_ref": "COMP_TEC_0001",
                 "logros": ["Diseña servicios mantenibles."],
                 "evidencia": [{"fragmento": "Diseña servicios mantenibles."}],
             }
@@ -137,6 +140,71 @@ def test_hitl_zero_auto_adds_pending_technical_proposals_at_terminal_execution(
     assert decision["id_propuesta"] == "PROP_TEC_1"
     assert decision["decision"] == "ADD"
     assert decision["actor"] == "automatico_hitl_0"
+
+
+def test_hitl_zero_finalization_auto_adds_unreferenced_llm_proposal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """New automatic executions safely materialize proposals without catalog references."""
+    import openpyxl
+
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path, hitl="0")
+    reportes = directorio / "salidas" / "reportes"
+    propuesta = {
+        "id_propuesta": "PROP_TEC_SIN_REFERENCIA",
+        "id_silabo": "SIL_1",
+        "nombre_competencia": "Seguridad de APIs",
+        "descripcion": "Diseña APIs con controles de seguridad.",
+        "codigo_competencia": "T_API_SEC",
+        "logros": ["Diseña servicios mantenibles."],
+        "evidencia": [{"fragmento": "Aplica controles de seguridad en APIs."}],
+    }
+    (reportes / "propuestas_tecnicas.jsonl").write_text(
+        json.dumps(propuesta) + "\n", encoding="utf-8"
+    )
+
+    catalogo_path = tmp_path / "carrera_competencia_oficial.csv"
+    catalogo_path.write_text(
+        "id_carrera,nombre_carrera,id_habilidad,nombre_habilidad\n"
+        "CAR_SIS,Sistemas,COMP_TEC_0001,API Architecture\n",
+        encoding="utf-8",
+    )
+    workbook = openpyxl.Workbook()
+    hoja = workbook.active
+    assert hoja is not None
+    hoja.append(["Carrera", "Habilidad tecnica", "Descripcion"])
+    hoja.append(["Sistemas", "API Architecture", "Diseña APIs mantenibles."])
+    workbook.save(tmp_path / "catalogo_competencias_tecnicas.xlsx")
+
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    assert ejecucion.configuracion_curricular is not None
+    ejecucion.configuracion_curricular["ruta_catalogo_tecnico"] = str(catalogo_path)
+    gestor._persistir(ejecucion)
+
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    gestor._finalizar(ejecucion)
+
+    journal_path = reportes / "decisiones_tecnicas.jsonl"
+    decision = json.loads(journal_path.read_text(encoding="utf-8"))
+    assert decision["id_propuesta"] == "PROP_TEC_SIN_REFERENCIA"
+    assert decision["decision"] == "ADD"
+    assert decision["actor"] == "automatico_hitl_0"
+
+    catalogo_habilidades = directorio / "salidas" / "catalogo_habilidades.csv"
+    with catalogo_habilidades.open(encoding="utf-8-sig", newline="") as archivo:
+        habilidades = list(csv.DictReader(archivo))
+    nueva = next(fila for fila in habilidades if fila["nombre_habilidad"] == "Seguridad de APIs")
+    assert nueva["id_habilidad"].startswith("HAB_TEC_")
+    assert ejecucion.limpieza_silabos is not None
+    assert ejecucion.limpieza_silabos.release_gate["decision"] == "ALLOW_IMPORT"
+    assert not any(
+        hallazgo.codigo == "AUTO_APROBACION_TECNICA_FALLIDA" for hallazgo in ejecucion.hallazgos
+    )
+    assert [output["archivo"] for output in ejecucion.limpieza_silabos.outputs] == list(
+        ARCHIVOS_TECNICOS
+    )
+    for output in ejecucion.limpieza_silabos.outputs:
+        _assert_metadata_matches_csv(directorio, dict(output))
 
 
 def test_hitl_one_keeps_pending_technical_proposals_for_manual_recovery(
@@ -405,7 +473,7 @@ def test_pending_api_deduplicates_persisted_proposals_by_normalized_name(
             "id_silabo": "SIL_1",
             "nombre_competencia": "Configurar redes informáticas.",
             "descripcion": "First proposal must win.",
-            "catalogo_ref": "NET-001",
+            "catalogo_ref": "COMP_TEC_0002",
             "logros": ["Diseña servicios mantenibles."],
         },
         {
@@ -413,7 +481,7 @@ def test_pending_api_deduplicates_persisted_proposals_by_normalized_name(
             "id_silabo": "SIL_2",
             "nombre_competencia": " configurar   redes INFORMATICAS ",
             "descripcion": "Duplicate proposal must remain audit-only.",
-            "catalogo_ref": "NET-001",
+            "catalogo_ref": "COMP_TEC_0002",
             "logros": ["Duplicate outcome"],
         },
         {
@@ -421,7 +489,7 @@ def test_pending_api_deduplicates_persisted_proposals_by_normalized_name(
             "id_silabo": "SIL_1",
             "nombre_competencia": "Monitorear redes informáticas",
             "descripcion": "Distinct name must remain visible.",
-            "catalogo_ref": "NET-001",
+            "catalogo_ref": "COMP_TEC_0002",
             "logros": ["Diseña servicios mantenibles."],
         },
     ]
@@ -516,3 +584,237 @@ def test_pending_api_ignores_duplicate_journal_rows_but_rejects_true_orphans(
 
     assert orphan_response.status_code == 422
     assert "PROP_TEC_ORPHAN" in orphan_response.json()["detail"]
+
+
+def test_legacy_manifest_without_catalog_path_accepts_new_technical_proposal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path)
+    reportes = directorio / "salidas" / "reportes"
+    (reportes / "propuestas_tecnicas.jsonl").write_text(
+        json.dumps(
+            {
+                "id_propuesta": "PROP_TEC_SIN_CATALOGO",
+                "id_silabo": "SIL_1",
+                "nombre_competencia": "Machine Learning Avanzado",
+                "descripcion": "Construye modelos predictivos escalables.",
+                "codigo_competencia": "T_ML",
+                "logros": ["Diseña servicios mantenibles."],
+                "evidencia": [{"fragmento": "Diseña servicios mantenibles."}],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    manifest_path = directorio / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert "ruta_catalogo_tecnico" not in manifest["configuracion_curricular"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+    pendientes = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/pendientes")
+    assert pendientes.status_code == 200
+    decision = cliente.post(
+        f"/normalizador/ejecuciones/{id_ejecucion}/pendientes/decidir",
+        json={
+            "decisiones": [{"id_pendiente": "PROP_TEC_SIN_CATALOGO", "decision": "ADD"}],
+            "revision": pendientes.json()["revision"],
+        },
+    )
+
+    assert decision.status_code == 200, decision.text
+    assert decision.json()["aprobacion"]["release_gate"]["decision"] == "ALLOW_IMPORT"
+    catalogo_habilidades = directorio / "salidas" / "catalogo_habilidades.csv"
+    with catalogo_habilidades.open(encoding="utf-8-sig", newline="") as archivo:
+        filas = list(csv.DictReader(archivo))
+    nueva = next(fila for fila in filas if fila["nombre_habilidad"] == "Machine Learning Avanzado")
+    assert nueva["id_habilidad"].startswith("HAB_TEC_")
+
+    registro = directorio.parent / "catalogos" / "habilidades.sqlite3"
+    with sqlite3.connect(registro) as conexion:
+        persistida = conexion.execute(
+            "SELECT nombre_clave, descripcion_clave FROM habilidades WHERE id_habilidad = ?",
+            (nueva["id_habilidad"],),
+        ).fetchone()
+    assert persistida is not None
+
+
+def test_new_technical_proposal_without_catalog_ref_publishes_with_auto_assigned_suffix(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """E2E API regression: genuinely new technical proposal auto-assigns HAB_TEC_0002 suffix."""
+    import openpyxl
+
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path)
+    reportes = directorio / "salidas" / "reportes"
+
+    (reportes / "propuestas_tecnicas.jsonl").write_text(
+        json.dumps(
+            {
+                "id_propuesta": "PROP_TEC_NUEVA",
+                "id_silabo": "SIL_1",
+                "nombre_competencia": "Machine Learning Avanzado",
+                "descripcion": "Construye modelos predictivos escalables.",
+                "codigo_competencia": "T_ML",
+                "logros": ["Diseña servicios mantenibles."],
+                "evidencia": [{"fragmento": "Implementa pipelines ML."}],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    csv_path = tmp_path / "carrera_competencia_oficial.csv"
+    csv_path.write_text(
+        "id_carrera,nombre_carrera,id_habilidad,nombre_habilidad\n"
+        "CAR_SIS,Sistemas,COMP_TEC_0001,API Architecture\n",
+        encoding="utf-8",
+    )
+
+    xlsx_path = tmp_path / "catalogo_competencias_tecnicas.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.append(["Carrera", "Habilidad tecnica", "Descripcion"])
+    ws.append(["Sistemas", "API Architecture", "Diseña APIs mantenibles"])
+    wb.save(xlsx_path)
+
+    ejecucion = gestor._obtener_objeto(id_ejecucion)
+    assert ejecucion.configuracion_curricular is not None
+    ejecucion.configuracion_curricular["ruta_catalogo_tecnico"] = str(csv_path)
+    gestor._persistir(ejecucion)
+
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    pendientes = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/pendientes")
+    assert pendientes.status_code == 200
+    revision = pendientes.json()["revision"]
+    manifest_path = directorio / "manifest.json"
+    manifest_before = manifest_path.read_bytes()
+    journal_path = reportes / "decisiones_tecnicas.jsonl"
+    catalogo_habilidades_path = directorio / "salidas" / "catalogo_habilidades.csv"
+    assert not journal_path.exists()
+    assert not catalogo_habilidades_path.exists()
+
+    persistir_manifest_original = aprobaciones_tecnicas._persistir_manifest
+
+    def persistir_manifest_fallido(
+        directorio_manifest: Path,
+        manifest: dict[str, object],
+        gate: dict[str, object],
+        resumen: dict[str, object],
+    ) -> None:
+        persistir_manifest_original(directorio_manifest, manifest, gate, resumen)
+        raise RuntimeError("simulated manifest failure")
+
+    monkeypatch.setattr(
+        aprobaciones_tecnicas,
+        "_persistir_manifest",
+        persistir_manifest_fallido,
+    )
+    with pytest.raises(RuntimeError, match="simulated manifest failure"):
+        aprobaciones_tecnicas.aplicar_decisiones(
+            directorio,
+            [{"id_pendiente": "PROP_TEC_NUEVA", "decision": "ADD"}],
+            revision=revision,
+        )
+
+    assert manifest_path.read_bytes() == manifest_before
+    assert not journal_path.exists()
+    assert not catalogo_habilidades_path.exists()
+    registry_path = directorio.parent / "catalogos" / "habilidades.sqlite3"
+    assert registry_path.exists()
+    with sqlite3.connect(registry_path) as connection:
+        try:
+            registered = connection.execute(
+                "SELECT 1 FROM habilidades WHERE id_habilidad = ?",
+                ("HAB_TEC_0002",),
+            ).fetchone()
+        except sqlite3.OperationalError as error:
+            assert "no such table" in str(error)
+        else:
+            assert registered is None
+
+    monkeypatch.setattr(
+        aprobaciones_tecnicas,
+        "_persistir_manifest",
+        persistir_manifest_original,
+    )
+    decision = cliente.post(
+        f"/normalizador/ejecuciones/{id_ejecucion}/pendientes/decidir",
+        json={
+            "decisiones": [{"id_pendiente": "PROP_TEC_NUEVA", "decision": "ADD"}],
+            "revision": pendientes.json()["revision"],
+        },
+    )
+
+    assert decision.status_code == 200
+    assert decision.json()["aprobacion"]["release_gate"]["decision"] == "ALLOW_IMPORT"
+
+    estado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}")
+    assert estado.status_code == 200
+    assert estado.json()["release_gate"]["decision"] == "ALLOW_IMPORT"
+
+    assert catalogo_habilidades_path.exists()
+    with catalogo_habilidades_path.open(encoding="utf-8-sig", newline="") as f:
+        lector = csv.DictReader(f)
+        filas = list(lector)
+        nueva = next((fila for fila in filas if fila.get("id_habilidad") == "HAB_TEC_0002"), None)
+        assert nueva is not None
+        assert nueva["nombre_habilidad"] == "Machine Learning Avanzado"
+
+    gestor_segunda, id_ejecucion_segunda, directorio_segunda = _preparar_ejecucion(tmp_path)
+    reportes_segunda = directorio_segunda / "salidas" / "reportes"
+    (reportes_segunda / "propuestas_tecnicas.jsonl").write_text(
+        json.dumps(
+            {
+                "id_propuesta": "PROP_TEC_REUTILIZADA",
+                "id_silabo": "SIL_1",
+                "nombre_competencia": "Machine Learning Avanzado",
+                "descripcion": "Construye modelos predictivos escalables.",
+                "codigo_competencia": "T_ML",
+                "logros": ["Diseña servicios mantenibles."],
+                "evidencia": [{"fragmento": "Implementa pipelines ML."}],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    ejecucion_segunda = gestor_segunda._obtener_objeto(id_ejecucion_segunda)
+    assert ejecucion_segunda.configuracion_curricular is not None
+    ejecucion_segunda.configuracion_curricular["ruta_catalogo_tecnico"] = str(csv_path)
+    gestor_segunda._persistir(ejecucion_segunda)
+
+    registry_path = directorio.parent / "catalogos" / "habilidades.sqlite3"
+    assert registry_path.exists()
+    assert registry_path == directorio_segunda.parent / "catalogos" / "habilidades.sqlite3"
+
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor_segunda)
+    cliente_segunda = TestClient(servidor.app, client=("127.0.0.1", 0))
+    pendientes_segunda = cliente_segunda.get(
+        f"/normalizador/ejecuciones/{id_ejecucion_segunda}/pendientes"
+    )
+    assert pendientes_segunda.status_code == 200
+
+    decision_segunda = cliente_segunda.post(
+        f"/normalizador/ejecuciones/{id_ejecucion_segunda}/pendientes/decidir",
+        json={
+            "decisiones": [{"id_pendiente": "PROP_TEC_REUTILIZADA", "decision": "ADD"}],
+            "revision": pendientes_segunda.json()["revision"],
+        },
+    )
+
+    assert decision_segunda.status_code == 200
+    assert decision_segunda.json()["aprobacion"]["release_gate"]["decision"] == "ALLOW_IMPORT"
+
+    catalogo_habilidades_segunda = directorio_segunda / "salidas" / "catalogo_habilidades.csv"
+    assert catalogo_habilidades_segunda.exists()
+    with catalogo_habilidades_segunda.open(encoding="utf-8-sig", newline="") as f:
+        filas_segunda = list(csv.DictReader(f))
+        assert [
+            fila["id_habilidad"]
+            for fila in filas_segunda
+            if fila["nombre_habilidad"] == "Machine Learning Avanzado"
+        ] == ["HAB_TEC_0002"]
