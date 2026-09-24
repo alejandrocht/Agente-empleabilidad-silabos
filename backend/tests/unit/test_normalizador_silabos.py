@@ -113,9 +113,10 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
 
     assert resultado.registros == 1
     assert resultado.publicable is True
-    assert resultado.relaciones == 2
+    assert resultado.relaciones == 1
     registro = json.loads((ejecucion / "limpios" / "silabos.jsonl").read_text(encoding="utf-8"))
     assert registro["datos"]["curso"] == "Diseño de bases de datos"
+    assert registro["datos"]["logro_general"] == "Modelar bases de datos relacionales"
     assert registro["datos"]["logros_especificos"][0] == {
         "orden": "1",
         "descripcion": "Modelar bases de datos relacionales",
@@ -171,6 +172,19 @@ def test_valida_y_limpia_docx_con_carrera_y_periodo(tmp_path: Path) -> None:
     for nombre, esperado in schemas.items():
         with (ejecucion / "salidas" / nombre).open(encoding="utf-8-sig", newline="") as archivo:
             assert next(csv.reader(archivo)) == esperado
+
+    with (ejecucion / "salidas" / "catalogo_logros.csv").open(
+        encoding="utf-8-sig", newline=""
+    ) as archivo:
+        logros = list(csv.DictReader(archivo))
+    assert [fila["logro"] for fila in logros] == ["Modelar bases de datos relacionales"]
+    with (ejecucion / "salidas" / "cobertura_curricular.csv").open(
+        encoding="utf-8-sig", newline=""
+    ) as archivo:
+        coberturas = list(csv.DictReader(archivo))
+    assert len(coberturas) == 1
+    assert coberturas[0]["id_competencia"]
+    assert coberturas[0]["id_logro"] == logros[0]["id_logro"]
 
 
 def test_extrae_metadatos_estructurados_docx_y_conserva_coordinadores(tmp_path: Path) -> None:
