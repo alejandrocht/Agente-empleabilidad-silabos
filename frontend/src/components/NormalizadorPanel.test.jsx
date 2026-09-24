@@ -389,7 +389,7 @@ describe("panel del normalizador", () => {
     await waitFor(() =>
       expect(obtenerEjecucionNormalizador).toHaveBeenCalledWith(idEjecucion),
     );
-    expect(navigation.replace).toHaveBeenCalledWith(`/${idEjecucion}`);
+    expect(navigation.replace).not.toHaveBeenCalled();
 
     resolverDetalle({
       id_ejecucion: idEjecucion,
@@ -439,6 +439,19 @@ describe("panel del normalizador", () => {
     ).toBe("false");
     expect(screen.getByText("Aprobación técnica automática")).toBeTruthy();
     expect(screen.getByLabelText("Progreso de limpieza LLM")).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "HITL técnico" }).disabled).toBe(
+      true,
+    );
+    expect(screen.getByRole("combobox", { name: "Carrera" }).disabled).toBe(
+      true,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Historial de ejecuciones" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Inspeccionar" }).getAttribute("href"),
+    ).toBe(`/${idEjecucion}`);
+    expect(navigation.replace).not.toHaveBeenCalled();
   });
 
   it("limpia el polling al desmontar una ejecución restaurada", async () => {

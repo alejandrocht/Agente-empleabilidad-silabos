@@ -646,7 +646,6 @@ export default function NormalizadorPanel() {
         );
         if (!ejecucionActiva) return;
 
-        router.replace(`/${encodeURIComponent(ejecucionActiva.id_ejecucion)}`);
         const parametros = ejecucionActiva.parametros || {};
         setModo("silabos");
         setHitl(valorHitl(parametros));
@@ -681,7 +680,7 @@ export default function NormalizadorPanel() {
     return () => {
       desmontado = true;
     };
-  }, [consultar, router]);
+  }, [consultar]);
 
   useEffect(() => {
     if (
