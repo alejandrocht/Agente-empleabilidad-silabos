@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:d4b34e552ab3e327aeef3bf37431fb9088b04b7d4db94da234d85aff087c789b",
+  "claims": [
+    {
+      "id": "claim_64461611b13c45baa5888bd1ee903cfe",
+      "statement": "CIAR Agente Empleabilidad es un agente LangGraph de solo lectura que traduce preguntas en español a consultas seguras Cypher sobre Neo4j.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L3-L6",
+          "version": "repo-lines-v1:sha256:eb2e24a3865978d85b05feca0cd568467eed32d05bb1aeef251d758c8f0ed161:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzExMWQ4YWVmMDRlYjc4OTY5NDdhN2JkMTYxZGVjNzg5Zjc3NjVkMWMwMDk5M2E4OWJiYmI0ZWE5OTE5YWQ0YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjIsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2I0MzA2YzUwODFjYjBlZGRmZDJiODc5ZmI5YzhmMzNjM2JkODI5MWI3OTY2YzZiY2UzNTNmYTlhZWI2ODBjZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjRjZDc2YjVjYzc2MzY0NjViNDc2ZjMxY2JiZjgxNDBmYWFhYmU1MjdkODg4ZDRjNDEyNmYxNTk1MzI3OWQ1NCJ9"
+        },
+        {
+          "resource": "repo://CLAUDE.md#L3-L7",
+          "version": "repo-lines-v1:sha256:24ea2f1e9d74c2d458b25bbf60ff4a4bb59c78aea4fa4cb5fa68d62cd7f2fb0d:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTk0NDEzMjk3YTNlOTVhOWI3MmY1ZTRjMDRhYTljMzA2ZjkwMDlhZDg4ZmEwZjk5NDUzZDE5NjM4MzU2NjhiOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2IyMTQ3OWRiMDMwN2Q0MWMzN2FlMmI2ZDJhMGU3NzZhY2Y5YWZjNjEzODliODY1NDg0Y2MwYjkwZjhlY2JkNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjIsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmZhNTgyN2EyMTUzZThlZmNiNzMyZmQ2ZTkwY2UxOTk2NGJkMGNjZTIzNWRhN2E3ZDRjZTZkOGY1NjIzZDUzNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTZjZjIzMTZlZTQzMWJmZDRlMDFkYjc0NmUwMTMwYTA0NzFiN2VmNTViNjgwYjFhOGU3YTEzZGYwZDVlNjFmNCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_38032f1104f94050b1b686d392ba3cd6",
+      "statement": "El script start_services.sh automatiza el arranque y supervisión simultánea del backend FastAPI en el puerto 8001 y el frontend Next.js en el puerto 3000.",
+      "evidence": [
+        {
+          "resource": "repo://start_services.sh#L23-L56",
+          "version": "repo-lines-v1:sha256:0887311153a453320f330d52ecc1a3e3b87d028f51063b24791f0bf73779885b:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAwNzgzMTMzMDk1ZjllYzljYTViOWY1ZDVhNmRlOWRlNjI2MWFkMzc0NzNkMzc3NjQyMjhjYmYxM2ZmNzA3ZmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5ZjdiZWZiODQ2ZjBhZjI5NTVhNWMxZDhjODIwOGUzYjM2NjVlYTY2Y2QyMGI1M2JmODAzNTFjZGUzYmQyOWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdkMmRkNGI0YzllMWVhMjczZjRmMDViNzRhMzRiY2VkYjlkZjM1MDc4MjEzYTQ1NWI5ZDZjMDcyZDE3Zjg2N2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9e8d8c0076be4e4d9435add4aa2ed155",
+      "statement": "La interacción interactiva por consola se puede ejecutar de forma aislada mediante cd backend && python scripts/consola.py.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L32-L35",
+          "version": "repo-lines-v1:sha256:743729713114636aab9d1362bb32f55a8b6e3e9d4cc2a0e1633a7170862728b5:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2Q4NGVkZjQ5YWZmMjRkZTc3NGE0Mjg2YTQxNDczYjQ4MGFhZTE5ZGEyZTZhODcyYzBkNjcwMTY0OGQyNzQ0OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGIzNWZiN2IyYmU5YmUyM2FmYWJmYzE3NTM2MTc5NDE1NjAwYjUwNzZjNDU1YjU5OTc1N2U5MWVhMDNiNjQ2ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWUwNzY3MzM1ODcyYWY1ZDBkOWFjZDJhZTU4NGYzODJiOGFjZDcwYmVmZDAyZDQ3MjM3YWYyYTVjNGE4ZDgwMCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.1",
+    "at": "2026-09-15T01:46:01.029Z"
+  }
+}
