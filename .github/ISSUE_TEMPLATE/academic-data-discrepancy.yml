@@ -1,0 +1,37 @@
+name: Discrepancia de datos académicos
+description: Solicitar aclaraciones sobre inconsistencias verificadas en fuentes académicas.
+title: "[Datos académicos] "
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Incluí solo evidencia apta para un repositorio público. No adjuntes sílabos,
+        descripciones completas, datos personales ni rutas locales.
+  - type: textarea
+    id: periodo-y-alcance
+    attributes:
+      label: Periodo y alcance
+      description: Indicá el periodo, las carreras afectadas y la fuente de los datos.
+    validations:
+      required: true
+  - type: textarea
+    id: evidencia-observada
+    attributes:
+      label: Evidencia observada
+      description: Separá observaciones verificadas de hipótesis o decisiones aún pendientes.
+    validations:
+      required: true
+  - type: textarea
+    id: decisiones-solicitadas
+    attributes:
+      label: Decisiones solicitadas a responsables académicos
+      description: Preguntas concretas que deben resolver quienes mantienen las fuentes.
+    validations:
+      required: true
+  - type: textarea
+    id: criterios-de-cierre
+    attributes:
+      label: Criterios para cerrar el issue
+      description: Evidencia o confirmaciones necesarias antes de corregir el catálogo.
+    validations:
+      required: true
