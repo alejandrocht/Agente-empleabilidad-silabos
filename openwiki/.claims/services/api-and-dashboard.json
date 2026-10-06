@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:89d723ee403f930079cdb85d495f6b9f777eb6e8eeb88ada1a96eee132207767",
+  "claims": [
+    {
+      "id": "claim_db5f96b3a99949d4b7248d7de723f656",
+      "statement": "El servidor FastAPI expone endpoints sincrónicos y de streaming (/chat y /chat/stream) traduciendo los nodos internos del grafo a fases públicas de progreso amigables para el usuario.",
+      "evidence": [
+        {
+          "resource": "repo://backend/api/servidor.py#L56-L80",
+          "version": "repo-lines-v1:sha256:fa769736ae97839d4d1865fe55f06c75552c5b8409342fb906d546616c098af9:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkMDJmODMxYTI0N2EwNmQ0NDA2ZDgyNDkxZmMwNWM1MzQxOGZiNGVjMDIwZDc2NDkwYzBmYjY0MjM2NTg1MmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYxZDMyMjU2NWI0ZWQ3M2IxYzE2OGNhYjY2YTA5MDBmNTdkMGUwNTAxNTVhOGQ4NzIxMTA2ODg1NjEyY2Y0ZmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYyZGIzNzZiNzBmNzc2NWQxNGNhNjJiNjFmOWZjNzFkOWY4NTFiZTZlMzlmYTg2OTllMTU0NGEwMTExMTdlZDMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_267cd202b622437e87f8f9f7f57b7062",
+      "statement": "Las consultas del dashboard emplean una caché en memoria thread-safe acotada con políticas LRU y TTL configurable (por defecto 600 segundos y 256 entradas).",
+      "evidence": [
+        {
+          "resource": "repo://backend/agente/cache/consultas.py#L19-L21",
+          "version": "repo-lines-v1:sha256:40e17067720710ca32011ae9a1bc0fb131d912b12981cdc47daca3b1b8a4b115:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDliMWM2NTdkMjI0NDhjOTUwYzAxOTBjOWIyOTBiYjhiODQ3MjEwOWNiOTY4ZDA2MWY3NGY5NDVmZGRjNzlmYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDg0MDgzZDExZWZjYmRkNjc1YzIxOTc0YzQ3NTBhYjc5NzI4YThlMDg4OTM3Y2E3MDgwOTFhNjdiMzg4MjYwZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmU4ZGViMWU2YjYzZTViYjNiYjI0MzU4MDM3YzBhOTJiZTZiZDdiOWVhZGI4YTJmNjRjOTk4NGY1ZjhmYzI0ZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_9cd73f5c040c47a38008085f32ed87b7",
+      "statement": "Las solicitudes de chat aplican un tiempo de espera global estricto (DEFAULT_GRAPH_TIMEOUT_SECONDS = 90.0) abortando de forma segura y controlada las consultas que excedan el umbral.",
+      "evidence": [
+        {
+          "resource": "repo://backend/api/servidor.py#L38-L42",
+          "version": "repo-lines-v1:sha256:ed4db3e0bb772a6ffbf07ac6364506e99b4c2de337c731de2291fa343364a735:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGQwYWUzYzkzODYxZmQ4ODc0YTZjZGUwZjlkZDIyNTkwNDZjMmFkYjExMDIxOTY3NjAzNmYwOGRiZDQ3YjdhYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmFmYmEwNTI3YzM5NTNjNGI2ZTBlNWI1NzM5YmE4MzYxMmY4MDUzYmNkYzk0NjY3MzAxOTNjZDFkNTkwYjQwOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDI1ZDA2MDk1MTRmYzA0NDNhMWMzNDBkOThhZGRhYjI1MWM3MTNlMmU3MDcxMjFiNGZjZDZmYTE5NzY0OGE3NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGFlMzg1NzIwYWY5NmQ3YzA2MTkzNzg5YjY2YjA2NzUxOWMyMDcxMWQ3ZDhmOTA1MjhhMjRkOTQyMDgzMGVkMSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.1",
+    "at": "2026-09-15T01:46:01.029Z"
+  }
+}

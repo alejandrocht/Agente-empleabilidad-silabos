@@ -116,3 +116,11 @@ schema; they must not be represented with graph data or hidden mocks.
 Live-only acceptance is separate and is not part of offline verification: a real
 Neo4j question, Neo4j `EXPLAIN`/execution against the deployed schema, and external
 OpenAI/LangSmith connectivity. Never run those checks with placeholder credentials.
+
+<!-- OPENWIKI:START -->
+
+## OpenWiki
+
+See [AGENTS.md](AGENTS.md) for OpenWiki agent instructions.
+
+<!-- OPENWIKI:END -->

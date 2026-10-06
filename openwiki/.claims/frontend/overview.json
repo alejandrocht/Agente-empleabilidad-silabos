@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:e28b4104202c72cd1392c4be7002efbdbcc4345cddc6cf7efa72bedf14589aa3",
+  "claims": [
+    {
+      "id": "claim_a120e0c87d0d40e488591a236da03341",
+      "statement": "El frontend está construido sobre Next.js y React 19, utilizando Recharts para gráficos de empleabilidad y Tailwind CSS para diseño.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/package.json#L13-L20",
+          "version": "repo-lines-v1:sha256:78e5770f760d9f366774b435c30971215d850bdac297941129b54571e9beca14:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmEzYjQ2OWQ5ZTA5NzU3MjI0NjY2NzM0YzllZjdiMjU0ZDg4NTM0ZjVkNWJiNzA5ODk2MDgwNWM1NTNkYzMwNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ1Y2QyZmI0ZjNkZjg4NDUxNTI1NWIzOTUyM2YyZjhiNTQ3MmJlZWE5ZjU2NmZmY2EyMDRkYjgwMjU2MTA0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDM3ZjliNTY0NDI5NGJjOTAxZDJjOWFiMzJlMDQ4NzYxMGVlMmZmZGRhYTc3NGVjODU0NmQ5YmEzMjg3NWIyZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzNlN2M2ZmJlMDBjZGZkZWQyYTEzMTI3ZTRjODg0N2EyZDBjZDNmNjA2ZjRlOTM4Y2EzODZkOTI5OGE3OTk0ZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d5324e90d6824ad88bfc8e8037bad58b",
+      "statement": "Next.js configura rewrites para enrutar de forma transparente las llamadas de /chat, /chat/stream y /api/dashboard/* hacia el backend FastAPI en el puerto 8001.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/next.config.js#L1-L39",
+          "version": "repo-lines-v1:sha256:7feab4c3ac1fa0f584c4c492797294e3e8defd1f7415c935faa0133ba735d50c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmMWJlMDdmOWIzZGY4YmQ0ZjJhZjU3ZmU1MjBlMTk5NzE3MGRiYzAwNjJlOWMwM2ZiNmExMDBlNzE4M2NlY2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkNWNkMmZiNGYzZGY4ODQ1MTUyNTViMzk1MjNmMmY4YjU0NzJiZWVhOWY1NjZmZmNhMjA0ZGI4MDI1NjEwNDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ0MGZlOTQ3ZWQyNDgxMGRiZTYxNGQzMTMyMWU0ODRkMzZhZGE3ZTJjMWI0ZjAxNDlmYWI3NjAyMTYyZmNjYTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_17e03738bca146f48ff0ad230f8fabed",
+      "statement": "La compresión HTTP está deshabilitada (compress: false) en next.config.js para garantizar que los eventos SSE de streaming en /chat/stream lleguen inmediatamente al navegador sin almacenamiento intermedio en búfer.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/next.config.js#L4-L6",
+          "version": "repo-lines-v1:sha256:6ff4562526547e4d16a16c04e280aeaa20572a8aeff5cc04e6c8377c4735304c:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzdjMWZkY2MyNTM0MjBkMjQ4ZDNmZWVlODNhMGM5MGRkN2IxYjdlYjI0YzdkOWJiNmZiOGMzYTI4YzA3YmFkZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2U5YWQ4ZjVlNDhjOWMxZTQ0YjdlZmIwMGQ4NjRlZGY1OWQyMzZmMjU4NjdmNDI0ODIxYmRkNjRkYWFmMzIwNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2E0OGZmODVlOTY4ZThiZTg1YzkzOTI0ODRlNWVjNjM2OTcwOTdiMzhhMDllNTgzNjc0ZTgzMjVlOWFhNWYyMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWI5NzA3YmVhNTFhMWJkODE3MWQzYzVlZjg2OGIyNWRmYzExZGQ4YWZkNWFmYTYyOGU0ZDQ1NWM0MjJhNDU5ZSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.1",
+    "at": "2026-09-15T01:46:01.029Z"
+  }
+}
