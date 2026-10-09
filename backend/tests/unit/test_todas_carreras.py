@@ -171,11 +171,11 @@ def _resultado(carrera: str, directorio: Path) -> ResultadoExtraccionCactus:
 
 def _extraer_todas(extractor: CactusExtractor, tmp_path: Path, **kwargs):
     return extractor._extraer_todas(
+        contexto=object(),
         periodo="2026-2",
         usuario="usuario",
         contrasena="secreto",
         directorio_salida=tmp_path / "descargas",
-        directorio_perfil=tmp_path / "perfil",
         al_actualizar_progreso=kwargs.get("progreso"),
         cancelada=kwargs.get("cancelada"),
     )
@@ -191,7 +191,7 @@ def test_cactus_recorre_todas_y_acumula_progreso_y_carpetas(monkeypatch, tmp_pat
         kwargs["al_actualizar_progreso"]({"cursos_encontrados": 1, "archivos_descargados": 1})
         return _resultado(kwargs["carrera"], kwargs["directorio_salida"])
 
-    monkeypatch.setattr(extractor, "extraer", extraer)
+    monkeypatch.setattr(extractor, "_extraer_carrera", extraer)
     resultado = _extraer_todas(extractor, tmp_path, progreso=eventos.append)
     assert llamadas == list(CARRERAS_ULIMA)
     assert resultado.completa
@@ -212,7 +212,7 @@ def test_cactus_carrera_fallida_bloquea_publicacion_aunque_otros_conteos_cuadren
             raise CactusExtractorError("FUENTE_FALLIDA", "No se pudo descargar la carrera")
         return _resultado(kwargs["carrera"], kwargs["directorio_salida"])
 
-    monkeypatch.setattr(extractor, "extraer", extraer)
+    monkeypatch.setattr(extractor, "_extraer_carrera", extraer)
     resultado = _extraer_todas(extractor, tmp_path)
     assert resultado.cursos_encontrados == resultado.archivos_descargados == 13
     assert not resultado.completa
@@ -234,7 +234,7 @@ def test_cactus_detiene_todas_al_fallar_autenticacion_o_cancelarse(
             raise CactusAuthenticationError("Sesión inválida")
         return _resultado(kwargs["carrera"], kwargs["directorio_salida"])
 
-    monkeypatch.setattr(extractor, "extraer", extraer)
+    monkeypatch.setattr(extractor, "_extraer_carrera", extraer)
     error = CactusAuthenticationError if autenticacion else CancelacionSolicitada
     with pytest.raises(error):
         _extraer_todas(extractor, tmp_path, cancelada=lambda: bool(llamadas) and not autenticacion)

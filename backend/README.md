@@ -61,7 +61,8 @@ Cada ejecución usa `hitl=1` por defecto y puede cambiarse a `hitl=0` solo para 
 
 Para normalizar juntas todas las carreras de un periodo, selecciona **Todas las carreras**
 en el frontend (`carrera=TODAS` en la API). Cactus recorre las 14 carreras secuencialmente
-y crea una única ejecución y un paquete de seis CSV. Si alguna carrera no termina,
+y conserva un único navegador y su sesión durante todo el recorrido. Crea una única
+ejecución y un paquete de seis CSV. Si alguna carrera no termina,
 la publicación queda bloqueada por cobertura incompleta. También puedes subir un ZIP
 con carpetas explícitas, por ejemplo `ARQUITECTURA/2026-2/Ciclo_01/curso.docx` y
 `MARKETING/2026-2/Ciclo_01/curso.pdf`; no se permite mezclar periodos. En una carga

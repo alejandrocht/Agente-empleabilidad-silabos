@@ -10,7 +10,9 @@ import pytest
 
 from agente.normalizador import ejecuciones
 from agente.normalizador.ejecuciones import GestorEjecuciones
+from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import ResultadoLimpiezaSilabos
+from agente.normalizador.silabos import fuente_cactus
 from agente.normalizador.silabos.cactus_navegacion import (
     CactusAuthenticationError,
     NavegadorCactus,
@@ -206,9 +208,7 @@ class _PaginaFalsa:
                     return _LocatorFalso([_EnlaceFalso(self, "?Expand=9", "2025-2")])
                 return _LocatorFalso([_EnlaceFalso(self, "?Expand=1", "2026-1", "carrera")])
             if self.estado == "carrera":
-                return _LocatorFalso(
-                    [_EnlaceFalso(self, "?Expand=1.2", "Marketing", "ciclos")]
-                )
+                return _LocatorFalso([_EnlaceFalso(self, "?Expand=1.2", "Marketing", "ciclos")])
             if self.estado == "ciclos":
                 return _LocatorFalso([_EnlaceFalso(self, "?Expand=1.2.3", "Ciclo 03")])
             return _LocatorFalso()
@@ -250,9 +250,7 @@ def test_navega_periodo_carrera_paginacion_expand_y_open_document(monkeypatch) -
 
     monkeypatch.setattr(extractor, "_esperar_vista", lambda _pagina: esperas.append("vista"))
 
-    cursos = extractor._procesar_carrera(
-        pagina, "Marketing", "2026-1", "usuario", "secreto", None
-    )
+    cursos = extractor._procesar_carrera(pagina, "Marketing", "2026-1", "usuario", "secreto", None)
 
     assert cursos == [
         {
@@ -363,7 +361,129 @@ def test_login_y_fallback_playwright_rechazan_credenciales_incompletas_y_archivo
         )
         is None
     )
+
+
+@pytest.mark.parametrize(
+    "carreras",
+    [("Administración", "Arquitectura"), fuente_cactus.CARRERAS_ULIMA],
+)
+def test_multicarrera_conserva_sesion_al_pasar_a_la_segunda_carrera(
+    monkeypatch, tmp_path: Path, carreras: tuple[str, ...]
+) -> None:
+    """Reproduce una sesión que funciona hasta cerrar y reabrir su navegador."""
+
+    from contextlib import nullcontext
+
+    from playwright import sync_api
+
+    contextos = []
+    eventos = []
+    extractor = CactusExtractor()
+    monkeypatch.setattr(fuente_cactus, "CARRERAS_ULIMA", carreras)
+    monkeypatch.setattr(sync_api, "sync_playwright", lambda: nullcontext(object()))
+
+    class Pagina(_PaginaLoginYDescargaFalsa):
+        def __init__(self, sesion_perdida):
+            super().__init__(b"docx")
+            self.login = False
+            self.sesion_perdida = sesion_perdida
+
+        def goto(self, url, **_kwargs):
+            if "CollapseView" in url and self.sesion_perdida:
+                self.login = True
+
+        @property
+        def estado(self):
+            return ""
+
+        @estado.setter
+        def estado(self, valor):
+            if valor == "autenticado" and not self.sesion_perdida:
+                self.login = False
+
+    class Contexto:
+        def __init__(self):
+            self.pages = [Pagina(sesion_perdida=bool(contextos))]
+            self.cerrado = False
+
+        def close(self):
+            self.cerrado = True
+
+    def abrir(*_args):
+        contexto = Contexto()
+        contextos.append(contexto)
+        return contexto
+
+    def periodo(_self, pagina, *_args, **kwargs):
+        pagina.goto("https://cactus.example.test/?OpenView&CollapseView")
+        kwargs["comprobar_login"](pagina)
+        return "1"
+
+    def descargar(_contexto, _pagina, _cursos, destino, *_args):
+        ruta = destino / "Ciclo_01/curso.docx"
+        ruta.parent.mkdir(parents=True)
+        ruta.write_bytes(b"docx")
+        return {"archivos_descargados": 1, "errores": []}
+
+    monkeypatch.setattr(extractor, "_abrir_contexto", abrir)
+    monkeypatch.setattr(NavegadorCactus, "abrir_periodo", periodo)
+    monkeypatch.setattr(NavegadorCactus, "buscar_carrera", lambda *_args, **_kwargs: "1.1")
+    monkeypatch.setattr(
+        NavegadorCactus,
+        "cursos_de_carrera",
+        lambda *_args, **_kwargs: [{"unid": "ABC", "nombre_curso": "CURSO", "nivel": "1"}],
+    )
+    monkeypatch.setattr(extractor, "_descargar_cursos", descargar)
+    resultado = extractor.extraer(
+        carrera="TODAS",
+        periodo="2026-2",
+        usuario="usuario",
+        contrasena="secreto",
+        directorio_salida=tmp_path / "descargas",
+        directorio_perfil=tmp_path / "perfil",
+        al_actualizar_progreso=eventos.append,
+    )
+    assert resultado.completa
+    assert resultado.archivos_descargados == len(carreras)
+    assert len(contextos) == 1
+    assert contextos[0].cerrado
     assert not list(tmp_path.rglob("*.pdf"))
+
+
+@pytest.mark.parametrize("carrera", ["TODAS", "Arquitectura"])
+@pytest.mark.parametrize("error", [CactusAuthenticationError, CancelacionSolicitada])
+def test_cierra_contexto_unico_si_falla_o_se_cancela(
+    monkeypatch, tmp_path: Path, carrera, error
+) -> None:
+    from contextlib import nullcontext
+
+    from playwright import sync_api
+
+    class Contexto:
+        cerrado = False
+
+        def close(self):
+            self.cerrado = True
+
+    contexto = Contexto()
+    extractor = CactusExtractor()
+    monkeypatch.setattr(sync_api, "sync_playwright", lambda: nullcontext(object()))
+    monkeypatch.setattr(extractor, "_abrir_contexto", lambda *_args: contexto)
+
+    def fallar(**_kwargs):
+        raise error("Fallo de prueba")
+
+    monkeypatch.setattr(extractor, "_extraer_carrera", fallar)
+    with pytest.raises(error):
+        extractor.extraer(
+            carrera=carrera,
+            periodo="2026-2",
+            usuario="usuario",
+            contrasena="secreto",
+            directorio_salida=tmp_path / "descargas",
+            directorio_perfil=tmp_path / "perfil",
+        )
+    assert contexto.cerrado
 
 
 def test_el_worker_entrega_el_paquete_cactus_al_pipeline_sin_persistir_secretos(

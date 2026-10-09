@@ -179,17 +179,6 @@ class CactusExtractor(NavegadorCactus):
     ) -> ResultadoExtraccionCactus:
         """Descarga sílabos de una carrera y ciclo sin persistir credenciales."""
 
-        if es_todas_carreras(carrera):
-            return self._extraer_todas(
-                periodo=periodo,
-                usuario=usuario,
-                contrasena=contrasena,
-                directorio_salida=directorio_salida,
-                directorio_perfil=directorio_perfil,
-                al_actualizar_progreso=al_actualizar_progreso,
-                cancelada=cancelada,
-            )
-
         carrera_limpia = str(carrera or "").strip()
         periodo_limpio = re.sub(r"\s+", "", str(periodo or ""))
         if not carrera_limpia:
@@ -200,9 +189,7 @@ class CactusExtractor(NavegadorCactus):
                 "El periodo debe tener formato año-secuencia, por ejemplo 2026-1.",
             )
 
-        directorio_salida.mkdir(parents=True, exist_ok=True)
         directorio_perfil.mkdir(parents=True, exist_ok=True)
-        done = self._cargar_checkpoint(directorio_salida)
         self._progreso(
             al_actualizar_progreso,
             fase="autenticando",
@@ -220,66 +207,90 @@ class CactusExtractor(NavegadorCactus):
                 "Playwright no está instalado en el backend.",
             ) from exc
 
-        errores: list[dict[str, str]] = []
-        cursos: list[dict[str, str]] = []
         with sync_playwright() as playwright:
             contexto = self._abrir_contexto(playwright, directorio_perfil)
             try:
-                pagina = contexto.pages[0] if contexto.pages else contexto.new_page()
-                self._esperar_login(pagina, usuario, contrasena, cancelada)
-                self._verificar_cancelacion(cancelada)
-                self._progreso(
-                    al_actualizar_progreso,
-                    fase="navegando",
-                    mensaje=f"Buscando {carrera_limpia} en el periodo {periodo_limpio}.",
-                    cursos_encontrados=0,
-                    cursos_procesados=0,
-                    archivos_descargados=0,
-                )
-                cursos = (
-                    self._procesar_carrera(
-                        pagina,
-                        carrera_limpia,
-                        periodo_limpio,
-                        usuario,
-                        contrasena,
-                        cancelada,
+                if es_todas_carreras(carrera_limpia):
+                    return self._extraer_todas(
+                        contexto=contexto,
+                        periodo=periodo_limpio,
+                        usuario=usuario,
+                        contrasena=contrasena,
+                        directorio_salida=directorio_salida,
+                        al_actualizar_progreso=al_actualizar_progreso,
+                        cancelada=cancelada,
                     )
-                    or []
+                return self._extraer_carrera(
+                    contexto=contexto,
+                    carrera=carrera_limpia,
+                    periodo=periodo_limpio,
+                    usuario=usuario,
+                    contrasena=contrasena,
+                    directorio_salida=directorio_salida,
+                    al_actualizar_progreso=al_actualizar_progreso,
+                    cancelada=cancelada,
                 )
-                if not cursos:
-                    errores.append(
-                        {
-                            "codigo": "CACTUS_CARRERA_SIN_CURSOS",
-                            "mensaje": (
-                                f"No se encontraron cursos para {carrera_limpia} "
-                                f"en {periodo_limpio}."
-                            ),
-                        }
-                    )
-                self._progreso(
-                    al_actualizar_progreso,
-                    fase="descargando",
-                    mensaje=f"Se encontraron {len(cursos)} cursos; iniciando descargas.",
-                    cursos_encontrados=len(cursos),
-                    cursos_procesados=0,
-                    archivos_descargados=0,
-                )
-                estadisticas = self._descargar_cursos(
-                    contexto,
-                    pagina,
-                    cursos,
-                    directorio_salida,
-                    done,
-                    usuario,
-                    contrasena,
-                    cancelada,
-                    al_actualizar_progreso,
-                )
-                errores.extend(estadisticas.pop("errores"))
             finally:
                 contexto.close()
 
+    def _extraer_carrera(
+        self,
+        *,
+        contexto: Any,
+        carrera: str,
+        periodo: str,
+        usuario: str,
+        contrasena: str,
+        directorio_salida: Path,
+        al_actualizar_progreso: ProgressCallback | None,
+        cancelada: CancelCallback | None,
+    ) -> ResultadoExtraccionCactus:
+        """Descarga una carrera en la sesión que pertenece a la ejecución."""
+
+        directorio_salida.mkdir(parents=True, exist_ok=True)
+        done = self._cargar_checkpoint(directorio_salida)
+        errores: list[dict[str, str]] = []
+        pagina = contexto.pages[0] if contexto.pages else contexto.new_page()
+        self._esperar_login(pagina, usuario, contrasena, cancelada)
+        self._verificar_cancelacion(cancelada)
+        self._progreso(
+            al_actualizar_progreso,
+            fase="navegando",
+            mensaje=f"Buscando {carrera} en el periodo {periodo}.",
+            cursos_encontrados=0,
+            cursos_procesados=0,
+            archivos_descargados=0,
+        )
+        cursos = (
+            self._procesar_carrera(pagina, carrera, periodo, usuario, contrasena, cancelada) or []
+        )
+        if not cursos:
+            errores.append(
+                {
+                    "codigo": "CACTUS_CARRERA_SIN_CURSOS",
+                    "mensaje": f"No se encontraron cursos para {carrera} en {periodo}.",
+                }
+            )
+        self._progreso(
+            al_actualizar_progreso,
+            fase="descargando",
+            mensaje=f"Se encontraron {len(cursos)} cursos; iniciando descargas.",
+            cursos_encontrados=len(cursos),
+            cursos_procesados=0,
+            archivos_descargados=0,
+        )
+        estadisticas = self._descargar_cursos(
+            contexto,
+            pagina,
+            cursos,
+            directorio_salida,
+            done,
+            usuario,
+            contrasena,
+            cancelada,
+            al_actualizar_progreso,
+        )
+        errores.extend(estadisticas.pop("errores"))
         archivos = tuple(
             sorted(
                 ruta
@@ -288,8 +299,8 @@ class CactusExtractor(NavegadorCactus):
             )
         )
         resultado = ResultadoExtraccionCactus(
-            carrera=carrera_limpia,
-            periodo=periodo_limpio,
+            carrera=carrera,
+            periodo=periodo,
             cursos_encontrados=len(cursos),
             archivos_descargados=int(estadisticas.get("archivos_descargados", 0)),
             archivos_procesables=len(archivos),
@@ -619,11 +630,11 @@ class CactusExtractor(NavegadorCactus):
     def _extraer_todas(
         self,
         *,
+        contexto: Any,
         periodo: str,
         usuario: str,
         contrasena: str,
         directorio_salida: Path,
-        directorio_perfil: Path,
         al_actualizar_progreso: ProgressCallback | None,
         cancelada: CancelCallback | None,
     ) -> ResultadoExtraccionCactus:
@@ -654,18 +665,20 @@ class CactusExtractor(NavegadorCactus):
                 self._progreso(al_actualizar_progreso, **acumulado)
 
             try:
-                resultado = self.extraer(
+                resultado = self._extraer_carrera(
+                    contexto=contexto,
                     carrera=carrera,
                     periodo=periodo,
                     usuario=usuario,
                     contrasena=contrasena,
                     directorio_salida=directorio_salida / normalizar_carrera(carrera) / periodo,
-                    directorio_perfil=directorio_perfil,
                     al_actualizar_progreso=progreso,
                     cancelada=cancelada,
                 )
-            except CactusAuthenticationError:
-                raise
+            except CactusAuthenticationError as exc:
+                raise CactusAuthenticationError(
+                    f"Carrera {indice}/{len(CARRERAS_ULIMA)}: {carrera}. {exc.mensaje}"
+                ) from exc
             except CactusExtractorError as exc:
                 incompletas.append(carrera)
                 errores.append({"carrera": carrera, "codigo": exc.codigo, "mensaje": exc.mensaje})
