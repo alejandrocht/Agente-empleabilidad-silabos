@@ -639,7 +639,9 @@ def _extraer_pdf(
         recursos=recursos,
         programa=programa,
     )
-    id_silabo, id_curso = _ids_curriculares(carrera, periodo, nombre, codigo_curso)
+    id_silabo, id_curso = _ids_curriculares(
+        carrera, periodo, nombre, codigo_curso, nombre_curso=curso
+    )
     return {
         "id_silabo": id_silabo,
         "id_curso": id_curso,

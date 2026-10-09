@@ -14,6 +14,19 @@ from agente.normalizador.silabos.entrada import clave_concepto, normalizar_etiqu
 
 _PATRON_REFERENCIA_CURRICULAR = r"(?<![A-Z0-9])(?:L\d+|[GE]\d+|[GE]{2,4})(?![A-Z0-9])"
 
+# Colisiones documentadas en la auditoría de sílabos 2026-2. La excepción
+# distingue la identidad sin corregir el código declarado ni asumir la vigencia
+# del código alternativo del plan. Solo modifica el curso señalado, no su pareja.
+_CURSOS_CON_CODIGO_DUPLICADO = frozenset(
+    (normalizar_etiqueta(carrera), codigo, normalizar_etiqueta(curso))
+    for carrera, codigo, curso in (
+        ("ARQUITECTURA", "700087", "DESARROLLO DE PROYECTO"),
+        ("ECONOMIA", "530004", "METODOS NO PARAMETRICOS"),
+        ("INGENIERIA_CIVIL", "710059", "FUNDAMENTOS DEL PLANEAMIENTO URBANO Y REGIONAL"),
+        ("DERECHO", "7410", "DERECHO CIVIL I PRINCIPIOS GENERALES Y PERSONAS NATURALES"),
+    )
+)
+
 
 def _normalizar_modalidad(valor: object) -> str:
     """Reduce la modalidad declarada al único vocabulario permitido por curso.csv."""
@@ -57,11 +70,19 @@ def _ids_curriculares(
     periodo: str,
     nombre: str,
     codigo_curso: str,
+    *,
+    nombre_curso: str = "",
 ) -> tuple[str, str]:
     """Construye un curso estable y un sílabo versionado por periodo."""
 
     codigo = _texto(codigo_curso)
     if codigo:
+        carrera_clave = normalizar_etiqueta(carrera)
+        for candidato in (nombre_curso, _nombre_desde_archivo(nombre.replace("\\", "/"))):
+            curso_clave = normalizar_etiqueta(candidato)
+            if (carrera_clave, codigo, curso_clave) in _CURSOS_CON_CODIGO_DUPLICADO:
+                identidad = (codigo, "codigo_duplicado", carrera_clave, curso_clave)
+                return _hash_id("SIL", *identidad, periodo), _hash_id("CUR", *identidad)
         return _hash_id("SIL", codigo, periodo), _hash_id("CUR", codigo)
     return (
         _hash_id("SIL", carrera, periodo, nombre),
@@ -306,6 +327,7 @@ def _extraer_docx(
         periodo,
         nombre,
         _primer_metadata(metadata, ("codigo_del_curso", "codigo", "cod_asignatura")),
+        nombre_curso=curso,
     )
     return {
         "id_silabo": id_silabo,

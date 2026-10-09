@@ -52,3 +52,28 @@ seleccionan del almacenamiento local de la PC donde se cargaron.
 Reversión: revertir esta unidad retira retriever validado, analista cerrado,
 validación de salida/HITL y el filtro de auditoría informativa en limpieza.
 No toca documentos ni CSV históricos.
+
+## Hashes de los cuatro cursos auditados
+
+La identidad distingue código observado + carrera + nombre solo para los cuatro
+cursos señalados. Sus contrapartes conservan el hash anterior. DOCX y PDF
+comparten regla; no se altera codigo_curso ni se asume el código del plan.
+Validación focal: pytest -q tests/unit/test_ids_cursos_auditados.py
+ tests/unit/test_normalizador_silabos.py: 43 passed (17 casos auditados).
+Harness: extracción de DOCX generados y exportación de los seis CSV, referencias
+regeneradas de curso/sílabo/logro/cobertura; PDF con lector simulado. Passed.
+Reversión: retirar la excepción en extraccion_curricular.py y el argumento de
+nombre en extraccion_pdf.py junto con su test; no hay migración del grafo.
+Las ejecuciones anteriores deben regenerarse para aplicar los nuevos hashes.
+
+## Verificación final antes del push
+
+Backend en checkout limpio: uv run --locked --extra dev pytest -q: 615 passed,
+1 warning de deprecación de LangSmith. Frontend sin cambios respecto de main:
+98 tests passed y next build passed. Ruff en los módulos/tests modificados: passed.
+Mypy: --python-version 3.14 --follow-imports silent en los nueve módulos
+modificados: Success, no issues found. La invocación con configuración base 3.11
+choca con stubs NumPy instalados en Python 3.14; seguir imports con 3.14 reporta
+cinco errores existentes en logger, prompt_injection y constructor (fuera de scope).
+Los archivos locales pendientes ajenos a estas unidades se conservaron en el
+checkout original; no se publican .env, outputs ni artefactos locales del catálogo.

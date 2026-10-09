@@ -96,6 +96,10 @@ La misma habilidad puede aparecer en varios sílabos: las propuestas se deduplic
 
 Antes de aprobar o exportar, Python verifica la referencia, la carrera y los campos literales contra la versión del catálogo utilizada. Ante un error se revierten los CSV, el diario de decisiones y el `manifest.json`.
 
+Los cuatro cursos auditados con códigos repetidos reciben IDs de curso y sílabo diferenciados por código observado, carrera y nombre: Desarrollo de Proyecto (Arquitectura, 700087), Métodos No Paramétricos (Economía, 530004), Fundamentos del Planeamiento Urbano y Regional (Ingeniería Civil, 710059) y Derecho Civil I Principios Generales y Personas Naturales (Derecho, 7410). Se conserva `codigo_curso` de la fuente; la excepción no reemplaza el código por el propuesto en el plan. El ID de curso sigue estable entre periodos y el de sílabo incluye el periodo. Sus contrapartes y los cursos no incluidos mantienen sus hashes anteriores. DOCX y PDF aplican la misma regla, usando el nombre declarado o el nombre del archivo.
+
+La regla se aplica al volver a normalizar los sílabos; no modifica ejecuciones, CSV ni nodos ya publicados. Las referencias a curso, sílabo, logros y cobertura se regeneran juntas durante la normalización.
+
 La proveniencia
 y las propuestas técnicas se conservan en `salidas/reportes/`, principalmente
 `analisis_tecnico.json`, `propuestas_tecnicas.jsonl` y `decisiones_tecnicas.jsonl`. Cada propuesta tiene
