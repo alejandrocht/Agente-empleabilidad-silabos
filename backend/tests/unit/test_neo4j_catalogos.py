@@ -136,7 +136,10 @@ def test_importa_nuevo_contrato_sin_habilidades_ni_herramientas(tmp_path: Path) 
     )
 
 
-def test_materializa_habilidad_y_relaciones_de_cobertura_con_nombres_nuevos() -> None:
+@pytest.mark.parametrize("id_habilidad", ["HAB_TEC_007", "f9db583c7660"])
+def test_materializa_habilidad_y_relaciones_de_cobertura_con_nombres_nuevos(
+    id_habilidad: str,
+) -> None:
     filas: dict[str, list[dict[str, str]]] = {
         nombre: [] for nombre, _ in neo4j_catalogos.ARCHIVOS_CATALOGO
     }
@@ -164,7 +167,7 @@ def test_materializa_habilidad_y_relaciones_de_cobertura_con_nombres_nuevos() ->
     ]
     filas["catalogo_habilidades.csv"] = [
         {
-            "id_habilidad": "HAB_TEC_007",
+            "id_habilidad": id_habilidad,
             "id_carrera": "CAR_1234567890abcdef",
             "nombre_habilidad": "Diseño técnico",
             "desc_breve": "Diseña soluciones.",
@@ -177,7 +180,7 @@ def test_materializa_habilidad_y_relaciones_de_cobertura_con_nombres_nuevos() ->
             "id_curso": "CUR_1234567890abcdef",
             "id_silabo": "SIL_1234567890abcdef",
             "id_competencia": "",
-            "id_habilidad": "HAB_TEC_007",
+            "id_habilidad": id_habilidad,
             "id_logro": "LOGRO_1234567890abcdef",
         }
     ]

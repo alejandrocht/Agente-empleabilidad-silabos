@@ -77,3 +77,25 @@ choca con stubs NumPy instalados en Python 3.14; seguir imports con 3.14 reporta
 cinco errores existentes en logger, prompt_injection y constructor (fuera de scope).
 Los archivos locales pendientes ajenos a estas unidades se conservaron en el
 checkout original; no se publican .env, outputs ni artefactos locales del catálogo.
+
+## Seguimiento: configuración Ollama y XLSX real
+
+El archivo catalogo_habilidades_tecnicas_unificado.xlsx tiene 1898 filas,
+1403 IDs distintos, 14 carreras y cero errores de carga. Los 1898 IDs son
+hashes hexadecimales de 12 caracteres. Hay 249 advertencias de nombre variante
+por ID y 34 de nombre repetido con IDs distintos; el contexto por carrera se conserva.
+El importador ahora acepta esos hashes literales además de HAB_TEC numéricos.
+La plantilla .env.example elimina ANALYST_MODEL (ignorado), explicita las
+variables vigentes del proveedor Ollama y desactiva tracing sin credenciales.
+
+Validación focal: pytest -q tests/unit/test_silabos_hab_tec.py
+ tests/unit/test_neo4j_catalogos.py tests/unit/test_neo4j_importador.py: 46 passed.
+Validación global: 621 passed, 1 warning LangSmith; Ruff passed y mypy scoped passed.
+Harness sobre copia del XLSX real: carga de las 1898 filas, índice temporal,
+selección, exportación y validación de IDs: PASS. El nombre/descripción exactos
+se conservaron pese a campos inventados del doble LLM. Embeddings, LLM y Neo4j
+simulados; no comprueba la conectividad o modelos instalados en la otra PC.
+Smoke de plantilla: cliente curricular ollama, qwen3.8:27b,
+http://127.0.0.1:11434/v1, LLM=true, tracing=false: PASS sin API key OpenAI.
+Reversión: revertir esta unidad retira soporte hex12, tests y correcciones de la
+plantilla/documentación; no cambia secretos .env ni artefactos vectorizados existentes.

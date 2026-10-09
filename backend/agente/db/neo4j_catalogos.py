@@ -23,7 +23,7 @@ _ID_PATTERNS = {
     "id_curso": re.compile(r"CUR_[0-9a-f]{16}"),
     "id_silabo": re.compile(r"SIL_[0-9a-f]{16}"),
     "id_competencia": re.compile(r"COMP_[0-9a-f]{16}"),
-    "id_habilidad": re.compile(r"HAB_TEC_[0-9]+"),
+    "id_habilidad": re.compile(r"(?:HAB_TEC_[0-9]+|[0-9a-f]{12})"),
     "id_logro": re.compile(r"LOGRO_[0-9a-f]{16}"),
     "id_cobertura_curricular": re.compile(r"COB_CUR_[0-9a-f]{16}"),
     "id_cob_curricular": re.compile(r"COB_CUR_[0-9a-f]{16}"),

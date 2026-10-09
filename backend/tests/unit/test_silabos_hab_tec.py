@@ -27,15 +27,17 @@ DESCRIPCION = "Diseña estructuras y patrones técnicos."
 LOGRO = "Diseña arquitecturas de software mantenibles."
 
 
-def _vectorizar(base: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def _vectorizar(
+    base: Path, monkeypatch: pytest.MonkeyPatch, id_habilidad: str = "HAB_TEC_001"
+) -> Path:
     fuente = base.parent / "entrada.xlsx"
     libro = Workbook()
     hoja = libro.active
     assert hoja is not None
     hoja.append(["Carrera", "id", "nombre", "descripcion"])
-    hoja.append([CARRERA, "HAB_TEC_001", NOMBRE, DESCRIPCION])
+    hoja.append([CARRERA, id_habilidad, NOMBRE, DESCRIPCION])
     hoja.append([CARRERA, "HAB_TEC_002", "Redes", "Configura redes informáticas."])
-    hoja.append(["Marketing", "HAB_TEC_001", "Analítica comercial", "Analiza campañas."])
+    hoja.append(["Marketing", id_habilidad, "Analítica comercial", "Analiza campañas."])
     libro.save(fuente)
     gestor = GestorCatalogosHabTec(base, publicar_en_neo4j=lambda *_args: {})
     estado = gestor.crear_desde_archivo(fuente.name, fuente)
@@ -312,3 +314,32 @@ def test_catalogo_con_vectorizacion_fallida_no_se_activa(indice: Path) -> None:
     assert cargar_retriever_hab_tec() is None
     with pytest.raises(ErrorHabTecRetriever):
         cargar_retriever_hab_tec(indice.name)
+
+
+def test_hash_literal_del_catalogo_se_conserva_hasta_importacion(
+    indice: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agente.db.neo4j_catalogos import leer_catalogos
+
+    id_habilidad = "f9db583c7660"
+    _vectorizar(indice.parent, monkeypatch, id_habilidad)
+    _modelo(monkeypatch, [{"competencias": [_propuesta(id_habilidad)]}])
+    registro = _registro("1234567890abcdef")
+    registro["id_curso"] = "CUR_1234567890abcdef"
+    registro["id_silabo"] = "SIL_1234567890abcdef"
+    propuestas = _inferir([registro])
+    assert propuestas[0]["catalogo_ref"] == id_habilidad
+    propuestas[0]["estado_aprobacion"] = "APROBADA"
+    salida = tmp_path / "salida_hash"
+    salida_catalogos.construir_catalogos_curriculares(
+        [registro],
+        salida,
+        carrera="INGENIERIA_DE_SISTEMAS",
+        periodo_academico="2026-2",
+        competencias_tecnicas=propuestas,
+    )
+    filas = leer_catalogos(salida)
+    assert filas["catalogo_habilidades.csv"][0]["id_habilidad"] == id_habilidad
+    assert filas["catalogo_habilidades.csv"][0]["nombre_habilidad"] == NOMBRE
+    assert filas["catalogo_habilidades.csv"][0]["desc_breve"] == DESCRIPCION
+    assert {f["id_habilidad"] for f in filas["cobertura_curricular.csv"]} == {id_habilidad}

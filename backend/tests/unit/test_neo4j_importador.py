@@ -300,11 +300,16 @@ def test_gate_tecnico_bloqueado_no_lee_neo4j(
     assert driver.session_obj.queries == []
 
 
+@pytest.mark.parametrize("id_habilidad", ["HAB_TEC_007", "f9db583c7660"])
 @pytest.mark.parametrize("variacion", ["exacto", "nombre", "descripcion", "carrera"])
-def test_preview_compara_contexto_de_catalogo_por_carrera(tmp_path: Path, variacion: str) -> None:
+def test_preview_compara_contexto_de_catalogo_por_carrera(
+    tmp_path: Path,
+    variacion: str,
+    id_habilidad: str,
+) -> None:
     gestor, id_ejecucion = _manifest_tecnico(tmp_path)
     habilidad = {
-        "id_habilidad": "HAB_TEC_007",
+        "id_habilidad": id_habilidad,
         "id_carrera": IDS["id_carrera"],
         "nombre_habilidad": "Analítica comercial",
         "desc_breve": "Analiza campañas.",

@@ -120,6 +120,8 @@ El normalizador curricular usa `modo_analista=technical` y el catálogo HAB_TEC 
 
 Para cada logro se recuperan candidatos de la carrera mediante el índice vectorial local. `NORMALIZADOR_SILABOS_HAB_TEC_TOP_K=8` limita candidatos por logro; el umbral compartido es `NORMALIZADOR_HAB_TEC_RETRIEVAL_MIN_SIMILARITY=0.35`. La consulta usa el modelo de embeddings guardado en el índice, aunque la configuración de vectorización cambie después. El LLM selecciona referencias sustentadas por evidencia literal; Python copia los campos oficiales. Si no hay coincidencia sustentada, el sílabo queda sin habilidades técnicas y se registra en la auditoría, sin forzar propuestas.
 
+El catálogo puede conservar IDs `HAB_TEC_007` o hashes de 12 caracteres como `f9db583c7660`; los IDs se copian literalmente, sin añadir prefijos ni reasignarlos. `backend/.env.example` incluye las variables vigentes para Ollama. `NORMALIZADOR_CURRICULAR_ANALYST_MODEL` y una variable mal escrita como `NORMALIZADOR_CURRICULAR_p_LLM` no configuran este flujo. El modelo de chat se elige con `NORMALIZADOR_CURRICULAR_OLLAMA_MODEL`, mientras que el embedding de HAB_TEC usa `NORMALIZADOR_HAB_TEC_EMBEDDING_MODEL`. El archivo XLSX se carga y vectoriza desde Catálogo HAB_TEC; su ruta no se configura como un catálogo CSV.
+
 Cada nueva ejecución utiliza la versión vectorizada más reciente. Las propuestas conservan `catalogo_id` y `catalogo_sha256`; su aprobación carga esa misma versión aunque se suba otro catálogo después. Los cargadores CSV/XLSX anteriores siguen disponibles para herramientas y pruebas offline, pero la ejecución LLM del producto utiliza HAB_TEC.
 
 ```dotenv
