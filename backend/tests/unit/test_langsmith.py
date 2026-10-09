@@ -19,6 +19,7 @@ def test_configuracion_llm_es_noop_con_tracing_apagado(monkeypatch) -> None:
 
 def test_configuracion_llm_publica_nombre_tags_y_metadata_sin_secretos(monkeypatch) -> None:
     monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "test-key")
 
     config = langsmith.configuracion_llm(
         "analista_curricular",
@@ -47,6 +48,7 @@ def test_configuracion_llm_publica_nombre_tags_y_metadata_sin_secretos(monkeypat
 
 def test_invocar_llm_pasa_config_por_with_config(monkeypatch) -> None:
     monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "test-key")
 
     class RunnableFalso:
         def __init__(self) -> None:
@@ -76,6 +78,7 @@ def test_invocar_llm_pasa_config_por_with_config(monkeypatch) -> None:
 
 def test_ejecutar_flujo_no_requiere_red(monkeypatch) -> None:
     monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "test-key")
     llamadas = {}
 
     def traceable(**kwargs):
@@ -116,6 +119,7 @@ def test_ejecutar_flujo_no_requiere_red(monkeypatch) -> None:
 
 def test_ejecutar_flujo_cierra_traza_con_estado_cancelado(monkeypatch) -> None:
     monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "test-key")
     capturado = {}
 
     def traceable(**kwargs):

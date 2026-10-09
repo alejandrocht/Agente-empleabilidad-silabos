@@ -159,7 +159,8 @@ def test_cambiar_solo_proveedor_selecciona_el_modelo_configurado() -> None:
     assert configuracion_openai.modelo_analista == "gpt-5.6-luna"
 
 
-def test_configuracion_curricular_usa_defaults_por_proveedor() -> None:
+def test_configuracion_curricular_usa_defaults_por_proveedor(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "_leer_archivo_entorno", lambda _ruta: {})
     entorno = _entorno()
     entorno.pop("NORMALIZADOR_CURRICULAR_LLM_PROVIDER")
     entorno.pop("NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL")
@@ -171,7 +172,7 @@ def test_configuracion_curricular_usa_defaults_por_proveedor() -> None:
     configuracion_openai = settings.configuracion_normalizador_curricular(entorno_openai)
 
     assert configuracion_ollama.proveedor_llm == "ollama"
-    assert configuracion_ollama.modelo_analista == "qwen3:27b"
+    assert configuracion_ollama.modelo_analista == "qwen3.8:27b"
     assert configuracion_ollama.base_url_llm == "http://localhost:11434/v1"
     assert configuracion_openai.proveedor_llm == "openai"
     assert configuracion_openai.modelo_analista == "gpt-5.6-luna"

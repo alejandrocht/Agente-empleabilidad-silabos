@@ -21,3 +21,14 @@ os.environ["DEV"] = "0"
 os.environ["NORMALIZADOR_CATALOGOS_DIR"] = str(
     Path(__file__).resolve().parent / "fixtures" / "catalogos"
 )
+
+# A fresh checkout has no developer .env. Supply the required non-secret runtime
+# selections explicitly so offline tests exercise the same contract everywhere.
+for variable, valor in {
+    "NORMALIZADOR_CURRICULAR_LLM_TIMEOUT_SECONDS": "120",
+    "NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES": "2",
+    "NORMALIZADOR_CURRICULAR_LLM_BATCH_SIZE": "8",
+    "NORMALIZADOR_CURRICULAR_LLM_TEMPERATURE": "0",
+    "NORMALIZADOR_CURRICULAR_ANALYST_REASONING_EFFORT": "medium",
+}.items():
+    os.environ[variable] = valor
