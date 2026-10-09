@@ -15,11 +15,10 @@ from typing import Any
 
 import openpyxl
 
-
-_CATALOGO = (
-    Path(__file__).resolve().parents[3]
-    / "empleabilidad_normalizacion"
-    / "catalogo_competencias_tecnicas.xlsx"
+_RAIZ = Path(__file__).resolve().parents[3]
+_CATALOGO_CANDIDATOS = (
+    _RAIZ / "empleabilidad_normalizacion" / "catalogo_competencias_tecnicas.xlsx",
+    _RAIZ / "backend" / "catalogos" / "catalogo_competencias_tecnicas.xlsx",
 )
 
 
@@ -37,7 +36,12 @@ def _clave(value: object) -> str:
 def cargar_catalogo_oficial() -> tuple[dict[str, Any], ...]:
     """Return one row per official concept, preserving career provenance."""
 
-    workbook = openpyxl.load_workbook(_CATALOGO, read_only=True, data_only=True)
+    catalogo = next((ruta for ruta in _CATALOGO_CANDIDATOS if ruta.is_file()), None)
+    if catalogo is None:
+        raise FileNotFoundError(
+            "No se encontró el catálogo oficial de competencias técnicas."
+        )
+    workbook = openpyxl.load_workbook(catalogo, read_only=True, data_only=True)
     sheet = workbook["Catalogo"]
     rows = list(sheet.iter_rows(values_only=True))
     if not rows:
@@ -125,7 +129,10 @@ def construir_brecha_catalogo(
     cubiertas = sum(1 for concepto in conceptos if concepto["cubierta"])
     total = len(conceptos)
     return {
-        "fuente": _CATALOGO.name,
+        "fuente": next(
+            (ruta.name for ruta in _CATALOGO_CANDIDATOS if ruta.is_file()),
+            _CATALOGO_CANDIDATOS[-1].name,
+        ),
         "filas_hoja": sum(len(concepto["carreras"]) for concepto in conceptos) + 1,
         "registros_fuente": sum(len(concepto["carreras"]) for concepto in conceptos),
         "conceptos_unicos": total,
