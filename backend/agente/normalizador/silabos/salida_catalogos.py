@@ -17,6 +17,11 @@ from pathlib import Path
 from typing import cast
 
 from agente.normalizador.modelos import Hallazgo
+from agente.normalizador.silabos.analista_tecnico import (
+    CatalogoTecnico,
+    cargar_catalogo_hab_tec,
+    validar_habilidad_catalogo,
+)
 from agente.normalizador.silabos.extraccion_curricular import _hash_id
 from agente.normalizador.silabos.registro_habilidades import RegistroHabilidades
 
@@ -306,6 +311,7 @@ def construir_catalogos_curriculares(
     periodo_academico: str,
     competencias_tecnicas: Sequence[Mapping[str, object]] = (),
     registro_habilidades: RegistroHabilidades | None = None,
+    catalogo_tecnico: CatalogoTecnico | None = None,
 ) -> dict[str, object]:
     """Construye catálogos para un único lote carrera-periodo.
 
@@ -462,6 +468,7 @@ def construir_catalogos_curriculares(
 
     inferencias: list[dict[str, object]] = []
     curso_por_silabo = {fila["id_silabo"]: fila["id_curso"] for fila in silabos.values()}
+    catalogos_cerrados: dict[str, CatalogoTecnico] = {}
     for tecnica in competencias_tecnicas:
         if tecnica.get("estado_aprobacion") != "APROBADA":
             raise ValueError(
@@ -473,24 +480,22 @@ def construir_catalogos_curriculares(
         descripcion = _texto(
             tecnica.get("descripcion_breve_competencia") or tecnica.get("descripcion")
         )
-        catalogo_ref = _texto(tecnica.get("catalogo_ref")).upper() or None
         if not id_curso or not nombre or not descripcion:
-            raise ValueError("Una competencia técnica no referencia un sílabo válido")
-        if registro_habilidades is None:
-            coincidencia = re.fullmatch(r"COMP_TEC_(\d{4})", catalogo_ref or "")
-            if not coincidencia:
-                raise ValueError(
-                    "La competencia técnica aprobada requiere catalogo_ref con formato "
-                    "COMP_TEC_####, o un catálogo oficial utilizable con un registro "
-                    "de habilidades activo"
-                )
-            id_habilidad = f"HAB_TEC_{coincidencia.group(1)}"
-        else:
-            id_habilidad = registro_habilidades.resolve_id(
-                catalogo_ref,
-                nombre,
-                descripcion,
-            )
+            raise ValueError("Una habilidad técnica no referencia un sílabo válido")
+        id_catalogo = str(tecnica.get("catalogo_id") or "")
+        catalogo = catalogo_tecnico
+        if catalogo is None:
+            if id_catalogo not in catalogos_cerrados:
+                catalogos_cerrados[id_catalogo] = cargar_catalogo_hab_tec(id_catalogo)
+            catalogo = catalogos_cerrados[id_catalogo]
+        candidato = validar_habilidad_catalogo(tecnica, carrera, catalogo)
+        nombre, descripcion = candidato.nombre, candidato.descripcion
+        id_habilidad = candidato.referencia
+        # Legacy COMP catalogs are accepted only when explicitly supplied offline.
+        if not catalogo.id_catalogo:
+            coincidencia = re.fullmatch(r"COMP_TEC_(\d{4})", id_habilidad)
+            if coincidencia:
+                id_habilidad = f"HAB_TEC_{coincidencia.group(1)}"
         _agregar_unico(
             habilidades,
             {

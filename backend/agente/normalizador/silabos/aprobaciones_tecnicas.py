@@ -14,9 +14,7 @@ from importlib import import_module
 from pathlib import Path
 from threading import RLock
 
-from agente.config.settings import BASE_DIR
 from agente.normalizador.silabos import salida_catalogos
-from agente.normalizador.silabos.analista_tecnico import cargar_catalogo_tecnico
 from agente.normalizador.silabos.entrada import normalizar_carrera, normalizar_periodo
 from agente.normalizador.silabos.registro_habilidades import RegistroHabilidades
 from agente.normalizador.silabos.salida_catalogos import construir_salidas_tecnicas
@@ -124,18 +122,23 @@ def _clave_nombre_competencia(valor: object) -> str:
 
 def _deduplicar_propuestas(
     propuestas: Sequence[dict[str, object]],
+    *,
+    por_silabo: bool = False,
 ) -> list[dict[str, object]]:
-    """Retain the first persisted proposal; leave later duplicates audit-only."""
+    """Retain the first persisted duplicate, scoped to syllabus when requested."""
 
     resultado: list[dict[str, object]] = []
-    vistos: set[str] = set()
+    vistos: set[tuple[str, str]] = set()
     for propuesta in propuestas:
         nombre = propuesta.get("nombre_competencia") or propuesta.get("nombre")
-        clave = _clave_nombre_competencia(nombre)
-        if clave and clave in vistos:
+        clave = str(propuesta.get("catalogo_ref") or "") or _clave_nombre_competencia(nombre)
+        clave_deduplicacion = (
+            (str(propuesta.get("id_silabo") or ""), clave) if por_silabo else ("", clave)
+        )
+        if clave and clave_deduplicacion in vistos:
             continue
         if clave:
-            vistos.add(clave)
+            vistos.add(clave_deduplicacion)
         resultado.append(propuesta)
     return resultado
 
@@ -154,7 +157,7 @@ def _cargar_propuestas(
                 f"La propuesta técnica {identificador!r} está duplicada."
             )
         ids.add(identificador)
-    activas = _deduplicar_propuestas(propuestas)
+    activas = _deduplicar_propuestas(propuestas, por_silabo=True)
     ids_activas = {str(propuesta.get("id_propuesta") or "") for propuesta in activas}
     return activas, ids - ids_activas
 
@@ -609,36 +612,9 @@ def _registro_para_ejecucion(
     propuestas: Sequence[Mapping[str, object]],
     journal: Sequence[Mapping[str, object]],
 ) -> AbstractContextManager[RegistroHabilidades | None]:
-    decisiones = _decisiones_por_id(journal)
-    aprobadas = [
-        propuesta
-        for propuesta in propuestas
-        if str(decisiones.get(str(propuesta.get("id_propuesta")), {}).get("decision") or "")
-        == "ADD"
-    ]
-    if not aprobadas:
-        return nullcontext(None)
-
-    referencias = {
-        " ".join(str(propuesta.get("catalogo_ref") or "").split()).upper()
-        for propuesta in aprobadas
-    }
-    requiere_registro = any(
-        not re.fullmatch(r"COMP_TEC_(\d{4})", referencia) for referencia in referencias
-    )
-    configuracion = manifest.get("configuracion_curricular")
-    ruta_valor = (
-        configuracion.get("ruta_catalogo_tecnico") if isinstance(configuracion, Mapping) else None
-    )
-    ruta_catalogo = str(ruta_valor or "").strip()
-    db_path = directorio.parent / "catalogos" / "habilidades.sqlite3"
-    if not ruta_catalogo:
-        if not requiere_registro:
-            return nullcontext(None)
-        ruta_catalogo = str(BASE_DIR / "catalogos" / "carrera_competencia_oficial.csv")
-
-    catalogo = cargar_catalogo_tecnico(ruta_catalogo)
-    return RegistroHabilidades(db_path, catalogo)
+    # HAB_TEC IDs belong to the versioned catalog, never to an allocating registry.
+    # The output boundary validates every accepted row against its pinned catalog.
+    return nullcontext(None)
 
 
 def _materializar(
@@ -692,7 +668,7 @@ def _materializar(
             analisis_tecnico=analisis or {"estado": "COMPLETADO"},
             registro_habilidades=registro_habilidades,
         )
-    except (KeyError, ValueError) as exc:
+    except (KeyError, ValueError, RuntimeError) as exc:
         raise DecisionCurricularInvalida(str(exc)) from exc
     gate = _gate_tecnico(
         _conservar_gate_previo(resultado.release_gate, gate_previo),

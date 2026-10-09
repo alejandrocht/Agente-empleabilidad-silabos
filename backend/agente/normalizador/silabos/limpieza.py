@@ -520,12 +520,14 @@ def limpiar_archivo(
                 propuestas_tecnicas = analista_tecnico.inferir_competencias_tecnicas(
                     registros,
                     configuracion_curricular,
-                    configuracion_curricular.ruta_catalogo_tecnico,
                     auditoria=auditoria_tecnica,
                     al_actualizar_progreso_silabo=actualizar_traza_silabo,
                     cancelada=cancelada,
                 )
-                for advertencia in auditoria_tecnica:
+                advertencias_tecnicas = [
+                    a for a in auditoria_tecnica if a.get("severidad") != "info"
+                ]
+                for advertencia in advertencias_tecnicas:
                     hallazgos.append(
                         _hallazgo(
                             str(advertencia.get("codigo") or "SILABO_SIN_PROPUESTA_TECNICA"),
@@ -540,13 +542,15 @@ def limpiar_archivo(
                     )
                 analisis_tecnico = {
                     "estado": (
-                        "COMPLETADO_CON_ADVERTENCIAS" if auditoria_tecnica else "COMPLETADO"
+                        "COMPLETADO_CON_ADVERTENCIAS" if advertencias_tecnicas else "COMPLETADO"
                     ),
                     "modo_analista": "technical",
                     "propuestas_pendientes": len(propuestas_tecnicas),
                 }
                 if auditoria_tecnica:
-                    analisis_tecnico["advertencias"] = auditoria_tecnica
+                    analisis_tecnico["auditoria"] = auditoria_tecnica
+                if advertencias_tecnicas:
+                    analisis_tecnico["advertencias"] = advertencias_tecnicas
             except CancelacionSolicitada:
                 raise
             except Exception as exc:

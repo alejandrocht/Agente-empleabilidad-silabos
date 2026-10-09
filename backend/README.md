@@ -87,14 +87,14 @@ salidas/cobertura_curricular.csv
 ```
 
 El analista técnico recibe carrera, nombre del curso, resultados de aprendizaje, las filas extraídas de
-`programa_analitico_detalle` (`semana`, `tema`, `contenido`) y candidatos del catálogo técnico. No recibe
-IDs, periodo, sumilla, competencias declaradas, herramientas ni relaciones del grafo.
+`programa_analitico_detalle` (`tema`, `contenido`) y candidatos del catálogo técnico. No recibe
+IDs académicos, periodo, sumilla, competencias declaradas, herramientas ni relaciones del grafo.
 
-La cobertura conecta curso y sílabo con un logro y exactamente una competencia declarada o una habilidad técnica. Las habilidades aprobadas usan el catálogo público `catalogo_habilidades.csv`; las referencias oficiales `COMP_TEC_####` se publican como `HAB_TEC_####` y las propuestas técnicas aprobadas sin referencia de catálogo también reciben un ID `HAB_TEC_####`.
+La cobertura conecta curso y sílabo con un logro y exactamente una competencia declarada o una habilidad técnica. Las habilidades aprobadas se exportan en `catalogo_habilidades.csv` con el **ID, nombre y descripción exactos del catálogo HAB_TEC de la carrera**. No se crean IDs ni se aceptan habilidades nuevas, nombres alternativos o descripciones editadas, incluso con `hitl=0`.
 
-Los IDs `HAB_TEC_####` son globales: la identidad de una habilidad es el par nombre normalizado + descripción normalizada, independiente de la carrera. Si el catálogo oficial repite `COMP_TEC_####` en varias carreras para el mismo contenido, todas las filas conservan un único `HAB_TEC_####`. `id_carrera` permanece en el CSV por contrato y como metadato de procedencia, pero no forma parte de la identidad de `Habilidad`. El contexto de carrera se obtiene por `Curso` → `CoberturaCurricular` → `Habilidad`; no se crean relaciones directas `Carrera`–`Habilidad`.
+La misma habilidad puede aparecer en varios sílabos: las propuestas se deduplican por `id_silabo` + `catalogo_ref` y conservan evidencia y cobertura para cada sílabo. Un mismo ID puede tener descripciones contextuales distintas por carrera, tal como las define el catálogo. Esta ruta no utiliza el registro SQLite histórico para asignar habilidades.
 
-El registro persistente vive en `catalogos/habilidades.sqlite3` bajo la raíz de ejecución compartida, junto a los directorios `NOR_*`; no forma parte de los catálogos oficiales. Al inicializarlo, cada sufijo oficial `COMP_TEC_####` reserva su correspondiente `HAB_TEC_####`. Una propuesta sin referencia reutiliza el ID de la misma identidad normalizada o recibe el siguiente sufijo libre, sin colisionar con sufijos oficiales ni registrados. La resolución y la materialización son transaccionales: ante un error se revierte el registro SQLite junto con los CSV materializados, el diario de decisiones y el `manifest.json`.
+Antes de aprobar o exportar, Python verifica la referencia, la carrera y los campos literales contra la versión del catálogo utilizada. Ante un error se revierten los CSV, el diario de decisiones y el `manifest.json`.
 
 La proveniencia
 y las propuestas técnicas se conservan en `salidas/reportes/`, principalmente
@@ -107,19 +107,16 @@ cuando el gate indica `ALLOW_IMPORT`; evidencia incompleta, propuestas sin decis
 huérfanas mantienen `BLOCK_IMPORT`.
 
 Cada ejecución curricular está aislada por la pareja declarada `carrera` + `periodo`: esa pareja se
-normaliza, se conserva en el registro y forma parte de los IDs de curso y sílabo. Python genera todos los
-IDs y relaciones del grafo; el catálogo técnico solo aporta candidatos para el análisis. DOCX y PDF pasan
-por el mismo extractor curricular y cada sílabo se analiza una sola vez.
+normaliza y se conserva en el registro. Python genera los IDs académicos y las relaciones del grafo;
+los IDs de habilidad pertenecen al catálogo HAB_TEC. DOCX y PDF pasan por el mismo extractor curricular.
 
 ### Analista técnico LLM
 
-El normalizador curricular usa un único contrato técnico. La configuración siempre fija
-`modo_analista=technical` y carga el mapa oficial carrera-competencia desde
-`backend/catalogos/carrera_competencia_oficial.csv`. Ese CSV aporta `id_carrera`,
-`nombre_carrera`, `id_habilidad` y `nombre_habilidad`; el cargador une cada fila por carrera y
-nombre normalizados con `backend/catalogos/catalogo_competencias_tecnicas.xlsx`, que continúa
-siendo la fuente de descripciones y compatibilidad para los formatos anteriores. La unión es
-estricta: no usa fuzzy matching ni búsquedas aproximadas.
+El normalizador curricular usa `modo_analista=technical` y el catálogo HAB_TEC cargado desde `/normalizador/catalogo`, con las columnas `Carrera`, `id`, `nombre` y `descripcion`. El catálogo y su índice se guardan en `NORMALIZADOR_HAB_TEC_DIR` (por defecto `backend/.normalizador/hab_tec`). Debe existir una versión terminada con estado `vectorizado` antes de analizar sílabos; la ausencia o inconsistencia del índice bloquea el análisis técnico.
+
+Para cada logro se recuperan candidatos de la carrera mediante el índice vectorial local. `NORMALIZADOR_SILABOS_HAB_TEC_TOP_K=8` limita candidatos por logro; el umbral compartido es `NORMALIZADOR_HAB_TEC_RETRIEVAL_MIN_SIMILARITY=0.35`. La consulta usa el modelo de embeddings guardado en el índice, aunque la configuración de vectorización cambie después. El LLM selecciona referencias sustentadas por evidencia literal; Python copia los campos oficiales. Si no hay coincidencia sustentada, el sílabo queda sin habilidades técnicas y se registra en la auditoría, sin forzar propuestas.
+
+Cada nueva ejecución utiliza la versión vectorizada más reciente. Las propuestas conservan `catalogo_id` y `catalogo_sha256`; su aprobación carga esa misma versión aunque se suba otro catálogo después. Los cargadores CSV/XLSX anteriores siguen disponibles para herramientas y pruebas offline, pero la ejecución LLM del producto utiliza HAB_TEC.
 
 ```dotenv
 NORMALIZADOR_CURRICULAR_LLM=true
@@ -137,10 +134,10 @@ NORMALIZADOR_CURRICULAR_LLM_TEMPERATURE=0
 Ollama usa `NORMALIZADOR_CURRICULAR_OLLAMA_MODEL`; OpenAI usa
 `NORMALIZADOR_CURRICULAR_OPENAI_MODEL` y requiere `OPENAI_API_KEY`. No existe una ruta curricular
 `legacy`: una ejecución de sílabos usa `analista_tecnico.py`, una llamada por sílabo y el reintento
-acotado del mismo analista cuando falta una propuesta válida.
+acotado del mismo analista si su respuesta contiene propuestas inválidas. Una respuesta vacía es válida.
 
 El payload del LLM contiene únicamente carrera, nombre del curso, logros, candidatos técnicos y las filas
-extraídas de `programa_analitico_detalle` (`semana`, `tema`, `contenido`). No se envían IDs, periodo,
+extraídas de `programa_analitico_detalle` (`tema`, `contenido`). No se envían IDs académicos, periodo,
 sumilla, competencias declaradas, herramientas ni relaciones del grafo. Toda propuesta debe citar un
 logro literalmente; Python valida la evidencia, genera IDs y deja la decisión en
 `PENDIENTE_APROBACION` hasta la revisión humana `ADD`, `DISCARD` o `KEEP_PENDING`.

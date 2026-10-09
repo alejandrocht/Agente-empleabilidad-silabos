@@ -14,6 +14,28 @@ construir_catalogos_curriculares: Any = _salida_catalogos.construir_catalogos_cu
 construir_salidas_tecnicas: Any = _salida_catalogos.construir_salidas_tecnicas
 
 
+@pytest.fixture(autouse=True)
+def catalogo_cerrado(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agente.normalizador.silabos.analista_tecnico import CandidatoTecnico, CatalogoTecnico
+
+    catalogo = CatalogoTecnico(
+        (
+            CandidatoTecnico(
+                "HAB_TEC_0007",
+                "SISTEMAS",
+                "Diseño técnico de arquitecturas",
+                "Selecciona estructuras y patrones según atributos de calidad.",
+                2,
+            ),
+        ),
+        "fixture",
+        "a" * 64,
+        "HAB_TEC",
+        id_catalogo="HABTEC_" + "a" * 16,
+    )
+    monkeypatch.setattr(_salida_catalogos, "cargar_catalogo_hab_tec", lambda *_args: catalogo)
+
+
 def _registro() -> dict[str, object]:
     return {
         "id_curso": "CUR_1234567890abcdef",
@@ -93,7 +115,7 @@ def test_materializa_contrato_curricular_sin_herramientas(tmp_path: Path) -> Non
     tecnica = {
         "id_silabo": registro["id_silabo"],
         "estado_aprobacion": "APROBADA",
-        "catalogo_ref": "COMP_TEC_0007",
+        "catalogo_ref": "HAB_TEC_0007",
         "nombre_competencia": "Diseño técnico de arquitecturas",
         "descripcion_breve_competencia": (
             "Selecciona estructuras y patrones según atributos de calidad."
@@ -195,7 +217,7 @@ def test_rechaza_tecnica_aprobada_sin_catalogo_ref_seguro(tmp_path: Path) -> Non
         "logros": ["Diseña una arquitectura de software mantenible."],
     }
 
-    with pytest.raises(ValueError, match="catalogo_ref.*COMP_TEC_####"):
+    with pytest.raises(ValueError, match="referenciar el catálogo"):
         construir_catalogos_curriculares(
             [_registro()],
             tmp_path,
@@ -216,7 +238,7 @@ def test_materializa_tecnica_aprobada_sin_competencia_declarada(
     tecnica = {
         "id_silabo": registro["id_silabo"],
         "estado_aprobacion": "APROBADA",
-        "catalogo_ref": "COMP_TEC_0007",
+        "catalogo_ref": "HAB_TEC_0007",
         "nombre_competencia": "Diseño técnico de arquitecturas",
         "descripcion_breve_competencia": (
             "Selecciona estructuras y patrones según atributos de calidad."
@@ -322,9 +344,11 @@ def test_materializacion_rechaza_relacion_tecnica_sin_logro_valido(tmp_path: Pat
                 {
                     "id_silabo": "SIL_1234567890abcdef",
                     "nombre_competencia": "Diseño técnico de arquitecturas",
-                    "descripcion_breve_competencia": "Selecciona estructuras técnicas.",
+                    "descripcion_breve_competencia": (
+                        "Selecciona estructuras y patrones según atributos de calidad."
+                    ),
                     "estado_aprobacion": "APROBADA",
-                    "catalogo_ref": "COMP_TEC_0007",
+                    "catalogo_ref": "HAB_TEC_0007",
                     "logros": ["Este logro no existe en el sílabo."],
                 }
             ],

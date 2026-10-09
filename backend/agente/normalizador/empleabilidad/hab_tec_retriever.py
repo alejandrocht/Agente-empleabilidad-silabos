@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -18,7 +19,7 @@ from agente.config.settings import BASE_DIR, decimal, entero, texto
 def _normalize(value: object) -> str:
     """Normaliza carreras sin depender del módulo de identidad legado."""
 
-    texto = unicodedata.normalize("NFKD", str(value or ""))
+    texto = unicodedata.normalize("NFKD", str(value or "").replace("_", " "))
     texto = "".join(caracter for caracter in texto if not unicodedata.combining(caracter))
     return " ".join(texto.casefold().split())
 
@@ -56,6 +57,8 @@ class HabTecRetriever:
         modelo: str,
         similitud_minima: float,
         limite: int,
+        id_catalogo: str = "",
+        sha256_catalogo: str = "",
     ) -> None:
         if not documentos:
             raise ErrorHabTecRetriever("El índice HAB_TEC no contiene documentos.")
@@ -64,6 +67,8 @@ class HabTecRetriever:
         self.modelo = modelo
         self.similitud_minima = similitud_minima
         self.limite = limite
+        self.id_catalogo = id_catalogo
+        self.sha256_catalogo = sha256_catalogo
         self._por_carrera: dict[str, tuple[_Documento, ...]] = {}
         for documento in documentos:
             clave = _normalize(documento.carrera)
@@ -151,22 +156,43 @@ class HabTecRetriever:
         return resultado
 
 
-def cargar_retriever_hab_tec() -> HabTecRetriever | None:
+def cargar_retriever_hab_tec(
+    id_catalogo: str = "", *, limite: int | None = None
+) -> HabTecRetriever | None:
     """Carga el índice vectorial vigente; devuelve None si aún no existe."""
 
     base = Path(texto("NORMALIZADOR_HAB_TEC_DIR") or BASE_DIR / ".normalizador" / "hab_tec")
-    candidatos = sorted(
-        (ruta for ruta in base.glob("HABTEC_*") if (ruta / "indice" / "manifest.json").is_file()),
-        key=lambda ruta: ruta.stat().st_mtime,
-        reverse=True,
-    )
+    if id_catalogo and not re.fullmatch(r"HABTEC_[0-9a-f]{16}", id_catalogo):
+        raise ErrorHabTecRetriever("Identificador de catálogo HAB_TEC inválido.")
+    candidatos: list[tuple[str, Path]] = []
+    for ruta in base.glob(id_catalogo or "HABTEC_*"):
+        try:
+            estado = json.loads((ruta / "manifest.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(estado, dict) and estado.get("estado") == "vectorizado":
+            candidatos.append((str(estado.get("creado_en") or ""), ruta))
+    candidatos.sort(key=lambda item: (item[0], item[1].name), reverse=True)
     if not candidatos:
+        if id_catalogo:
+            raise ErrorHabTecRetriever("El catálogo HAB_TEC de la ejecución no está disponible.")
         return None
-    indice = candidatos[0] / "indice"
+    directorio = candidatos[0][1]
+    indice = directorio / "indice"
     try:
         manifest = json.loads((indice / "manifest.json").read_text(encoding="utf-8"))
         dimension = int(manifest["dimension"])
         cantidad = int(manifest["registros"])
+        modelo = str(manifest["modelo_embedding"])
+        if dimension <= 0 or cantidad <= 0 or not modelo:
+            raise ErrorHabTecRetriever("El índice HAB_TEC no contiene dimensiones válidas.")
+        fuente = (directorio / "catalogo_normalizado.jsonl").read_bytes()
+        sha256_catalogo = hashlib.sha256(fuente).hexdigest()
+        if sha256_catalogo != manifest["sha256_catalogo"]:
+            raise ErrorHabTecRetriever("El índice no corresponde al catálogo HAB_TEC vigente.")
+        registros = [
+            json.loads(linea) for linea in fuente.decode("utf-8").splitlines() if linea.strip()
+        ]
         metadatos = [
             json.loads(linea)
             for linea in (indice / "metadatos.jsonl").read_text(encoding="utf-8").splitlines()
@@ -174,14 +200,31 @@ def cargar_retriever_hab_tec() -> HabTecRetriever | None:
         ]
         datos_vectores = (indice / "vectores.f32").read_bytes()
         esperado = cantidad * dimension * 4
-        if len(metadatos) != cantidad or len(datos_vectores) != esperado:
+        if (
+            len(registros) != cantidad
+            or len(metadatos) != cantidad
+            or len(datos_vectores) != esperado
+        ):
             raise ErrorHabTecRetriever("El índice HAB_TEC está incompleto o inconsistente.")
         documentos: list[_Documento] = []
+        asociaciones: set[tuple[str, str]] = set()
         for posicion, metadata in enumerate(metadatos):
+            campos = ("id", "carrera", "nombre", "descripcion")
+            if any(
+                not metadata.get(campo) or metadata.get(campo) != registros[posicion].get(campo)
+                for campo in campos
+            ):
+                raise ErrorHabTecRetriever("Los candidatos difieren del catálogo HAB_TEC.")
+            asociacion = (str(metadata["id"]), _normalize(metadata["carrera"]))
+            if asociacion in asociaciones:
+                raise ErrorHabTecRetriever("El catálogo HAB_TEC contiene asociaciones duplicadas.")
+            asociaciones.add(asociacion)
             inicio = posicion * dimension * 4
             vector = struct.unpack(
                 f"<{dimension}f", datos_vectores[inicio : inicio + dimension * 4]
             )
+            if not all(math.isfinite(valor) for valor in vector) or not any(vector):
+                raise ErrorHabTecRetriever("El índice HAB_TEC contiene un vector inválido.")
             documentos.append(
                 _Documento(
                     id_habilidad=str(metadata.get("id") or ""),
@@ -191,7 +234,7 @@ def cargar_retriever_hab_tec() -> HabTecRetriever | None:
                     vector=vector,
                 )
             )
-    except (OSError, ValueError, KeyError, json.JSONDecodeError, struct.error) as exc:
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, struct.error) as exc:
         raise ErrorHabTecRetriever("No se pudo cargar el índice local HAB_TEC.") from exc
     return HabTecRetriever(
         tuple(documentos),
@@ -199,11 +242,19 @@ def cargar_retriever_hab_tec() -> HabTecRetriever | None:
             "NORMALIZADOR_HAB_TEC_EMBEDDING_ENDPOINT",
             "http://127.0.0.1:11434/api/embed",
         ),
-        modelo=texto("NORMALIZADOR_HAB_TEC_EMBEDDING_MODEL", "qwen3-embedding:0.6b"),
+        modelo=modelo,
+        id_catalogo=directorio.name,
+        sha256_catalogo=sha256_catalogo,
         similitud_minima=max(
             0.0, min(decimal("NORMALIZADOR_HAB_TEC_RETRIEVAL_MIN_SIMILARITY", 0.35), 0.999)
         ),
-        limite=max(1, min(entero("NORMALIZADOR_HAB_TEC_RETRIEVAL_TOP_K", 1), 10)),
+        limite=max(
+            1,
+            min(
+                limite if limite is not None else entero("NORMALIZADOR_HAB_TEC_RETRIEVAL_TOP_K", 1),
+                20,
+            ),
+        ),
     )
 
 

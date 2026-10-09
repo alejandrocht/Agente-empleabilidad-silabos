@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-import sqlite3
 from pathlib import Path
 from typing import cast
 
@@ -27,6 +26,37 @@ ARCHIVOS_TECNICOS = (
 )
 
 
+@pytest.fixture(autouse=True)
+def catalogo_hab_tec(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from openpyxl import Workbook
+
+    from agente.normalizador.catalogo_hab_tec import GestorCatalogosHabTec
+
+    base = tmp_path / "hab_tec"
+    monkeypatch.setenv("NORMALIZADOR_HAB_TEC_DIR", str(base))
+    fuente = tmp_path / "hab_tec.xlsx"
+    libro = Workbook()
+    hoja = libro.active
+    assert hoja is not None
+    hoja.append(["Carrera", "id", "nombre", "descripcion"])
+    hoja.append(["SISTEMAS", "HAB_TEC_0001", "Arquitectura de APIs", "Diseña APIs mantenibles."])
+    hoja.append(
+        [
+            "INGENIERIA_DE_SISTEMAS",
+            "HAB_TEC_0001",
+            "Arquitectura de APIs",
+            "Diseña APIs mantenibles.",
+        ]
+    )
+    libro.save(fuente)
+    gestor = GestorCatalogosHabTec(base, publicar_en_neo4j=lambda *_args: {})
+    estado = gestor.crear_desde_archivo(fuente.name, fuente)
+    catalogo = gestor._obtener(str(estado["id_catalogo"]))
+    catalogo.modelo_embedding = "fixture-model"
+    monkeypatch.setattr(gestor, "_embeddings", lambda *_args: [[1.0, 0.0], [1.0, 0.0]])
+    gestor._vectorizar(catalogo)
+
+
 def _preparar_ejecucion(
     tmp_path: Path, *, estado: str = "no_publicado", hitl: str | None = None
 ) -> tuple[GestorEjecuciones, str, Path]:
@@ -43,9 +73,9 @@ def _preparar_ejecucion(
                 "id_propuesta": "PROP_TEC_1",
                 "id_silabo": "SIL_1",
                 "nombre_competencia": "Arquitectura de APIs",
-                "descripcion": "Diseña APIs mantenibles.",
+                "descripcion_breve_competencia": "Diseña APIs mantenibles.",
                 "codigo_competencia": "T1",
-                "catalogo_ref": "COMP_TEC_0001",
+                "catalogo_ref": "HAB_TEC_0001",
                 "logros": ["Diseña servicios mantenibles."],
                 "evidencia": [{"fragmento": "Diseña servicios mantenibles."}],
             }
@@ -142,69 +172,21 @@ def test_hitl_zero_auto_adds_pending_technical_proposals_at_terminal_execution(
     assert decision["actor"] == "automatico_hitl_0"
 
 
-def test_hitl_zero_finalization_auto_adds_unreferenced_llm_proposal(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_hitl_zero_rechaza_habilidad_sin_referencia(
+    tmp_path: Path,
 ) -> None:
-    """New automatic executions safely materialize proposals without catalog references."""
-    import openpyxl
-
-    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path, hitl="0")
-    reportes = directorio / "salidas" / "reportes"
-    propuesta = {
-        "id_propuesta": "PROP_TEC_SIN_REFERENCIA",
-        "id_silabo": "SIL_1",
-        "nombre_competencia": "Seguridad de APIs",
-        "descripcion": "Diseña APIs con controles de seguridad.",
-        "codigo_competencia": "T_API_SEC",
-        "logros": ["Diseña servicios mantenibles."],
-        "evidencia": [{"fragmento": "Aplica controles de seguridad en APIs."}],
-    }
-    (reportes / "propuestas_tecnicas.jsonl").write_text(
-        json.dumps(propuesta) + "\n", encoding="utf-8"
-    )
-
-    catalogo_path = tmp_path / "carrera_competencia_oficial.csv"
-    catalogo_path.write_text(
-        "id_carrera,nombre_carrera,id_habilidad,nombre_habilidad\n"
-        "CAR_SIS,Sistemas,COMP_TEC_0001,API Architecture\n",
-        encoding="utf-8",
-    )
-    workbook = openpyxl.Workbook()
-    hoja = workbook.active
-    assert hoja is not None
-    hoja.append(["Carrera", "Habilidad tecnica", "Descripcion"])
-    hoja.append(["Sistemas", "API Architecture", "Diseña APIs mantenibles."])
-    workbook.save(tmp_path / "catalogo_competencias_tecnicas.xlsx")
-
-    ejecucion = gestor._obtener_objeto(id_ejecucion)
-    assert ejecucion.configuracion_curricular is not None
-    ejecucion.configuracion_curricular["ruta_catalogo_tecnico"] = str(catalogo_path)
-    gestor._persistir(ejecucion)
-
-    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    gestor, _, directorio = _preparar_ejecucion(tmp_path, hitl="0")
+    ruta = directorio / "salidas" / "reportes" / "propuestas_tecnicas.jsonl"
+    propuesta = json.loads(ruta.read_text(encoding="utf-8"))
+    propuesta.pop("catalogo_ref")
+    ruta.write_text(json.dumps(propuesta) + "\n", encoding="utf-8")
+    ejecucion = gestor._obtener_objeto(directorio.name)
     gestor._finalizar(ejecucion)
-
-    journal_path = reportes / "decisiones_tecnicas.jsonl"
-    decision = json.loads(journal_path.read_text(encoding="utf-8"))
-    assert decision["id_propuesta"] == "PROP_TEC_SIN_REFERENCIA"
-    assert decision["decision"] == "ADD"
-    assert decision["actor"] == "automatico_hitl_0"
-
-    catalogo_habilidades = directorio / "salidas" / "catalogo_habilidades.csv"
-    with catalogo_habilidades.open(encoding="utf-8-sig", newline="") as archivo:
-        habilidades = list(csv.DictReader(archivo))
-    nueva = next(fila for fila in habilidades if fila["nombre_habilidad"] == "Seguridad de APIs")
-    assert nueva["id_habilidad"].startswith("HAB_TEC_")
     assert ejecucion.limpieza_silabos is not None
-    assert ejecucion.limpieza_silabos.release_gate["decision"] == "ALLOW_IMPORT"
-    assert not any(
-        hallazgo.codigo == "AUTO_APROBACION_TECNICA_FALLIDA" for hallazgo in ejecucion.hallazgos
-    )
-    assert [output["archivo"] for output in ejecucion.limpieza_silabos.outputs] == list(
-        ARCHIVOS_TECNICOS
-    )
-    for output in ejecucion.limpieza_silabos.outputs:
-        _assert_metadata_matches_csv(directorio, dict(output))
+    assert ejecucion.limpieza_silabos.release_gate["decision"] == "BLOCK_IMPORT"
+    assert any(h.codigo == "AUTO_APROBACION_TECNICA_FALLIDA" for h in ejecucion.hallazgos)
+    assert not (ruta.parent / "decisiones_tecnicas.jsonl").exists()
+    assert not (directorio / "salidas" / "catalogo_habilidades.csv").exists()
 
 
 def test_hitl_one_keeps_pending_technical_proposals_for_manual_recovery(
@@ -495,17 +477,17 @@ def test_pending_api_deduplicates_persisted_proposals_by_normalized_name(
         {
             "id_propuesta": "PROP_TEC_1",
             "id_silabo": "SIL_1",
-            "nombre_competencia": "Configurar redes informáticas.",
-            "descripcion": "First proposal must win.",
-            "catalogo_ref": "COMP_TEC_0002",
+            "nombre_competencia": "Arquitectura de APIs",
+            "descripcion_breve_competencia": "Diseña APIs mantenibles.",
+            "catalogo_ref": "HAB_TEC_0001",
             "logros": ["Diseña servicios mantenibles."],
         },
         {
             "id_propuesta": "PROP_TEC_2",
-            "id_silabo": "SIL_2",
+            "id_silabo": "SIL_1",
             "nombre_competencia": " configurar   redes INFORMATICAS ",
             "descripcion": "Duplicate proposal must remain audit-only.",
-            "catalogo_ref": "COMP_TEC_0002",
+            "catalogo_ref": "HAB_TEC_0001",
             "logros": ["Duplicate outcome"],
         },
         {
@@ -513,7 +495,7 @@ def test_pending_api_deduplicates_persisted_proposals_by_normalized_name(
             "id_silabo": "SIL_1",
             "nombre_competencia": "Monitorear redes informáticas",
             "descripcion": "Distinct name must remain visible.",
-            "catalogo_ref": "COMP_TEC_0002",
+            "catalogo_ref": "HAB_TEC_0002",
             "logros": ["Diseña servicios mantenibles."],
         },
     ]
@@ -533,7 +515,7 @@ def test_pending_api_deduplicates_persisted_proposals_by_normalized_name(
         "PROP_TEC_1",
         "PROP_TEC_3",
     ]
-    assert payload["filas"][0]["descripcion"] == "First proposal must win."
+    assert payload["filas"][0]["descripcion_breve_competencia"] == "Diseña APIs mantenibles."
     assert payload["aprobacion"]["total"] == 2
 
     decision = cliente.post(
@@ -541,7 +523,7 @@ def test_pending_api_deduplicates_persisted_proposals_by_normalized_name(
         json={
             "decisiones": [
                 {"id_pendiente": "PROP_TEC_1", "decision": "ADD"},
-                {"id_pendiente": "PROP_TEC_3", "decision": "ADD"},
+                {"id_pendiente": "PROP_TEC_3", "decision": "DISCARD"},
             ],
             "revision": payload["revision"],
         },
@@ -552,6 +534,89 @@ def test_pending_api_deduplicates_persisted_proposals_by_normalized_name(
     journal = (reportes / "decisiones_tecnicas.jsonl").read_text(encoding="utf-8")
     assert "PROP_TEC_2" not in journal
     assert "PROP_TEC_2" in (reportes / "propuestas_tecnicas.jsonl").read_text(encoding="utf-8")
+
+
+def test_session_authored_pending_api_keeps_cross_syllabus_names_and_accepts_each_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path)
+    reportes = directorio / "salidas" / "reportes"
+    (reportes / "analisis_tecnico.json").write_text(
+        json.dumps({"estado": "COMPLETADO", "modo_ejecucion": "SESSION_AUTHORED"}),
+        encoding="utf-8",
+    )
+    propuestas = [
+        {
+            "id_propuesta": "PROP_TEC_SIL_1",
+            "id_silabo": "SIL_1",
+            "nombre_competencia": "Evaluación psicológica",
+            "descripcion": "First syllabus proposal.",
+            "catalogo_ref": "COMP_TEC_0002",
+            "logros": ["Evalúa evidencia clínica."],
+        },
+        {
+            "id_propuesta": "PROP_TEC_SIL_2",
+            "id_silabo": "SIL_2",
+            "nombre_competencia": " evaluacion PSICOLOGICA ",
+            "descripcion": "Same reusable skill for another syllabus.",
+            "catalogo_ref": "COMP_TEC_0002",
+            "logros": ["Evalúa evidencia clínica."],
+        },
+        {
+            "id_propuesta": "PROP_TEC_SIL_1_DUP",
+            "id_silabo": "SIL_1",
+            "nombre_competencia": "EVALUACIÓN psicológica",
+            "descripcion": "Same-syllabus duplicate stays audit-only.",
+            "catalogo_ref": "COMP_TEC_0002",
+        },
+    ]
+    (reportes / "propuestas_tecnicas.jsonl").write_text(
+        "".join(json.dumps(propuesta) + "\n" for propuesta in propuestas),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        aprobaciones_tecnicas,
+        "_materializar",
+        lambda *args, **kwargs: {
+            "decision": "BLOCK_IMPORT",
+            "blockers": ["UNLINKED_SOURCE_OUTCOME"],
+        },
+    )
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+
+    pendientes = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}/pendientes")
+
+    assert pendientes.status_code == 200
+    payload = pendientes.json()
+    assert [fila["id_pendiente"] for fila in payload["filas"]] == [
+        "PROP_TEC_SIL_1",
+        "PROP_TEC_SIL_2",
+    ]
+    decision = cliente.post(
+        f"/normalizador/ejecuciones/{id_ejecucion}/pendientes/decidir",
+        json={
+            "decisiones": [
+                {"id_pendiente": "PROP_TEC_SIL_1", "decision": "ADD"},
+                {"id_pendiente": "PROP_TEC_SIL_2", "decision": "ADD"},
+            ],
+            "revision": payload["revision"],
+        },
+    )
+
+    assert decision.status_code == 200
+    journal = [
+        json.loads(line)
+        for line in (reportes / "decisiones_tecnicas.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert [fila["id_propuesta"] for fila in journal] == [
+        "PROP_TEC_SIL_1",
+        "PROP_TEC_SIL_2",
+    ]
+    assert decision.json()["aprobacion"]["accepted"] == 2
+    assert decision.json()["aprobacion"]["release_gate"]["decision"] == "BLOCK_IMPORT"
 
 
 def test_pending_api_ignores_duplicate_journal_rows_but_rejects_true_orphans(
@@ -568,7 +633,7 @@ def test_pending_api_ignores_duplicate_journal_rows_but_rejects_true_orphans(
         },
         {
             "id_propuesta": "PROP_TEC_2",
-            "id_silabo": "SIL_2",
+            "id_silabo": "SIL_1",
             "nombre_competencia": " configurar redes INFORMATICAS ",
             "descripcion": "Deduplicated proposal.",
         },
@@ -610,7 +675,7 @@ def test_pending_api_ignores_duplicate_journal_rows_but_rejects_true_orphans(
     assert "PROP_TEC_ORPHAN" in orphan_response.json()["detail"]
 
 
-def test_legacy_manifest_without_catalog_path_accepts_new_technical_proposal(
+def test_legacy_manifest_rechaza_habilidad_nueva(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path)
@@ -647,27 +712,16 @@ def test_legacy_manifest_without_catalog_path_accepts_new_technical_proposal(
         },
     )
 
-    assert decision.status_code == 200, decision.text
-    assert decision.json()["aprobacion"]["release_gate"]["decision"] == "ALLOW_IMPORT"
-    catalogo_habilidades = directorio / "salidas" / "catalogo_habilidades.csv"
-    with catalogo_habilidades.open(encoding="utf-8-sig", newline="") as archivo:
-        filas = list(csv.DictReader(archivo))
-    nueva = next(fila for fila in filas if fila["nombre_habilidad"] == "Machine Learning Avanzado")
-    assert nueva["id_habilidad"].startswith("HAB_TEC_")
-
-    registro = directorio.parent / "catalogos" / "habilidades.sqlite3"
-    with sqlite3.connect(registro) as conexion:
-        persistida = conexion.execute(
-            "SELECT nombre_clave, descripcion_clave FROM habilidades WHERE id_habilidad = ?",
-            (nueva["id_habilidad"],),
-        ).fetchone()
-    assert persistida is not None
+    assert decision.status_code == 422
+    assert "referenciar el catálogo" in decision.json()["detail"]
+    assert not (reportes / "decisiones_tecnicas.jsonl").exists()
+    assert not (directorio / "salidas" / "catalogo_habilidades.csv").exists()
 
 
-def test_new_technical_proposal_without_catalog_ref_publishes_with_auto_assigned_suffix(
+def test_habilidad_catalogada_revierte_publicacion_si_manifest_falla(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """E2E API regression: genuinely new technical proposal auto-assigns HAB_TEC_0002 suffix."""
+    """A failed manifest write rolls back closed-catalog CSV and journal publication."""
     import openpyxl
 
     gestor, id_ejecucion, directorio = _preparar_ejecucion(tmp_path)
@@ -678,8 +732,9 @@ def test_new_technical_proposal_without_catalog_ref_publishes_with_auto_assigned
             {
                 "id_propuesta": "PROP_TEC_NUEVA",
                 "id_silabo": "SIL_1",
-                "nombre_competencia": "Machine Learning Avanzado",
-                "descripcion": "Construye modelos predictivos escalables.",
+                "catalogo_ref": "HAB_TEC_0001",
+                "nombre_competencia": "Arquitectura de APIs",
+                "descripcion_breve_competencia": "Diseña APIs mantenibles.",
                 "codigo_competencia": "T_ML",
                 "logros": ["Diseña servicios mantenibles."],
                 "evidencia": [{"fragmento": "Implementa pipelines ML."}],
@@ -749,96 +804,4 @@ def test_new_technical_proposal_without_catalog_ref_publishes_with_auto_assigned
     assert not journal_path.exists()
     assert not catalogo_habilidades_path.exists()
     registry_path = directorio.parent / "catalogos" / "habilidades.sqlite3"
-    assert registry_path.exists()
-    with sqlite3.connect(registry_path) as connection:
-        try:
-            registered = connection.execute(
-                "SELECT 1 FROM habilidades WHERE id_habilidad = ?",
-                ("HAB_TEC_0002",),
-            ).fetchone()
-        except sqlite3.OperationalError as error:
-            assert "no such table" in str(error)
-        else:
-            assert registered is None
-
-    monkeypatch.setattr(
-        aprobaciones_tecnicas,
-        "_persistir_manifest",
-        persistir_manifest_original,
-    )
-    decision = cliente.post(
-        f"/normalizador/ejecuciones/{id_ejecucion}/pendientes/decidir",
-        json={
-            "decisiones": [{"id_pendiente": "PROP_TEC_NUEVA", "decision": "ADD"}],
-            "revision": pendientes.json()["revision"],
-        },
-    )
-
-    assert decision.status_code == 200
-    assert decision.json()["aprobacion"]["release_gate"]["decision"] == "ALLOW_IMPORT"
-
-    estado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}")
-    assert estado.status_code == 200
-    assert estado.json()["release_gate"]["decision"] == "ALLOW_IMPORT"
-
-    assert catalogo_habilidades_path.exists()
-    with catalogo_habilidades_path.open(encoding="utf-8-sig", newline="") as f:
-        lector = csv.DictReader(f)
-        filas = list(lector)
-        nueva = next((fila for fila in filas if fila.get("id_habilidad") == "HAB_TEC_0002"), None)
-        assert nueva is not None
-        assert nueva["nombre_habilidad"] == "Machine Learning Avanzado"
-
-    gestor_segunda, id_ejecucion_segunda, directorio_segunda = _preparar_ejecucion(tmp_path)
-    reportes_segunda = directorio_segunda / "salidas" / "reportes"
-    (reportes_segunda / "propuestas_tecnicas.jsonl").write_text(
-        json.dumps(
-            {
-                "id_propuesta": "PROP_TEC_REUTILIZADA",
-                "id_silabo": "SIL_1",
-                "nombre_competencia": "Machine Learning Avanzado",
-                "descripcion": "Construye modelos predictivos escalables.",
-                "codigo_competencia": "T_ML",
-                "logros": ["Diseña servicios mantenibles."],
-                "evidencia": [{"fragmento": "Implementa pipelines ML."}],
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    ejecucion_segunda = gestor_segunda._obtener_objeto(id_ejecucion_segunda)
-    assert ejecucion_segunda.configuracion_curricular is not None
-    ejecucion_segunda.configuracion_curricular["ruta_catalogo_tecnico"] = str(csv_path)
-    gestor_segunda._persistir(ejecucion_segunda)
-
-    registry_path = directorio.parent / "catalogos" / "habilidades.sqlite3"
-    assert registry_path.exists()
-    assert registry_path == directorio_segunda.parent / "catalogos" / "habilidades.sqlite3"
-
-    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor_segunda)
-    cliente_segunda = TestClient(servidor.app, client=("127.0.0.1", 0))
-    pendientes_segunda = cliente_segunda.get(
-        f"/normalizador/ejecuciones/{id_ejecucion_segunda}/pendientes"
-    )
-    assert pendientes_segunda.status_code == 200
-
-    decision_segunda = cliente_segunda.post(
-        f"/normalizador/ejecuciones/{id_ejecucion_segunda}/pendientes/decidir",
-        json={
-            "decisiones": [{"id_pendiente": "PROP_TEC_REUTILIZADA", "decision": "ADD"}],
-            "revision": pendientes_segunda.json()["revision"],
-        },
-    )
-
-    assert decision_segunda.status_code == 200
-    assert decision_segunda.json()["aprobacion"]["release_gate"]["decision"] == "ALLOW_IMPORT"
-
-    catalogo_habilidades_segunda = directorio_segunda / "salidas" / "catalogo_habilidades.csv"
-    assert catalogo_habilidades_segunda.exists()
-    with catalogo_habilidades_segunda.open(encoding="utf-8-sig", newline="") as f:
-        filas_segunda = list(csv.DictReader(f))
-        assert [
-            fila["id_habilidad"]
-            for fila in filas_segunda
-            if fila["nombre_habilidad"] == "Machine Learning Avanzado"
-        ] == ["HAB_TEC_0002"]
+    assert not registry_path.exists()
