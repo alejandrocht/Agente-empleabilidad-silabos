@@ -57,6 +57,13 @@ sesión del navegador y sus cookies viven en el directorio temporal de la ejecuc
 finalizar. Si Cactus entrega una cobertura parcial, los archivos se conservan como evidencia,
 pero `EXTRACTION_COVERAGE_INCOMPLETE` bloquea la publicación.
 
+Si la extracción aborta, el reporte `fuente` conserva la carrera actual y los conteos
+de progreso. Los PDF/DOCX ya descargados se guardan en un ZIP interno bajo
+`entrada/`, indicado por `fuente.archivo_parcial`, antes de purgar los temporales.
+Este respaldo queda en disco en la carpeta de la ejecución. Los perfiles y cookies
+del navegador se purgan al finalizar; los CSV siguen sujetos al release gate.
+La ejecución fallida queda en error y una nueva corrida obtiene un ID nuevo.
+
 Cada ejecución usa `hitl=1` por defecto y puede cambiarse a `hitl=0` solo para esa corrida; en 0 las propuestas técnicas válidas se registran automáticamente como `ADD` y la decisión queda en el diario de auditoría. La publicación y la descarga/importación siguen requiriendo que todos los controles del release gate permitan `ALLOW_IMPORT`.
 
 Para normalizar juntas todas las carreras de un periodo, selecciona **Todas las carreras**

@@ -10,6 +10,7 @@ from typing import Any
 
 from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import Hallazgo, ProgresoLimpiezaLLM, ResultadoLimpiezaSilabos
+from agente.normalizador.silabos.cactus_archivos import empaquetar_archivos_cactus
 
 
 class EjecutorCurricular:
@@ -284,12 +285,40 @@ class EjecutorCurricular:
 
         if ejecucion.fuente is None:
             ejecucion.fuente = {"tipo": "cactus"}
+        progreso = ejecucion.progreso_fuente or {}
+        campos = (
+            "carrera_actual",
+            "carreras_procesadas",
+            "carreras_totales",
+            "cursos_encontrados",
+            "cursos_procesados",
+            "archivos_descargados",
+        )
         ejecucion.fuente = {
             **ejecucion.fuente,
+            **{campo: progreso[campo] for campo in campos if campo in progreso},
             "estado": "error",
+            "completa": False,
             "codigo": codigo,
             "detalle": detalle,
         }
+        descargas = ejecucion.directorio / "fuentes_curriculares" / "cactus"
+        if descargas.is_dir():
+            ruta_parcial = ejecucion.directorio / "entrada" / ejecucion.archivo
+            try:
+                archivos = empaquetar_archivos_cactus(descargas, ruta_parcial)
+                if archivos:
+                    ejecucion.fuente["archivo_parcial"] = ruta_parcial.relative_to(
+                        ejecucion.directorio
+                    ).as_posix()
+                    ejecucion.fuente["archivos_procesables"] = len(archivos)
+            except Exception as exc:
+                # Un fallo del respaldo no debe reemplazar la causa de la extracción.
+                ejecucion.fuente["respaldo_parcial_error"] = type(exc).__name__
+                try:
+                    ruta_parcial.unlink(missing_ok=True)
+                except OSError:
+                    pass
         reportes = ejecucion.directorio / "salidas" / "reportes"
         reportes.mkdir(parents=True, exist_ok=True)
         reporte = reportes / "extraccion_cactus.json"
