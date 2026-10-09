@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flujo · Normalizador de empleabilidad</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #fff;
+      color: #173f41;
+      font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    }
+    main { width: min(1180px, 100%); margin: 0 auto; padding: 52px 24px 68px; }
+    h1 { margin: 0 0 10px; font-size: clamp(25px, 4vw, 34px); font-weight: 650; }
+    .intro { margin: 0 0 34px; color: #4d6263; font-size: 17px; }
+    svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .node { fill: #f5fbfa; stroke: #245a5c; stroke-width: 2; }
+    .node-catalog { fill: #fbf8ee; stroke: #897439; stroke-width: 2; }
+    .node-output { fill: #eef7f4; stroke: #3f7c68; stroke-width: 2; }
+    .node-warning { fill: #fff6f3; stroke: #b6614d; stroke-width: 2; }
+    .retry-note { fill: #fff6f3; stroke: #b6614d; stroke-width: 1.5; }
+    .flow { fill: none; stroke: #5a9293; stroke-width: 2.5; marker-end: url(#arrow); }
+    .flow-catalog { fill: none; stroke: #9a8240; stroke-width: 2.5; marker-end: url(#arrow-catalog); }
+    .flow-warning { fill: none; stroke: #b6614d; stroke-width: 2.5; marker-end: url(#arrow-warning); }
+    .title { fill: #173f41; font-size: 19px; font-weight: 650; text-anchor: middle; }
+    .body { fill: #405657; font-size: 14px; text-anchor: middle; }
+    .small { fill: #6b7b7c; font-size: 13px; text-anchor: middle; }
+    .branch { fill: #fff; stroke: #245a5c; stroke-width: 2; }
+    .branch-text { fill: #173f41; font-size: 15px; font-weight: 650; text-anchor: middle; }
+    .label-ok { fill: #3f7c68; font-size: 13px; font-weight: 650; }
+    .label-no { fill: #b6614d; font-size: 13px; font-weight: 650; }
+    @media (max-width: 720px) {
+      main { padding: 30px 14px 42px; }
+      .intro { font-size: 15px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Normalizador de empleabilidad</h1>
+    <p class="intro">Convierte publicaciones de empleo en información consistente y lista para cargar en Neo4j.</p>
+
+    <svg viewBox="0 0 1120 840" role="img" aria-label="Flujo del normalizador de empleabilidad">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a9293" />
+        </marker>
+        <marker id="arrow-catalog" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#9a8240" />
+        </marker>
+        <marker id="arrow-warning" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#b6614d" />
+        </marker>
+      </defs>
+
+      <rect class="node" x="30" y="40" width="210" height="126" rx="18" />
+      <text class="title" x="135" y="82">Subir Excel</text>
+      <text class="body" x="135" y="112">Elegir la hoja</text>
+      <text class="body" x="135" y="134">con publicaciones</text>
+
+      <path class="flow" d="M240 103 H287" />
+
+      <rect class="node" x="290" y="40" width="230" height="126" rx="18" />
+      <text class="title" x="405" y="80">Limpieza</text>
+      <text class="body" x="405" y="110">Quita texto que no aporta</text>
+      <text class="body" x="405" y="132">y ordena las viñetas</text>
+
+      <path class="flow" d="M520 103 H567" />
+
+      <rect class="node" x="570" y="40" width="230" height="126" rx="18" />
+      <text class="title" x="685" y="80">Reconocer carreras</text>
+      <text class="body" x="685" y="110">Relaciona la carrera indicada</text>
+      <text class="body" x="685" y="132">con las carreras de referencia</text>
+
+      <path class="flow" d="M800 103 H847" />
+
+      <rect class="node" x="850" y="40" width="240" height="126" rx="18" />
+      <text class="title" x="970" y="80">Preparar publicación</text>
+      <text class="body" x="970" y="110">Conserva funciones, puesto</text>
+      <text class="body" x="970" y="132">y carreras reconocidas</text>
+
+      <path class="flow" d="M970 166 V205 H855 V230" />
+
+      <rect class="node-catalog" x="65" y="230" width="270" height="128" rx="18" />
+      <text class="title" x="200" y="270">Catálogo oficial</text>
+      <text class="body" x="200" y="299">Competencias técnicas</text>
+      <text class="body" x="200" y="321">permitidas</text>
+
+      <path class="flow-catalog" d="M335 294 H547" />
+
+      <rect class="node" x="550" y="230" width="305" height="128" rx="18" />
+      <text class="title" x="702" y="268">Identificar competencias</text>
+      <text class="body" x="702" y="294">El modelo revisa las funciones</text>
+      <text class="body" x="702" y="316">con opciones ligadas a la carrera</text>
+      <path class="flow" d="M702 358 V374" />
+      <rect class="retry-note" x="530" y="380" width="345" height="54" rx="11" />
+      <text class="small" x="702" y="402" style="fill:#98503f">Falla: se realizan hasta 2 reintentos</text>
+      <text class="small" x="702" y="422" style="fill:#98503f">Si persiste, la publicación pasa a cuarentena</text>
+      <path class="flow" d="M702 434 V456" />
+
+      <path class="branch" d="M702 460 L788 518 L702 576 L616 518 Z" />
+      <text class="branch-text" x="702" y="513">¿Se encontró una</text>
+      <text class="branch-text" x="702" y="534">competencia válida?</text>
+
+      <path class="flow-warning" d="M616 518 H445" />
+      <text class="label-no" x="505" y="508">No</text>
+      <rect class="node-warning" x="75" y="458" width="340" height="120" rx="18" />
+      <text class="title" x="245" y="499">Publicación separada</text>
+      <text class="body" x="245" y="528">Se registra en cuarentena</text>
+      <text class="body" x="245" y="550">y no se carga en Neo4j</text>
+
+      <path class="flow" d="M702 576 V611" />
+      <text class="label-ok" x="715" y="600">Sí</text>
+
+      <rect class="node-output" x="550" y="615" width="305" height="124" rx="18" />
+      <text class="title" x="702" y="655">Preparar carga</text>
+      <text class="body" x="702" y="684">Crea publicaciones, puestos</text>
+      <text class="body" x="702" y="706">y competencias relacionadas</text>
+
+      <path class="flow" d="M855 677 H907" />
+
+      <rect class="node" x="910" y="615" width="180" height="124" rx="18" />
+      <text class="title" x="1000" y="655">Validar carga</text>
+      <text class="body" x="1000" y="684">Revisar datos</text>
+      <text class="body" x="1000" y="706">y confirmar</text>
+
+      <path class="flow" d="M1000 739 V779" />
+      <rect class="node-output" x="882" y="783" width="218" height="34" rx="12" />
+      <text class="title" x="991" y="806" style="font-size:16px">Neo4j sin duplicados</text>
+    </svg>
+  </main>
+</body>
+</html>

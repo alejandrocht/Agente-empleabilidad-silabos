@@ -2,32 +2,39 @@ import Burbuja from "./Burbuja";
 
 const SUGERENCIAS = [
   {
-    etiqueta: "Carreras",
-    pregunta: "¿Cuántas carreras hay?",
+    etiqueta: "Intersección",
+    pregunta: "¿Qué habilidades enseñadas en Ingeniería Industrial también solicitan las ofertas dirigidas a esa carrera?",
     acento: "text-secundario-turquesa",
     borde: "border-secundario-turquesa/35 hover:border-secundario-turquesa/70 hover:bg-secundario-turquesa/5",
     punto: "border-secundario-turquesa/40 group-hover:border-secundario-turquesa group-hover:bg-secundario-turquesa",
   },
   {
-    etiqueta: "Empresas",
-    pregunta: "¿Qué empresas publican más ofertas?",
+    etiqueta: "Brecha de mercado",
+    pregunta: "¿Qué habilidades solicitan las ofertas de Ingeniería Industrial que no se enseñan en su currícula?",
     acento: "text-secundario-verde",
     borde: "border-secundario-verde/35 hover:border-secundario-verde/70 hover:bg-secundario-verde/5",
     punto: "border-secundario-verde/40 group-hover:border-secundario-verde group-hover:bg-secundario-verde",
   },
   {
-    etiqueta: "Herramientas",
-    pregunta: "¿Cuáles son las herramientas más requeridas?",
+    etiqueta: "Cursos alineados",
+    pregunta: "¿Qué cursos de Ingeniería Industrial cubren habilidades que también solicita el mercado?",
     acento: "text-secundario-naranja",
     borde: "border-secundario-naranja/35 hover:border-secundario-naranja/70 hover:bg-secundario-naranja/5",
     punto: "border-secundario-naranja/40 group-hover:border-secundario-naranja group-hover:bg-secundario-naranja",
   },
   {
-    etiqueta: "Empleabilidad",
-    pregunta: "¿Cuáles son los puestos más demandados?",
+    etiqueta: "Brecha curricular",
+    pregunta: "¿Qué habilidades enseña Ingeniería Industrial que no aparecen en sus ofertas laborales?",
     acento: "text-secundario-rosa",
     borde: "border-secundario-rosa/35 hover:border-secundario-rosa/70 hover:bg-secundario-rosa/5",
     punto: "border-secundario-rosa/40 group-hover:border-secundario-rosa group-hover:bg-secundario-rosa",
+  },
+  {
+    etiqueta: "Comparativo",
+    pregunta: "¿Qué carreras tienen más habilidades compartidas entre su currícula y el mercado laboral?",
+    acento: "text-secundario-turquesa",
+    borde: "border-secundario-turquesa/35 hover:border-secundario-turquesa/70 hover:bg-secundario-turquesa/5",
+    punto: "border-secundario-turquesa/40 group-hover:border-secundario-turquesa group-hover:bg-secundario-turquesa",
   },
 ];
 

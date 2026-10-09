@@ -34,14 +34,27 @@ ALLOWED_NODE_TYPES = frozenset(
         "Oferta_Laboral",
         "Puesto",
         "Habilidad",
-        "Herramienta",
+        "Logros",
         "Competencia",
         "Requerimiento_Laboral",
         "Cobertura_Curricular",
     }
 )
 ALLOWED_RELATIONSHIP_TYPES = frozenset(
-    {"ENSENIA", "TIENE", "DIRIGE_A", "PUBLICA", "AGRUPA", "OFRECE", "DEFIINE", "REQUIERE"}
+    {
+        "ENSENIA",
+        "TIENE",
+        "DIRIGE_A",
+        "PUBLICA",
+        "AGRUPA",
+        "OFRECE",
+        "DEFIINE",
+        "REQUIERE",
+        "CUBRE",
+        "DECLARA",
+        "DESARROLLA",
+        "PIDE",
+    }
 )
 
 ALLOWED_NODE_PROPERTIES: Mapping[str, frozenset[str]] = {
@@ -62,9 +75,22 @@ ALLOWED_NODE_PROPERTIES: Mapping[str, frozenset[str]] = {
         }
     ),
     "Puesto": frozenset({"id_puesto", "nombre", "descripcion"}),
-    "Habilidad": frozenset({"id_habilidad", "nombre_habilidad", "descripcion"}),
-    "Herramienta": frozenset({"id_herramienta", "nombre_herramienta", "descripcion"}),
-    "Competencia": frozenset({"id_competencia", "nombre_competencia", "descripcion"}),
+    "Habilidad": frozenset(
+        {"id_habilidad", "nombre_habilidad", "descripcion_breve", "descripcion"}
+    ),
+    "Logros": frozenset(
+        {"id_herramienta", "nombre_herramienta", "descripcion_breve", "descripcion"}
+    ),
+    "Competencia": frozenset(
+        {
+            "id_competencia",
+            "nombre_competencia",
+            "descripcion_breve",
+            "tipo_competencia",
+            "codigo_competencia",
+            "descripcion",
+        }
+    ),
     "Requerimiento_Laboral": frozenset({"id_requerimiento_laboral", "nombre", "descripcion"}),
     "Cobertura_Curricular": frozenset({"id_cobertura_curricular", "nombre", "descripcion"}),
 }
@@ -79,7 +105,7 @@ _ID_PROPERTY_BY_TYPE = {
     "Oferta_Laboral": ("id_ofe_laboral", "OFE_"),
     "Puesto": ("id_puesto", "PUE_"),
     "Habilidad": ("id_habilidad", "HAB_"),
-    "Herramienta": ("id_herramienta", "HER_"),
+    "Logros": ("id_herramienta", "HER_"),
     "Competencia": ("id_competencia", "COM_"),
     "Requerimiento_Laboral": ("id_requerimiento_laboral", "REQ_"),
     "Cobertura_Curricular": ("id_cobertura_curricular", "COB_"),

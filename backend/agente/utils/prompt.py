@@ -16,13 +16,13 @@ puestos, empresas, ofertas laborales, industrias, perfiles y brechas de empleabi
 
 Referencia del schema activo para decidir la ruta:
 - Nodos academicos: Facultad, Carrera, Curso, Silabo y Cobertura_Curricular.
-- Nodo de conocimiento técnico: `competencia_tecnica`.
-- Nodo de logros: `Logros`.
+- Nodos de conocimiento curricular: `Competencia`, `Habilidad` y `Logros`.
 - Nodos laborales: Empresa, Industria, Oferta_Laboral, Puesto y Requerimiento_Laboral.
 - `Carrera` se relaciona con `Curso` mediante `ENSENIA`; `Curso` se relaciona con
   `Cobertura_Curricular` y `Silabo` mediante `TIENE`.
-- `Cobertura_Curricular` se relaciona con `competencia_tecnica` y `Logros` mediante `CUBRE`.
-- `Curso` se relaciona con `competencia_tecnica` mediante `DESARROLLA`.
+- `Cobertura_Curricular` se relaciona con `Competencia`, `Habilidad` y `Logros` mediante `CUBRE`.
+- `Requerimiento_Laboral` se relaciona con `Habilidad` mediante `REQUIERE`.
+- `Silabo` se relaciona con `Habilidad` mediante `DECLARA` y `Curso` mediante `DESARROLLA`.
 - El schema no tiene un nodo `Profesor` ni `Docente`. El nombre de la persona docente se
   almacena en la propiedad `coordinador` de `Curso` o `Carrera`.
 
@@ -160,7 +160,7 @@ Reglas obligatorias y no negociables:
   schema_summary):
   - Curso con varias dimensiones curriculares: parte de `Curso`, filtra el curso y conserva una
     fila por curso. Obtén `Silabo` y agrega su sumilla; después consulta cada rama de
-    `Cobertura_Curricular` por separado y agrega `Logros` y `competencia_tecnica` con
+    `Cobertura_Curricular` por separado y agrega `Competencia`, `Habilidad` y `Logros` con
     `collect(DISTINCT ...)`, usando `WITH` entre ramas.
   - Consulta por docente: no inventes un nodo `Profesor` o `Docente`. Si el schema confirma
     `Curso.coordinador` o `Carrera.coordinador`, filtra esa propiedad con un parámetro textual
@@ -176,10 +176,12 @@ Reglas obligatorias y no negociables:
    OPTIONAL MATCH (c)-[:TIENE]->(s:Silabo)
    WITH c, head(collect(DISTINCT s.sumilla)) AS sumilla
    OPTIONAL MATCH (c)-[:TIENE]->(:Cobertura_Curricular)-[:CUBRE]->(l:Logros)
-   WITH c, sumilla, collect(DISTINCT l.nombre_herramienta) AS logros
-   OPTIONAL MATCH (c)-[:TIENE]->(:Cobertura_Curricular)-[:CUBRE]->(ct:competencia_tecnica)
-   WITH c, sumilla, logros, collect(DISTINCT ct.nombre_habilidad) AS competencias_tecnicas
-   RETURN c.nombre_curso AS nombre_curso, sumilla, logros, competencias_tecnicas LIMIT $limite`.
+   WITH c, sumilla, collect(DISTINCT l.logro) AS logros
+   OPTIONAL MATCH (c)-[:TIENE]->(:Cobertura_Curricular)-[:CUBRE]->(co:Competencia)
+   WITH c, sumilla, logros, collect(DISTINCT co.nombre_competencia) AS competencias
+   OPTIONAL MATCH (c)-[:TIENE]->(:Cobertura_Curricular)-[:CUBRE]->(ct:Habilidad)
+   WITH c, sumilla, logros, competencias, collect(DISTINCT ct.nombre_habilidad) AS habilidades
+   RETURN c.nombre_curso AS nombre_curso, sumilla, logros, competencias, habilidades LIMIT $limite`.
   `DISTINCT` sobre todas las columnas no reemplaza esta agregación: elimina combinaciones
   idénticas, pero no evita la multiplicación de ramas uno-a-muchos.
 - Parametrizá todo valor proveniente de la pregunta. Preferí
@@ -203,7 +205,9 @@ Reglas obligatorias y no negociables:
   de que el resultado representa una ausencia curricular y no sólo demanda laboral. Incluí
   `count(DISTINCT oferta)` con un alias visible y ordená de mayor a menor por esa demanda.
 - Respetá el contrato canónico de entidades: usá el nombre concreto de la entidad en el
-  parámetro (`$industria_id`, `$logro_id`, `$competencia_tecnica_id`, `$carrera_id`, etc.) y comparalo sólo con su
+  parámetro (`$industria_id`, `$logro_id`, `$competencia_id`, `$competencia_tecnica_id`,
+  `$carrera_id`, etc.) y
+  comparalo sólo con su
   propiedad ID correspondiente mediante `=`. Para listas, usá el plural concreto (`*_ids`)
   con la misma propiedad ID mediante `IN`. Nunca uses aliases genéricos como `$entidad_id`,
   ni `CONTAINS`, `toLower` o propiedades textuales con parámetros `_id`/`_ids`.
@@ -275,7 +279,9 @@ def build_cypher_correction_prompt(exc: Exception | None = None) -> str:
     if exc is not None and "Canonical ID parameter" in str(exc):
         semantic_feedback = (
             " La salida violó el contrato semántico de parámetros: usá el nombre concreto "
-            "de la entidad (`$industria_id`, `$logro_id`, `$competencia_tecnica_id`, `$carrera_id`, etc.) con su "
+            "de la entidad (`$industria_id`, `$logro_id`, `$competencia_id`, "
+            "`$competencia_tecnica_id`, "
+            "`$carrera_id`, etc.) con su "
             "propiedad `id_*` y `=`, o su plural concreto `*_ids` con `IN`. No uses aliases "
             "genéricos como `$entidad_id`, nombres, `CONTAINS` ni `toLower` con IDs canónicos."
         )

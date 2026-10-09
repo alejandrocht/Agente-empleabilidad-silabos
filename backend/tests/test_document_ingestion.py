@@ -274,7 +274,7 @@ def test_transformer_builder_enforces_ciAR_allow_lists(monkeypatch: pytest.Monke
         "Oferta_Laboral",
         "Puesto",
         "Habilidad",
-        "Herramienta",
+        "Logros",
         "Competencia",
         "Requerimiento_Laboral",
         "Cobertura_Curricular",

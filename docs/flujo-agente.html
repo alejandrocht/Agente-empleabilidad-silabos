@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flujo · Agente de empleabilidad</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #fff; color: #173f41; font-family: "Segoe UI", Arial, Helvetica, sans-serif; }
+    main { width: min(1180px, 100%); margin: 0 auto; padding: 52px 24px 68px; }
+    h1 { margin: 0 0 10px; font-size: clamp(25px, 4vw, 34px); font-weight: 650; }
+    .intro { margin: 0 0 34px; color: #4d6263; font-size: 17px; }
+    svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .node { fill: #f5fbfa; stroke: #245a5c; stroke-width: 2; }
+    .node-safe { fill: #eef7f4; stroke: #3f7c68; stroke-width: 2; }
+    .node-answer { fill: #f7f4fb; stroke: #77639a; stroke-width: 2; }
+    .flow { fill: none; stroke: #5a9293; stroke-width: 2.5; marker-end: url(#arrow); }
+    .title { fill: #173f41; font-size: 18px; font-weight: 650; text-anchor: middle; }
+    .body { fill: #405657; font-size: 14px; text-anchor: middle; }
+    .small { fill: #6b7b7c; font-size: 13px; text-anchor: middle; }
+    .branch { fill: #fff; stroke: #245a5c; stroke-width: 2; }
+    .branch-text { fill: #173f41; font-size: 14px; font-weight: 650; text-anchor: middle; }
+    .label { fill: #3f7c68; font-size: 13px; font-weight: 650; }
+    @media (max-width: 720px) { main { padding: 30px 14px 42px; } .intro { font-size: 15px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Agente de empleabilidad</h1>
+    <p class="intro">Responde preguntas en lenguaje cotidiano usando datos académicos y de empleabilidad.</p>
+    <svg viewBox="0 0 1120 820" role="img" aria-label="Flujo de atención de preguntas del agente">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a9293" />
+        </marker>
+      </defs>
+
+      <rect class="node" x="45" y="54" width="235" height="120" rx="18" />
+      <text class="title" x="162" y="94">Pregunta de la persona</text>
+      <text class="body" x="162" y="123">Puede escribirla</text>
+      <text class="body" x="162" y="145">en lenguaje cotidiano</text>
+
+      <path class="flow" d="M280 114 H327" />
+
+      <rect class="node-safe" x="330" y="54" width="230" height="120" rx="18" />
+      <text class="title" x="445" y="94">Revisar la entrada</text>
+      <text class="body" x="445" y="123">Descarta instrucciones</text>
+      <text class="body" x="445" y="145">o formatos no seguros</text>
+
+      <path class="flow" d="M560 114 H607" />
+
+      <rect class="node" x="610" y="54" width="250" height="120" rx="18" />
+      <text class="title" x="735" y="92">Entender la intención</text>
+      <text class="body" x="735" y="121">Un modelo identifica si necesita</text>
+      <text class="body" x="735" y="143">consultar datos o responder directo</text>
+
+      <path class="flow" d="M735 174 V218" />
+      <path class="branch" d="M735 222 L820 280 L735 338 L650 280 Z" />
+      <text class="branch-text" x="735" y="275">¿Necesita datos</text>
+      <text class="branch-text" x="735" y="296">del grafo?</text>
+
+      <path class="flow" d="M650 280 H505" />
+      <text class="label" x="572" y="270">No</text>
+      <rect class="node-answer" x="155" y="220" width="320" height="120" rx="18" />
+      <text class="title" x="315" y="260">Responder directamente</text>
+      <text class="body" x="315" y="289">Responde orientación general</text>
+      <text class="body" x="315" y="311">sin consultar Neo4j</text>
+
+      <path class="flow" d="M735 338 V388" />
+      <text class="label" x="748" y="368">Sí</text>
+
+      <rect class="node" x="580" y="392" width="310" height="128" rx="18" />
+      <text class="title" x="735" y="432">Preparar consulta</text>
+      <text class="body" x="735" y="461">Consulta la estructura disponible</text>
+      <text class="body" x="735" y="483">y el modelo formula la pregunta de datos</text>
+
+      <path class="flow" d="M735 520 V562" />
+
+      <rect class="node-safe" x="580" y="566" width="310" height="128" rx="18" />
+      <text class="title" x="735" y="606">Confirmar seguridad</text>
+      <text class="body" x="735" y="635">Verifica entidades y permite</text>
+      <text class="body" x="735" y="657">solo consultas de lectura</text>
+
+      <path class="flow" d="M890 630 H937" />
+
+      <rect class="node-safe" x="940" y="566" width="150" height="128" rx="18" />
+      <text class="title" x="1015" y="606">Neo4j</text>
+      <text class="body" x="1015" y="635">Consulta</text>
+      <text class="body" x="1015" y="657">los datos</text>
+
+      <path class="flow" d="M1015 694 V742 H475" />
+      <path class="flow" d="M315 340 V742 H475" />
+
+      <rect class="node-answer" x="478" y="686" width="315" height="112" rx="18" />
+      <text class="title" x="635" y="725">Redactar respuesta</text>
+      <text class="body" x="635" y="754">Un modelo explica los resultados</text>
+      <text class="body" x="635" y="776">de forma clara y útil</text>
+    </svg>
+  </main>
+</body>
+</html>

@@ -15,6 +15,7 @@ from agente.dashboard.consultas import (
     UNSUPPORTED_DATASETS,
     get_dashboard_query,
 )
+from agente.dashboard.catalogo_oficial import construir_brecha_catalogo
 from agente.nodos.devuelve_respuesta import ReadQueryGateway
 from agente.utils.cypher_guard import guard_cypher
 from agente.utils.db import normalize_neo4j_value, open_query_gateway
@@ -154,6 +155,25 @@ async def metadatos(
             "unsupported": dict(UNSUPPORTED_DATASETS),
         },
     }
+
+
+async def brecha_catalogo_oficial(
+    *,
+    query_gateway: ReadQueryGateway | None = None,
+    result_cache: QueryResultCache | None = None,
+) -> dict[str, Any]:
+    """Return coverage and gaps restricted to the official technical catalog."""
+
+    rows = await _execute(
+        "dashboard_catalogo_oficial",
+        {},
+        query_gateway=query_gateway,
+        result_cache=result_cache,
+    )
+    graph_rows = rows[0].get("habilidades", []) if rows else []
+    if not isinstance(graph_rows, list):
+        raise TypeError("La consulta del catálogo oficial devolvió una forma inválida.")
+    return construir_brecha_catalogo([row for row in graph_rows if isinstance(row, dict)])
 
 
 async def obtener_carrera(

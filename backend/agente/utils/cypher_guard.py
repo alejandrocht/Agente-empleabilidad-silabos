@@ -30,7 +30,7 @@ class GuardedCypher:
 
     text: str
     parameters: dict[str, Any]
-    limit: int
+    limit: int | None
 
 
 _PARAMETER = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
@@ -181,9 +181,16 @@ def _reconcile_parameters(masked: str, parameters: Mapping[str, Any]) -> dict[st
     return dict(parameters)
 
 
-def _bounded_limit(tokens: list[str], parameters: Mapping[str, Any]) -> int:
+def _bounded_limit(
+    tokens: list[str],
+    parameters: Mapping[str, Any],
+    *,
+    allow_unbounded: bool = False,
+) -> int | None:
     limit_indexes = [index for index, token in enumerate(tokens) if token == "LIMIT"]
     if len(limit_indexes) != 1:
+        if allow_unbounded and not limit_indexes:
+            return None
         raise CypherGuardError("Exactly one statically analyzable LIMIT is required")
     index = limit_indexes[0]
     if index + 1 >= len(tokens) or index + 2 != len(tokens):
@@ -287,8 +294,14 @@ def validate_order_by_aggregate_projection(text: str) -> None:
 def guard_cypher(
     text: str,
     parameters: Mapping[str, Any] | None = None,
+    *,
+    allow_unbounded: bool = False,
 ) -> GuardedCypher:
-    """Validate a conservative read-only Cypher subset without rewriting it."""
+    """Validate a conservative read-only Cypher subset without rewriting it.
+
+    Queries remain bounded by default. ``allow_unbounded`` is reserved for
+    explicitly trusted internal flows, such as the fixed demo catalog.
+    """
     if not isinstance(text, str) or not text.strip():
         raise CypherGuardError("Cypher text must be nonblank")
     supplied = {} if parameters is None else parameters
@@ -314,7 +327,11 @@ def guard_cypher(
     normalized_tokens = [
         token if token.startswith("$") else token.upper() for token in limit_tokens
     ]
-    limit = _bounded_limit(normalized_tokens, reconciled)
+    limit = _bounded_limit(
+        normalized_tokens,
+        reconciled,
+        allow_unbounded=allow_unbounded,
+    )
     _reject_complete_entities(masked)
     validate_order_by_aggregate_projection(masked)
     validate_parameter_cardinality(masked, reconciled)
@@ -409,7 +426,12 @@ def validate_entity_parameter_semantics(
         contract.id_property: contract
         for contract in CANONICAL_ENTITY_PARAMETERS.values()
     }
-    polymorphic_element_properties = {"id_habilidad", "id_herramienta"}
+    polymorphic_element_properties = {
+        "id_habilidad",
+        "id_herramienta",
+        "id_logros",
+        "id_competencia",
+    }
     for name, property_name, operator, wrapped in all_comparisons:
         if not (name.endswith("_id") or name.endswith("_ids")):
             continue

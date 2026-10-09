@@ -457,6 +457,7 @@ class AsyncNeo4jQueryGateway:
         parameters: Mapping[str, Any] | None = None,
         *,
         diagnostic_stage: DiagnosticStage = "entity_resolution",
+        allow_unbounded: bool = False,
     ) -> list[dict[str, Any]]:
         parameter_names = (
             sorted(name for name in parameters if isinstance(name, str))
@@ -472,7 +473,11 @@ class AsyncNeo4jQueryGateway:
             parameter_count=len(parameter_names),
         )
         try:
-            guarded = guard_cypher(cypher, parameters)
+            guarded = guard_cypher(
+                cypher,
+                parameters,
+                allow_unbounded=allow_unbounded,
+            )
         except Exception as exc:
             log_error(
                 "neo4j_query",

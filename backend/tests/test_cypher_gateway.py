@@ -282,9 +282,9 @@ def test_guard_rejects_unprojected_order_by_aggregate() -> None:
             {"industria_id": "INDU_1"},
         ),
         (
-            "MATCH (h:Herramienta) WHERE h.id_herramienta IN $herramienta_ids "
-            "RETURN h.nombre_herramienta AS herramienta LIMIT 10",
-            {"herramienta_ids": ["HERR_1", "HERR_2"]},
+                "MATCH (l:Logros) WHERE l.id_logros IN $logro_ids "
+                "RETURN l.logro AS logro LIMIT 10",
+                {"logro_ids": ["LOGRO_1", "LOGRO_2"]},
         ),
         (
             "MATCH (c:Carrera) WHERE $carrera_id = c.id_carrera "

@@ -49,7 +49,11 @@ def _normalize_temporal_aliases(rows: list[dict[str, Any]]) -> list[dict[str, An
 
 class ReadQueryGateway(Protocol):
     async def run(
-        self, cypher: str, parameters: Mapping[str, Any] | None = None
+        self,
+        cypher: str,
+        parameters: Mapping[str, Any] | None = None,
+        *,
+        allow_unbounded: bool = False,
     ) -> list[dict[str, Any]]: ...
 
 

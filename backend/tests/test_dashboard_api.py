@@ -29,8 +29,30 @@ def test_every_active_dashboard_query_is_guarded_read_only() -> None:
 def test_dashboard_gap_weights_curriculum_coverage_by_market_demand() -> None:
     query = get_dashboard_query("dashboard_brechas_competencias").cypher
 
+    assert "MATCH (elemento:Habilidad)" in query
+    assert "-[:CUBRE]-(elemento)" in query
     assert "toFloat(demanda) * toFloat(cobertura) AS demanda_cubierta" in query
     assert "toFloat(demanda) * (1.0 - toFloat(cobertura)) AS brecha" in query
+
+
+def test_official_catalog_gap_uses_only_official_concepts() -> None:
+    gateway = FakeGateway(
+        [
+            {
+                "habilidades": [
+                    {"id": "HAB_1", "nombre": "Analizar datos", "cursos_con_cobertura": 2},
+                    {"id": "HAB_2", "nombre": "Comunicar resultados", "cursos_con_cobertura": 0},
+                ]
+            }
+        ]
+    )
+
+    result = asyncio.run(servicio.brecha_catalogo_oficial(query_gateway=gateway))
+
+    assert result["conceptos_unicos"] == 222
+    assert result["cubiertas"] + result["no_cubiertas"] == 222
+    assert result["filas_hoja"] == 278
+    assert gateway.calls[0][1] == {}
 
 
 def test_dashboard_execution_uses_fixed_query_parameters_and_cache() -> None:

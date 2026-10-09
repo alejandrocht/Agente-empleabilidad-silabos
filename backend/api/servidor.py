@@ -21,7 +21,9 @@ from agente import responder
 from agente.api.acceso_administrativo import require_local_administrator
 from agente.api.neo4j_importacion import router as neo4j_importacion_router
 from agente.api.normalizador import router as normalizador_router
+from agente.config.settings import booleano
 from agente.dashboard import servicio as dashboard
+from agente.demo_conversacional import PREGUNTAS_DEMO, responder_demo
 from agente.grafo.constructor import construir_grafo
 from agente.memoria_corta import DEFAULT_CONVERSATION_MEMORY, server_memory_scope
 from agente.utils.cypher_guard import CypherGuardError, guard_cypher
@@ -180,6 +182,15 @@ def _graph_timeout_seconds() -> float:
     return value if math.isfinite(value) and value > 0 else DEFAULT_GRAPH_TIMEOUT_SECONDS
 
 
+def _demo_mode_enabled() -> bool:
+    """Use the deterministic query catalog when an LLM key is unavailable."""
+    return booleano("CIAR_DEMO_MODE", False)
+
+
+def _demo_catalog_text() -> str:
+    return "\n".join(f"- {item.pregunta}" for item in PREGUNTAS_DEMO)
+
+
 def extract_public_text(content: object) -> str:
     """Extract only explicit text blocks from a chat-model stream chunk."""
     if isinstance(content, str):
@@ -243,6 +254,40 @@ def stream_message_event(message_id: str, node: str, content: str) -> str:
         {"langgraph_node": node},
     ]
     return f"event: messages\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+async def _demo_stream_events(pregunta: str, started_at: float) -> AsyncIterator[str]:
+    """Emit the same small SSE contract as the real graph, without an LLM."""
+    yield stream_progress_event("Ejecutando consulta demo…", "consultando_grafo")
+    try:
+        resultado = await responder_demo(pregunta)
+    except ValueError as exc:
+        yield f"event: error\ndata: {json.dumps({'error': str(exc)}, ensure_ascii=False)}\n\n"
+        yield "event: end\ndata: {}\n\n"
+        return
+    except Exception as exc:
+        log_error("api", "demo_stream_failed", exc, route="chat_stream", status="failed")
+        yield "event: error\ndata: {\"error\": \"La consulta demo no pudo ejecutarse\"}\n\n"
+        yield "event: end\ndata: {}\n\n"
+        return
+
+    public_state = {
+        "respuesta": resultado["respuesta"],
+        "cypher": resultado["cypher"],
+        "fase": "completado",
+        "modo": "demo",
+    }
+    yield f"event: values\ndata: {json.dumps(public_state, ensure_ascii=False)}\n\n"
+    yield stream_message_event(str(uuid4()), "responder_directo", resultado["respuesta"])
+    log_event(
+        "api",
+        "demo_stream_completed",
+        route="chat_stream",
+        duration_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        status="success",
+        output_keys=sorted(public_state),
+    )
+    yield "event: end\ndata: {}\n\n"
 
 
 def _validated_public_cypher(output: Mapping[str, object]) -> str | None:
@@ -396,6 +441,13 @@ async def dashboard_carreras() -> dict[str, Any]:
     return await _dashboard_operation("dashboard_carreras", dashboard.listar_carreras)
 
 
+@app.get("/dashboard/catalogo-oficial/brecha")
+async def dashboard_catalogo_oficial_brecha() -> dict[str, Any]:
+    return await _dashboard_operation(
+        "dashboard_catalogo_oficial_brecha", dashboard.brecha_catalogo_oficial
+    )
+
+
 @app.get("/dashboard/ofertas/tendencia")
 async def dashboard_tendencia(
     desde: date = Query(...),
@@ -514,6 +566,24 @@ async def chat(body: PreguntaChat, request: Request) -> JSONResponse:
 
         thread_id = _thread_id(body.thread_id or body.id_sesion)
         user_identity, new_identity_cookie = _anonymous_identity(request)
+        if _demo_mode_enabled():
+            try:
+                demo = await responder_demo(pregunta)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Pregunta no disponible en modo demo.\n{_demo_catalog_text()}",
+                ) from exc
+            response = JSONResponse(
+                {
+                    "respuesta": demo["respuesta"],
+                    "thread_id": thread_id,
+                    "cypher": demo["cypher"],
+                    "modo": "demo",
+                }
+            )
+            _set_anonymous_cookie(response, request, new_identity_cookie)
+            return response
         try:
             resultado = await asyncio.wait_for(
                 responder(
@@ -571,6 +641,26 @@ async def chat_stream(body: ChatStreamBody, request: Request) -> StreamingRespon
         configurable = dict(body.config.get("configurable", {}))
         thread_id = _thread_id(configurable.get("thread_id"))
         user_identity, new_identity_cookie = _anonymous_identity(request)
+        if _demo_mode_enabled():
+            response = StreamingResponse(
+                _demo_stream_events(pregunta, started_at),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                    "X-CIAR-Thread-ID": thread_id,
+                },
+            )
+            _set_anonymous_cookie(response, request, new_identity_cookie)
+            log_event(
+                "api",
+                "stream_opened",
+                route="chat_stream",
+                status="success",
+                mode="demo",
+                output_keys=["sse"],
+            )
+            return response
         memory_scope = server_memory_scope(user_identity, thread_id)
         configurable.pop("user_id", None)
         configurable.pop("memory_scope", None)
@@ -754,6 +844,24 @@ async def preguntar(pregunta: Pregunta, request: Request) -> JSONResponse:
 
         thread_id = _thread_id(pregunta.thread_id)
         user_identity, new_identity_cookie = _anonymous_identity(request)
+        if _demo_mode_enabled():
+            try:
+                demo = await responder_demo(texto)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Pregunta no disponible en modo demo.\n{_demo_catalog_text()}",
+                ) from exc
+            response = JSONResponse(
+                {
+                    "respuesta": demo["respuesta"],
+                    "thread_id": thread_id,
+                    "cypher": demo["cypher"],
+                    "modo": "demo",
+                }
+            )
+            _set_anonymous_cookie(response, request, new_identity_cookie)
+            return response
         try:
             resultado = await responder(
                 texto,

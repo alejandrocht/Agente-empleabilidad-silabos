@@ -446,12 +446,12 @@ VALID_TEN_RESULTS = (
     {
         "cypher": (
             "MATCH (o:Oferta_Laboral)-[:OFRECE]->(p:Puesto) "
-            "MATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Herramienta) "
-            "WHERE h.id_herramienta = $herramienta_id "
+            "MATCH (o)-[:TIENE]->(r:Requerimiento_Laboral)-[:REQUIERE]->(h:Habilidad) "
+            "WHERE h.id_habilidad = $competencia_tecnica_id "
             "RETURN p.nombre AS puesto, count(DISTINCT o) AS total_ofertas "
             "ORDER BY total_ofertas DESC LIMIT $limite"
         ),
-        "parameters": {"herramienta_id": "HERR_1", "limite": 10},
+            "parameters": {"competencia_tecnica_id": "HAB_1", "limite": 10},
         "query_limit": 10,
     },
     {

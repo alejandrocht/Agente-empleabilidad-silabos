@@ -23,7 +23,8 @@ CANONICAL_ENTITY_PARAMETERS = {
         CanonicalEntityParameter("industria_id", "id_industria"),
         CanonicalEntityParameter("puesto_id", "id_puesto"),
         CanonicalEntityParameter("competencia_tecnica_id", "id_habilidad"),
-        CanonicalEntityParameter("logro_id", "id_herramienta"),
+        CanonicalEntityParameter("competencia_id", "id_competencia"),
+        CanonicalEntityParameter("logro_id", "id_logros"),
         CanonicalEntityParameter("curso_id", "id_curso"),
         CanonicalEntityParameter("facultad_id", "id_facultad"),
     )
@@ -32,8 +33,6 @@ CANONICAL_ENTITY_PARAMETERS = {
 ENTITY_PARAMETER_ALIASES = {
     "habilidad_id": "competencia_tecnica_id",
     "habilidad_ids": "competencia_tecnica_ids",
-    "competencia_id": "competencia_tecnica_id",
-    "competencia_ids": "competencia_tecnica_ids",
     "herramienta_id": "logro_id",
     "herramienta_ids": "logro_ids",
 }

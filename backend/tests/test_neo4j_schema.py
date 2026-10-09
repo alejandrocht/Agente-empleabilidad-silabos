@@ -85,17 +85,27 @@ def test_runtime_schema_loader_uses_the_static_ciar_contract(
         "Cobertura_Curricular",
         "Industria",
         "Oferta_Laboral",
-        "competencia_tecnica",
+        "Habilidad",
+        "Competencia",
         "Requerimiento_Laboral",
         "Puesto",
         "Empresa",
         "Silabo",
     }
+    assert snapshot.structured["node_props"]["Logros"] == ["id_logros", "logro"]
+    assert snapshot.structured["node_props"]["Competencia"] == [
+        "id_competencia",
+        "nombre_competencia",
+        "descripcion_breve",
+        "tipo_competencia",
+        "codigo_competencia",
+    ]
     assert {
         (item["start"], item["type"], item["end"])
         for item in snapshot.structured["relationships"]
     } >= {
+        ("Cobertura_Curricular", "CUBRE", "Competencia"),
         ("Cobertura_Curricular", "CUBRE", "Logros"),
-        ("Cobertura_Curricular", "CUBRE", "competencia_tecnica"),
-        ("Curso", "DESARROLLA", "competencia_tecnica"),
+        ("Cobertura_Curricular", "CUBRE", "Habilidad"),
+        ("Curso", "DESARROLLA", "Habilidad"),
     }

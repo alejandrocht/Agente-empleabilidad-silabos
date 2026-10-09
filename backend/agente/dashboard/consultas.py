@@ -22,13 +22,30 @@ def _query(query_id: str, cypher: str, *parameters: str) -> DashboardQuery:
 
 
 DIMENSIONS: Final[dict[str, tuple[str, str, str]]] = {
-    "competencias": ("Competencia", "id_competencia", "nombre_competencia"),
+    # ``competencias`` is the public compatibility name for technical skills.
+    # The active ontology stores those nodes as Habilidad.
+    "competencias": ("Habilidad", "id_habilidad", "nombre_habilidad"),
     "habilidades": ("Habilidad", "id_habilidad", "nombre_habilidad"),
-    "herramientas": ("Herramienta", "id_herramienta", "nombre_herramienta"),
+    "herramientas": ("Logros", "id_logros", "logro"),
+    "logros": ("Logros", "id_logros", "logro"),
 }
 
 
 _QUERIES: dict[str, DashboardQuery] = {
+    "dashboard_catalogo_oficial": _query(
+        "dashboard_catalogo_oficial",
+        """
+        MATCH (h:Habilidad)
+        OPTIONAL MATCH (cu:Curso)-[:TIENE]->(cc:Cobertura_Curricular)-[:CUBRE]->(h)
+        WITH h, count(DISTINCT cu) AS cursos_con_cobertura
+        RETURN collect({
+                   id: h.id_habilidad,
+                   nombre: h.nombre_habilidad,
+                   cursos_con_cobertura: cursos_con_cobertura
+               }) AS habilidades
+        LIMIT 1
+        """,
+    ),
     "dashboard_carreras": _query(
         "dashboard_carreras",
         """
@@ -160,7 +177,7 @@ for _slug, (_label, _id_property, _name_property) in DIMENSIONS.items():
         MATCH (ca:Carrera {{id_carrera: $carrera_id}})-[:ENSENIA]-(curso_total:Curso)
         WITH ca, count(DISTINCT curso_total) AS total_cursos
         MATCH (ca)-[:ENSENIA]-(curso:Curso)-[:TIENE]-(cobertura:Cobertura_Curricular)
-              -[:{("CUBRE" if _slug == "competencias" else "ENSENIA")}]-(elemento:{_label})
+              -[:CUBRE]-(elemento:{_label})
         RETURN elemento.{_id_property} AS id,
                elemento.{_name_property} AS elemento,
                count(DISTINCT curso) AS cursos_con_cobertura,
@@ -185,7 +202,7 @@ for _slug, (_label, _id_property, _name_property) in DIMENSIONS.items():
         MATCH (elemento:{_label})
         OPTIONAL MATCH (ca)-[:ENSENIA]-(curso_cobertura:Curso)-[:TIENE]
                        -(cobertura:Cobertura_Curricular)
-                       -[:{("CUBRE" if _slug == "competencias" else "ENSENIA")}]-(elemento)
+                       -[:CUBRE]-(elemento)
         WITH elemento, total_cursos, total_ofertas,
              count(DISTINCT curso_cobertura) AS cursos_con_cobertura
         OPTIONAL MATCH (ca)-[:DIRIGE_A]-(oferta_requerida:Oferta_Laboral)-[:TIENE]
