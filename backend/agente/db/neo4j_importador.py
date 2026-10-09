@@ -27,6 +27,10 @@ from agente.db.neo4j import obtener_driver
 from agente.normalizador.ejecuciones import GestorEjecuciones, gestor_ejecuciones
 
 _TECHNICAL_SCHEMAS = dict(neo4j_catalogos.ARCHIVOS_CATALOGO)
+_COMPARISON_SCHEMAS = {
+    **_TECHNICAL_SCHEMAS,
+    "catalogo_habilidades.csv": ("id_habilidad", "nombre_habilidad", "desc_breve"),
+}
 
 
 ID_EJECUCION_RE = re.compile(r"NOR_[0-9a-f]{16}")
@@ -354,8 +358,8 @@ class ImportadorNeo4j:
             "Curso": (
                 "MATCH (n:Curso) RETURN n.id_curso AS id_curso, n.nombre_curso AS nombre_curso, "
                 "n.coordinador AS coordinador, n.creditos AS creditos, n.nivel AS nivel, "
-                "n.tipo_curso AS tipo_curso, n.codigo_curso AS codigo_curso, "
-                "n.id_carrera AS id_carrera"
+                "n.tipo_curso AS tipo_curso, n.naturaleza AS naturaleza, "
+                "n.codigo_curso AS codigo_curso, n.id_carrera AS id_carrera"
             ),
             "Silabo": (
                 "MATCH (n:Silabo) RETURN n.id_silabo AS id_silabo, "
@@ -369,11 +373,22 @@ class ImportadorNeo4j:
                 "n.descripcion_breve_competencia AS descripcion_breve, "
                 "n.tipo_competencia AS tipo_competencia, n.codigo_competencia AS codigo_competencia"
             ),
+            "Habilidad": (
+                "MATCH (n:Habilidad) "
+                "OPTIONAL MATCH (c:Carrera)-[rel:TIENE_HABILIDAD_TECNICA]->(n) "
+                "RETURN n.id_habilidad AS id_habilidad, "
+                "n.id_carrera AS id_carrera, n.nombre_habilidad AS nombre_habilidad, "
+                "n.desc_breve AS desc_breve, n.origen_catalogo AS origen_catalogo, "
+                "collect({id_carrera: c.id_carrera, "
+                "nombre_habilidad: rel.nombre_contextual, "
+                "desc_breve: rel.descripcion_contextual}) AS contextos_catalogo"
+            ),
             "Logro": "MATCH (n:Logro) RETURN n.id_logro AS id_logro, n.logro AS logro",
             "CoberturaCurricular": (
-                "MATCH (n:CoberturaCurricular) RETURN n.id_cob_curricular AS id_cob_curricular, "
-                "n.id_curso AS id_curso, n.id_silabo AS id_silabo, "
-                "n.id_competencia AS id_competencia, n.id_logro AS id_logro"
+                "MATCH (n:CoberturaCurricular) RETURN n.id_cobertura_curricular AS "
+                "id_cobertura_curricular, n.id_curso AS id_curso, n.id_silabo AS id_silabo, "
+                "n.id_competencia AS id_competencia, n.id_habilidad AS id_habilidad, "
+                "n.id_logro AS id_logro"
             ),
         }
         with self._sesion(READ_ACCESS) as sesion:
@@ -384,8 +399,9 @@ class ImportadorNeo4j:
                     "Curso": "id_curso",
                     "Silabo": "id_silabo",
                     "Competencia": "id_competencia",
+                    "Habilidad": "id_habilidad",
                     "Logro": "id_logro",
-                    "CoberturaCurricular": "id_cob_curricular",
+                    "CoberturaCurricular": "id_cobertura_curricular",
                 }[etiqueta]
                 resultado[etiqueta] = {
                     _texto(fila.get(campo_id)): fila for fila in filas if _texto(fila.get(campo_id))
@@ -406,6 +422,11 @@ class ImportadorNeo4j:
                 "id_competencia",
                 _TECHNICAL_SCHEMAS["catalogo_competencias.csv"],
             ),
+            "catalogo_habilidades.csv": (
+                "Habilidad",
+                "id_habilidad",
+                _COMPARISON_SCHEMAS["catalogo_habilidades.csv"],
+            ),
             "catalogo_logros.csv": (
                 "Logro",
                 "id_logro",
@@ -413,7 +434,7 @@ class ImportadorNeo4j:
             ),
             "cobertura_curricular.csv": (
                 "CoberturaCurricular",
-                "id_cob_curricular",
+                "id_cobertura_curricular",
                 _TECHNICAL_SCHEMAS["cobertura_curricular.csv"],
             ),
         }
@@ -423,6 +444,7 @@ class ImportadorNeo4j:
             "nuevos_cursos": 0,
             "nuevos_silabos": 0,
             "nuevas_competencias": 0,
+            "nuevas_habilidades": 0,
             "nuevos_logros": 0,
             "nuevas_coberturas": 0,
             "sin_cambios": 0,
@@ -437,16 +459,36 @@ class ImportadorNeo4j:
                         "curso.csv": "nuevos_cursos",
                         "silabo.csv": "nuevos_silabos",
                         "catalogo_competencias.csv": "nuevas_competencias",
+                        "catalogo_habilidades.csv": "nuevas_habilidades",
                         "catalogo_logros.csv": "nuevos_logros",
                         "cobertura_curricular.csv": "nuevas_coberturas",
                     }[archivo]
                     resumen[resumen_key] += 1
                     continue
-                diferencias = [
-                    campo
-                    for campo in esquema[1:]
-                    if actual.get(campo) is not None and _texto(actual.get(campo)) != fila[campo]
-                ]
+                if archivo == "catalogo_habilidades.csv" and (
+                    actual.get("origen_catalogo") == "catalogo_hab_tec"
+                ):
+                    # Un ID global puede tener nombres distintos en cada carrera.
+                    contexto = next(
+                        (
+                            c
+                            for c in actual.get("contextos_catalogo", [])
+                            if isinstance(c, dict) and c.get("id_carrera") == fila["id_carrera"]
+                        ),
+                        None,
+                    )
+                    diferencias = [
+                        campo
+                        for campo in esquema[1:]
+                        if contexto is None or _texto(contexto.get(campo)) != fila[campo]
+                    ]
+                else:
+                    diferencias = [
+                        campo
+                        for campo in esquema[1:]
+                        if actual.get(campo) is not None
+                        and _texto(actual.get(campo)) != fila[campo]
+                    ]
                 if diferencias:
                     conflictos.append(
                         self._conflicto(
@@ -551,6 +593,7 @@ class ImportadorNeo4j:
                 "nuevos_cursos": 0,
                 "nuevos_silabos": 0,
                 "nuevas_competencias": 0,
+                "nuevas_habilidades": 0,
                 "nuevos_logros": 0,
                 "nuevas_coberturas": 0,
                 "sin_cambios": 0,
@@ -579,8 +622,9 @@ class ImportadorNeo4j:
             "curso.csv": ("Curso", "id_curso"),
             "silabo.csv": ("Silabo", "id_silabo"),
             "catalogo_competencias.csv": ("Competencia", "id_competencia"),
+            "catalogo_habilidades.csv": ("Habilidad", "id_habilidad"),
             "catalogo_logros.csv": ("Logro", "id_logro"),
-            "cobertura_curricular.csv": ("CoberturaCurricular", "id_cob_curricular"),
+            "cobertura_curricular.csv": ("CoberturaCurricular", "id_cobertura_curricular"),
         }
         return [
             {
@@ -655,6 +699,9 @@ class ImportadorNeo4j:
                         "curso.tipo_curso = CASE WHEN 'tipo_curso' "
                         "IN reversion.propiedades_presentes THEN "
                         "reversion.tipo_curso ELSE NULL END, "
+                        "curso.naturaleza = CASE WHEN 'naturaleza' "
+                        "IN reversion.propiedades_presentes THEN "
+                        "reversion.naturaleza ELSE NULL END, "
                         "curso.codigo_curso = CASE WHEN 'codigo_curso' "
                         "IN reversion.propiedades_presentes THEN "
                         "reversion.codigo_curso ELSE NULL END, "

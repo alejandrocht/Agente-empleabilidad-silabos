@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from agente.db.neo4j_importador import ImportadorNeo4j
 from agente.normalizador.ejecuciones import GestorEjecuciones
 from agente.normalizador.silabos import salida_catalogos
@@ -205,6 +207,52 @@ def test_preview_detects_legacy_description_conflict_using_public_alias(
     )
 
 
+def test_preview_reports_new_skill(tmp_path: Path) -> None:
+    gestor, id_ejecucion = _manifest_tecnico(tmp_path)
+    habilidades_path = tmp_path / id_ejecucion / "salidas" / "catalogo_habilidades.csv"
+    with habilidades_path.open("a", encoding="utf-8", newline="") as archivo:
+        csv.DictWriter(
+            archivo,
+            fieldnames=("id_habilidad", "id_carrera", "nombre_habilidad", "desc_breve"),
+        ).writerow(
+            {
+                "id_habilidad": "HAB_TEC_0007",
+                "id_carrera": IDS["id_carrera"],
+                "nombre_habilidad": "Diseño técnico de arquitecturas",
+                "desc_breve": "Selecciona estructuras y patrones según atributos de calidad.",
+            }
+        )
+    importador = ImportadorNeo4j(gestor, driver_factory=lambda: FakeDriver())
+
+    preview = importador.previsualizar(id_ejecucion)
+
+    assert preview["resumen"]["nuevas_habilidades"] == 1
+
+
+def test_preview_reuses_global_skill_across_careers(tmp_path: Path) -> None:
+    gestor, id_ejecucion = _manifest_tecnico(tmp_path)
+    habilidades_path = tmp_path / id_ejecucion / "salidas" / "catalogo_habilidades.csv"
+    habilidad = {
+        "id_habilidad": "HAB_TEC_0007",
+        "id_carrera": IDS["id_carrera"],
+        "nombre_habilidad": "Diseño técnico de arquitecturas",
+        "desc_breve": "Selecciona estructuras y patrones según atributos de calidad.",
+    }
+    with habilidades_path.open("a", encoding="utf-8", newline="") as archivo:
+        csv.DictWriter(archivo, fieldnames=tuple(habilidad)).writerow(habilidad)
+    driver = FakeDriver(
+        graph={"habilidades": [{**habilidad, "id_carrera": "CAR_abcdef0123456789"}]}
+    )
+    importador = ImportadorNeo4j(gestor, driver_factory=lambda: driver)
+
+    preview = importador.previsualizar(id_ejecucion)
+
+    assert preview["resumen"]["nuevas_habilidades"] == 0
+    assert not any(
+        conflicto["archivo"] == "catalogo_habilidades.csv" for conflicto in preview["conflictos"]
+    )
+
+
 def test_importa_grafo_tecnico_y_revierte_sus_creaciones(
     tmp_path: Path,
 ) -> None:
@@ -220,6 +268,7 @@ def test_importa_grafo_tecnico_y_revierte_sus_creaciones(
         "curso.csv",
         "silabo.csv",
         "catalogo_competencias.csv",
+        "catalogo_habilidades.csv",
         "catalogo_logros.csv",
         "cobertura_curricular.csv",
     }
@@ -228,7 +277,8 @@ def test_importa_grafo_tecnico_y_revierte_sus_creaciones(
     consultas = driver.session_obj.queries
     assert not any("ContenidoSemanal" in consulta for consulta in consultas)
     assert any("_ciar_import_created = true" in consulta for consulta in consultas)
-    assert not any("Habilidad" in consulta or "Herramienta" in consulta for consulta in consultas)
+    assert any("Habilidad" in consulta for consulta in consultas)
+    assert not any("Herramienta" in consulta for consulta in consultas)
 
     revertido = importador.revertir(resultado["id_importacion"], confirmar=True)
     assert revertido["estado"] == "revertida"
@@ -248,3 +298,45 @@ def test_gate_tecnico_bloqueado_no_lee_neo4j(
     assert preview["errores"][0]["codigo"] == "RELEASE_GATE_BLOQUEADO"
     assert driver.session_obj.modes == []
     assert driver.session_obj.queries == []
+
+
+@pytest.mark.parametrize("variacion", ["exacto", "nombre", "descripcion", "carrera"])
+def test_preview_compara_contexto_de_catalogo_por_carrera(tmp_path: Path, variacion: str) -> None:
+    gestor, id_ejecucion = _manifest_tecnico(tmp_path)
+    habilidad = {
+        "id_habilidad": "HAB_TEC_007",
+        "id_carrera": IDS["id_carrera"],
+        "nombre_habilidad": "Analítica comercial",
+        "desc_breve": "Analiza campañas.",
+    }
+    ruta = tmp_path / id_ejecucion / "salidas" / "catalogo_habilidades.csv"
+    with ruta.open("a", encoding="utf-8", newline="") as archivo:
+        csv.DictWriter(archivo, fieldnames=tuple(habilidad)).writerow(habilidad)
+    contexto = {**habilidad}
+    if variacion == "nombre":
+        contexto["nombre_habilidad"] = "Nombre alterado"
+    elif variacion == "descripcion":
+        contexto["desc_breve"] = "Descripción alterada"
+    elif variacion == "carrera":
+        contexto["id_carrera"] = "CAR_abcdef0123456789"
+    driver = FakeDriver(
+        graph={
+            "habilidades": [
+                {
+                    "id_habilidad": habilidad["id_habilidad"],
+                    "nombre_habilidad": "Nombre global de otra carrera",
+                    "origen_catalogo": "catalogo_hab_tec",
+                    "contextos_catalogo": [contexto],
+                }
+            ]
+        }
+    )
+    importador = ImportadorNeo4j(gestor, driver_factory=lambda: driver)
+    preview = importador.previsualizar(id_ejecucion)
+    conflictos = [c for c in preview["conflictos"] if c["archivo"] == "catalogo_habilidades.csv"]
+    assert bool(conflictos) is (variacion != "exacto")
+    if variacion == "exacto":
+        assert preview["puede_importar"] is True
+        assert preview["resumen"]["nuevas_habilidades"] == 0
+        resultado = importador.importar(id_ejecucion, preview["fingerprint"], confirmar=True)
+        assert resultado["estado"] == "completada"

@@ -1,4 +1,4 @@
-"""Neo4j writer for the canonical five-file syllabus curriculum contract."""
+"""Neo4j writer for the canonical six-file syllabus curriculum contract."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ _ID_PATTERNS = {
     "id_curso": re.compile(r"CUR_[0-9a-f]{16}"),
     "id_silabo": re.compile(r"SIL_[0-9a-f]{16}"),
     "id_competencia": re.compile(r"COMP_[0-9a-f]{16}"),
+    "id_habilidad": re.compile(r"HAB_TEC_[0-9]+"),
     "id_logro": re.compile(r"LOGRO_[0-9a-f]{16}"),
     "id_cobertura_curricular": re.compile(r"COB_CUR_[0-9a-f]{16}"),
     "id_cob_curricular": re.compile(r"COB_CUR_[0-9a-f]{16}"),
@@ -35,7 +36,7 @@ class TransaccionNeo4j(Protocol):
 
 
 def leer_catalogos(directorio: Path) -> dict[str, list[dict[str, str]]]:
-    """Read only the five CSV artifacts authorized by the technical contract."""
+    """Read only the six CSV artifacts authorized by the technical contract."""
 
     raiz = directorio.resolve()
     if not raiz.is_dir():
@@ -72,6 +73,7 @@ def _validar_ids(filas: Mapping[str, list[dict[str, str]]]) -> None:
     ids_curso = {fila["id_curso"] for fila in filas["curso.csv"]}
     ids_silabo = {fila["id_silabo"] for fila in filas["silabo.csv"]}
     ids_competencia = {fila["id_competencia"] for fila in filas["catalogo_competencias.csv"]}
+    ids_habilidad = {fila["id_habilidad"] for fila in filas["catalogo_habilidades.csv"]}
     ids_logro = {fila["id_logro"] for fila in filas["catalogo_logros.csv"]}
     for fila in filas["silabo.csv"]:
         if fila["id_curso"] not in ids_curso:
@@ -81,12 +83,14 @@ def _validar_ids(filas: Mapping[str, list[dict[str, str]]]) -> None:
             raise ValueError("cobertura_curricular.csv referencia curso o sílabo inexistente")
         if fila["id_competencia"] and fila["id_competencia"] not in ids_competencia:
             raise ValueError("cobertura_curricular.csv referencia una competencia inexistente")
+        if fila["id_habilidad"] and fila["id_habilidad"] not in ids_habilidad:
+            raise ValueError("cobertura_curricular.csv referencia una habilidad inexistente")
         if fila["id_logro"] and fila["id_logro"] not in ids_logro:
             raise ValueError("cobertura_curricular.csv referencia un logro inexistente")
-        if fila["id_logro"] and not fila["id_competencia"]:
-            raise ValueError("Todo logro debe relacionarse con una competencia")
-        if not fila["id_competencia"] and not fila["id_logro"]:
-            raise ValueError("Una cobertura debe relacionar una competencia o un logro")
+        if fila["id_logro"] and not fila["id_competencia"] and not fila["id_habilidad"]:
+            raise ValueError("Todo logro debe relacionarse con una competencia o habilidad")
+        if bool(fila["id_competencia"]) == bool(fila["id_habilidad"]):
+            raise ValueError("Una cobertura debe relacionar una competencia o una habilidad")
 
 
 def _traducir_competencias_para_neo4j(
@@ -150,7 +154,8 @@ def escribir_catalogos(
         "ON CREATE SET curso.nombre_curso = row.nombre_curso, "
         "curso.coordinador = row.coordinador, curso.creditos = row.creditos, "
         "curso.nivel = row.nivel, curso.tipo_curso = row.tipo_curso, "
-        "curso.codigo_curso = row.codigo_curso, curso.id_carrera = row.id_carrera, "
+        "curso.naturaleza = row.naturaleza, curso.codigo_curso = row.codigo_curso, "
+        "curso.id_carrera = row.id_carrera, "
         "curso._ciar_import_id = $import_id, curso._ciar_import_created = true "
         "MERGE (carrera)-[rel:TIENE_CURSO]->(curso) "
         "ON CREATE SET rel._ciar_import_id = $import_id, rel._ciar_import_created = true "
@@ -172,8 +177,6 @@ def escribir_catalogos(
         "silabo.sumilla = row.sumilla, silabo.id_curso = row.id_curso, "
         "silabo.periodo_academico = row.periodo_academico, "
         "silabo._ciar_import_id = $import_id, silabo._ciar_import_created = true "
-        "MERGE (curso)-[rel:TIENE_SILABO]->(silabo) "
-        "ON CREATE SET rel._ciar_import_id = $import_id, rel._ciar_import_created = true "
         "RETURN count(silabo) AS total",
         filas["silabo.csv"],
         import_id,
@@ -201,6 +204,30 @@ def escribir_catalogos(
     _ejecutar_lote(
         tx,
         "UNWIND $rows AS row "
+        "OPTIONAL MATCH (existente:Habilidad {id_habilidad: row.id_habilidad}) "
+        "OPTIONAL MATCH (:Carrera {id_carrera: row.id_carrera})"
+        "-[contexto:TIENE_HABILIDAD_TECNICA]->(existente) "
+        "WITH row, existente, contexto "
+        "WHERE existente IS NULL OR "
+        "(existente.origen_catalogo = 'catalogo_hab_tec' AND contexto IS NOT NULL "
+        "AND contexto.nombre_contextual = row.nombre_habilidad "
+        "AND contexto.descripcion_contextual = row.desc_breve) OR "
+        "(coalesce(existente.origen_catalogo, '') <> 'catalogo_hab_tec' "
+        "AND NOT any(campo IN $campos WHERE "
+        "existente[campo] IS NOT NULL AND existente[campo] <> row[campo])) "
+        "MERGE (habilidad:Habilidad {id_habilidad: row.id_habilidad}) "
+        "ON CREATE SET habilidad.id_carrera = row.id_carrera, "
+        "habilidad.nombre_habilidad = row.nombre_habilidad, "
+        "habilidad.desc_breve = row.desc_breve, habilidad._ciar_import_id = $import_id, "
+        "habilidad._ciar_import_created = true "
+        "RETURN count(habilidad) AS total",
+        filas["catalogo_habilidades.csv"],
+        import_id,
+        campos=list(_salida_catalogos.HABILIDADES_SCHEMA[2:]),
+    )
+    _ejecutar_lote(
+        tx,
+        "UNWIND $rows AS row "
         "OPTIONAL MATCH (existente:Logro {id_logro: row.id_logro}) "
         "WITH row, existente "
         "WHERE existente IS NULL OR NOT any(campo IN $campos WHERE "
@@ -214,50 +241,73 @@ def escribir_catalogos(
         campos=["logro"],
     )
     coberturas = filas["cobertura_curricular.csv"]
-    for requiere_logro in (False, True):
-        lote = [fila for fila in coberturas if bool(fila["id_logro"]) is requiere_logro]
-        if not lote:
-            continue
-        match_logro = "MATCH (logro:Logro {id_logro: row.id_logro}) " if requiere_logro else ""
-        variable_logro = ", logro" if requiere_logro else ""
-        evidencia = (
-            "MERGE (cobertura)-[revid:EVIDENCIA]->(logro) "
-            "ON CREATE SET revid._ciar_import_id = $import_id, "
-            "revid._ciar_import_created = true "
-            if requiere_logro
-            else ""
-        )
-        _ejecutar_lote(
-            tx,
-            "UNWIND $rows AS row "
-            "MATCH (curso:Curso {id_curso: row.id_curso}) "
-            "MATCH (silabo:Silabo {id_silabo: row.id_silabo}) "
-            "MATCH (competencia:Competencia {id_competencia: row.id_competencia}) "
-            f"{match_logro}"
-            "OPTIONAL MATCH (existente:CoberturaCurricular "
-            "{id_cob_curricular: row.id_cob_curricular}) "
-            f"WITH row, curso, silabo, competencia{variable_logro}, existente "
-            "WHERE existente IS NULL OR NOT any(campo IN $campos WHERE "
-            "existente[campo] IS NOT NULL AND existente[campo] <> row[campo]) "
-            "MERGE (cobertura:CoberturaCurricular "
-            "{id_cob_curricular: row.id_cob_curricular}) "
-            "ON CREATE SET cobertura.id_curso = row.id_curso, "
-            "cobertura.id_silabo = row.id_silabo, "
-            "cobertura.id_competencia = row.id_competencia, "
-            "cobertura.id_logro = row.id_logro, cobertura._ciar_import_id = $import_id, "
-            "cobertura._ciar_import_created = true "
-            "MERGE (curso)-[relcurso:TIENE_COBERTURA]->(cobertura) "
-            "ON CREATE SET relcurso._ciar_import_id = $import_id, "
-            "relcurso._ciar_import_created = true "
-            "MERGE (silabo)-[relsilabo:TIENE_COBERTURA]->(cobertura) "
-            "ON CREATE SET relsilabo._ciar_import_id = $import_id, "
-            "relsilabo._ciar_import_created = true "
-            "MERGE (cobertura)-[relcompetencia:CUBRE]->(competencia) "
-            "ON CREATE SET relcompetencia._ciar_import_id = $import_id, "
-            "relcompetencia._ciar_import_created = true "
-            f"{evidencia}"
-            "RETURN count(cobertura) AS total",
-            lote,
-            import_id,
-            campos=list(_salida_catalogos.COBERTURA_SCHEMA[1:]),
-        )
+    for es_habilidad in (False, True):
+        for requiere_logro in (False, True):
+            lote = [
+                fila
+                for fila in coberturas
+                if bool(fila["id_habilidad"]) is es_habilidad
+                and bool(fila["id_logro"]) is requiere_logro
+            ]
+            if not lote:
+                continue
+            if es_habilidad:
+                match_objetivo = "MATCH (habilidad:Habilidad {id_habilidad: row.id_habilidad}) "
+                variable_objetivo = ", habilidad"
+                relacion_objetivo = "MERGE (cobertura)-[relobjetivo:CUBRE_HABILIDAD]->(habilidad) "
+                relacion_id = "relobjetivo"
+            else:
+                match_objetivo = (
+                    "MATCH (competencia:Competencia {id_competencia: row.id_competencia}) "
+                )
+                variable_objetivo = ", competencia"
+                relacion_objetivo = (
+                    "MERGE (cobertura)-[relobjetivo:CUBRE_COMPETENCIA]->(competencia) "
+                )
+                relacion_id = "relobjetivo"
+            match_logro = "MATCH (logro:Logro {id_logro: row.id_logro}) " if requiere_logro else ""
+            variable_logro = ", logro" if requiere_logro else ""
+            relacion_logro = (
+                "MERGE (cobertura)-[rellogro:CUBRE_LOGRO]->(logro) " if requiere_logro else ""
+            )
+            _ejecutar_lote(
+                tx,
+                "UNWIND $rows AS row "
+                "MATCH (curso:Curso {id_curso: row.id_curso}) "
+                "MATCH (silabo:Silabo {id_silabo: row.id_silabo}) "
+                f"{match_objetivo}"
+                f"{match_logro}"
+                "OPTIONAL MATCH (existente:CoberturaCurricular "
+                "{id_cobertura_curricular: row.id_cobertura_curricular}) "
+                f"WITH row, curso, silabo{variable_objetivo}{variable_logro}, existente "
+                "WHERE existente IS NULL OR NOT any(campo IN $campos WHERE "
+                "existente[campo] IS NOT NULL AND existente[campo] <> row[campo]) "
+                "MERGE (cobertura:CoberturaCurricular "
+                "{id_cobertura_curricular: row.id_cobertura_curricular}) "
+                "ON CREATE SET cobertura.id_curso = row.id_curso, "
+                "cobertura.id_silabo = row.id_silabo, "
+                "cobertura.id_competencia = row.id_competencia, "
+                "cobertura.id_habilidad = row.id_habilidad, "
+                "cobertura.id_logro = row.id_logro, cobertura._ciar_import_id = $import_id, "
+                "cobertura._ciar_import_created = true "
+                "MERGE (curso)-[relcurso:TIENE_COBERTURA]->(cobertura) "
+                "ON CREATE SET relcurso._ciar_import_id = $import_id, "
+                "relcurso._ciar_import_created = true "
+                "MERGE (silabo)-[relsilabo:TIENE_COBERTURA]->(cobertura) "
+                "ON CREATE SET relsilabo._ciar_import_id = $import_id, "
+                "relsilabo._ciar_import_created = true "
+                f"{relacion_objetivo}"
+                f"ON CREATE SET {relacion_id}._ciar_import_id = $import_id, "
+                f"{relacion_id}._ciar_import_created = true "
+                f"{relacion_logro}"
+                + (
+                    "ON CREATE SET rellogro._ciar_import_id = $import_id, "
+                    "rellogro._ciar_import_created = true "
+                    if requiere_logro
+                    else ""
+                )
+                + "RETURN count(cobertura) AS total",
+                lote,
+                import_id,
+                campos=list(_salida_catalogos.COBERTURA_SCHEMA[1:]),
+            )

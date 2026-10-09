@@ -127,7 +127,6 @@ def test_importa_nuevo_contrato_sin_habilidades_ni_herramientas(tmp_path: Path) 
     assert "Logro" in cypher
     assert "ContenidoSemanal" not in cypher
     assert "Competencia" in cypher
-    assert "Habilidad" not in cypher
     assert "Herramienta" not in cypher
     assert all(
         "MATCH (competencia" in consulta for consulta, _ in tx.llamadas if "EVIDENCIA" in consulta
@@ -135,6 +134,93 @@ def test_importa_nuevo_contrato_sin_habilidades_ni_herramientas(tmp_path: Path) 
     assert all(
         fila["id_competencia"] for fila in filas["cobertura_curricular.csv"] if fila["id_logro"]
     )
+
+
+def test_materializa_habilidad_y_relaciones_de_cobertura_con_nombres_nuevos() -> None:
+    filas: dict[str, list[dict[str, str]]] = {
+        nombre: [] for nombre, _ in neo4j_catalogos.ARCHIVOS_CATALOGO
+    }
+    filas["curso.csv"] = [
+        {
+            "id_curso": "CUR_1234567890abcdef",
+            "nombre_curso": "Arquitectura",
+            "coordinador": "",
+            "creditos": "",
+            "nivel": "",
+            "tipo_curso": "Obligatorio",
+            "naturaleza": "Taller",
+            "codigo_curso": "A1",
+            "id_carrera": "CAR_1234567890abcdef",
+        }
+    ]
+    filas["silabo.csv"] = [
+        {
+            "id_silabo": "SIL_1234567890abcdef",
+            "codigo_silabo": "A1",
+            "sumilla": "",
+            "id_curso": "CUR_1234567890abcdef",
+            "periodo_academico": "2026-2",
+        }
+    ]
+    filas["catalogo_habilidades.csv"] = [
+        {
+            "id_habilidad": "HAB_TEC_007",
+            "id_carrera": "CAR_1234567890abcdef",
+            "nombre_habilidad": "Diseño técnico",
+            "desc_breve": "Diseña soluciones.",
+        }
+    ]
+    filas["catalogo_logros.csv"] = [{"id_logro": "LOGRO_1234567890abcdef", "logro": "L1"}]
+    filas["cobertura_curricular.csv"] = [
+        {
+            "id_cobertura_curricular": "COB_CUR_1234567890abcdef",
+            "id_curso": "CUR_1234567890abcdef",
+            "id_silabo": "SIL_1234567890abcdef",
+            "id_competencia": "",
+            "id_habilidad": "HAB_TEC_007",
+            "id_logro": "LOGRO_1234567890abcdef",
+        }
+    ]
+
+    tx = TransaccionFalsa()
+    neo4j_catalogos.escribir_catalogos(tx, filas, "IMP_1234567890abcdef")
+    consultas = "\n".join(consulta for consulta, _ in tx.llamadas)
+    assert "MERGE (habilidad:Habilidad {id_habilidad: row.id_habilidad})" in consultas
+    assert "habilidad.id_carrera = row.id_carrera" in consultas
+    assert "CUBRE_HABILIDAD" in consultas
+    assert "CUBRE_LOGRO" in consultas
+    assert "TIENE_SILABO" not in consultas
+    assert "CUBRE_COMPETENCIA" not in consultas
+    assert "contexto.nombre_contextual = row.nombre_habilidad" in consultas
+    assert "contexto.descripcion_contextual = row.desc_breve" in consultas
+    assert "(carrera)-[" not in "\n".join(
+        consulta for consulta, _ in tx.llamadas if "Habilidad" in consulta
+    )
+
+
+def test_habilidad_global_no_compara_id_carrera() -> None:
+    filas: dict[str, list[dict[str, str]]] = {
+        nombre: [] for nombre, _ in neo4j_catalogos.ARCHIVOS_CATALOGO
+    }
+    filas["catalogo_habilidades.csv"] = [
+        {
+            "id_habilidad": "HAB_TEC_007",
+            "id_carrera": "CAR_1234567890abcdef",
+            "nombre_habilidad": "Diseño técnico",
+            "desc_breve": "Diseña soluciones.",
+        }
+    ]
+
+    tx = TransaccionFalsa()
+    neo4j_catalogos.escribir_catalogos(tx, filas, "IMP_1234567890abcdef")
+
+    consulta, parametros = next(
+        (consulta, parametros) for consulta, parametros in tx.llamadas if "Habilidad" in consulta
+    )
+    campos = parametros["campos"]
+    assert isinstance(campos, list)
+    assert campos == ["nombre_habilidad", "desc_breve"]
+    assert "id_carrera" not in campos
 
 
 def test_rechaza_logro_sin_competencia(tmp_path: Path) -> None:
