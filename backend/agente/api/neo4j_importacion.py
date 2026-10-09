@@ -11,6 +11,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agente.db.neo4j_importador import ImportacionNeo4jError, importador_neo4j
+from agente.normalizador.ejecuciones import gestor_ejecuciones
+from agente.normalizador.empleabilidad.neo4j import (
+    ImportacionEmpleabilidadError,
+    importador_empleabilidad_neo4j,
+)
 from agente.observabilidad.logger import log_paso
 from agente.utils.neo4j_schema import (
     Neo4jSchemaMismatchError,
@@ -54,6 +59,8 @@ def _ejecutar(nombre: str, operacion: Callable[[], dict[str, Any]]) -> dict[str,
         return operacion()
     except ImportacionNeo4jError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.mensaje) from exc
+    except ImportacionEmpleabilidadError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.mensaje) from exc
     except Exception as exc:
         log_paso(
             "api.neo4j_importacion",
@@ -70,6 +77,22 @@ def _ejecutar(nombre: str, operacion: Callable[[], dict[str, Any]]) -> dict[str,
             status_code=500,
             detail="La operación de importación no pudo completarse.",
         ) from exc
+
+
+def _importador_para_ejecucion(id_ejecucion: str) -> Any:
+    """Selecciona el importador según el tipo de normalización ya completada."""
+
+    try:
+        estado = gestor_ejecuciones.obtener(id_ejecucion)
+    except KeyError:
+        # Compatibilidad con ejecuciones curriculares de procesos ya reiniciados
+        # y con el adaptador de pruebas del importador histórico.
+        return importador_neo4j
+    return (
+        importador_empleabilidad_neo4j
+        if estado.get("tipo") == "empleabilidad"
+        else importador_neo4j
+    )
 
 
 def _estado_neo4j(
@@ -113,7 +136,10 @@ def obtener_estado_neo4j() -> EstadoNeo4jOut:
 def validar_importacion(body: ValidarImportacionIn) -> dict[str, Any]:
     """Valida el formato, referencias, duplicados y novedad sin escribir."""
 
-    return _ejecutar("validar", lambda: importador_neo4j.previsualizar(body.id_ejecucion))
+    return _ejecutar(
+        "validar",
+        lambda: _importador_para_ejecucion(body.id_ejecucion).previsualizar(body.id_ejecucion),
+    )
 
 
 @router.post("/importar")
@@ -122,7 +148,7 @@ def importar_a_neo4j(body: ImportarNeo4jIn) -> dict[str, Any]:
 
     return _ejecutar(
         "importar",
-        lambda: importador_neo4j.importar(
+        lambda: _importador_para_ejecucion(body.id_ejecucion).importar(
             body.id_ejecucion,
             body.fingerprint,
             body.confirmar,

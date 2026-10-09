@@ -204,3 +204,40 @@ export function obtenerUrlOutputNormalizador(idEjecucion, archivo) {
     .join("/");
   return `/api/normalizador/ejecuciones/${encodeURIComponent(idEjecucion)}/outputs/${ruta}`;
 }
+
+export async function cargarCatalogoHabTec(archivo) {
+  const formulario = new FormData();
+  formulario.append("archivo", archivo);
+  const respuesta = await fetch("/api/normalizador/catalogos/hab-tec", {
+    method: "POST",
+    body: formulario,
+  });
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudo validar el catálogo de HAB_TEC.");
+  }
+  return datos;
+}
+
+export async function vectorizarCatalogoHabTec(idCatalogo) {
+  const respuesta = await fetch(
+    `/api/normalizador/catalogos/hab-tec/${encodeURIComponent(idCatalogo)}/vectorizar`,
+    { method: "POST" },
+  );
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudo iniciar la vectorización.");
+  }
+  return datos;
+}
+
+export async function obtenerCatalogoHabTec(idCatalogo) {
+  const respuesta = await fetch(
+    `/api/normalizador/catalogos/hab-tec/${encodeURIComponent(idCatalogo)}`,
+  );
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudo consultar el catálogo de HAB_TEC.");
+  }
+  return datos;
+}

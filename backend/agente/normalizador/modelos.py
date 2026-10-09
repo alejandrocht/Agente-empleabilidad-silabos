@@ -10,6 +10,7 @@ TipoHoja = Literal["convenios", "informes", "publicaciones"]
 Severidad = Literal["error", "warning"]
 EstadoEjecucion = Literal[
     "recibido",
+    "seleccionando_hoja",
     "extrayendo",
     "validando",
     "validado",

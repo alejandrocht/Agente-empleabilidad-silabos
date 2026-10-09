@@ -10,6 +10,7 @@ from collections.abc import Callable, Coroutine
 from importlib import import_module
 from pathlib import Path
 from typing import Any, Literal, cast
+from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -17,6 +18,10 @@ from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, SecretStr
 
 from agente.config.settings import entero
+from agente.normalizador.catalogo_hab_tec import (
+    ErrorCatalogoHabTec,
+    gestor_catalogos_hab_tec,
+)
 from agente.normalizador.ejecuciones import (
     EjecucionNoCancelable,
     HistorialNoEliminable,
@@ -66,6 +71,52 @@ class _EarlyUploadLimitRoute(APIRoute):
 
 
 router = APIRouter(route_class=_EarlyUploadLimitRoute)
+
+
+@router.post("/catalogos/hab-tec", status_code=202)
+def cargar_catalogo_hab_tec(archivo: UploadFile = File(...)) -> dict[str, object]:
+    """Carga y valida un catálogo HAB_TEC versionado localmente."""
+
+    nombre = Path(archivo.filename or "catalogo_hab_tec.xlsx").name
+    if Path(nombre).suffix.lower() != ".xlsx":
+        raise HTTPException(status_code=422, detail="El catálogo debe cargarse como archivo XLSX.")
+    temporal = gestor_catalogos_hab_tec.base_dir / f".upload-{uuid4().hex}.xlsx"
+    temporal.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with temporal.open("wb") as destino:
+            shutil.copyfileobj(archivo.file, destino, length=1024 * 1024)
+    finally:
+        archivo.file.close()
+    if temporal.stat().st_size > MAX_UPLOAD_BYTES:
+        temporal.unlink(missing_ok=True)
+        raise HTTPException(status_code=413, detail="El archivo supera el límite permitido.")
+    try:
+        return gestor_catalogos_hab_tec.crear_desde_archivo(nombre, temporal)
+    except ErrorCatalogoHabTec as exc:
+        temporal.unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/catalogos/hab-tec/{id_catalogo}/vectorizar", status_code=202)
+def vectorizar_catalogo_hab_tec(id_catalogo: str) -> dict[str, object]:
+    """Genera el índice vectorial local del catálogo."""
+
+    try:
+        return gestor_catalogos_hab_tec.vectorizar(id_catalogo)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Catálogo no encontrado.") from exc
+    except ErrorCatalogoHabTec as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/catalogos/hab-tec/{id_catalogo}")
+def obtener_catalogo_hab_tec(id_catalogo: str) -> dict[str, object]:
+    """Consulta el estado y artefactos del catálogo local."""
+
+    try:
+        return gestor_catalogos_hab_tec.obtener(id_catalogo)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Catálogo no encontrado.") from exc
 
 
 class DecisionCurricularIn(BaseModel):
