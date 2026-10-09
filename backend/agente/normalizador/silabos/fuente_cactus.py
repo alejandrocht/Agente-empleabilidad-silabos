@@ -44,6 +44,12 @@ from agente.normalizador.silabos.cactus_navegacion import (
     NavegadorCactus,
     _SesionCaida,  # noqa: F401
 )
+from agente.normalizador.silabos.entrada import (
+    CARRERAS_ULIMA,
+    TODAS_CARRERAS,
+    es_todas_carreras,
+    normalizar_carrera,
+)
 
 __all__ = (
     "CactusAuthenticationError",
@@ -92,6 +98,8 @@ class ResultadoExtraccionCactus:
     archivos_no_soportados: int
     archivos: tuple[Path, ...]
     errores: tuple[dict[str, str], ...]
+    carreras: tuple[str, ...] = ()
+    carreras_incompletas: tuple[str, ...] = ()
 
     @property
     def completa(self) -> bool:
@@ -105,6 +113,7 @@ class ResultadoExtraccionCactus:
             and self.fetch_fallidos == 0
             and self.sesiones_fallidas == 0
             and self.archivos_no_soportados == 0
+            and not self.carreras_incompletas
         )
 
     def a_dict(self, raiz: Path) -> dict[str, object]:
@@ -132,6 +141,8 @@ class ResultadoExtraccionCactus:
             "archivos_no_soportados": self.archivos_no_soportados,
             "archivos": archivos,
             "errores": list(self.errores),
+            "carreras": list(self.carreras),
+            "carreras_incompletas": list(self.carreras_incompletas),
         }
 
 
@@ -167,6 +178,17 @@ class CactusExtractor(NavegadorCactus):
         cancelada: CancelCallback | None = None,
     ) -> ResultadoExtraccionCactus:
         """Descarga sílabos de una carrera y ciclo sin persistir credenciales."""
+
+        if es_todas_carreras(carrera):
+            return self._extraer_todas(
+                periodo=periodo,
+                usuario=usuario,
+                contrasena=contrasena,
+                directorio_salida=directorio_salida,
+                directorio_perfil=directorio_perfil,
+                al_actualizar_progreso=al_actualizar_progreso,
+                cancelada=cancelada,
+            )
 
         carrera_limpia = str(carrera or "").strip()
         periodo_limpio = re.sub(r"\s+", "", str(periodo or ""))
@@ -214,14 +236,17 @@ class CactusExtractor(NavegadorCactus):
                     cursos_procesados=0,
                     archivos_descargados=0,
                 )
-                cursos = self._procesar_carrera(
-                    pagina,
-                    carrera_limpia,
-                    periodo_limpio,
-                    usuario,
-                    contrasena,
-                    cancelada,
-                ) or []
+                cursos = (
+                    self._procesar_carrera(
+                        pagina,
+                        carrera_limpia,
+                        periodo_limpio,
+                        usuario,
+                        contrasena,
+                        cancelada,
+                    )
+                    or []
+                )
                 if not cursos:
                     errores.append(
                         {
@@ -390,8 +415,7 @@ class CactusExtractor(NavegadorCactus):
                         "codigo": "CACTUS_ADJUNTO_NO_DESCARGABLE",
                         "curso": info["nombre_curso"],
                         "mensaje": (
-                            "El curso figura en Cactus, pero el adjunto no pudo "
-                            "descargarse."
+                            "El curso figura en Cactus, pero el adjunto no pudo descargarse."
                         ),
                     }
                 )
@@ -513,10 +537,7 @@ class CactusExtractor(NavegadorCactus):
                     allow_redirects=False,
                     stream=True,
                 )
-                if (
-                    respuesta_archivo.is_redirect
-                    or respuesta_archivo.is_permanent_redirect
-                ):
+                if respuesta_archivo.is_redirect or respuesta_archivo.is_permanent_redirect:
                     respuesta_archivo.close()
                     return {
                         "info": info,
@@ -594,6 +615,93 @@ class CactusExtractor(NavegadorCactus):
                     "mensaje": str(resultado.get("detalle") or "Falló la descarga del sílabo."),
                 }
             )
+
+    def _extraer_todas(
+        self,
+        *,
+        periodo: str,
+        usuario: str,
+        contrasena: str,
+        directorio_salida: Path,
+        directorio_perfil: Path,
+        al_actualizar_progreso: ProgressCallback | None,
+        cancelada: CancelCallback | None,
+    ) -> ResultadoExtraccionCactus:
+        """Descarga carreras secuencialmente y conserva las carpetas de procedencia."""
+
+        resultados: list[ResultadoExtraccionCactus] = []
+        incompletas: list[str] = []
+        errores: list[dict[str, str]] = []
+        for indice, carrera in enumerate(CARRERAS_ULIMA, start=1):
+            self._verificar_cancelacion(cancelada)
+
+            def progreso(datos: dict[str, object]) -> None:
+                acumulado = dict(datos)
+                for campo in ("cursos_encontrados", "archivos_descargados", "cursos_procesados"):
+                    atributo = "archivos_descargados" if campo == "cursos_procesados" else campo
+                    acumulado[campo] = sum(getattr(r, atributo) for r in resultados) + int(
+                        str(datos.get(campo, 0))
+                    )
+                acumulado.update(
+                    {
+                        "carrera_actual": carrera,
+                        "carreras_procesadas": indice - 1,
+                        "carreras_totales": len(CARRERAS_ULIMA),
+                        "mensaje": f"Carrera {indice}/{len(CARRERAS_ULIMA)}: {carrera}. "
+                        + str(datos.get("mensaje", "")),
+                    }
+                )
+                self._progreso(al_actualizar_progreso, **acumulado)
+
+            try:
+                resultado = self.extraer(
+                    carrera=carrera,
+                    periodo=periodo,
+                    usuario=usuario,
+                    contrasena=contrasena,
+                    directorio_salida=directorio_salida / normalizar_carrera(carrera) / periodo,
+                    directorio_perfil=directorio_perfil,
+                    al_actualizar_progreso=progreso,
+                    cancelada=cancelada,
+                )
+            except CactusAuthenticationError:
+                raise
+            except CactusExtractorError as exc:
+                incompletas.append(carrera)
+                errores.append({"carrera": carrera, "codigo": exc.codigo, "mensaje": exc.mensaje})
+                continue
+            resultados.append(resultado)
+            errores.extend({**error, "carrera": carrera} for error in resultado.errores)
+            if not resultado.completa:
+                incompletas.append(carrera)
+        campos = (
+            "cursos_encontrados",
+            "archivos_descargados",
+            "archivos_procesables",
+            "sin_silabo",
+            "fetch_fallidos",
+            "sesiones_fallidas",
+            "archivos_no_soportados",
+        )
+        totales = {campo: sum(getattr(r, campo) for r in resultados) for campo in campos}
+        combinado = ResultadoExtraccionCactus(
+            carrera=TODAS_CARRERAS,
+            periodo=periodo,
+            **totales,
+            archivos=tuple(p for r in resultados for p in r.archivos),
+            errores=tuple(errores),
+            carreras=CARRERAS_ULIMA,
+            carreras_incompletas=tuple(incompletas),
+        )
+        self._progreso(
+            al_actualizar_progreso,
+            fase="extraccion_completada",
+            mensaje="Finalizó la extracción de todas las carreras.",
+            carreras_procesadas=len(CARRERAS_ULIMA),
+            carreras_totales=len(CARRERAS_ULIMA),
+            **totales,
+        )
+        return combinado
 
     def _emitir_descarga(
         self,

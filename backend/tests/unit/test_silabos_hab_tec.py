@@ -5,10 +5,14 @@ from __future__ import annotations
 import csv
 import json
 from copy import deepcopy
+from io import BytesIO
 from pathlib import Path
 from typing import Any
+from zipfile import ZipFile
 
 import pytest
+from docx import Document
+from fastapi.testclient import TestClient
 from openpyxl import Workbook
 
 from agente.config.settings import configuracion_normalizador_curricular
@@ -189,6 +193,126 @@ def test_misma_habilidad_conserva_evidencia_y_cobertura_de_cada_silabo(
     assert habilidades[0]["desc_breve"] == DESCRIPCION
     with (salida / "cobertura_curricular.csv").open(encoding="utf-8-sig") as archivo:
         assert {f["id_silabo"] for f in csv.DictReader(archivo)} == {"SIL_1", "SIL_2"}
+
+
+def test_todas_selecciona_por_carrera_y_exporta_variantes_exactas_del_mismo_id(
+    indice: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    llamadas = _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+    marketing = _registro("SIL_MARKETING")
+    marketing["carrera"] = "MARKETING"
+    registros = [_registro(), marketing]
+    propuestas = _inferir(registros)
+    assert len(llamadas) == len(propuestas) == 2
+    assert [p["nombre_competencia"] for p in propuestas] == [NOMBRE, "Analítica comercial"]
+    for llamada, nombre in zip(llamadas, [NOMBRE, "Analítica comercial"], strict=True):
+        payload = json.loads(llamada[1][1].split("\n", 1)[1])
+        assert len(payload["catalog_context"]) == 1
+        assert payload["catalog_context"][0]["nombre"] == nombre
+    salida = tmp_path / "salida"
+    aprobadas = [{**p, "estado_aprobacion": "APROBADA"} for p in propuestas]
+    resumen = salida_catalogos.construir_catalogos_curriculares(
+        registros,
+        salida,
+        carrera="TODAS",
+        periodo_academico="2026-2",
+        competencias_tecnicas=aprobadas,
+    )
+    assert resumen["carreras"] == ["INGENIERIA_DE_SISTEMAS", "MARKETING"]
+    with (salida / "catalogo_habilidades.csv").open(encoding="utf-8-sig") as archivo:
+        habilidades = list(csv.DictReader(archivo))
+    assert len(habilidades) == 2
+    assert {h["id_habilidad"] for h in habilidades} == {"HAB_TEC_001"}
+    assert len({h["id_carrera"] for h in habilidades}) == 2
+    assert {(h["nombre_habilidad"], h["desc_breve"]) for h in habilidades} == {
+        (NOMBRE, DESCRIPCION),
+        ("Analítica comercial", "Analiza campañas."),
+    }
+    with (salida / "cobertura_curricular.csv").open(encoding="utf-8-sig") as archivo:
+        assert {f["id_silabo"] for f in csv.DictReader(archivo)} == {"SIL_1", "SIL_MARKETING"}
+    # El alcance TODAS no permite asignar a Marketing el texto oficial de Sistemas.
+    aprobadas[1]["nombre_competencia"] = NOMBRE
+    aprobadas[1]["descripcion_breve_competencia"] = DESCRIPCION
+    with pytest.raises(ValueError, match="idénticos"):
+        salida_catalogos.construir_catalogos_curriculares(
+            registros,
+            tmp_path / "rechazado",
+            carrera="TODAS",
+            periodo_academico="2026-2",
+            competencias_tecnicas=aprobadas,
+        )
+
+
+def test_api_multicarrera_normaliza_aprueba_y_publica_un_solo_paquete(
+    indice: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from agente.api import normalizador
+    from agente.db.neo4j_catalogos import leer_catalogos
+    from agente.normalizador.ejecuciones import GestorEjecuciones
+    from api import servidor
+
+    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_LLM", "true")
+    llamadas = _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+    documento = Document()
+    metadata = documento.add_table(rows=2, cols=2)
+    metadata.cell(0, 0).text, metadata.cell(0, 1).text = "Curso", NOMBRE
+    metadata.cell(1, 0).text, metadata.cell(1, 1).text = "Código", "10001"
+    logro = documento.add_table(rows=2, cols=3)
+    for i, texto in enumerate(("Logro de aprendizaje general", "Descripción", "Competencias")):
+        logro.cell(0, i).text = texto
+    logro.cell(1, 0).text, logro.cell(1, 1).text = "L1", LOGRO
+    docx = BytesIO()
+    documento.save(docx)
+    fuente = BytesIO()
+    with ZipFile(fuente, "w") as paquete:
+        for carrera in ("INGENIERIA_DE_SISTEMAS", "MARKETING"):
+            paquete.writestr(f"{carrera}/2026-2/Ciclo_01/curso.docx", docx.getvalue())
+    gestor = GestorEjecuciones(tmp_path / "ejecuciones")
+    futuros = []
+    submit = gestor._executor.submit
+
+    def enviar(*args, **kwargs):
+        futuro = submit(*args, **kwargs)
+        futuros.append(futuro)
+        return futuro
+
+    monkeypatch.setattr(gestor._executor, "submit", enviar)
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+    respuesta = cliente.post(
+        "/normalizador/silabos",
+        files={"archivo": ("todas.zip", fuente.getvalue(), "application/zip")},
+        data={"carrera": "TODAS", "periodo": "2026-2", "hitl": "0"},
+    )
+    assert respuesta.status_code == 202
+    id_ejecucion = respuesta.json()["id_ejecucion"]
+    assert len(futuros) == 1
+    futuros[0].result(timeout=30)
+    estado = cliente.get(f"/normalizador/ejecuciones/{id_ejecucion}").json()
+    assert estado["estado"] in {"limpiado", "limpiado_con_advertencias"}, estado
+    assert estado["limpieza_silabos"]["registros"] == 2
+    assert estado["release_gate"]["decision"] == "ALLOW_IMPORT"
+    assert len(llamadas) == 2
+    objeto = gestor._obtener_objeto(id_ejecucion)
+    with (objeto.directorio / "salidas/catalogo_habilidades.csv").open(
+        encoding="utf-8-sig"
+    ) as archivo:
+        habilidades = list(csv.DictReader(archivo))
+    assert len(habilidades) == 2
+    assert {h["id_habilidad"] for h in habilidades} == {"HAB_TEC_001"}
+    assert {h["nombre_habilidad"] for h in habilidades} == {NOMBRE, "Analítica comercial"}
+    paquete_validado = leer_catalogos(objeto.directorio / "salidas")
+    assert len(paquete_validado) == 6
+    assert len(paquete_validado["catalogo_habilidades.csv"]) == 2
+    staging = [
+        json.loads(linea)
+        for linea in (objeto.directorio / "limpios/silabos.jsonl").read_text().splitlines()
+    ]
+    assert len({r["id_curso"] for r in staging}) == 2
+    assert {s["id_silabo"] for s in estado["progreso_llm"]["silabos"]} == {
+        r["id_silabo"] for r in staging
+    }
+    assert len(list((tmp_path / "ejecuciones").glob("NOR_*"))) == 1
 
 
 def test_sin_coincidencias_no_fuerza_propuesta_ni_reintenta(

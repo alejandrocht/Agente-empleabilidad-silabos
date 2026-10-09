@@ -29,6 +29,8 @@ from agente.normalizador.modelos import (
 )
 from agente.normalizador.silabos import analista_tecnico, salida_catalogos
 from agente.normalizador.silabos import programa_pdf as _programa_pdf
+from agente.normalizador.silabos.entrada import carrera_del_archivo, es_todas_carreras
+from agente.normalizador.silabos.extraccion_curricular import distinguir_cursos_multicarrera
 from agente.normalizador.silabos.salida_catalogos import ResultadoCatalogosTecnicos
 
 construir_salidas_tecnicas = salida_catalogos.construir_salidas_tecnicas
@@ -378,18 +380,23 @@ def limpiar_archivo(
                 )
             )
         try:
+            carrera_archivo = (
+                carrera_del_archivo(archivo.nombre, validacion.periodo)
+                if es_todas_carreras(validacion.carrera)
+                else validacion.carrera
+            )
             if archivo.formato == "docx":
                 registro = _extraer_docx(
                     ruta,
                     archivo.nombre,
-                    validacion.carrera,
+                    carrera_archivo,
                     validacion.periodo,
                 )
             else:
                 registro = _extraer_pdf(
                     ruta,
                     archivo.nombre,
-                    validacion.carrera,
+                    carrera_archivo,
                     validacion.periodo,
                 )
             datos = registro["datos"]
@@ -492,6 +499,28 @@ def limpiar_archivo(
                 silabos_chunk=1 if silabo_extraido else 0,
             )
             publicar_progreso(progreso_extraccion)
+
+    if es_todas_carreras(validacion.carrera):
+        distinguir_cursos_multicarrera(registros)
+        ids_por_archivo = {
+            str(origen["archivo"]): str(r["id_silabo"])
+            for r in registros
+            if isinstance(origen := r.get("origen"), dict)
+        }
+        for item in cuarentena:
+            origen = item.get("origen")
+            if isinstance(origen, dict) and origen.get("archivo") in ids_por_archivo:
+                item["id_silabo"] = ids_por_archivo[str(origen["archivo"])]
+        if usar_llm:
+            publicar_progreso(
+                replace(
+                    progreso_extraccion,
+                    silabos=tuple(
+                        replace(s, id_silabo=ids_por_archivo.get(s.archivo, s.id_silabo))
+                        for s in progreso_extraccion.silabos
+                    ),
+                )
+            )
 
     staging = limpios / "silabos.jsonl"
     verificar_cancelacion()

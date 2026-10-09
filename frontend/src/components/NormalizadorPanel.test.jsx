@@ -147,6 +147,64 @@ describe("panel del normalizador", () => {
     );
   });
 
+  it("envía todas las carreras en una única carga ZIP", async () => {
+    iniciarNormalizadorSilabos.mockResolvedValue(activa("NOR_todas12345678"));
+    const { container } = await renderPanel();
+    completarFormularioManual(container);
+    fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), {
+      target: { value: "TODAS" },
+    });
+    expect(screen.getByText(/El ZIP debe tener carpetas por carrera/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar limpieza curricular" }));
+    await waitFor(() =>
+      expect(iniciarNormalizadorSilabos).toHaveBeenCalledWith(
+        expect.any(File), "TODAS", "2026-1", 1,
+      ),
+    );
+    expect(iniciarNormalizadorSilabos).toHaveBeenCalledTimes(1);
+    expect(navigation.push).toHaveBeenCalledWith("/NOR_todas12345678");
+  });
+
+  it("rechaza un documento individual al elegir todas las carreras", async () => {
+    const { container } = await renderPanel();
+    completarFormularioManual(container);
+    fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), {
+      target: { value: "TODAS" },
+    });
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: { files: [new File(["docx"], "curso.docx")] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar limpieza curricular" }));
+    expect(await screen.findByText("Para todas las carreras carga un ZIP con carpetas por carrera.")).toBeTruthy();
+    expect(iniciarNormalizadorSilabos).not.toHaveBeenCalled();
+  });
+
+  it("envía todas las carreras en una única extracción Cactus", async () => {
+    iniciarNormalizadorSilabosCactus.mockResolvedValue(activa("NOR_todascactus123"));
+    await renderPanel();
+    fireEvent.change(screen.getByRole("combobox", { name: "Carrera" }), {
+      target: { value: "TODAS" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Periodo" }), {
+      target: { value: "2026-1" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Usuario ULima" }), {
+      target: { value: "usuario.ulima" },
+    });
+    fireEvent.change(screen.getByLabelText("Contraseña ULima"), {
+      target: { value: "secreto" },
+    });
+    expect(screen.getByText(/Cactus recorrerá las 14 carreras/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Extraer y normalizar sílabos" }));
+    await waitFor(() =>
+      expect(iniciarNormalizadorSilabosCactus).toHaveBeenCalledWith(
+        "TODAS", "2026-1", "usuario.ulima", "secreto", 1,
+      ),
+    );
+    expect(iniciarNormalizadorSilabosCactus).toHaveBeenCalledTimes(1);
+    expect(navigation.push).toHaveBeenCalledWith("/NOR_todascactus123");
+  });
+
   it("restaura una ejecución activa sin redirigir y enlaza solo a su inspección", async () => {
     const id = "NOR_restaurar12345678";
     listarEjecucionesNormalizador.mockResolvedValue({ ejecuciones: [activa(id)] });

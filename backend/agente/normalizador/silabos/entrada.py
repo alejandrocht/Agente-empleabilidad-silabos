@@ -21,6 +21,23 @@ MAX_ARCHIVOS = 500
 MAX_BYTES_ARCHIVO = 50 * 1024 * 1024
 MAX_BYTES_DESCOMPRIMIDOS = 500 * 1024 * 1024
 PATRON_PERIODO = re.compile(r"\d{4}-\d+")
+TODAS_CARRERAS = "TODAS"
+CARRERAS_ULIMA = (
+    "Administración",
+    "Arquitectura",
+    "Comunicación",
+    "Contabilidad y Finanzas",
+    "Derecho",
+    "Economía",
+    "Ingeniería Ambiental",
+    "Ingeniería Civil",
+    "Ingeniería Industrial",
+    "Ingeniería de Sistemas",
+    "Ingeniería Mecatrónica",
+    "Marketing",
+    "Negocios Internacionales",
+    "Psicología",
+)
 
 
 def normalizar_etiqueta(valor: object) -> str:
@@ -66,6 +83,25 @@ def normalizar_periodo(valor: object) -> str:
     return periodo
 
 
+def es_todas_carreras(valor: object) -> bool:
+    return normalizar_carrera(valor) in {TODAS_CARRERAS, "TODAS_LAS_CARRERAS"}
+
+
+def carrera_del_archivo(nombre: str, periodo: str) -> str:
+    """Resuelve la carrera explícita en las carpetas del ZIP, sin usar el LLM."""
+
+    partes = PurePosixPath(nombre.replace("\\", "/")).parts[:-1]
+    carreras = {normalizar_carrera(c): normalizar_carrera(c) for c in CARRERAS_ULIMA}
+    for carrera in tuple(carreras):
+        carreras[carrera.replace("_DE_", "_")] = carrera
+    encontradas = {carreras[p] for parte in partes if (p := normalizar_carrera(parte)) in carreras}
+    if len(encontradas) != 1:
+        raise ValueError("Cada sílabo debe estar en una carpeta con una única carrera reconocida")
+    if any(PATRON_PERIODO.fullmatch(p) and p != periodo for p in partes):
+        raise ValueError("El ZIP contiene un periodo diferente al seleccionado")
+    return encontradas.pop()
+
+
 def _hallazgo(
     codigo: str,
     severidad: str,
@@ -107,6 +143,9 @@ def validar_archivo(
 
     archivo = nombre_archivo or ruta.name
     carrera_normalizada = normalizar_carrera(carrera)
+    todas = es_todas_carreras(carrera)
+    if todas:
+        carrera_normalizada = TODAS_CARRERAS
     periodo_normalizado = normalizar_periodo(periodo)
     hallazgos: list[Hallazgo] = []
     archivos: list[ArchivoSilabo] = []
@@ -159,6 +198,14 @@ def validar_archivo(
         )
 
     if ruta.suffix.lower() in {".docx", ".pdf"}:
+        if todas:
+            hallazgos.append(
+                _hallazgo(
+                    "TODAS_CARRERAS_REQUIERE_ZIP",
+                    "error",
+                    "Para todas las carreras carga un ZIP organizado en carpetas por carrera.",
+                )
+            )
         formato = _formato(ruta.name)
         if formato:
             archivos.append(ArchivoSilabo(ruta.name, formato, ruta.stat().st_size))
@@ -185,13 +232,14 @@ def validar_archivo(
                         # Los archivos auxiliares de macOS no son datos curriculares
                         # ni deben contaminar el reporte con warnings irrelevantes.
                         continue
-                    if len(archivos) >= MAX_ARCHIVOS:
+                    limite_archivos = MAX_ARCHIVOS * len(CARRERAS_ULIMA) if todas else MAX_ARCHIVOS
+                    if len(archivos) >= limite_archivos:
                         hallazgos.append(
                             _hallazgo(
                                 "LIMITE_ARCHIVOS_EXCEDIDO",
                                 "error",
                                 "El paquete supera el máximo de sílabos procesables.",
-                                str(MAX_ARCHIVOS),
+                                str(limite_archivos),
                             )
                         )
                         break
@@ -227,6 +275,19 @@ def validar_archivo(
                             )
                         )
                         continue
+                    if todas:
+                        try:
+                            carrera_del_archivo(nombre, periodo_normalizado)
+                        except ValueError as exc:
+                            hallazgos.append(
+                                _hallazgo(
+                                    "CARPETA_CURRICULAR_INVALIDA",
+                                    "error",
+                                    str(exc),
+                                    nombre,
+                                )
+                            )
+                            continue
                     clave = normalizar_etiqueta(nombre)
                     if clave in nombres:
                         hallazgos.append(

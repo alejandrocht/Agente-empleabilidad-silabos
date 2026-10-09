@@ -198,6 +198,10 @@ export default function NormalizadorPanel() {
         setErrorRed("Para procesar sílabos debes indicar carrera y periodo.");
         return;
       }
+      if (carrera === "TODAS" && fuenteSilabos === "manual" && !archivo.name.toLowerCase().endsWith(".zip")) {
+        setErrorRed("Para todas las carreras carga un ZIP con carpetas por carrera.");
+        return;
+      }
       if (
         fuenteSilabos === "cactus" &&
         (!usuario.trim() || !contrasena)
@@ -364,6 +368,7 @@ export default function NormalizadorPanel() {
                       className="w-full appearance-none rounded-xl border border-line bg-paper px-3 py-2.5 pr-10 text-sm font-normal outline-none transition focus:border-ulima focus:ring-2 focus:ring-ulima/20 disabled:cursor-not-allowed disabled:bg-ash disabled:text-muted"
                     >
                       <option value="">Selecciona una carrera</option>
+                      <option value="TODAS">Todas las carreras</option>
                       {CARRERAS_ULIMA.map((opcion) => (
                         <option key={opcion} value={opcion}>
                           {opcion}
@@ -394,6 +399,14 @@ export default function NormalizadorPanel() {
                   </span>
                 </label>
               </div>
+
+              {carrera === "TODAS" ? (
+                <p className="mt-3 rounded-lg border border-ulima/20 bg-[#FFF9F7] px-3 py-2 text-xs leading-5 text-ink" role="status">
+                  Una sola ejecución y un paquete de CSV para todas las carreras del periodo.
+                  Se procesará un sílabo a la vez, usando el catálogo de su carrera.
+                  {fuenteSilabos === "manual" ? " El ZIP debe tener carpetas por carrera, por ejemplo ARQUITECTURA/2026-2/Ciclo_01/curso.docx." : " Cactus recorrerá las 14 carreras."}
+                </p>
+              ) : null}
 
               <div className="mt-4 rounded-xl border border-line bg-fondo p-3.5">
                 <div className="flex flex-wrap items-start justify-between gap-3">

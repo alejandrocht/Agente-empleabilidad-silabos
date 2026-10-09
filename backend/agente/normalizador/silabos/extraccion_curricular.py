@@ -28,6 +28,22 @@ _CURSOS_CON_CODIGO_DUPLICADO = frozenset(
 )
 
 
+def distinguir_cursos_multicarrera(registros: list[dict[str, object]]) -> None:
+    """Distingue las membresías de cursos compartidos antes del análisis y exportación."""
+
+    carreras_por_curso: dict[str, set[str]] = {}
+    for registro in registros:
+        carreras_por_curso.setdefault(_texto(registro.get("id_curso")), set()).add(
+            normalizar_etiqueta(registro.get("carrera"))
+        )
+    for registro in registros:
+        curso = _texto(registro.get("id_curso"))
+        if len(carreras_por_curso[curso]) > 1:
+            carrera = _texto(registro.get("carrera"))
+            registro["id_curso"] = _hash_id("CUR", curso, carrera)
+            registro["id_silabo"] = _hash_id("SIL", _texto(registro.get("id_silabo")), carrera)
+
+
 def _normalizar_modalidad(valor: object) -> str:
     """Reduce la modalidad declarada al único vocabulario permitido por curso.csv."""
 

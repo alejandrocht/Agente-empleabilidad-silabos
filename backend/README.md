@@ -59,6 +59,23 @@ pero `EXTRACTION_COVERAGE_INCOMPLETE` bloquea la publicación.
 
 Cada ejecución usa `hitl=1` por defecto y puede cambiarse a `hitl=0` solo para esa corrida; en 0 las propuestas técnicas válidas se registran automáticamente como `ADD` y la decisión queda en el diario de auditoría. La publicación y la descarga/importación siguen requiriendo que todos los controles del release gate permitan `ALLOW_IMPORT`.
 
+Para normalizar juntas todas las carreras de un periodo, selecciona **Todas las carreras**
+en el frontend (`carrera=TODAS` en la API). Cactus recorre las 14 carreras secuencialmente
+y crea una única ejecución y un paquete de seis CSV. Si alguna carrera no termina,
+la publicación queda bloqueada por cobertura incompleta. También puedes subir un ZIP
+con carpetas explícitas, por ejemplo `ARQUITECTURA/2026-2/Ciclo_01/curso.docx` y
+`MARKETING/2026-2/Ciclo_01/curso.pdf`; no se permite mezclar periodos. En una carga
+manual se procesan las carreras presentes en el ZIP; no se descargan las faltantes.
+El límite multicarrera es de 7000 archivos, conservando los límites de tamaño del ZIP.
+
+El analista procesa cada sílabo con los candidatos vectorizados de su propia carrera.
+Los nombres, descripciones e IDs se copian exactamente del catálogo HAB_TEC. Una
+habilidad compartida conserva una fila por carrera cuando su texto oficial varía.
+Los cursos que comparten ID entre carreras reciben IDs de curso/sílabo diferenciados
+antes del análisis y la exportación. Los cursos sin colisión conservan sus IDs anteriores;
+los códigos del documento no cambian. Los nuevos IDs de cursos compartidos pertenecen
+al alcance multicarrera y no migran registros ya importados desde corridas individuales.
+
 El extractor requiere Playwright y un navegador Chromium instalado en el entorno del backend:
 
 ```powershell

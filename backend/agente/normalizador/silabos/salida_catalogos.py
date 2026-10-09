@@ -22,6 +22,7 @@ from agente.normalizador.silabos.analista_tecnico import (
     cargar_catalogo_hab_tec,
     validar_habilidad_catalogo,
 )
+from agente.normalizador.silabos.entrada import es_todas_carreras
 from agente.normalizador.silabos.extraccion_curricular import _hash_id
 from agente.normalizador.silabos.registro_habilidades import RegistroHabilidades
 
@@ -107,8 +108,9 @@ def _agregar_unico(
     clave: str,
     *,
     variantes_canonicas: bool = False,
+    alcance: str = "",
 ) -> None:
-    identificador = fila[clave]
+    identificador = f"{alcance}:{fila[clave]}" if alcance else fila[clave]
     anterior = destino.get(identificador)
     if anterior is not None and anterior != fila:
         if not variantes_canonicas:
@@ -313,7 +315,7 @@ def construir_catalogos_curriculares(
     registro_habilidades: RegistroHabilidades | None = None,
     catalogo_tecnico: CatalogoTecnico | None = None,
 ) -> dict[str, object]:
-    """Construye catálogos para un único lote carrera-periodo.
+    """Construye un paquete para un periodo y una carrera o el alcance TODAS.
 
     ``competencias_tecnicas`` contiene únicamente propuestas aprobadas. Cada
     resultado debe referenciar ``id_silabo`` y ``logros`` (IDs o textos completos)
@@ -323,7 +325,13 @@ def construir_catalogos_curriculares(
     if not _texto(carrera) or not _texto(periodo_academico):
         raise ValueError("La carrera y el periodo académico son obligatorios")
     for registro in registros:
-        if _texto(registro.get("carrera")).casefold() != _texto(carrera).casefold():
+        carrera_registro = _texto(registro.get("carrera"))
+        if not carrera_registro or es_todas_carreras(carrera_registro):
+            raise ValueError("Cada sílabo debe conservar su carrera concreta")
+        if (
+            not es_todas_carreras(carrera)
+            and carrera_registro.casefold() != _texto(carrera).casefold()
+        ):
             raise ValueError("El lote mezcla carreras")
         if _texto(registro.get("periodo")) != _texto(periodo_academico):
             raise ValueError("El lote mezcla periodos académicos")
@@ -339,7 +347,7 @@ def construir_catalogos_curriculares(
     outcomes_sin_competencia: list[dict[str, object]] = []
     competencias_por_silabo_codigo: dict[tuple[str, str], str] = {}
     logros_por_silabo: dict[str, dict[str, str]] = {}
-    id_carrera = _hash_id("CAR", carrera)
+    carrera_por_silabo: dict[str, str] = {}
 
     for registro in registros:
         datos = registro.get("datos")
@@ -347,6 +355,9 @@ def construir_catalogos_curriculares(
             continue
         id_curso = _texto(registro.get("id_curso"))
         id_silabo = _texto(registro.get("id_silabo"))
+        carrera_registro = _texto(registro.get("carrera"))
+        id_carrera = _hash_id("CAR", carrera_registro)
+        carrera_por_silabo[id_silabo] = carrera_registro
         codigo_curso = _texto(datos.get("codigo_curso"))
         if not id_curso or not id_silabo:
             raise ValueError("Todo registro debe incluir id_curso e id_silabo")
@@ -488,7 +499,9 @@ def construir_catalogos_curriculares(
             if id_catalogo not in catalogos_cerrados:
                 catalogos_cerrados[id_catalogo] = cargar_catalogo_hab_tec(id_catalogo)
             catalogo = catalogos_cerrados[id_catalogo]
-        candidato = validar_habilidad_catalogo(tecnica, carrera, catalogo)
+        carrera_tecnica = carrera_por_silabo[id_silabo]
+        id_carrera = _hash_id("CAR", carrera_tecnica)
+        candidato = validar_habilidad_catalogo(tecnica, carrera_tecnica, catalogo)
         nombre, descripcion = candidato.nombre, candidato.descripcion
         id_habilidad = candidato.referencia
         # Legacy COMP catalogs are accepted only when explicitly supplied offline.
@@ -505,7 +518,7 @@ def construir_catalogos_curriculares(
                 "desc_breve": descripcion,
             },
             "id_habilidad",
-            variantes_canonicas=True,
+            alcance=id_carrera,
         )
         logros_disponibles = logros_por_silabo.get(id_silabo, {})
         ids_disponibles = set(logros_disponibles.values())
@@ -612,6 +625,7 @@ def construir_catalogos_curriculares(
         "archivos": {nombre: len(filas_por_archivo[nombre]) for nombre, _ in ARCHIVOS_CATALOGO},
         "inferencias_tecnicas": len(inferencias),
         "carrera": carrera,
+        "carreras": sorted(set(carrera_por_silabo.values())),
         "periodo_academico": periodo_academico,
         "hallazgos": tuple(hallazgos),
         "cuarentena": tuple(cuarentena),
