@@ -76,6 +76,25 @@ con carpetas explícitas, por ejemplo `ARQUITECTURA/2026-2/Ciclo_01/curso.docx` 
 manual se procesan las carreras presentes en el ZIP; no se descargan las faltantes.
 El límite multicarrera es de 7000 archivos, conservando los límites de tamaño del ZIP.
 
+Para correr sin frontend y aislar los fallos por carrera, mantén la API en el puerto 8001
+y ejecuta desde `backend`:
+
+```powershell
+uv run --locked python scripts/normalizar_cactus_secuencial.py --periodo 2026-2
+```
+
+El script pide usuario y contraseña ULima (oculta) una vez, y espera hasta que termine
+la normalización de cada carrera antes de solicitar la siguiente, de Administración
+a Psicología. Crea 14 ejecuciones independientes, no un paquete conjunto. Usa `hitl=0`
+por defecto; `--hitl 1` exige revisión humana. Cada ejecución conserva el LLM y el
+catálogo vectorizado del backend, y sus CSV siguen sujetos al release gate. Los estados,
+IDs y hallazgos se guardan bajo `backend/resultados_cactus/<fecha>/`, sin credenciales.
+Un error terminal de una carrera no impide intentar las siguientes. Si se pierde conexión,
+se interrumpe con Ctrl+C o aparece un estado desconocido, el script se detiene: el trabajo
+actual puede seguir activo en el backend. Revisa su ID antes de lanzar otra corrida.
+`--desde 2` empieza en Arquitectura; `--desde 14` solo pide Psicología. No reanuda el
+trabajo anterior ni reintenta automáticamente solicitudes de creación sin respuesta.
+
 El analista procesa cada sílabo con los candidatos vectorizados de su propia carrera.
 Los nombres, descripciones e IDs se copian exactamente del catálogo HAB_TEC. Una
 habilidad compartida conserva una fila por carrera cuando su texto oficial varía.
