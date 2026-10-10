@@ -325,6 +325,77 @@ def test_sin_coincidencias_no_fuerza_propuesta_ni_reintenta(
     assert auditoria[0]["severidad"] == "info"
 
 
+@pytest.mark.parametrize("habilitado", [False, True])
+def test_cactus_docx_pipeline_y_cli_verifican_llm_y_habilidades(
+    indice: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, habilitado: bool
+) -> None:
+    from agente.normalizador import ejecuciones
+    from agente.normalizador.ejecuciones import GestorEjecuciones
+    from agente.normalizador.silabos.fuente_cactus import ResultadoExtraccionCactus
+    from scripts import normalizar_cactus_secuencial as cli
+
+    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_LLM", str(habilitado).lower())
+    llamadas = _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+
+    class Extractor:
+        def __init__(self, **_kwargs):
+            pass
+
+        def extraer(self, **kwargs):
+            carpeta = kwargs["directorio_salida"] / "Ciclo_01"
+            carpeta.mkdir(parents=True)
+            archivo = carpeta / "curso.docx"
+            documento = Document()
+            metadata = documento.add_table(rows=2, cols=2)
+            metadata.cell(0, 0).text, metadata.cell(0, 1).text = "Curso", NOMBRE
+            metadata.cell(1, 0).text, metadata.cell(1, 1).text = "Código", "10001"
+            logro = documento.add_table(rows=2, cols=3)
+            for i, texto in enumerate(
+                ("Logro de aprendizaje general", "Descripción", "Competencias")
+            ):
+                logro.cell(0, i).text = texto
+            logro.cell(1, 0).text, logro.cell(1, 1).text = "L1", LOGRO
+            documento.save(archivo)
+            return ResultadoExtraccionCactus(
+                carrera=CARRERA,
+                periodo="2026-2",
+                cursos_encontrados=1,
+                archivos_descargados=1,
+                archivos_procesables=1,
+                sin_silabo=0,
+                fetch_fallidos=0,
+                sesiones_fallidas=0,
+                archivos_no_soportados=0,
+                archivos=(archivo,),
+                errores=(),
+            )
+
+    gestor = GestorEjecuciones(tmp_path / "ejecuciones")
+    identificador, directorio = gestor.crear(
+        "silabos",
+        "cactus.zip",
+        {"carrera": CARRERA, "periodo": "2026-2", "fuente": "cactus", "hitl": "0"},
+    )
+    monkeypatch.setattr(ejecuciones, "CactusExtractor", Extractor)
+    gestor._extraer_y_validar_silabos(
+        gestor._obtener_objeto(identificador), CARRERA, "2026-2", "usuario", "contraseña"
+    )
+    estado = gestor.obtener(identificador)
+    with (directorio / "salidas/catalogo_habilidades.csv").open(encoding="utf-8-sig") as fuente:
+        habilidades = list(csv.DictReader(fuente))
+    monkeypatch.setattr(cli, "CARRERAS_ULIMA", (CARRERA,))
+    monkeypatch.setattr(cli, "solicitar", lambda *_args, **_kwargs: estado)
+    if habilitado:
+        assert estado["release_gate"]["decision"] == "ALLOW_IMPORT", estado
+        assert len(llamadas) == 1
+        assert len(habilidades) == 1 and habilidades[0]["nombre_habilidad"] == NOMBRE
+        assert cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path / "cli") == 0
+    else:
+        assert llamadas == [] and habilidades == []
+        with pytest.raises(RuntimeError, match="LLM desactivado"):
+            cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path / "cli")
+
+
 def test_sin_candidatos_o_logros_no_invoca_modelo(
     indice: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

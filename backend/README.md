@@ -95,6 +95,24 @@ actual puede seguir activo en el backend. Revisa su ID antes de lanzar otra corr
 `--desde 2` empieza en Arquitectura; `--desde 14` solo pide Psicología. No reanuda el
 trabajo anterior ni reintenta automáticamente solicitudes de creación sin respuesta.
 
+Antes de descargar, el script consulta `GET /normalizador/configuracion/curricular` y
+exige que el backend tenga `NORMALIZADOR_CURRICULAR_LLM=true`. Muestra el proveedor
+y modelo efectivos; cambiar esa variable en la terminal del script no cambia el backend
+ya iniciado. El progreso distingue sílabos con respuesta del modelo de los omitidos
+sin logros o candidatos. No marca éxito solo por `ALLOW_IMPORT`: exige análisis LLM
+completado con al menos un sílabo realmente atendido por el modelo. Una respuesta
+válida sin coincidencias puede dejar habilidades vacías; no se fuerzan habilidades.
+
+Para revisar los IDs de la última corrida sin descargar otra vez ni pedir credenciales:
+
+```powershell
+uv run --locked python scripts/normalizar_cactus_secuencial.py --diagnosticar
+```
+
+El diagnóstico consulta el estado actual y guarda `diagnostico.json` junto al resumen.
+Muestra LLM habilitado, modelo, logros detectados, sílabos con respuesta, omitidos,
+propuestas válidas y hallazgos. No modifica las ejecuciones ni sus CSV.
+
 El analista procesa cada sílabo con los candidatos vectorizados de su propia carrera.
 Los nombres, descripciones e IDs se copian exactamente del catálogo HAB_TEC. Una
 habilidad compartida conserva una fila por carrera cuando su texto oficial varía.

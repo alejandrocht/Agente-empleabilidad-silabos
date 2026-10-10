@@ -58,6 +58,19 @@ def test_catorce_carreras_por_http_esperan_llm_y_continuan_tras_error(tmp_path: 
             datos = {
                 "id_ejecucion": activo,
                 "estado": "error" if falla else "limpiado_con_advertencias",
+                "configuracion_curricular": {"usar_llm": True},
+                "progreso_llm": {
+                    "fase": "completado",
+                    "silabos": [
+                        {
+                            "estado_analisis": "completado",
+                            "latencia_modelo_ms": 12.0,
+                            "propuestas_validas": 1,
+                        }
+                    ],
+                }
+                if not falla
+                else None,
                 "release_gate": None if falla else {"decision": "ALLOW_IMPORT"},
                 "hallazgos": [{"codigo": "CACTUS_AUTENTICACION_FALLIDA"}] if falla else [],
             }

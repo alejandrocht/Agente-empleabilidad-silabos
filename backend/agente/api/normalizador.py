@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, SecretStr
 
-from agente.config.settings import entero
+from agente.config.settings import configuracion_normalizador_curricular, entero
 from agente.normalizador.catalogo_hab_tec import (
     ErrorCatalogoHabTec,
     gestor_catalogos_hab_tec,
@@ -151,6 +151,15 @@ class EventoHitlIn(BaseModel):
     """Cambio explícito del modo HITL, independiente de una ejecución."""
 
     hitl: Literal[0, 1]
+
+
+@router.get("/configuracion/curricular")
+def consultar_configuracion_curricular() -> dict[str, object]:
+    """Expone la configuración efectiva sin secretos antes de una descarga."""
+    try:
+        return configuracion_normalizador_curricular().a_dict()
+    except ValueError:
+        raise HTTPException(status_code=503, detail="Configuración curricular inválida.") from None
 
 
 @router.post("/eventos/hitl", status_code=204)
