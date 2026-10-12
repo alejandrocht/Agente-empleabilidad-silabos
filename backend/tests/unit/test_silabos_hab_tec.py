@@ -14,6 +14,7 @@ import pytest
 from docx import Document
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
+from pydantic import ValidationError
 
 from agente.config.settings import configuracion_normalizador_curricular
 from agente.normalizador.catalogo_hab_tec import GestorCatalogosHabTec
@@ -28,7 +29,7 @@ from agente.normalizador.silabos import analista_tecnico, salida_catalogos
 CARRERA = "Ingeniería de Sistemas"
 NOMBRE = "Arquitectura de software"
 DESCRIPCION = "Diseña estructuras y patrones técnicos."
-LOGRO = "Diseña arquitecturas de software mantenibles."
+LOGRO = "Aplica Arquitectura de software y Analítica comercial para resolver problemas técnicos."
 
 
 def _vectorizar(
@@ -144,6 +145,82 @@ def test_modelo_selecciona_referencia_y_python_copia_campos_exactos(
     assert payload["syllabus_context"]["logros"] == [{"texto": LOGRO}]
 
 
+def test_no_infiere_habilidad_desde_un_logro_sin_nombre_explicito(indice, monkeypatch):
+    llamadas = _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+    registro = _registro()
+    registro["datos"]["logro_general"] = "Diseña estructuras y patrones mantenibles."
+    # Nombre de curso y descripción del catálogo no cuentan como evidencia de habilidad.
+    monkeypatch.setattr(HabTecRetriever, "_embedding", lambda *_args: pytest.fail("Sin mención"))
+    assert _inferir([registro]) == []
+    assert llamadas == []
+
+
+def test_modelo_no_puede_devolver_dos_habilidades_por_silabo(indice, monkeypatch):
+    _modelo(monkeypatch, [{"competencias": [_propuesta(), _propuesta()]}])
+    with pytest.raises(ValidationError):
+        _inferir([_registro()])
+
+
+def test_registros_repetidos_no_agregan_otra_habilidad_al_mismo_silabo(indice, monkeypatch):
+    llamadas = _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+    assert len(_inferir([_registro(), _registro()])) == 1
+    assert len(llamadas) == 1
+
+
+def test_exportacion_rechaza_segunda_habilidad_aun_aprobada(indice, monkeypatch, tmp_path):
+    _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+    registro = _registro()
+    registro["datos"]["programa_analitico_detalle"] = [{"tema": "Redes", "contenido": ""}]
+    primera = {**_inferir([registro])[0], "estado_aprobacion": "APROBADA"}
+    segunda = {
+        **primera,
+        "catalogo_ref": "HAB_TEC_002",
+        "nombre_competencia": "Redes",
+        "descripcion_breve_competencia": "Configura redes informáticas.",
+    }
+    with pytest.raises(ValueError, match="una habilidad técnica por sílabo"):
+        salida_catalogos.construir_catalogos_curriculares(
+            [registro],
+            tmp_path,
+            carrera="INGENIERIA_DE_SISTEMAS",
+            periodo_academico="2026-2",
+            competencias_tecnicas=[primera, segunda],
+        )
+    assert not (tmp_path / "catalogo_habilidades.csv").exists()
+
+
+def test_exportacion_revalida_mencion_y_rechaza_inferencia_aprobada(indice, monkeypatch, tmp_path):
+    _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+    registro = _registro()
+    aprobada = {**_inferir([registro])[0], "estado_aprobacion": "APROBADA"}
+    registro["datos"]["logro_general"] = "Diseña estruturas y patrones mantenibles."
+    with pytest.raises(ValueError, match="mencionada explícitamente"):
+        salida_catalogos.construir_catalogos_curriculares(
+            [registro],
+            tmp_path,
+            carrera="INGENIERIA_DE_SISTEMAS",
+            periodo_academico="2026-2",
+            competencias_tecnicas=[aprobada],
+        )
+    assert not (tmp_path / "catalogo_habilidades.csv").exists()
+
+
+@pytest.mark.parametrize(
+    "nombre,texto,esperado",
+    [
+        ("Analítica comercial", "Aplica ANALITICA   COMERCIAL.", True),
+        ("Redes", "Estudia paredes estructurales.", False),
+        ("C", "Programa con C++.", False),
+        ("C++", "Programa con C++.", True),
+    ],
+)
+def test_match_explicito_no_confunde_palabras_o_lenguajes(nombre, texto, esperado):
+    candidato = analista_tecnico.CandidatoTecnico("HAB_TEC_001", CARRERA, nombre, "Descripción", 1)
+    assert (
+        analista_tecnico.habilidad_mencionada(candidato, {"logros": [{"texto": texto}]}) is esperado
+    )
+
+
 @pytest.mark.parametrize("ref", [None, "", "HAB_TEC_999", "HAB_TEC_002"])
 def test_rechaza_inventadas_y_referencias_no_recuperadas(
     indice: Path, monkeypatch: pytest.MonkeyPatch, ref: str | None
@@ -172,7 +249,7 @@ def test_reintento_puede_recuperar_referencia_valida(
 def test_misma_habilidad_conserva_evidencia_y_cobertura_de_cada_silabo(
     indice: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    _modelo(monkeypatch, [{"competencias": [_propuesta(), _propuesta()]}])
+    _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
     registros = [_registro(), _registro("SIL_2")]
     propuestas = _inferir(registros)
     assert [p["id_silabo"] for p in propuestas] == ["SIL_1", "SIL_2"]

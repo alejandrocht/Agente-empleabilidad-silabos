@@ -187,18 +187,23 @@ def test_rechaza_content_length_excesivo_antes_de_crear_ejecucion(
     assert list(tmp_path.iterdir()) == []
 
 
-def test_ruta_de_empleabilidad_no_existe(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_ruta_de_empleabilidad_restaurada_delega_validacion(monkeypatch, tmp_path) -> None:
     gestor = GestorEjecuciones(tmp_path)
     monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    llamadas = []
+    monkeypatch.setattr(gestor, "iniciar_validacion", lambda *args: llamadas.append(args))
     cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
 
     respuesta = cliente.post(
         "/normalizador/empleabilidad",
-        files={"archivo": ("fuente.xlsx", b"retirado", "application/octet-stream")},
+        files={"archivo": ("fuente.xlsx", b"fuente", "application/octet-stream")},
     )
 
-    assert respuesta.status_code == 404
-    assert list(tmp_path.iterdir()) == []
+    assert respuesta.status_code == 202
+    assert respuesta.json()["tipo"] == "empleabilidad"
+    assert len(llamadas) == 1
+    assert llamadas[0][0] == respuesta.json()["id_ejecucion"]
+    assert llamadas[0][1].read_bytes() == b"fuente"
 
 
 def test_inicia_silabos_persiste_hitl_por_defecto(
@@ -308,7 +313,9 @@ def test_inicia_y_consulta_ejecucion_de_silabos(
     assert diagnostico[0] in {"limpiado", "limpiado_con_advertencias"}
     ejecucion = respuesta_get
     assert ejecucion["validacion_silabos"]["valida"] is True
-    assert not {"validacion", "limpieza", "normalizacion"} & ejecucion.keys()
+    assert all(
+        ejecucion.get(campo) is None for campo in ("validacion", "limpieza", "normalizacion")
+    )
     assert ejecucion["limpieza_silabos"]["registros"] == 1
     assert ejecucion["release_gate"]["decision"] == "ALLOW_IMPORT"
     outputs = {output["archivo"] for output in ejecucion["outputs"]}

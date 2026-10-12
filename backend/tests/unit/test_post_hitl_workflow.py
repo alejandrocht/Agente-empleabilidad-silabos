@@ -114,6 +114,9 @@ def _preparar_ejecucion(
                         }
                     ],
                     "logro_general": "Diseña servicios mantenibles.",
+                    "programa_analitico_detalle": [
+                        {"tema": "Arquitectura de APIs", "contenido": ""}
+                    ],
                 },
             }
         )
@@ -466,6 +469,31 @@ def test_mixed_career_rejects_add_without_persisting_decision(
     assert not (directorio / "salidas" / "reportes" / "decisiones_tecnicas.jsonl").exists()
     assert gate_path.read_bytes() == gate_before
     assert manifest_path.read_bytes() == manifest_before
+
+
+def test_aprobacion_no_puede_publicar_habilidad_implicitamente_inferida(monkeypatch, tmp_path):
+    gestor, identificador, directorio = _preparar_ejecucion(tmp_path)
+    archivo = directorio / "limpios" / "silabos.jsonl"
+    registro = json.loads(archivo.read_text())
+    registro["datos"].pop("programa_analitico_detalle")
+    archivo.write_text(json.dumps(registro) + "\n", encoding="utf-8")
+    monkeypatch.setattr(normalizador, "gestor_ejecuciones", gestor)
+    cliente = TestClient(servidor.app, client=("127.0.0.1", 0))
+    ruta = f"/normalizador/ejecuciones/{identificador}/pendientes"
+    pendientes = cliente.get(ruta).json()
+    manifest = (directorio / "manifest.json").read_bytes()
+    respuesta = cliente.post(
+        ruta + "/decidir",
+        json={
+            "decisiones": [{"id_pendiente": "PROP_TEC_1", "decision": "ADD"}],
+            "revision": pendientes["revision"],
+        },
+    )
+    assert respuesta.status_code == 422
+    assert "mencionada explícitamente" in respuesta.json()["detail"]
+    assert (directorio / "manifest.json").read_bytes() == manifest
+    assert not (directorio / "salidas/reportes/decisiones_tecnicas.jsonl").exists()
+    assert not (directorio / "salidas/catalogo_habilidades.csv").exists()
 
 
 def test_pending_api_deduplicates_persisted_proposals_by_normalized_name(

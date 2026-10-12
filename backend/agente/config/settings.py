@@ -103,6 +103,7 @@ class ConfiguracionNormalizadorCurricular:
     temperatura_llm: float
     modo_analista: str = "technical"
     ruta_catalogo_tecnico: str = ""
+    politica_habilidades: str = "extraccion_explicita_max_1"
 
     def a_dict(self) -> dict[str, object]:
         """Expone el snapshot operativo que acompaña a una ejecución."""

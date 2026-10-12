@@ -20,6 +20,8 @@ from agente.normalizador.modelos import Hallazgo
 from agente.normalizador.silabos.analista_tecnico import (
     CatalogoTecnico,
     cargar_catalogo_hab_tec,
+    construir_contexto_tecnico,
+    habilidad_mencionada,
     validar_habilidad_catalogo,
 )
 from agente.normalizador.silabos.entrada import es_todas_carreras
@@ -348,6 +350,7 @@ def construir_catalogos_curriculares(
     competencias_por_silabo_codigo: dict[tuple[str, str], str] = {}
     logros_por_silabo: dict[str, dict[str, str]] = {}
     carrera_por_silabo: dict[str, str] = {}
+    contextos_por_silabo: dict[str, dict[str, object]] = {}
 
     for registro in registros:
         datos = registro.get("datos")
@@ -358,6 +361,7 @@ def construir_catalogos_curriculares(
         carrera_registro = _texto(registro.get("carrera"))
         id_carrera = _hash_id("CAR", carrera_registro)
         carrera_por_silabo[id_silabo] = carrera_registro
+        contextos_por_silabo[id_silabo] = construir_contexto_tecnico(registro)
         codigo_curso = _texto(datos.get("codigo_curso"))
         if not id_curso or not id_silabo:
             raise ValueError("Todo registro debe incluir id_curso e id_silabo")
@@ -480,6 +484,7 @@ def construir_catalogos_curriculares(
     inferencias: list[dict[str, object]] = []
     curso_por_silabo = {fila["id_silabo"]: fila["id_curso"] for fila in silabos.values()}
     catalogos_cerrados: dict[str, CatalogoTecnico] = {}
+    habilidad_por_silabo: dict[str, str] = {}
     for tecnica in competencias_tecnicas:
         if tecnica.get("estado_aprobacion") != "APROBADA":
             raise ValueError(
@@ -502,8 +507,17 @@ def construir_catalogos_curriculares(
         carrera_tecnica = carrera_por_silabo[id_silabo]
         id_carrera = _hash_id("CAR", carrera_tecnica)
         candidato = validar_habilidad_catalogo(tecnica, carrera_tecnica, catalogo)
+        if catalogo.id_catalogo and not habilidad_mencionada(
+            candidato, contextos_por_silabo[id_silabo]
+        ):
+            raise ValueError(
+                "La habilidad técnica debe estar mencionada explícitamente en el sílabo"
+            )
         nombre, descripcion = candidato.nombre, candidato.descripcion
         id_habilidad = candidato.referencia
+        anterior = habilidad_por_silabo.setdefault(id_silabo, id_habilidad)
+        if anterior != id_habilidad:
+            raise ValueError("Solo se permite una habilidad técnica por sílabo")
         # Legacy COMP catalogs are accepted only when explicitly supplied offline.
         if not catalogo.id_catalogo:
             coincidencia = re.fullmatch(r"COMP_TEC_(\d{4})", id_habilidad)

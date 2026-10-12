@@ -238,6 +238,7 @@ def test_snapshot_incluye_todas_las_selecciones_operativas_sin_secretos() -> Non
         "tamano_lote_llm": 6,
         "temperatura_llm": 0.25,
         "modo_analista": "technical",
+        "politica_habilidades": "extraccion_explicita_max_1",
         "ruta_catalogo_tecnico": str(
             settings.BASE_DIR / "catalogos" / "carrera_competencia_oficial.csv"
         ),

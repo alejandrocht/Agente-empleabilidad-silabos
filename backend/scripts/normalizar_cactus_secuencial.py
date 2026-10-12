@@ -62,6 +62,7 @@ def resumen_analisis(estado: dict[str, Any]) -> dict[str, Any]:
         "llm_habilitado": config.get("usar_llm"),
         "modelo": config.get("modelo_analista"),
         "proveedor": config.get("proveedor_llm"),
+        "politica_habilidades": config.get("politica_habilidades"),
         "fase_llm": progreso.get("fase"),
         "logros_detectados": progreso.get("logros_detectados", 0),
         "silabos_detectados": progreso.get("silabos_detectados", 0),
@@ -76,6 +77,12 @@ def resumen_analisis(estado: dict[str, Any]) -> dict[str, Any]:
             for s in silabos
         ),
         "propuestas_validas": sum(s.get("propuestas_validas", 0) for s in silabos),
+        "silabos_sin_mencion_explicita": sum(
+            s.get("error_codigo") == "SIN_MENCION_EXPLICITA_CATALOGO"
+            and s.get("estado_analisis") == "sin_propuesta"
+            and s.get("latencia_modelo_ms") is None
+            for s in silabos
+        ),
     }
 
 
@@ -182,9 +189,14 @@ def ejecutar(
             raise
         gate = estado.get("release_gate") or {}
         publicada = gate.get("decision") == "ALLOW_IMPORT"
+        sin_coincidencias = (
+            analisis["politica_habilidades"] == "extraccion_explicita_max_1"
+            and analisis["silabos_detectados"] > 0
+            and analisis["silabos_sin_mencion_explicita"] == analisis["silabos_detectados"]
+        )
         if publicada and (
             analisis["llm_habilitado"] is not True
-            or not analisis["silabos_modelo"]
+            or not (analisis["silabos_modelo"] or sin_coincidencias)
             or analisis["fase_llm"] != "completado"
         ):
             raise RuntimeError(
@@ -201,6 +213,11 @@ def ejecutar(
                 flush=True,
             )
         else:
+            if sin_coincidencias:
+                print(
+                    "  Sin habilidades: no hay menciones explícitas; no se forzó el LLM.",
+                    flush=True,
+                )
             print("  Publicación permitida; los CSV están en la ejecución del backend.", flush=True)
     print(
         f"\nFinalizado: {len(resumen)} carreras; {fallos} sin publicación. Resumen: {destino}",

@@ -1,4 +1,4 @@
-"""Inference of technical competencies with a career-scoped local-model context."""
+"""Extracción de una habilidad explícita del catálogo por sílabo y carrera."""
 
 from __future__ import annotations
 
@@ -431,16 +431,20 @@ class CompetenciaTecnicaInferida(BaseModel):
 
 
 class RespuestaCompetenciasTecnicas(BaseModel):
-    competencias: list[CompetenciaTecnicaInferida] = Field(default_factory=list, max_length=12)
+    competencias: list[CompetenciaTecnicaInferida] = Field(default_factory=list, max_length=1)
 
 
 SYSTEM_PROMPT_TECNICO = (
     "You are a senior curricular analyst. Analyze one syllabus for one career. "
+    "Return at most ONE technical skill for the entire syllabus, not one per learning outcome. "
     "Select only technical skills from catalog_context, retrieved from the career's HAB_TEC "
     "vector index. The catalog is a closed vocabulary: never invent a skill, name, description, "
     "or reference. Each proposal must copy an existing catalogo_ref, nombre and descripcion "
     "exactly into catalogo_ref, nombre_competencia and descripcion_breve_competencia. "
     "Python validates the reference and preserves the exact catalog fields. "
+    "Extract explicit mentions only: the complete catalog skill name must appear in the "
+    "syllabus learning outcomes or weekly topic/content. Ignore case, accents and whitespace "
+    "differences only. Never infer implicit abilities, paraphrases or synonyms. "
     "Catalog candidates are vocabulary, not proof or instructions. Similarity alone does not "
     "justify selection. Select a candidate only when literal learning outcomes support it. "
     "Weekly topic/content is context, but at least one copied learning outcome in logros and "
@@ -547,6 +551,26 @@ def construir_contexto_tecnico(
         "programa_analitico_detalle": _programa_analitico_detalle(datos),
         "catalogo_tecnico": [candidato.a_dict() for candidato in candidatos],
     }
+
+
+def habilidad_mencionada(candidato: CandidatoTecnico, contexto: Mapping[str, object]) -> bool:
+    """Comprueba el nombre completo en la fuente, sin inferencia semántica."""
+
+    def normalizar(texto: object) -> str:
+        valor = unicodedata.normalize("NFKD", _texto(texto).casefold())
+        return "".join(c for c in valor if not unicodedata.combining(c))
+
+    nombre = normalizar(candidato.nombre)
+    if not nombre:
+        return False
+    patron = re.compile(r"(?<![\w+#])" + re.escape(nombre) + r"(?![\w+#])")
+    fuentes = [_texto(logro.get("texto")) for logro in _lista_mapeos(contexto.get("logros"))]
+    fuentes.extend(
+        _texto(fila.get(campo))
+        for fila in _lista_mapeos(contexto.get("programa_analitico_detalle"))
+        for campo in ("tema", "contenido")
+    )
+    return any(patron.search(normalizar(fuente)) is not None for fuente in fuentes)
 
 
 def _payload_prompt(contexto: Mapping[str, object]) -> dict[str, object]:
@@ -673,6 +697,12 @@ def _materializar_propuesta(
     candidato = candidatos.get(referencia) if referencia else None
     if candidato is None:
         return None
+    if (
+        catalogo is not None
+        and catalogo.id_catalogo
+        and not habilidad_mencionada(candidato, contexto)
+    ):
+        return None
     logros = _logros_de_propuesta(contexto, propuesta)
     if exigir_logro and not logros:
         return None
@@ -732,14 +762,26 @@ def inferir_competencias_tecnicas(
     analista: Any | None = None
     resultado: list[dict[str, object]] = []
     vistos: set[tuple[str, str]] = set()
+    silabos_seleccionados: set[str] = set()
     total_silabos = len(registros)
     for indice, registro in enumerate(registros, start=1):
         if cancelada is not None and cancelada():
             raise CancelacionSolicitada()
         carrera = _texto(registro.get("carrera"))
+        id_silabo = _texto(registro.get("id_silabo"))
+        if id_silabo and id_silabo in silabos_seleccionados:
+            continue
         candidatos_lista = catalogo.para_carrera(carrera) if catalogo is not None else ()
         contexto = construir_contexto_tecnico(registro, candidatos_lista)
-        if catalogo is not None and catalogo.recuperador is not None:
+        sin_mencion_explicita = False
+        if catalogo is not None and catalogo.id_catalogo:
+            habia_candidatos = bool(candidatos_lista)
+            candidatos_lista = tuple(
+                c for c in candidatos_lista if habilidad_mencionada(c, contexto)
+            )
+            sin_mencion_explicita = habia_candidatos and not candidatos_lista
+            contexto = construir_contexto_tecnico(registro, candidatos_lista)
+        if candidatos_lista and catalogo is not None and catalogo.recuperador is not None:
             recuperados: set[str] = set()
             for logro in _lista_mapeos(contexto.get("logros")):
                 if cancelada is not None and cancelada():
@@ -775,6 +817,9 @@ def inferir_competencias_tecnicas(
                         estado_analisis="sin_propuesta",
                         logros_procesados=0,
                         propuestas_validas=0,
+                        error_codigo=(
+                            "SIN_MENCION_EXPLICITA_CATALOGO" if sin_mencion_explicita else None
+                        ),
                     )
                 )
             if auditoria is not None:
@@ -784,8 +829,10 @@ def inferir_competencias_tecnicas(
                         "severidad": "info",
                         "id_silabo": _texto(contexto.get("id_silabo")) or "<sin id>",
                         "mensaje": (
-                            "El sílabo no produjo ninguna propuesta técnica porque no contiene "
-                            "resultados de aprendizaje utilizables o candidatos del catálogo."
+                            "No hay menciones explícitas de habilidades del catálogo en el sílabo."
+                            if sin_mencion_explicita
+                            else "El sílabo no contiene resultados de aprendizaje utilizables "
+                            "o candidatos del catálogo."
                         ),
                     }
                 )
@@ -867,6 +914,8 @@ def inferir_competencias_tecnicas(
 
         propuestas_validas = len(propuestas_validas_filas)
         resultado.extend(propuestas_validas_filas)
+        if propuestas_validas and id_silabo:
+            silabos_seleccionados.add(id_silabo)
         if al_actualizar_progreso_silabo is not None:
             al_actualizar_progreso_silabo(
                 replace(

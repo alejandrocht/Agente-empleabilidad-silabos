@@ -98,3 +98,30 @@ def test_diagnostico_consulta_ids_existentes_sin_post(monkeypatch, tmp_path, cap
     datos = json.loads((corrida / "diagnostico.json").read_text())
     assert datos[0]["llm_habilitado"] is False and datos[0]["silabos_modelo"] == 0
     assert "Administración" in capsys.readouterr().out
+
+
+def test_sin_menciones_explicitas_no_fuerza_habilidad_ni_llm(monkeypatch, tmp_path):
+    def solicitar(*_args):
+        return {
+            "id_ejecucion": "NOR_0000000000000001",
+            "estado": "limpiado",
+            "configuracion_curricular": {
+                "usar_llm": True,
+                "politica_habilidades": "extraccion_explicita_max_1",
+            },
+            "release_gate": {"decision": "ALLOW_IMPORT"},
+            "progreso_llm": {
+                "fase": "completado",
+                "silabos_detectados": 1,
+                "silabos": [
+                    {
+                        "estado_analisis": "sin_propuesta",
+                        "latencia_modelo_ms": None,
+                        "error_codigo": "SIN_MENCION_EXPLICITA_CATALOGO",
+                    }
+                ],
+            },
+        }
+
+    monkeypatch.setattr(cli, "solicitar", solicitar)
+    assert cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=14) == 0

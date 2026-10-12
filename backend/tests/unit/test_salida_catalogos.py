@@ -73,11 +73,12 @@ def _registro() -> dict[str, object]:
                 }
             ],
             "programa_analitico_detalle": [
+                {"tema": "Diseño técnico de arquitecturas", "contenido": ""},
                 {
                     "semana": "1",
                     "tema": "Fundamentos",
                     "contenido": "Atributos de calidad y decisiones arquitectónicas.",
-                }
+                },
             ],
         },
     }

@@ -100,8 +100,9 @@ exige que el backend tenga `NORMALIZADOR_CURRICULAR_LLM=true`. Muestra el provee
 y modelo efectivos; cambiar esa variable en la terminal del script no cambia el backend
 ya iniciado. El progreso distingue sílabos con respuesta del modelo de los omitidos
 sin logros o candidatos. No marca éxito solo por `ALLOW_IMPORT`: exige análisis LLM
-completado con al menos un sílabo realmente atendido por el modelo. Una respuesta
-válida sin coincidencias puede dejar habilidades vacías; no se fuerzan habilidades.
+completado con sílabos atendidos por el modelo, o una omisión auditada porque ningún
+sílabo contiene menciones explícitas del catálogo. Una carrera sin coincidencias
+puede dejar habilidades vacías; no se fuerzan habilidades ni llamadas al modelo.
 
 Para revisar los IDs de la última corrida sin descargar otra vez ni pedir credenciales:
 
@@ -114,6 +115,15 @@ Muestra LLM habilitado, modelo, logros detectados, sílabos con respuesta, omiti
 propuestas válidas y hallazgos. No modifica las ejecuciones ni sus CSV.
 
 El analista procesa cada sílabo con los candidatos vectorizados de su propia carrera.
+La política `extraccion_explicita_max_1` queda en el snapshot de cada ejecución.
+Solo admite habilidades cuyo nombre completo aparezca en los logros o en el programa
+analítico del sílabo. Para reconocer la mención se ignoran mayúsculas, tildes y espacios;
+el ID, nombre y descripción exportados permanecen idénticos al catálogo. No admite
+sinónimos, paráfrasis ni habilidades implícitas. La similitud vectorial no prueba una mención.
+El LLM selecciona como máximo una habilidad técnica para todo el sílabo. Python vuelve
+a comprobar la mención y el límite al exportar, incluso con aprobación automática.
+Si no hay coincidencia explícita, se registra `SIN_MENCION_EXPLICITA_CATALOGO` y queda
+sin habilidad. Una habilidad seleccionada puede conservar varios logros y coberturas.
 Los nombres, descripciones e IDs se copian exactamente del catálogo HAB_TEC. Una
 habilidad compartida conserva una fila por carrera cuando su texto oficial varía.
 Los cursos que comparten ID entre carreras reciben IDs de curso/sílabo diferenciados
