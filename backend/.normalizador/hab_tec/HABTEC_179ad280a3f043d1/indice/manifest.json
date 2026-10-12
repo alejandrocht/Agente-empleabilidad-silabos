@@ -1,7 +1,7 @@
 {
   "modelo_embedding": "qwen3-embedding:0.6b",
   "dimension": 1024,
-  "registros": 1898,
-  "sha256_catalogo": "7a63b83d00aa7a779098a2bb1ebc0fc138668cd47206e61ed09b63c98a4cc132",
+  "registros": 2190,
+  "sha256_catalogo": "b77d21ad1dc3e18692f06ebedb200164aa0d6a9490800084691abfed3d0cdeef",
   "formato_vectores": "float32-little-endian"
 }

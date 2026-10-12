@@ -1,0 +1,1426 @@
+{
+  "id_catalogo": "HABTEC_179ad280a3f043d1",
+  "archivo": "catalogo_hab_tec_vectorizable.xlsx",
+  "estado": "vectorizado",
+  "creado_en": "2026-10-12T21:54:58.765515+00:00",
+  "actualizada_en": "2026-10-12T21:55:44.870909+00:00",
+  "hoja": "HAB_TEC",
+  "valido": true,
+  "resumen": {
+    "habilidades": 2190,
+    "errores": 0,
+    "advertencias": 435,
+    "modelo_embedding": "qwen3-embedding:0.6b",
+    "dimension_embedding": 1024,
+    "neo4j": {
+      "habilidades": 2128,
+      "asociaciones": 2190
+    }
+  },
+  "preview": [
+    {
+      "carrera": "Administración",
+      "id": "600f9d63ca3c",
+      "nombre": "Adaptación de directrices corporativas a operaciones locales",
+      "descripcion": "Aplicación de directrices y objetivos de la sede corporativa en la gestión local de una empresa o filial, adaptándolos a la realidad regional.",
+      "fila": 2
+    },
+    {
+      "carrera": "Administración",
+      "id": "dc476af4bf29",
+      "nombre": "Adaptación de metodologías de proyectos",
+      "descripcion": "Ajuste de una metodología de gestión de proyectos a las necesidades, tamaño y tipo del proyecto y a la cultura y procesos de la organización.",
+      "fila": 3
+    },
+    {
+      "carrera": "Administración",
+      "id": "02c9ffd396dc",
+      "nombre": "Administración eficiente de recursos",
+      "descripcion": "Planificación y gestión eficiente y responsable de los recursos humanos, materiales y financieros de la organización.",
+      "fila": 4
+    },
+    {
+      "carrera": "Administración",
+      "id": "c9e6176cc24b",
+      "nombre": "Alianzas intersectoriales",
+      "descripcion": "Creación de relaciones de cooperación de largo plazo entre empresas, organizaciones sin fines de lucro y sector público para abordar retos sociales comunes.",
+      "fila": 5
+    },
+    {
+      "carrera": "Administración",
+      "id": "b6006b2208bc",
+      "nombre": "Alineamiento estratégico interdepartamental",
+      "descripcion": "Sincronización de esfuerzos, planes y estrategias de las áreas de la empresa hacia el crecimiento del negocio y su facturación.",
+      "fila": 6
+    },
+    {
+      "carrera": "Administración",
+      "id": "4c0a6909ff48",
+      "nombre": "Análisis costo-beneficio",
+      "descripcion": "Preparación y comunicación de informes que desglosan costos y beneficios de propuestas y planes presupuestarios de la empresa.",
+      "fila": 7
+    },
+    {
+      "carrera": "Administración",
+      "id": "dc8d6a55477f",
+      "nombre": "Análisis de causa raíz",
+      "descripcion": "Proceso sistemático para identificar las causas fundamentales de problemas o hechos y definir cómo responder a ellas.",
+      "fila": 8
+    },
+    {
+      "carrera": "Administración",
+      "id": "08e581d85a53",
+      "nombre": "Análisis de datos para decisiones",
+      "descripcion": "Recopilación y análisis de datos y estadísticas para identificar patrones y generar información útil para la toma de decisiones.",
+      "fila": 9
+    },
+    {
+      "carrera": "Administración",
+      "id": "edeec081003d",
+      "nombre": "Análisis de empresas",
+      "descripcion": "Análisis de la situación, necesidades, problemas y procesos de una empresa para apoyar la identificación de soluciones y oportunidades de mejora.",
+      "fila": 10
+    },
+    {
+      "carrera": "Administración",
+      "id": "1d7950739ab3",
+      "nombre": "Análisis de estrategias de cadena de suministro",
+      "descripcion": "Examen de la planificación de producción, unidades, calidad, costos y mano de obra para mejorar la gestión de la cadena de suministro.",
+      "fila": 11
+    },
+    {
+      "carrera": "Administración",
+      "id": "fef05acf2584",
+      "nombre": "Análisis de necesidades del cliente",
+      "descripcion": "Análisis de hábitos y necesidades de clientes y segmentos objetivo para diseñar y aplicar estrategias comerciales que vendan de manera más eficaz.",
+      "fila": 12
+    },
+    {
+      "carrera": "Administración",
+      "id": "6c6607ee27c9",
+      "nombre": "Análisis de negocios",
+      "descripcion": "Identificación de necesidades y problemas de las empresas y determinación de soluciones que aseguren su buen funcionamiento.",
+      "fila": 13
+    },
+    {
+      "carrera": "Administración",
+      "id": "9c29ef02c56e",
+      "nombre": "Análisis de procesos de negocio",
+      "descripcion": "Estudio de la contribución de los procesos de trabajo a los objetivos de la empresa y control de su eficiencia y productividad.",
+      "fila": 14
+    },
+    {
+      "carrera": "Administración",
+      "id": "9bbbff391fb0",
+      "nombre": "Análisis de requerimientos del negocio",
+      "descripcion": "Estudio de necesidades y expectativas de clientes e interesados sobre un producto o servicio para resolver inconsistencias y desacuerdos.",
+      "fila": 15
+    },
+    {
+      "carrera": "Administración",
+      "id": "484c3b22f38f",
+      "nombre": "Análisis de riesgos empresariales",
+      "descripcion": "Identificación, clasificación y evaluación de factores que amenazan proyectos u operaciones de la organización, y aplicación de medidas para evitar o reducir su impacto.",
+      "fila": 16
+    },
+    {
+      "carrera": "Administración",
+      "id": "a5bd4a958df5",
+      "nombre": "Análisis de tendencias del mercado financiero",
+      "descripcion": "Seguimiento y pronóstico de las tendencias del mercado financiero a lo largo del tiempo para apoyar decisiones de inversión y financiamiento.",
+      "fila": 17
+    },
+    {
+      "carrera": "Administración",
+      "id": "67f9e9dbdc45",
+      "nombre": "Análisis de ventas",
+      "descripcion": "Recopilación y análisis de niveles de venta de productos y servicios para planificar producción, recoger opiniones de clientes y ajustar estrategias comerciales.",
+      "fila": 18
+    },
+    {
+      "carrera": "Administración",
+      "id": "1b4fe892e0c9",
+      "nombre": "Análisis del desempeño financiero",
+      "descripcion": "Análisis del rendimiento financiero de la empresa a partir de cuentas, estados financieros e información de mercado para identificar mejoras.",
+      "fila": 19
+    },
+    {
+      "carrera": "Administración",
+      "id": "738ecde8d151",
+      "nombre": "Análisis del entorno externo",
+      "descripcion": "Investigación y análisis de factores externos a la empresa como consumidores, posición de mercado, competencia y situación política.",
+      "fila": 20
+    },
+    {
+      "carrera": "Administración",
+      "id": "75b74f6c528d",
+      "nombre": "Análisis del entorno interno",
+      "descripcion": "Investigación de factores internos que influyen en la empresa, como cultura, base estratégica, productos, precios y recursos disponibles.",
+      "fila": 21
+    },
+    {
+      "carrera": "Administración",
+      "id": "f9db583c7660",
+      "nombre": "Análisis financiero",
+      "descripcion": "Evaluación de las posibilidades, medios y situación financiera de una organización mediante el análisis de sus estados e informes financieros.",
+      "fila": 22
+    },
+    {
+      "carrera": "Administración",
+      "id": "3bb7c46a11a0",
+      "nombre": "Análisis financiero de cambios logísticos",
+      "descripcion": "Evaluación del impacto financiero de cambios en modalidades de transporte, volúmenes de productos y transportistas.",
+      "fila": 23
+    },
+    {
+      "carrera": "Administración",
+      "id": "a51c0a99f77b",
+      "nombre": "Análisis PESTEL",
+      "descripcion": "Análisis de factores políticos, económicos, sociales, tecnológicos, ambientales y legales que influyen externamente en una organización.",
+      "fila": 24
+    },
+    {
+      "carrera": "Administración",
+      "id": "5a0cc12e27d2",
+      "nombre": "Análisis y mejora de procesos productivos",
+      "descripcion": "Análisis de los procesos de producción y operaciones de la empresa para reducir pérdidas y costos generales, e introducir mejoras en la productividad.",
+      "fila": 25
+    },
+    {
+      "carrera": "Administración",
+      "id": "b702bfc73c01",
+      "nombre": "Aplicación de políticas financieras",
+      "descripcion": "Interpretación y aplicación de las políticas financieras de la empresa en los procedimientos contables y tributarios.",
+      "fila": 26
+    },
+    {
+      "carrera": "Administración",
+      "id": "39bac937c28b",
+      "nombre": "Aprovechamiento de economías de escala",
+      "descripcion": "Consideración conjunta de los proyectos de la empresa para obtener economías de escala que aumenten eficiencia y reduzcan costos.",
+      "fila": 27
+    },
+    {
+      "carrera": "Administración",
+      "id": "b31982f95e4a",
+      "nombre": "Aseguramiento de la calidad",
+      "descripcion": "Principios, requisitos y procesos para medir, controlar y asegurar la calidad de productos y procesos.",
+      "fila": 28
+    },
+    {
+      "carrera": "Administración",
+      "id": "81dd86169827",
+      "nombre": "Asesoría en estrategias de comunicación corporativa",
+      "descripcion": "Consultoría sobre planes de comunicación interna y externa y la presencia en línea de empresas y organizaciones.",
+      "fila": 29
+    },
+    {
+      "carrera": "Administración",
+      "id": "a05607ba0324",
+      "nombre": "Asesoría en gestión de personas",
+      "descripcion": "Asesoría a la dirección sobre métodos para mejorar relaciones laborales, reclutamiento, capacitación y satisfacción de los colaboradores.",
+      "fila": 30
+    },
+    {
+      "carrera": "Administración",
+      "id": "7b73ed328188",
+      "nombre": "Asesoría en mejora de la eficiencia operativa",
+      "descripcion": "Análisis de procesos y productos para recomendar mejoras de eficiencia que permitan un mejor uso de los recursos de la organización.",
+      "fila": 31
+    },
+    {
+      "carrera": "Administración",
+      "id": "28c9bb7b6d48",
+      "nombre": "Asesoría financiera empresarial",
+      "descripcion": "Consulta y propuesta de soluciones sobre gestión financiera, adquisición de activos, inversiones y eficiencia tributaria.",
+      "fila": 32
+    },
+    {
+      "carrera": "Administración",
+      "id": "f9d9a877d810",
+      "nombre": "Asignación de personal por competencias",
+      "descripcion": "Análisis de perfiles de colaboradores para asignarlos a los puestos y equipos más adecuados según los objetivos de la empresa.",
+      "fila": 33
+    },
+    {
+      "carrera": "Administración",
+      "id": "a749c2910336",
+      "nombre": "Cadena de suministro y rentabilidad",
+      "descripcion": "Interpretación de cómo las mejoras de la cadena de suministro contribuyen a aumentar los beneficios de la empresa.",
+      "fila": 34
+    },
+    {
+      "carrera": "Administración",
+      "id": "87a53aca59f3",
+      "nombre": "Capacitación de personal",
+      "descripcion": "Organización y conducción de actividades para enseñar a los colaboradores las capacidades que requieren en su trabajo.",
+      "fila": 35
+    },
+    {
+      "carrera": "Administración",
+      "id": "c418456ad19b",
+      "nombre": "Ciclo de vida del producto",
+      "descripcion": "Gestión del ciclo de vida de un producto desde su desarrollo hasta su entrada y retiro del mercado.",
+      "fila": 36
+    },
+    {
+      "carrera": "Administración",
+      "id": "f9cc4915c00e",
+      "nombre": "Comercio electrónico",
+      "descripcion": "Arquitectura digital y transacciones comerciales de productos o servicios realizadas por internet, celulares y redes sociales.",
+      "fila": 37
+    },
+    {
+      "carrera": "Administración",
+      "id": "0063f0473f37",
+      "nombre": "Comunicación interna de planes y estrategias",
+      "descripcion": "Difusión y presentación de planes y estrategias de negocio a directivos y colaboradores, fortaleciendo los canales de comunicación interna.",
+      "fila": 38
+    },
+    {
+      "carrera": "Administración",
+      "id": "7847167c0d18",
+      "nombre": "Comunicación organizacional",
+      "descripcion": "Procesos de comunicación efectiva dentro de la organización y con entidades externas para alcanzar los objetivos institucionales.",
+      "fila": 39
+    },
+    {
+      "carrera": "Administración",
+      "id": "1883b36962e5",
+      "nombre": "Consolidación de información financiera",
+      "descripcion": "Recopilación y revisión de información financiera de distintas fuentes o áreas para elaborar cuentas o planes financieros unificados.",
+      "fila": 40
+    },
+    {
+      "carrera": "Administración",
+      "id": "10cd373bec06",
+      "nombre": "Consultoría de gestión",
+      "descripcion": "Prestación de asesoría profesional a empresas y organizaciones para diagnosticar problemas, mejorar su desempeño y promover su crecimiento.",
+      "fila": 41
+    },
+    {
+      "carrera": "Administración",
+      "id": "363f0e988d23",
+      "nombre": "Contabilidad de costos",
+      "descripcion": "Actividades de costeo como costos estándar, análisis de precios medios, márgenes, control de inventarios y análisis de variaciones.",
+      "fila": 42
+    },
+    {
+      "carrera": "Administración",
+      "id": "da1535121c27",
+      "nombre": "Coordinación de operaciones",
+      "descripcion": "Sincronización de actividades y responsabilidades del personal operativo para usar los recursos con eficacia y alcanzar los objetivos.",
+      "fila": 43
+    },
+    {
+      "carrera": "Administración",
+      "id": "daf1e5db4e80",
+      "nombre": "Coordinación de reportes de sostenibilidad",
+      "descripcion": "Supervisión del proceso de reporte del desempeño de la organización en sostenibilidad según directrices y estándares establecidos.",
+      "fila": 44
+    },
+    {
+      "carrera": "Administración",
+      "id": "dab226cd38b7",
+      "nombre": "Cuidar el detalle en la preparación de las auditorías",
+      "descripcion": "Mantenimiento constante del cumplimiento de normas y requisitos, actualización de certificaciones y seguimiento de procedimientos para facilitar una preparación adecuada de auditorías.",
+      "fila": 45
+    },
+    {
+      "carrera": "Administración",
+      "id": "c39f48c99295",
+      "nombre": "Cumplimiento normativo empresarial",
+      "descripcion": "Aseguramiento de que las operaciones diarias y las actividades de la empresa cumplan la legislación, normas, políticas y especificaciones aplicables.",
+      "fila": 46
+    },
+    {
+      "carrera": "Administración",
+      "id": "8d34ae2be681",
+      "nombre": "Cumplimiento normativo en compras",
+      "descripcion": "Aplicación y supervisión de las actividades de la empresa conforme a la legislación sobre compras y contrataciones.",
+      "fila": 47
+    },
+    {
+      "carrera": "Administración",
+      "id": "83373ee45481",
+      "nombre": "Definición de objetivos de calidad",
+      "descripcion": "Definición de objetivos y procedimientos de aseguramiento de la calidad y su revisión para la mejora continua.",
+      "fila": 48
+    },
+    {
+      "carrera": "Administración",
+      "id": "420a86f7cc80",
+      "nombre": "Definición del alcance del proyecto",
+      "descripcion": "Definición del plan de trabajo, duración, entregables, recursos y procedimientos de un proyecto para alcanzar sus objetivos.",
+      "fila": 49
+    },
+    {
+      "carrera": "Administración",
+      "id": "9deac29786ec",
+      "nombre": "Derecho laboral",
+      "descripcion": "Normas que regulan la relación entre trabajadores y empleadores y los derechos derivados del contrato de trabajo.",
+      "fila": 50
+    },
+    {
+      "carrera": "Administración",
+      "id": "ad4255fa66fb",
+      "nombre": "Derecho societario",
+      "descripcion": "Normas que regulan la interacción entre accionistas, directivos, colaboradores y otros interesados de una sociedad y sus responsabilidades.",
+      "fila": 51
+    },
+    {
+      "carrera": "Administración",
+      "id": "c40dfffed7f8",
+      "nombre": "Desarrollo de relaciones comerciales",
+      "descripcion": "Establecimiento de relaciones positivas y de largo plazo con proveedores, distribuidores, accionistas y otros grupos de interés de la organización.",
+      "fila": 52
+    },
+    {
+      "carrera": "Administración",
+      "id": "6a4ccf8e3031",
+      "nombre": "Desarrollo del personal",
+      "descripcion": "Conducción de colaboradores hacia las expectativas de productividad y calidad mediante retroalimentación y planes de desarrollo.",
+      "fila": 53
+    },
+    {
+      "carrera": "Administración",
+      "id": "f2b4005e0f20",
+      "nombre": "Diagnóstico de necesidades organizacionales",
+      "descripcion": "Detección de necesidades de la empresa a partir de entrevistas con interesados y análisis de documentos para definir medidas de mejora.",
+      "fila": 54
+    },
+    {
+      "carrera": "Administración",
+      "id": "633fb6babffc",
+      "nombre": "Diagnóstico empresarial",
+      "descripcion": "Evaluación del estado de una empresa por sí misma y frente a su entorno competitivo, investigando y contextualizando datos para identificar oportunidades.",
+      "fila": 55
+    },
+    {
+      "carrera": "Administración",
+      "id": "5c77a37ccbb5",
+      "nombre": "Dirección de gerencias de área",
+      "descripcion": "Orientación a los gerentes de las distintas áreas de la empresa sobre objetivos, acciones y expectativas de su ámbito de gestión.",
+      "fila": 56
+    },
+    {
+      "carrera": "Administración",
+      "id": "e9f6000443ea",
+      "nombre": "Dirección y supervisión de personal",
+      "descripcion": "Planificación, asignación y supervisión del trabajo de colaboradores, individualmente o en equipo, para maximizar su rendimiento y su contribución a los objetivos de la organización.",
+      "fila": 57
+    },
+    {
+      "carrera": "Administración",
+      "id": "b91e1e181cf9",
+      "nombre": "Diseño de programas de capacitación",
+      "descripcion": "Diseño de programas de formación para que los colaboradores adquieran o amplíen las competencias necesarias para su trabajo.",
+      "fila": 58
+    },
+    {
+      "carrera": "Administración",
+      "id": "f1947795f440",
+      "nombre": "Documentación de procesos",
+      "descripcion": "Elaboración y documentación de los procesos de la organización y de sus definiciones asociadas para estandarizarlos y facilitar su mejora.",
+      "fila": 59
+    },
+    {
+      "carrera": "Administración",
+      "id": "a841c208bee7",
+      "nombre": "Documentación de proyectos",
+      "descripcion": "Redacción de planes de proyecto, planes de trabajo, informes de avance y matrices de interesados.",
+      "fila": 60
+    },
+    {
+      "carrera": "Administración",
+      "id": "e9ac1f636dc8",
+      "nombre": "Ejecución de planes de marketing",
+      "descripcion": "Realización de las actividades necesarias para alcanzar objetivos de marketing específicos dentro de un plazo determinado.",
+      "fila": 61
+    },
+    {
+      "carrera": "Administración",
+      "id": "e0787c28477c",
+      "nombre": "Elaboración de cronogramas",
+      "descripcion": "Preparación de cronogramas de trabajo que organizan procedimientos, actividades, citas y horas de trabajo para cumplir los plazos de la organización.",
+      "fila": 62
+    },
+    {
+      "carrera": "Administración",
+      "id": "0e868ccb49b3",
+      "nombre": "Elaboración de informes de gestión",
+      "descripcion": "Preparación y presentación de informes sobre operaciones, logros y resultados de la organización dirigidos a la alta dirección.",
+      "fila": 63
+    },
+    {
+      "carrera": "Administración",
+      "id": "b379c24911cd",
+      "nombre": "Elaboración de planes de negocio",
+      "descripcion": "Planificación y redacción de planes de negocio que integran estrategia de mercado, análisis competitivo, diseño operativo, gestión y proyecciones financieras de la empresa.",
+      "fila": 64
+    },
+    {
+      "carrera": "Administración",
+      "id": "f1bcd90a087e",
+      "nombre": "Elaboración de reportes de ventas",
+      "descripcion": "Registro y reporte de volúmenes de venta, cuentas nuevas y costos asociados en un periodo para el control comercial.",
+      "fila": 65
+    },
+    {
+      "carrera": "Administración",
+      "id": "3984132a8c41",
+      "nombre": "Entrevistar a personas",
+      "descripcion": "Realización de entrevistas a personas para recopilar información pertinente de acuerdo con los objetivos y el contexto de la actividad.",
+      "fila": 66
+    },
+    {
+      "carrera": "Administración",
+      "id": "5b223c437c8a",
+      "nombre": "Estados financieros",
+      "descripcion": "Conocimiento de los registros financieros que muestran la situación de la empresa al cierre de un periodo: situación financiera, resultados, patrimonio, flujos de efectivo y notas.",
+      "fila": 67
+    },
+    {
+      "carrera": "Administración",
+      "id": "46b0159a7203",
+      "nombre": "Estándares de reporte de sostenibilidad",
+      "descripcion": "Marcos estandarizados globales para que las organizaciones cuantifiquen y comuniquen su impacto ambiental, social y de gobernanza.",
+      "fila": 68
+    },
+    {
+      "carrera": "Administración",
+      "id": "679e78f141b7",
+      "nombre": "Estimación de costos de insumos",
+      "descripcion": "Cálculo de las cantidades y los costos de los suministros e insumos necesarios para las operaciones de la organización.",
+      "fila": 69
+    },
+    {
+      "carrera": "Administración",
+      "id": "9f49eea3c471",
+      "nombre": "Estimación de duración de actividades",
+      "descripcion": "Cálculo del tiempo necesario para completar tareas futuras a partir de información histórica y actual, para planificar plazos de proyectos.",
+      "fila": 70
+    },
+    {
+      "carrera": "Administración",
+      "id": "3d6f22a3991c",
+      "nombre": "Estrategias de crecimiento empresarial",
+      "descripcion": "Diseño y ejecución de estrategias y planes orientados a lograr un crecimiento sostenido de la empresa, aumentando ingresos y flujos de caja positivos.",
+      "fila": 71
+    },
+    {
+      "carrera": "Administración",
+      "id": "12b9ed7a5ab1",
+      "nombre": "Estrategias de generación de ingresos",
+      "descripcion": "Diseño de metodologías mediante las cuales la empresa comercializa y vende sus productos o servicios para generar ingresos.",
+      "fila": 72
+    },
+    {
+      "carrera": "Administración",
+      "id": "557f6f389800",
+      "nombre": "Estrategias de precios",
+      "descripcion": "Métodos para fijar precios considerando condiciones de mercado, competencia, costos de insumos y otros factores.",
+      "fila": 73
+    },
+    {
+      "carrera": "Administración",
+      "id": "c3c6f4b6bd4b",
+      "nombre": "Evaluación de la efectividad del servicio",
+      "descripcion": "Desarrollo y medición de recomendaciones para mejorar la calidad del servicio y de la práctica profesional en la organización.",
+      "fila": 74
+    },
+    {
+      "carrera": "Administración",
+      "id": "bad95ac2c110",
+      "nombre": "Evaluación de planes de negocio",
+      "descripcion": "Análisis de los planes de negocio de las empresas, sus objetivos y estrategias, para evaluar su viabilidad y la capacidad de cumplir sus compromisos.",
+      "fila": 75
+    },
+    {
+      "carrera": "Administración",
+      "id": "60fc6e5e83d8",
+      "nombre": "Evaluación de planes de proyecto",
+      "descripcion": "Evaluación de propuestas y planes de proyecto para valorar su viabilidad antes de su aprobación.",
+      "fila": 76
+    },
+    {
+      "carrera": "Administración",
+      "id": "3c5c328e10cd",
+      "nombre": "Evaluación de programas de capacitación",
+      "descripcion": "Evaluación del logro de los objetivos de aprendizaje y de la calidad de la capacitación, con retroalimentación a instructores y participantes.",
+      "fila": 77
+    },
+    {
+      "carrera": "Administración",
+      "id": "3040eb38bc52",
+      "nombre": "Evaluación de viabilidad financiera",
+      "descripcion": "Análisis de información financiera de proyectos, presupuesto, ingresos esperados y riesgos para determinar su viabilidad.",
+      "fila": 78
+    },
+    {
+      "carrera": "Administración",
+      "id": "3243c71cbdb2",
+      "nombre": "Evaluación del desempeño del personal",
+      "descripcion": "Organización y aplicación de procesos de evaluación del rendimiento de directivos y colaboradores según su eficiencia y eficacia en el trabajo.",
+      "fila": 79
+    },
+    {
+      "carrera": "Administración",
+      "id": "d92844e60ff5",
+      "nombre": "Evaluación del impacto ambiental",
+      "descripcion": "Seguimiento y evaluación de impactos ambientales para identificar y reducir los riesgos ambientales de la organización.",
+      "fila": 80
+    },
+    {
+      "carrera": "Administración",
+      "id": "e8e229394503",
+      "nombre": "Evaluación presupuestal",
+      "descripcion": "Revisión de planes presupuestarios, análisis de ingresos y gastos previstos y verificación de su alineamiento con los planes de la empresa.",
+      "fila": 81
+    },
+    {
+      "carrera": "Administración",
+      "id": "56c1aa99f858",
+      "nombre": "Evaluar riesgos de proveedores",
+      "descripcion": "Evaluación de los proveedores respecto de contratos, requisitos, calidad y continuidad del suministro para identificar riesgos asociados al abastecimiento.",
+      "fila": 82
+    },
+    {
+      "carrera": "Administración",
+      "id": "685be56957b1",
+      "nombre": "Filosofías de mejora continua",
+      "descripcion": "Fundamentos de los sistemas de gestión de calidad: producción esbelta, kanban, kaizen y gestión de la calidad total.",
+      "fila": 83
+    },
+    {
+      "carrera": "Administración",
+      "id": "d1c1c937a47c",
+      "nombre": "Finanzas sostenibles",
+      "descripcion": "Integración de criterios ambientales, sociales y de gobernanza en las decisiones empresariales y de inversión para generar valor sostenible de largo plazo.",
+      "fila": 84
+    },
+    {
+      "carrera": "Administración",
+      "id": "022958c0300a",
+      "nombre": "Formulación de estrategias empresariales",
+      "descripcion": "Concepción, planificación y desarrollo de estrategias empresariales para fines como ingresar a nuevos mercados, renovar equipamiento o rediseñar la organización.",
+      "fila": 85
+    },
+    {
+      "carrera": "Administración",
+      "id": "f1f238a06129",
+      "nombre": "Formulación de políticas y normas organizacionales",
+      "descripcion": "Redacción, aplicación y supervisión de normas y políticas internas que documentan los procedimientos de la organización según su planificación estratégica.",
+      "fila": 86
+    },
+    {
+      "carrera": "Administración",
+      "id": "c3470b939218",
+      "nombre": "Formulación de propuestas de mejora",
+      "descripcion": "Identificación de causas fundamentales de problemas organizacionales y propuesta de soluciones eficaces de largo plazo.",
+      "fila": 87
+    },
+    {
+      "carrera": "Administración",
+      "id": "25c3ed8019a6",
+      "nombre": "Fundamentos de contabilidad",
+      "descripcion": "Registro, documentación y tratamiento de los datos relativos a las actividades financieras de la organización como base para la información de gestión.",
+      "fila": 88
+    },
+    {
+      "carrera": "Administración",
+      "id": "42571b40b1a4",
+      "nombre": "Fundamentos de economía",
+      "descripcion": "Principios y prácticas económicas, mercados financieros y de materias primas, banca y análisis de datos financieros.",
+      "fila": 89
+    },
+    {
+      "carrera": "Administración",
+      "id": "478ccf55953f",
+      "nombre": "Garantizar el cumplimiento de las políticas",
+      "descripcion": "Aseguramiento del cumplimiento de las políticas, directrices y procedimientos establecidos por la organización.",
+      "fila": 90
+    },
+    {
+      "carrera": "Administración",
+      "id": "511ab445508c",
+      "nombre": "Gestión basada en resultados",
+      "descripcion": "Estrategia de gestión para medir y monitorear el desempeño de organizaciones respecto de los resultados previstos.",
+      "fila": 91
+    },
+    {
+      "carrera": "Administración",
+      "id": "d8144921e04d",
+      "nombre": "Gestión de almacenes",
+      "descripcion": "Principios y prácticas de las operaciones de almacén, como el almacenamiento de mercancías y la organización del almacén.",
+      "fila": 92
+    },
+    {
+      "carrera": "Administración",
+      "id": "f65b31f8e2e4",
+      "nombre": "Gestión de cambios en proyectos",
+      "descripcion": "Evaluación y gestión de cambios respecto de la planificación original del proyecto y su comunicación a los interesados.",
+      "fila": 93
+    },
+    {
+      "carrera": "Administración",
+      "id": "3e80fe6a38f4",
+      "nombre": "Gestión de compras",
+      "descripcion": "Coordinación de procesos de adquisición y alquiler, incluida la planificación, el seguimiento y el reporte de manera rentable.",
+      "fila": 94
+    },
+    {
+      "carrera": "Administración",
+      "id": "337785065f45",
+      "nombre": "Gestión de contratos",
+      "descripcion": "Negociación de términos, condiciones y costos de contratos, verificando su validez legal y supervisando su ejecución y modificaciones.",
+      "fila": 95
+    },
+    {
+      "carrera": "Administración",
+      "id": "58170b20075a",
+      "nombre": "Gestión de costos",
+      "descripcion": "Planificación, seguimiento y ajuste de gastos e ingresos de la empresa para lograr mayor rentabilidad.",
+      "fila": 96
+    },
+    {
+      "carrera": "Administración",
+      "id": "ff35e494c43e",
+      "nombre": "Gestión de equipos de trabajo",
+      "descripcion": "Gestión de un equipo asegurando canales de comunicación claros con otras áreas y el cumplimiento de estándares y objetivos.",
+      "fila": 97
+    },
+    {
+      "carrera": "Administración",
+      "id": "e74250a44028",
+      "nombre": "Gestión de inventarios",
+      "descripcion": "Control del inventario de productos y materiales de la empresa, equilibrando su disponibilidad para atender la demanda con los costos de almacenamiento.",
+      "fila": 98
+    },
+    {
+      "carrera": "Administración",
+      "id": "fc18ead5a788",
+      "nombre": "Gestión de la cadena de suministro",
+      "descripcion": "Gestión del flujo de bienes desde el origen hasta el consumo: traslado y almacenamiento de materias primas, inventario en proceso y productos terminados.",
+      "fila": 99
+    },
+    {
+      "carrera": "Administración",
+      "id": "049f3c7c9f6a",
+      "nombre": "Gestión de la cultura organizacional",
+      "descripcion": "Identificación y definición de elementos de la cultura corporativa para reforzar valores, creencias y comportamientos alineados con los objetivos de la empresa.",
+      "fila": 100
+    },
+    {
+      "carrera": "Administración",
+      "id": "3bdc742d1c77",
+      "nombre": "Gestión de la diversidad e inclusión",
+      "descripcion": "Promoción de la diversidad y la igualdad de trato en las organizaciones para prevenir la discriminación.",
+      "fila": 101
+    }
+  ],
+  "hallazgos": [
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 387,
+      "detalle": "También aparece en la fila 237."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 399,
+      "detalle": "También aparece en la fila 245."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 668,
+      "detalle": "También aparece en la fila 549."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 681,
+      "detalle": "También aparece en la fila 574."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 715,
+      "detalle": "También aparece en la fila 479."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 716,
+      "detalle": "También aparece en la fila 483."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 717,
+      "detalle": "También aparece en la fila 10."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 721,
+      "detalle": "También aparece en la fila 491."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 723,
+      "detalle": "También aparece en la fila 22."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 724,
+      "detalle": "También aparece en la fila 493."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 726,
+      "detalle": "También aparece en la fila 495."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 728,
+      "detalle": "También aparece en la fila 496."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 733,
+      "detalle": "También aparece en la fila 319."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 737,
+      "detalle": "También aparece en la fila 639."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 740,
+      "detalle": "También aparece en la fila 500."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 741,
+      "detalle": "También aparece en la fila 502."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 742,
+      "detalle": "También aparece en la fila 507."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 743,
+      "detalle": "También aparece en la fila 508."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 745,
+      "detalle": "También aparece en la fila 511."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 748,
+      "detalle": "También aparece en la fila 517."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 750,
+      "detalle": "También aparece en la fila 522."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 760,
+      "detalle": "También aparece en la fila 533."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 762,
+      "detalle": "También aparece en la fila 534."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 763,
+      "detalle": "También aparece en la fila 67."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 766,
+      "detalle": "También aparece en la fila 541."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 768,
+      "detalle": "También aparece en la fila 545."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 769,
+      "detalle": "También aparece en la fila 549."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 770,
+      "detalle": "También aparece en la fila 552."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 771,
+      "detalle": "También aparece en la fila 122."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 777,
+      "detalle": "También aparece en la fila 245."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 782,
+      "detalle": "También aparece en la fila 571."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 783,
+      "detalle": "También aparece en la fila 136."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 784,
+      "detalle": "También aparece en la fila 574."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 785,
+      "detalle": "También aparece en la fila 259."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 786,
+      "detalle": "También aparece en la fila 577."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 787,
+      "detalle": "También aparece en la fila 260."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 789,
+      "detalle": "También aparece en la fila 579."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 790,
+      "detalle": "También aparece en la fila 687."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 791,
+      "detalle": "También aparece en la fila 580."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 792,
+      "detalle": "También aparece en la fila 581."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 793,
+      "detalle": "También aparece en la fila 582."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 796,
+      "detalle": "También aparece en la fila 585."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 800,
+      "detalle": "También aparece en la fila 597."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 802,
+      "detalle": "También aparece en la fila 598."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 804,
+      "detalle": "También aparece en la fila 435."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 805,
+      "detalle": "También aparece en la fila 604."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 809,
+      "detalle": "También aparece en la fila 440."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 810,
+      "detalle": "También aparece en la fila 608."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 817,
+      "detalle": "También aparece en la fila 613."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 819,
+      "detalle": "También aparece en la fila 614."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 822,
+      "detalle": "También aparece en la fila 624."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 824,
+      "detalle": "También aparece en la fila 625."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 825,
+      "detalle": "También aparece en la fila 629."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 827,
+      "detalle": "También aparece en la fila 630."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 841,
+      "detalle": "También aparece en la fila 731."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 843,
+      "detalle": "También aparece en la fila 319."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 846,
+      "detalle": "También aparece en la fila 639."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 875,
+      "detalle": "También aparece en la fila 215."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 884,
+      "detalle": "También aparece en la fila 761."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 891,
+      "detalle": "También aparece en la fila 238."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 895,
+      "detalle": "También aparece en la fila 90."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 899,
+      "detalle": "También aparece en la fila 112."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 901,
+      "detalle": "También aparece en la fila 116."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 902,
+      "detalle": "También aparece en la fila 773."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 903,
+      "detalle": "También aparece en la fila 774."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 907,
+      "detalle": "También aparece en la fila 244."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 908,
+      "detalle": "También aparece en la fila 245."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 917,
+      "detalle": "También aparece en la fila 251."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 927,
+      "detalle": "También aparece en la fila 259."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 930,
+      "detalle": "También aparece en la fila 687."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 935,
+      "detalle": "También aparece en la fila 152."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 937,
+      "detalle": "También aparece en la fila 153."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 943,
+      "detalle": "También aparece en la fila 276."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 954,
+      "detalle": "También aparece en la fila 807."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 959,
+      "detalle": "También aparece en la fila 812."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 960,
+      "detalle": "También aparece en la fila 813."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 963,
+      "detalle": "También aparece en la fila 815."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 967,
+      "detalle": "También aparece en la fila 818."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 968,
+      "detalle": "También aparece en la fila 287."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 975,
+      "detalle": "También aparece en la fila 293."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 976,
+      "detalle": "También aparece en la fila 182."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 977,
+      "detalle": "También aparece en la fila 297."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 980,
+      "detalle": "También aparece en la fila 821."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 981,
+      "detalle": "También aparece en la fila 710."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 983,
+      "detalle": "También aparece en la fila 622."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 991,
+      "detalle": "También aparece en la fila 308."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 992,
+      "detalle": "También aparece en la fila 191."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 993,
+      "detalle": "También aparece en la fila 829."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 997,
+      "detalle": "También aparece en la fila 734."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 998,
+      "detalle": "También aparece en la fila 845."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 1005,
+      "detalle": "También aparece en la fila 201."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 1012,
+      "detalle": "También aparece en la fila 206."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 1016,
+      "detalle": "También aparece en la fila 650."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 1020,
+      "detalle": "También aparece en la fila 873."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 1021,
+      "detalle": "También aparece en la fila 874."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 1026,
+      "detalle": "También aparece en la fila 223."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 1027,
+      "detalle": "También aparece en la fila 879."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 1032,
+      "detalle": "También aparece en la fila 534."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 1036,
+      "detalle": "También aparece en la fila 892."
+    },
+    {
+      "codigo": "HAB_TEC_NOMBRE_REPETIDO",
+      "severidad": "warning",
+      "mensaje": "El nombre aparece más de una vez; se conservarán IDs separados.",
+      "fila": 1037,
+      "detalle": "También aparece en la fila 893."
+    }
+  ],
+  "error": null,
+  "sha256_fuente": "6e138f26921e20e61e5573c7a560a66f5b68144f026e20207d4d135e44dff003"
+}
