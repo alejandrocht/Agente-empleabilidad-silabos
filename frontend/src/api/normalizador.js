@@ -1,3 +1,47 @@
+export async function inspeccionarNormalizadorEmpleabilidad(archivo) {
+  const formulario = new FormData();
+  formulario.append("archivo", archivo);
+  const respuesta = await fetch("/api/normalizador/empleabilidad/inspeccionar", {
+    method: "POST",
+    body: formulario,
+  });
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudo inspeccionar la fuente de empleabilidad.");
+  }
+  return datos;
+}
+
+export async function iniciarNormalizadorEmpleabilidad(archivo) {
+  const formulario = new FormData();
+  formulario.append("archivo", archivo);
+  const respuesta = await fetch("/api/normalizador/empleabilidad", {
+    method: "POST",
+    body: formulario,
+  });
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudo iniciar la normalización de empleabilidad.");
+  }
+  return datos;
+}
+
+export async function iniciarEmpleabilidadDesdeHoja(idEjecucion, hoja, limitePrueba = 0) {
+  const respuesta = await fetch(
+    `/api/normalizador/empleabilidad/${encodeURIComponent(idEjecucion)}/iniciar`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hoja, limite_prueba: Number(limitePrueba) || 0 }),
+    },
+  );
+  const datos = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    throw new Error(datos.detail || "No se pudo iniciar la hoja de empleabilidad.");
+  }
+  return datos;
+}
+
 export async function iniciarNormalizadorSilabos(
   archivo,
   carrera,

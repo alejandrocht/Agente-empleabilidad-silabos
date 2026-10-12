@@ -21,12 +21,23 @@ from agente.config.settings import (
     texto,
 )
 from agente.normalizador.ejecuciones_curriculares import EjecutorCurricular
+from agente.normalizador.empleabilidad.catalogo import cargar_catalogo
+from agente.normalizador.empleabilidad.entrada import inspeccionar_archivo, validar_archivo
+from agente.normalizador.empleabilidad.hab_tec_retriever import (
+    ErrorHabTecRetriever,
+    cargar_retriever_hab_tec,
+)
+from agente.normalizador.empleabilidad.limpieza import limpiar_archivo
+from agente.normalizador.empleabilidad.pipeline import normalizar_staging
 from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import (
     EstadoEjecucion,
     Hallazgo,
     ProgresoLimpiezaLLM,
+    ResultadoLimpieza,
     ResultadoLimpiezaSilabos,
+    ResultadoNormalizacion,
+    ResultadoValidacionEntrada,
     ResultadoValidacionSilabos,
 )
 from agente.normalizador.persistencia_ejecuciones import (
@@ -54,7 +65,7 @@ def _empaquetar_archivos_cactus(raiz: Path, destino: Path) -> None:
 
 
 _ESTADOS_CANCELABLES: frozenset[str] = frozenset(
-    {"recibido", "extrayendo", "validando", "limpiando", "normalizando"}
+    {"recibido", "seleccionando_hoja", "extrayendo", "validando", "limpiando", "normalizando"}
 )
 
 
@@ -96,8 +107,12 @@ class Ejecucion:
         self.estado: EstadoEjecucion = "recibido"
         self.creada_en = _ahora()
         self.actualizada_en = self.creada_en
+        self.validacion: ResultadoValidacionEntrada | None = None
         self.validacion_silabos: ResultadoValidacionSilabos | None = None
+        self.limpieza: ResultadoLimpieza | None = None
         self.limpieza_silabos: ResultadoLimpiezaSilabos | None = None
+        self.normalizacion: ResultadoNormalizacion | None = None
+        self.catalogo_chh: dict[str, object] | None = None
         self.hallazgos: list[Hallazgo] = []
         self.progreso_llm: ProgresoLimpiezaLLM | None = None
         self.fuente: dict[str, object] | None = None
@@ -145,6 +160,59 @@ class GestorEjecuciones:
             self._ejecuciones[id_ejecucion] = ejecucion
         self._persistir(ejecucion)
         return id_ejecucion, directorio
+
+    def iniciar_validacion(self, id_ejecucion: str, ruta_entrada: Path) -> None:
+        """Programa la validación y el pipeline de empleabilidad en segundo plano."""
+
+        ejecucion = self._obtener_objeto(id_ejecucion)
+        ejecucion.estado = "validando"
+        ejecucion.actualizada_en = _ahora()
+        self._persistir(ejecucion)
+        self._executor.submit(self._validar, ejecucion, ruta_entrada)
+
+    def inspeccionar_empleabilidad(
+        self,
+        id_ejecucion: str,
+        ruta_entrada: Path,
+    ) -> dict[str, object]:
+        """Inspecciona un XLSX antes de elegir la hoja que se procesará."""
+
+        ejecucion = self._obtener_objeto(id_ejecucion)
+        resultado = inspeccionar_archivo(ruta_entrada, ejecucion.archivo)
+        ejecucion.validacion = resultado
+        ejecucion.hallazgos = list(resultado.hallazgos)
+        ejecucion.estado = "seleccionando_hoja" if resultado.valida else "rechazado"
+        ejecucion.actualizada_en = _ahora()
+        self._persistir(ejecucion)
+        return ejecucion.a_dict()
+
+    def iniciar_empleabilidad_hoja(
+        self,
+        id_ejecucion: str,
+        nombre_hoja: str,
+        limite_prueba: int = 0,
+    ) -> None:
+        """Inicia empleabilidad sobre una hoja seleccionada y límite opcional de prueba."""
+
+        ejecucion = self._obtener_objeto(id_ejecucion)
+        if ejecucion.tipo != "empleabilidad" or ejecucion.estado != "seleccionando_hoja":
+            raise ValueError("La ejecución no está disponible para seleccionar una hoja.")
+        ruta_entrada = ejecucion.directorio / "entrada" / ejecucion.archivo
+        if not ruta_entrada.is_file():
+            raise ValueError("No se encontró el XLSX cargado para esta ejecución.")
+        ejecucion.parametros["hoja"] = nombre_hoja
+        if limite_prueba:
+            ejecucion.parametros["limite_prueba"] = str(limite_prueba)
+        ejecucion.estado = "validando"
+        ejecucion.actualizada_en = _ahora()
+        self._persistir(ejecucion)
+        self._executor.submit(
+            self._validar,
+            ejecucion,
+            ruta_entrada,
+            (nombre_hoja,),
+            limite_prueba,
+        )
 
     def iniciar_validacion_silabos(
         self,
@@ -456,6 +524,8 @@ class GestorEjecuciones:
 
         raiz = ejecucion.directorio.resolve()
         temporales = ["fuentes_curriculares", "cactus_chrome_profile"]
+        if ejecucion.tipo == "empleabilidad":
+            temporales.extend(("limpios", "entrada"))
         for relativo in temporales:
             ruta = (raiz / relativo).resolve()
             if raiz not in ruta.parents or not ruta.is_dir():
@@ -465,6 +535,132 @@ class GestorEjecuciones:
             except OSError:
                 # La ejecución ya terminó; una falla de limpieza no invalida los CSV.
                 continue
+
+    def _validar(
+        self,
+        ejecucion: Ejecucion,
+        ruta_entrada: Path,
+        hojas_seleccionadas: tuple[str, ...] | None = None,
+        limite_prueba: int = 0,
+    ) -> None:
+        """Ejecuta validación, staging y normalización semántica de empleabilidad."""
+
+        try:
+            self._verificar_cancelacion(ejecucion)
+            resultado = validar_archivo(
+                ruta_entrada,
+                ejecucion.archivo,
+                hojas_seleccionadas,
+            )
+        except CancelacionSolicitada:
+            self._marcar_cancelado(ejecucion)
+            self._finalizar(ejecucion)
+            return
+        except Exception as exc:
+            ejecucion.estado = "error"
+            ejecucion.hallazgos = [
+                Hallazgo(
+                    codigo="ERROR_INTERNO_VALIDACION",
+                    severidad="error",
+                    mensaje="La validación terminó con un error interno.",
+                    detalle=f"{type(exc).__name__}: {str(exc)[:200]}",
+                )
+            ]
+            self._finalizar(ejecucion)
+            return
+
+        ejecucion.validacion = resultado
+        ejecucion.hallazgos = list(resultado.hallazgos)
+        if self._cancelar_si_solicitada(ejecucion) or not resultado.valida:
+            if not resultado.valida:
+                ejecucion.estado = "rechazado"
+            self._finalizar(ejecucion)
+            return
+
+        try:
+            self._verificar_cancelacion(ejecucion)
+            ejecucion.estado = "limpiando"
+            ejecucion.actualizada_en = _ahora()
+            self._persistir(ejecucion)
+
+            retriever = cargar_retriever_hab_tec()
+            if retriever is None and booleano("NORMALIZADOR_HAB_TEC_RETRIEVAL_REQUIRED", True):
+                raise ErrorHabTecRetriever(
+                    "No hay un índice HAB_TEC vectorial disponible. "
+                    "Vectoriza el catálogo antes de normalizar empleabilidad."
+                )
+            if retriever is not None:
+                ejecucion.catalogo_chh = {
+                    "disponible": True,
+                    "tipo": "hab_tec_vectorial",
+                    "modelo": retriever.modelo,
+                    "registros": len(retriever.documentos),
+                }
+            else:
+                ejecucion.catalogo_chh = cargar_catalogo().resumen()
+
+            limpieza = limpiar_archivo(
+                ruta_entrada,
+                ejecucion.directorio,
+                resultado,
+                limite_por_hoja=limite_prueba,
+            )
+            self._verificar_cancelacion(ejecucion)
+            ejecucion.limpieza = limpieza
+            ejecucion.hallazgos = list(resultado.hallazgos) + list(limpieza.hallazgos)
+            ejecucion.estado = (
+                "limpiado_con_advertencias"
+                if any(hallazgo.severidad == "warning" for hallazgo in ejecucion.hallazgos)
+                else "limpiado"
+            )
+            ejecucion.actualizada_en = _ahora()
+            self._persistir(ejecucion)
+
+            ejecucion.estado = "normalizando"
+            ejecucion.actualizada_en = _ahora()
+            self._persistir(ejecucion)
+            normalizacion = normalizar_staging(
+                ejecucion.directorio,
+                resultado,
+                hab_tec_retriever=retriever,
+            )
+            ejecucion.normalizacion = normalizacion
+            ejecucion.hallazgos = ejecucion.hallazgos + list(normalizacion.hallazgos)
+            hay_advertencias = any(
+                hallazgo.severidad == "warning" for hallazgo in ejecucion.hallazgos
+            )
+            if not normalizacion.publicable:
+                ejecucion.estado = "no_publicado"
+            elif hay_advertencias:
+                ejecucion.estado = "normalizado_con_advertencias"
+            else:
+                ejecucion.estado = "normalizado"
+        except CancelacionSolicitada:
+            self._marcar_cancelado(ejecucion)
+        except Exception as exc:
+            if ejecucion.cancelada.is_set():
+                self._marcar_cancelado(ejecucion)
+                return
+            es_error_vectorial = isinstance(exc, ErrorHabTecRetriever)
+            ejecucion.estado = "error"
+            ejecucion.hallazgos.append(
+                Hallazgo(
+                    codigo=(
+                        "HAB_TEC_VECTOR_INDEX_ERROR"
+                        if es_error_vectorial
+                        else "ERROR_INTERNO_LIMPIEZA"
+                    ),
+                    severidad="error",
+                    mensaje=(
+                        "No se pudo preparar el índice vectorial HAB_TEC."
+                        if es_error_vectorial
+                        else "La limpieza o normalización terminó con un error interno."
+                    ),
+                    detalle=f"{type(exc).__name__}: {str(exc)[:200]}",
+                )
+            )
+        finally:
+            self._finalizar(ejecucion)
 
     def _validar_silabos(
         self,

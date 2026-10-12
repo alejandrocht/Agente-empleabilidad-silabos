@@ -1,0 +1,153 @@
+{
+  "publicable": false,
+  "registros_procesados": {
+    "publicaciones": 9754,
+    "informes": 0
+  },
+  "relaciones": 9739,
+  "cuarentena": 15,
+  "catalogo_chh": {
+    "disponible": false,
+    "modo": "hab_tec_vectorial",
+    "motivo": "No requerido para la normalización semántica HAB_TEC."
+  },
+  "motor_habilidades": "hab_tec_qwen_vectorial",
+  "reglas_chh": "empleabilidad-chh-0.1.0",
+  "hallazgos": [
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 405,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 1351,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 1363,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 2568,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 2994,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 3027,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 3915,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 4057,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 4064,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 4282,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 4426,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 4839,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 5122,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 5798,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 8489,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    }
+  ]
+}

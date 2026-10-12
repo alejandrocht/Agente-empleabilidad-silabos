@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  iniciarEmpleabilidadDesdeHoja,
+  inspeccionarNormalizadorEmpleabilidad,
   iniciarNormalizadorSilabos,
   iniciarNormalizadorSilabosCactus,
   listarEjecucionesNormalizador,
@@ -33,6 +35,7 @@ const ESTADOS_TERMINALES = new Set([
 
 const ESTADOS_RECONOCIDOS = new Set([
   "recibido",
+  "seleccionando_hoja",
   "extrayendo",
   "validando",
   "validado",
@@ -115,6 +118,7 @@ export default function NormalizadorPanel() {
   const inputRef = useRef(null);
   const restauracionRef = useRef(0);
   const [archivo, setArchivo] = useState(null);
+  const [modo, setModo] = useState("silabos");
   const [fuenteSilabos, setFuenteSilabos] = useState("cactus");
   const [hitl, setHitl] = useState(1);
   const [carrera, setCarrera] = useState("");
@@ -236,10 +240,38 @@ export default function NormalizadorPanel() {
     }
   };
 
+  const iniciarEmpleabilidad = async (event) => {
+    event.preventDefault();
+    if (controlesBloqueados || !archivo) return;
+    restauracionRef.current += 1;
+    setRecuperando(false);
+    setCargando(true);
+    setErrorRed("");
+    try {
+      const inspeccion = await inspeccionarNormalizadorEmpleabilidad(archivo);
+      const hojas = (inspeccion?.validacion?.hojas || []).filter(
+        (hoja) => hoja?.rol === "publicaciones" && hoja?.encabezado_fila,
+      );
+      if (!hojas.length) {
+        throw new Error("El Excel no contiene una hoja de publicaciones compatible.");
+      }
+      const datos = await iniciarEmpleabilidadDesdeHoja(
+        inspeccion.id_ejecucion,
+        hojas[0].nombre,
+      );
+      setEjecucion(datos);
+      router.push(`/${encodeURIComponent(datos.id_ejecucion)}`);
+    } catch (error) {
+      setErrorRed(error.message || "No se pudo iniciar la normalización de empleabilidad.");
+    } finally {
+      setCargando(false);
+    }
+  };
+
   const seleccionarArchivo = (event) => {
     const siguiente = event.target.files?.[0] || null;
     setArchivo(siguiente);
-    if (siguiente) setFuenteSilabos("manual");
+    if (siguiente && modo === "silabos") setFuenteSilabos("manual");
     setErrorRed("");
   };
 
@@ -309,13 +341,44 @@ export default function NormalizadorPanel() {
                 01 / entrada
               </p>
               <h2 className="mt-1.5 text-xl font-extrabold tracking-[-0.025em]">
-                Paquete curricular
+                {modo === "empleabilidad" ? "Fuente de empleabilidad" : "Paquete curricular"}
               </h2>
               <p className="mt-1 text-sm leading-5 text-muted">
-                Valida y limpia la estructura de tus sílabos.
+                {modo === "empleabilidad"
+                  ? "Normaliza ofertas laborales usando el índice vectorial HAB_TEC."
+                  : "Valida y limpia la estructura de tus sílabos."}
               </p>
             </div>
 
+            <div className="mt-4 grid gap-2 sm:grid-cols-2" role="group" aria-label="Tipo de fuente">
+              <button type="button" disabled={controlesBloqueados} onClick={() => setModo("silabos")} aria-pressed={modo === "silabos"} className={`rounded-lg border px-3 py-2 text-left text-xs font-extrabold transition disabled:cursor-not-allowed disabled:opacity-50 ${modo === "silabos" ? "border-ulima bg-[#FFF5F1] text-ulima" : "border-line bg-paper text-muted hover:border-ulima/50"}`}>
+                Sílabos curriculares
+                <span className="mt-0.5 block text-[11px] font-normal leading-4 text-muted">Flujo técnico curricular</span>
+              </button>
+              <button type="button" disabled={controlesBloqueados} onClick={() => setModo("empleabilidad")} aria-pressed={modo === "empleabilidad"} className={`rounded-lg border px-3 py-2 text-left text-xs font-extrabold transition disabled:cursor-not-allowed disabled:opacity-50 ${modo === "empleabilidad" ? "border-ulima bg-[#FFF5F1] text-ulima" : "border-line bg-paper text-muted hover:border-ulima/50"}`}>
+                Empleabilidad
+                <span className="mt-0.5 block text-[11px] font-normal leading-4 text-muted">Matching vectorial HAB_TEC</span>
+              </button>
+            </div>
+
+            {modo === "empleabilidad" ? (
+              <form onSubmit={iniciarEmpleabilidad}>
+                <label className={`mt-4 flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed border-ulima/45 bg-[#FFF9F7] px-5 text-center transition focus-within:ring-2 focus-within:ring-ulima/30 ${controlesBloqueados ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-ulima hover:bg-[#FFF5F1]"}`}>
+                  <span className="grid h-11 w-11 place-items-center rounded-full bg-white text-ulima shadow-sm"><Upload size={21} /></span>
+                  <span className="mt-3 max-w-full truncate text-sm font-extrabold">{archivo ? archivo.name : "Seleccionar Excel de empleabilidad"}</span>
+                  <span className="mt-1 text-xs leading-5 text-muted">Se usará la primera hoja de publicaciones compatible.</span>
+                  <input ref={inputRef} disabled={controlesBloqueados} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={seleccionarArchivo} />
+                </label>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button type="submit" disabled={!archivo || controlesBloqueados} className="inline-flex items-center gap-2 rounded-xl bg-ulima px-4 py-2.5 text-sm font-extrabold text-white shadow-sm transition hover:-translate-y-px focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none">
+                    {cargando ? <LoaderCircle className="animate-girar" size={16} /> : <Database size={16} />}
+                    Normalizar con vectores HAB_TEC
+                  </button>
+                  {archivo ? <button type="button" onClick={resetear} disabled={controlesBloqueados} className="inline-flex items-center gap-2 rounded-xl border border-line bg-paper px-4 py-2.5 text-sm font-bold text-muted transition hover:border-ink hover:text-ink disabled:cursor-not-allowed disabled:opacity-45"><RefreshCw size={15} /> Nueva fuente</button> : null}
+                </div>
+                {errorRed ? <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold leading-5 text-red-700">{errorRed}</p> : null}
+              </form>
+            ) : (
             <form onSubmit={iniciar}>
               <section
                 className="mt-4 rounded-xl border border-line bg-fondo p-3.5"
@@ -491,6 +554,7 @@ export default function NormalizadorPanel() {
               </div>
               {errorRed ? <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold leading-5 text-red-700">{errorRed}</p> : null}
             </form>
+            )}
           </section>
 
           {ejecucionActiva ? (

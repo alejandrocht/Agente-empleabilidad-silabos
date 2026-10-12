@@ -1,0 +1,620 @@
+﻿id_habilidad,nombre_habilidad,descripcion_breve
+27c3ec17f624,Abordaje de patrones de comportamiento psicológico,"Trabajar con patrones de comportamiento psicológico identificados durante la evaluación o la intervención, utilizando procedimientos acordes con el enfoque profesional aplicado."
+f3d2e6681cec,Administración de bases de datos,"Aplicación de sistemas y modelos de bases de datos, definición de dependencias de datos y uso de lenguajes de consulta y gestores para desarrollar y administrar bases de datos."
+b34ac5e6c06a,Administración de pruebas psicológicas estandarizadas,"Administrar pruebas psicológicas estandarizadas siguiendo procedimientos técnicos, de aplicación y registro adecuados."
+66f6c7a719a5,Administración de sistemas de TI,"Gestión de componentes de un sistema de TI: configuración, usuarios, uso de recursos, copias de seguridad, monitoreo e instalación de hardware y software."
+02c9ffd396dc,Administración eficiente de recursos,"Planificación y gestión eficiente y responsable de los recursos humanos, materiales y financieros de la organización."
+b23b228f2a8a,Alineamiento del software con la arquitectura,Ajuste del diseño del sistema y de las especificaciones técnicas a la arquitectura de software para asegurar la integración e interoperabilidad entre componentes.
+2f7f45fb997f,Almacenes de datos,"Sistemas de almacenamiento de datos para análisis y reportes, como data warehouses y data marts, que integran datos de diversas fuentes para su explotación."
+9c538831faf4,Analítica de marketing,"Conocimiento de procesos para usar datos y mejorar la eficacia de las acciones de marketing, analizando indicadores como el retorno de la inversión."
+edeec081003d,Analítica de negocios,"Disciplinas y tecnologías para resolver problemas empresariales mediante métodos cuantitativos, como análisis de datos y modelos estadísticos."
+4c9cfd91f1f3,Analítica web,"Técnicas para medir, recopilar, analizar y reportar datos web que permiten comprender el comportamiento de los usuarios y mejorar el rendimiento de sitios y campañas."
+4c0a6909ff48,Análisis costo-beneficio,Elaboración y comunicación de informes que desglosan costos y beneficios financieros y sociales de propuestas y planes presupuestarios de la empresa.
+007a69215caa,Análisis cuantitativo,Uso de modelos y mediciones estadísticas y matemáticas para representar numéricamente una realidad económica específica.
+10eb17b088ae,Análisis de calidad del agua,"Análisis e interpretación de datos científicos, como propiedades físicas, químicas y biológicas, para determinar la calidad del agua."
+3bb7c46a11a0,Análisis de cambios logísticos,"Evaluación del impacto financiero de cambios logísticos, como modalidades de transporte, mezcla o volumen de productos y selección de transportistas."
+fadf25b660b5,Análisis de costos y rutas de transporte,Comparación de rutas posibles y cálculo de parámetros de costo de transporte para determinar el itinerario más conveniente.
+08e581d85a53,Análisis de datos,Recolección y evaluación de datos y estadísticas para generar afirmaciones y predicciones de patrones que apoyen la toma de decisiones.
+3440114dff68,Análisis de datos ambientales,Análisis e interpretación de datos para identificar correlaciones entre actividades humanas y sus efectos sobre el ambiente.
+62b701232750,Análisis de datos con software especializado,"Uso de software de estadística, hojas de cálculo y bases de datos para analizar datos y presentar información de manera útil para la gestión."
+5a1cfc50faa8,Análisis de datos experimentales,"Interpretación y análisis de datos obtenidos en ensayos o experimentos para formular conclusiones, generar conocimiento o proponer soluciones técnicas a problemas de ingeniería."
+7bea80b38ce8,Análisis de datos logísticos,"Interpretación de datos de cadena de suministro y transporte, evaluando su fiabilidad mediante minería de datos, modelamiento y análisis de costo-beneficio."
+c9af8fa31446,Análisis de encuestas de satisfacción,"Análisis de los resultados de encuestas y comentarios de clientes para identificar tendencias, medir su satisfacción con productos o servicios y extraer conclusiones accionables."
+d59b210df4df,Análisis de estados financieros,Lectura e interpretación de partidas e indicadores clave de los estados financieros para extraer información útil para la gestión.
+1d7950739ab3,Análisis de estrategias de cadena de suministro,"Examen de la planificación de producción, unidades, calidad, costos y mano de obra para mejorar la gestión de la cadena de suministro."
+c245913b8bb3,Análisis de medios para conceptos creativos,"Estudio de diversas fuentes mediáticas, como radio, televisión, prensa y medios en línea, para obtener referentes en el desarrollo de conceptos creativos."
+fef05acf2584,Análisis de necesidades del cliente,Análisis de hábitos y necesidades de clientes y segmentos objetivo para diseñar y aplicar estrategias comerciales que vendan de manera más eficaz.
+e01fc64c7461,Análisis de necesidades logísticas,Análisis de las necesidades logísticas de las distintas áreas de la organización para dimensionar recursos y servicios.
+bad95ac2c110,Análisis de planes de negocio,"Evaluación de planes de negocio que describen objetivos y estrategias de una empresa, para determinar su viabilidad y la capacidad de cumplir requisitos externos."
+5e41f67f6e12,Análisis de políticas públicas,"Conocimiento de los principios de formulación de políticas de un sector, sus procesos de implementación y sus consecuencias."
+8b08bf935f13,Análisis de pruebas jurídicas,Examen de pruebas y documentación de un caso civil o penal para obtener una visión clara de los hechos y sustentar una posición o resolución jurídica.
+4049b8a3dd6b,Análisis de préstamos,Examen y análisis de préstamos otorgados a organizaciones y personas mediante distintas formas de crédito.
+b6446fbfe7fb,Análisis de requerimientos de software,"Evaluación de las especificaciones de un producto de software por desarrollar, identificando requisitos funcionales y no funcionales, restricciones y casos de uso de interacción."
+9bbbff391fb0,Análisis de requerimientos del negocio,"Estudio de las necesidades y expectativas de clientes y usuarios sobre un producto o servicio, detectando y resolviendo incoherencias y desacuerdos entre las partes involucradas."
+2792c5fdbed6,Análisis de retroalimentación de audiencias,Identificación y síntesis de elementos recurrentes en comentarios de públicos seleccionados para evaluar y ajustar productos comunicacionales.
+b7248b4bfc1c,Análisis de retroalimentación de usuarios,Recolección y análisis de respuestas de clientes sobre aplicaciones para identificar solicitudes o problemas y mejorar el software y la satisfacción del usuario.
+484c3b22f38f,Análisis de riesgos de proyectos,"Identificación y evaluación de factores que pueden comprometer el éxito de un proyecto o la operación de la organización, aplicando medidas para evitarlos o minimizarlos."
+7619540dc685,Análisis de sistemas,Análisis del funcionamiento de un sistema y estimación del efecto que tendrían los cambios en sus componentes sobre sus resultados globales.
+db1a81b9da7f,Análisis de sistemas de información,"Análisis del funcionamiento y desempeño de sistemas de información para definir sus objetivos, estructura, servicios y procedimientos de operación."
+31970fcbaa00,Análisis de tarifas de transporte,Comparación de tarifas de transporte entre proveedores para seleccionar alternativas y preparar propuestas de costos logísticos.
+a5bd4a958df5,Análisis de tendencias del mercado financiero,Seguimiento y pronóstico de las tendencias del mercado financiero a lo largo del tiempo para apoyar decisiones de inversión y financiamiento.
+b9b6e8da9b2e,Análisis de tendencias económicas,"Análisis de la evolución del comercio nacional e internacional, las relaciones comerciales, la banca y las finanzas públicas, y de cómo interactúan en un contexto económico."
+46f5dc364c56,Análisis de tendencias en cadena de suministro,"Análisis y pronóstico de la evolución de las operaciones de la cadena de suministro en relación con tecnología, sistemas de eficiencia, tipos de productos y requisitos logísticos."
+67f9e9dbdc45,Análisis de ventas,"Recopilación y análisis de niveles de venta de productos y servicios para planificar producción, recoger opiniones de clientes y ajustar estrategias comerciales."
+8c83ebaabcf9,Análisis de vulnerabilidades de sistemas,"Análisis de la arquitectura de sistemas y redes, componentes de hardware, software y datos para detectar deficiencias y vulnerabilidades ante intrusiones o ataques."
+b18e2fa64c6a,Análisis del comportamiento del consumidor,Análisis de los hábitos de compra y del comportamiento predominante de los consumidores para orientar estrategias de comunicación y publicidad.
+958f3a6e3337,Análisis del comportamiento organizacional,"Analizar problemas y procesos de comportamiento organizacional mediante conceptos, modelos y evidencia psicológica aplicada a las organizaciones."
+738ecde8d151,Análisis del entorno empresarial,"Investigación y análisis de factores externos a la empresa, como consumidores, posición de mercado, competencia y contexto político."
+75b74f6c528d,Análisis del entorno interno,"Estudio de los factores internos que influyen en el funcionamiento de la empresa, como cultura, base estratégica, productos, precios y recursos disponibles, para formular estrategias comerciales."
+6c6607ee27c9,Análisis empresarial,Identificación de necesidades y problemas de las empresas y determinación de soluciones que los mitiguen o resuelvan.
+9499a9bbae34,Análisis estadístico de datos,"Uso de modelos de estadística descriptiva o inferencial y técnicas como minería de datos o aprendizaje automático para analizar datos, descubrir correlaciones y pronosticar tendencias."
+f9db583c7660,Análisis financiero,"Evaluación de las posibilidades, medios y situación financiera de una organización mediante el análisis de sus estados e informes financieros."
+1b4fe892e0c9,Análisis financiero de empresas,"Análisis del desempeño financiero de una empresa a partir de cuentas, estados financieros e información de mercado para identificar acciones de mejora."
+f73c93cf79db,Análisis financiero de estrategias de precios,Análisis financiero de un negocio para supervisar y evaluar las acciones y estrategias de precios aplicadas.
+9567b79c31b8,Análisis y gestión del riesgo financiero,"Identificación y análisis de riesgos que pueden afectar a una organización o persona, como riesgos de crédito y de mercado, y propuesta de medidas de cobertura."
+5a0cc12e27d2,Análisis y mejora de procesos productivos,"Análisis de los procesos de producción para identificar mejoras que reduzcan pérdidas, desperdicios y costos generales de fabricación, incrementando la eficiencia del sistema productivo."
+b702bfc73c01,Aplicación de políticas financieras,Interpretación y aplicación de las políticas financieras de la empresa en los procedimientos contables y tributarios.
+cb56a1855d50,Aplicación de protocolos clínicos,"Uso de guías de práctica clínica y protocolos acordados por instituciones de salud, asociaciones profesionales y entidades científicas en la atención psicológica."
+05e4cb06afc7,Aplicación de pruebas psicoeducativas,"Administración de pruebas psicológicas y educativas sobre intereses, personalidad, capacidades cognitivas, lenguaje o habilidades matemáticas de estudiantes."
+c61377dbdb2f,Aprobación de diseños de ingeniería,Revisión y validación de diseños de ingeniería terminados para autorizar su paso a las fases de fabricación y montaje del producto.
+32654e0aa773,Aprovisionamiento de recursos en la nube,"Identificación y ejecución de los pasos para suministrar recursos en la nube como redes, servidores, almacenamiento y servicios, definiendo la infraestructura requerida."
+17a39caf84de,Argumentación jurídica,"Exposición de argumentos jurídicos en audiencias, negociaciones o escritos posteriores al juicio, orientada a obtener el mejor resultado posible para el cliente dentro de la ley."
+199de07ac158,Arquitectura de software,"Creación y documentación de la estructura de productos de software, incluyendo componentes, acoplamiento e interfaces, asegurando viabilidad, funcionalidad y compatibilidad con las plataformas."
+28dadf50bd6f,Arquitectura empresarial,Análisis de la estructura del negocio y organización lógica de procesos e infraestructura de información para alinear la tecnología con la estrategia.
+adfbf3d14529,Arquitectura paisajista,"Principios y prácticas de diseño, planificación y cuidado de espacios exteriores y paisajes, nuevos o existentes."
+b31982f95e4a,Aseguramiento de la calidad,"Principios, requisitos y procesos para medir, controlar y garantizar la calidad de productos y procesos, aplicados al desarrollo y operación de sistemas."
+c2f661beb92f,Asesoría de inversiones,Evaluación de los objetivos económicos del cliente y asesoramiento sobre inversiones financieras o de capital para crear o preservar riqueza.
+56f86b97c3ff,Asesoría en cumplimiento de políticas públicas,Asesoramiento a organizaciones sobre cómo cumplir las políticas gubernamentales aplicables y qué medidas adoptar para asegurar su cumplimiento completo.
+98ac319969ad,Asesoría en decisiones jurisdiccionales,"Asesoramiento a jueces u otros funcionarios con responsabilidad jurídica sobre la decisión correcta conforme a la ley, considerando aspectos éticos y las consecuencias para las partes."
+81dd86169827,Asesoría en estrategias de comunicación corporativa,Consultoría sobre planes de comunicación interna y externa y la presencia en línea de empresas y organizaciones.
+a05607ba0324,Asesoría en gestión de personas,"Asesoría a la dirección sobre métodos para mejorar relaciones laborales, reclutamiento, capacitación y satisfacción de los colaboradores."
+6a0dd1c89693,Asesoría en gestión de riesgos,Asesoramiento sobre políticas y estrategias de prevención de riesgos y su aplicación según el tipo de organización.
+fd184bb3d075,Asesoría en gestión de riesgos de seguridad,Asesoramiento sobre políticas y estrategias de prevención de riesgos de seguridad y su aplicación según los tipos de riesgo de la organización.
+3856c4af3b4b,Asesoría en mantenimiento de equipos,"Recomendación de productos, métodos e intervenciones adecuadas para asegurar el mantenimiento correcto y eficiente de equipos y sistemas."
+7b73ed328188,Asesoría en mejora de la eficiencia operativa,Análisis de procesos y productos para recomendar mejoras de eficiencia que permitan un mejor uso de los recursos de la organización.
+b0d54326c477,Asesoría en relaciones públicas,Asesoramiento a empresas y organizaciones sobre la gestión de relaciones públicas y sus estrategias para lograr una comunicación eficiente con públicos objetivo.
+c1e7268bf2cd,Asesoría en resolución de conflictos,Asesoramiento a organizaciones públicas o privadas sobre los riesgos de conflicto y los métodos de resolución adecuados a cada controversia identificada.
+0bb5855d6c62,Asesoría en salud mental,"Asesoría a personas e instituciones sobre factores personales, sociales y estructurales que promueven la salud mental y el comportamiento saludable."
+28c9bb7b6d48,Asesoría financiera,"Asesoramiento y propuesta de soluciones sobre gestión financiera, adquisición de activos, inversiones, eficiencia tributaria y productos financieros a clientes u organizaciones."
+6821caf6b35b,Asesoría jurídica,"Asesoramiento a clientes para que sus actuaciones cumplan la legislación y obtengan el mayor beneficio posible, brindando información, documentación y orientación legal según su caso específico."
+4e18555a5a31,Asesoría legislativa,Asesoramiento a funcionarios del Poder Legislativo sobre nuevos proyectos de ley y la revisión de normas vigentes.
+9e36e433b0f3,Asesoría tributaria,"Asesoramiento a empresas y personas sobre sus obligaciones tributarias, cambios en la política tributaria y las implicancias de la legislación fiscal en sus decisiones."
+899c9a6f1b46,Asesoría técnica a arquitectos,"Asesoramiento a arquitectos sobre diseño estructural, seguridad y reducción de costos durante la etapa de proyecto."
+a91465ccbe91,Asesoría técnica en construcción,"Asesoramiento a las partes de un proyecto sobre aspectos técnicos, constructivos y presupuestarios relevantes para la construcción."
+87c9795eecad,Atención psicológica de abuso y maltrato,"Intervención con personas afectadas por abusos sexuales, maltrato y traumas físicos, psicológicos, culturales o por negligencia."
+a4fc5943505b,Auditoría de sistemas de TI,"Organización y ejecución de auditorías que evalúan sistemas de TI, conformidad de componentes, procesamiento de información y seguridad, identificando problemas y soluciones."
+d47dbf8a6d84,Auditoría energética,"Evaluación del consumo total de energía de una organización, de sus necesidades operativas y de las causas de consumo innecesario."
+2fd60ae1e2d7,Auditoría financiera,"Examen sistemático e independiente de libros, cuentas, registros y estados financieros para evaluar su fiabilidad, solidez financiera y cumplimiento normativo."
+46e4acc40230,Auditoría interna,"Observación, comprobación y evaluación sistemática de los procesos de la organización para mejorar su eficacia, reducir riesgos y aportar valor."
+4fbe56e35b53,Auditorías de calidad,"Ejecución de exámenes periódicos, sistemáticos y documentados de un sistema de calidad para verificar su conformidad con una norma, basados en evidencia objetiva."
+99b0465f8baf,Automatización de tareas en la nube,"Automatización de procesos manuales o repetitivos en la nube, evaluando alternativas para el despliegue de redes y de infraestructura con herramientas de automatización."
+10d4b779603c,Automatización industrial,"Tecnologías que permiten que procesos, sistemas o equipos productivos funcionen automáticamente mediante sistemas de control, aumentando eficiencia y confiabilidad."
+abe0e0275a12,Balance de comprobación,Verificación del registro de todas las transacciones y totalización de débitos y créditos de las cuentas para obtener el balance de comprobación.
+a05529163d16,Balanceo de recursos de bases de datos,"Estabilización de la carga de trabajo y los recursos de bases de datos, controlando transacciones, espacio en disco y confiabilidad de servidores."
+d46092f9ed19,Bases de datos relacionales,"Uso de sistemas gestores de bases de datos relacionales para extraer, almacenar y verificar información organizada en tablas de filas y columnas."
+de41830a584c,Bocetaje arquitectónico,Elaboración de bocetos arquitectónicos a escala para el diseño y las especificaciones de interiores y exteriores.
+ba6ad0d1c462,Branding y gestión de marca,Conocimiento de métodos y sistemas para investigar y construir la identidad de una marca con fines comerciales.
+2babc39f52c4,Calidad de sistemas informáticos,"Aseguramiento de que el desarrollo, la integración, la seguridad y la gestión de sistemas de TI cumplan plenamente con necesidades y resultados definidos."
+87a53aca59f3,Capacitación de personal,Organización y conducción de actividades para enseñar a los colaboradores las capacidades que requieren en su trabajo.
+97df4fa67503,Capacitación y desarrollo de personal,"Diseño y ejecución de acciones de formación para mejorar las competencias y el desempeño de los trabajadores, adaptando métodos al grupo destinatario."
+be7dd062dc06,Certificación notarial de actos,"Observación y certificación de la celebración y firma de documentos con carácter legalmente vinculante, dando fe pública de su veracidad."
+43968f92e269,Ciberseguridad,"Métodos y buenas prácticas para proteger sistemas, redes, computadoras, dispositivos, servicios y personas contra accesos, modificaciones no autorizadas o denegación de servicio."
+bf5fca37ad98,Ciclo de la contratación pública,"Conocimiento de las fases de la contratación estatal, desde la planificación y actos preparatorios hasta la adjudicación, ejecución y gestión de los contratos."
+39bba2192e49,Ciencia de datos,Campo que analiza grandes volúmenes de datos con técnicas de inteligencia artificial y aprendizaje automático para predecir patrones y obtener información útil para la toma de decisiones.
+22e74c20d658,Ciencias actuariales,Aplicación de técnicas matemáticas y estadísticas para determinar riesgos potenciales o existentes en sectores como finanzas o seguros.
+14824c03da6b,Ciencias de la computación,"Fundamentos científicos y prácticos de la información y la computación, como algoritmos, estructuras de datos, programación y arquitectura de datos."
+37174c0b3ca6,Clasificación de la información,Proceso de organizar la información en categorías y de establecer las relaciones entre los datos para fines claramente definidos.
+45444ca5ea9e,Comercialización de materias primas,Análisis de los requisitos del cliente y negociación de la compra y venta de materias primas para obtener el acuerdo más beneficioso.
+f9cc4915c00e,Comercio electrónico,"Arquitectura digital y transacciones comerciales de productos o servicios realizadas por internet, celulares y redes sociales."
+77eee59504bd,Comercio internacional,"Práctica económica y campo de estudio del intercambio de bienes y servicios entre países, incluidas sus teorías e implicancias para exportaciones e importaciones."
+7ff0ca3a1206,Compilación de documentación judicial,"Recopilación y organización de la documentación de un caso concreto para una investigación o audiencia, conforme a la normativa legal y asegurando la debida conservación de los registros."
+bc9991941dc3,Compra de espacios publicitarios,"Análisis de medios y puntos para adquirir espacios publicitarios adecuados al producto y negociación de condiciones, precios y entregables."
+4e372b1e4268,Computación en la nube,"Tecnologías que permiten acceder a hardware, software, datos y servicios mediante servidores remotos y redes, independientemente de su ubicación y arquitectura."
+7847167c0d18,Comunicación corporativa,Conocimiento de los procesos de comunicación eficaz dentro de la organización y hacia organismos externos para contribuir al logro de los objetivos organizacionales.
+0063f0473f37,Comunicación interna de planes y estrategias,"Difusión y presentación de planes y estrategias de negocio a directivos y colaboradores, fortaleciendo los canales de comunicación interna."
+c0be3aa9d87e,Conceptualización de ideas creativas,"Desarrollo de conceptos e ideas creativas originales como base de campañas, piezas publicitarias, producciones audiovisuales y contenidos de comunicación."
+1d35bf7f502d,Conciliación y formalización de acuerdos,"Facilitación de acuerdos entre partes en conflicto, verificando su conformidad con la solución adoptada y redactando los documentos que formalizan y dan validez al acuerdo."
+bf418f1654ab,Conducción de programas en vivo,"Presentación en directo de acontecimientos políticos, económicos, culturales, sociales o deportivos, o conducción de programas de radio y televisión."
+a65f788c5662,Conducción de sesiones terapéuticas,"Planificación y desarrollo de sesiones de terapia psicológica individuales o grupales en un entorno controlado, aplicando técnicas acordes al enfoque terapéutico."
+c596fec58edf,Conocimiento del producto,"Comprensión de los productos ofertados, sus funcionalidades, características y requisitos legales y regulatorios, para comunicarlos y comercializarlos adecuadamente."
+039793a22794,Consejería psicológica clínica,"Asesoramiento psicológico clínico sobre problemas de salud, sus condiciones y las posibilidades de cambio del paciente."
+0417eea52e0d,Consejería psicosocial,"Acompañamiento y orientación a personas para que comprendan y superen problemas personales, sociales o psicológicos mediante técnicas de consejería psicológica."
+9a1e5c685ca8,Conservación de la naturaleza,Evaluación y seguimiento de las características de interés para la conservación en hábitats y áreas naturales.
+1883b36962e5,Consolidación de información financiera,Recopilación y revisión de información financiera de distintas fuentes o áreas para elaborar cuentas o planes financieros unificados.
+88e6c5ddd37b,Construcción de carteras de inversión,Diseño de carteras de inversión para clientes que cubran riesgos específicos y se ajusten a sus objetivos financieros.
+8ae3c4f8f72b,Consulta de fuentes de información,"Identificación y consulta de fuentes pertinentes para documentarse sobre un tema, obtener información de contexto y encontrar inspiración para la elaboración de contenidos comunicacionales."
+a4ced6f99250,Consultas a bases de datos,Recuperación de información de bases de datos o sistemas de información mediante lenguajes diseñados para la consulta de datos.
+10cd373bec06,Consultoría de gestión,"Asesoría profesional a organizaciones orientada a diagnosticar problemas, mejorar su desempeño operativo y promover su crecimiento."
+4ffe78efecca,Consultoría en estrategias de mercado,"Análisis de información y recomendación de mejoras, estrategias de mercado y ajustes según las preferencias de los clientes."
+9f0119d21dc3,Consultoría en sostenibilidad,Asesoría a organizaciones para conocer su impacto en la sostenibilidad y aplicar estrategias eficientes y ambientalmente responsables.
+425a103e9906,Consultoría en tecnologías de la información,"Asesoría sobre soluciones de TI adecuadas, evaluando alternativas y optimizando decisiones según riesgos, beneficios e impacto para el cliente profesional."
+363f0e988d23,Contabilidad de costos,"Actividades de costeo como costos estándar, análisis de precios medios, márgenes, control de inventarios y análisis de variaciones."
+bc5ce7f921ad,Contabilidad forense,"Auditoría e investigación de información financiera, cuentas y administración empresarial con fines de prueba en procesos legales."
+9712adcda25e,Control de avance de obra,"Supervisión del progreso de la obra y del cumplimiento de parámetros de diseño como calidad, costos, cronograma y responsabilidades de contratistas."
+15a1037ce5d2,Control de calidad en obra,"Inspecciones y ensayos de procesos, materiales y trabajos ejecutados para evaluar su calidad frente a especificaciones."
+1e8dbd0773a6,Control de costos de producción,Seguimiento de los costos de cada área y fase de producción para asegurar que se mantengan dentro del presupuesto.
+1e24b1eb845b,Control de costos operativos,"Supervisión y control de costos considerando eficiencias, desperdicios, horas extra y personal, evaluando excesos para mejorar la productividad."
+fd1ef82d3fa0,Control de gastos,"Análisis de gastos frente a ingresos y usos de las unidades de la empresa, control de costos y recomendaciones para el uso eficiente de recursos."
+5919e5625ea9,Control de la programación de emisiones,Verificación del cumplimiento de la parrilla de programación y de la calidad de los programas a grabar y transmitir en radio o televisión.
+e0c097f7296c,Control de legalidad procesal,Supervisión de los procedimientos realizados durante o después de un proceso judicial para verificar su conformidad con la normativa y la correcta conclusión del caso.
+f77f4c9f5974,Control de recursos financieros,"Supervisión y control de presupuestos y recursos financieros de un área o empresa, limitando costos a lo necesario y maximizando ingresos."
+8abff914cc4c,Control del cumplimiento de la ley,Vigilancia del cumplimiento de la legislación y adopción de las medidas jurídicas correspondientes cuando se detectan infracciones.
+575cca46657c,Control del gasto público,Revisión de los procedimientos financieros de entidades públicas en la asignación presupuestaria y el gasto para prevenir errores o irregularidades.
+83d6c495166d,Coordinación con agentes de carga,Comunicación y coordinación con transportistas y agentes de carga internacional para asegurar la correcta entrega y distribución de las mercancías.
+3ebe984bc70e,Coordinación con la comunidad educativa,"Trabajo conjunto con docentes, directivos, tutores y familias para abordar el bienestar, la conducta y el rendimiento académico de los estudiantes."
+14d73a7a0e14,Coordinación de campañas publicitarias,"Organización y supervisión de las acciones de una campaña, como anuncios en televisión, prensa, correo electrónico y sitios web, para promocionar un producto o servicio."
+f5513e05f3be,Coordinación de inspecciones aduaneras,"Coordinación con la aduana para la inspección de mercancías de importación o exportación, verificando que cada envío cuente con la documentación conforme."
+da1535121c27,Coordinación de operaciones,Sincronización de actividades y responsabilidades del personal operativo para usar los recursos con eficacia y alcanzar los objetivos.
+daf1e5db4e80,Coordinación de reportes de sostenibilidad,Supervisión del proceso de reporte del desempeño de la organización en sostenibilidad según directrices y estándares establecidos.
+aefc091c2e56,Coordinación del plan de marketing,"Administración integral de las acciones de marketing, incluyendo planificación, asignación de recursos, materiales publicitarios, control y esfuerzos de comunicación."
+c2995a08e46e,Coordinación del transporte de importación,Supervisión de las operaciones de transporte de importación y optimización de los procesos y estrategias de servicio para el ingreso de mercancías.
+a51acf909d92,Creación de anuncios publicitarios,"Redacción y creación de anuncios considerando los requisitos del cliente, el público objetivo, los medios y los objetivos de marketing."
+8b867c0951d9,Creación de contenido digital,"Creación y edición de contenidos digitales en distintos formatos según requisitos y lineamientos definidos, para comunicar mensajes de marca en medios digitales."
+b6ce1372c37b,Cumplimiento ambiental en proyectos,"Seguimiento de actividades del proyecto para asegurar el cumplimiento de normas de protección ambiental y sostenibilidad, adaptándolas ante cambios en la legislación."
+8cd0b183bb9f,Cumplimiento de estándares de TI,"Verificación de que productos, servicios y soluciones de TI se ajusten a las normas y procedimientos definidos por la organización."
+478ccf55953f,Cumplimiento de normas de seguridad laboral,Aseguramiento del cumplimiento de la legislación y procedimientos de seguridad y salud en el trabajo en la organización.
+205e325001a4,Cumplimiento de normativa aduanera,"Aplicación y supervisión del cumplimiento de requisitos de importación y exportación para evitar reclamaciones aduaneras, interrupciones de la cadena de suministro y sobrecostos."
+31eaf262d9e5,Cumplimiento de normativa de seguridad ocupacional,"Implementación de programas y controles para que equipos, procesos y personal cumplan la legislación y normas de seguridad, salud e higiene en el trabajo."
+8c92da262bbf,Cumplimiento de normativa interna,"Aseguramiento de que las actividades del personal se ajusten a los reglamentos de la empresa mediante directrices, políticas y programas internos."
+3c781fa56f04,Cumplimiento normativo,"Conocimiento actualizado de las regulaciones legales que rigen una actividad específica y aseguramiento de que las actuaciones se ajusten a sus normas, políticas y leyes."
+00656e7aca90,Cumplimiento normativo,"Aseguramiento del cumplimiento de normas, especificaciones, políticas y requisitos legales aplicables a las operaciones de la organización."
+c39f48c99295,Cumplimiento normativo empresarial,"Aseguramiento de que las operaciones diarias y las actividades de la empresa cumplan la legislación, normas, políticas y especificaciones aplicables."
+8d34ae2be681,Cumplimiento normativo en compras,Aplicación y supervisión de las actividades de la empresa conforme a la legislación sobre compras y contrataciones.
+0001cf4c7354,Cumplimiento normativo en manejo de residuos,"Aplicación y supervisión de procedimientos de recolección, transporte y disposición de residuos conforme a la normativa vigente."
+2b52a84c99b9,Cumplimiento regulatorio de productos,"Estudio, aplicación y supervisión de la conformidad de los productos con los requisitos legales, asesorando sobre la normativa aplicable."
+447eb6d221b8,Cálculo financiero,"Apoyo a colegas, clientes u otras partes en la realización de cálculos financieros complejos vinculados a expedientes o decisiones."
+51ee12fe7dcc,Cálculo y declaración de impuestos,"Cálculo de tributos de personas y empresas, preparación y presentación de declaraciones juradas tributarias y verificación de su conformidad con la normativa."
+f694945d6ca9,Defensa de los intereses del cliente,Adopción de las medidas legales necesarias y evaluación de todas las alternativas jurídicas para proteger los intereses del cliente y lograr un resultado favorable.
+2fc02259e86e,Defensa de víctimas de derechos humanos,"Apoyo y protección a personas o grupos víctimas de abusos, discriminación o violencia que vulneran normas de derechos humanos, facilitando su acceso a la tutela correspondiente."
+caf121df9ec1,Definición de objetivos comerciales medibles,"Formulación de indicadores cuantificables del plan comercial, como participación de mercado, valor del cliente, reconocimiento de marca e ingresos por ventas, y su seguimiento."
+6372013c6f08,Depuración de software,"Corrección de código mediante el análisis de resultados de pruebas, la localización de defectos que producen resultados incorrectos o inesperados y la eliminación de esos fallos."
+adf3c352ddba,Derecho de la propiedad intelectual,"Conocimiento de las normas que protegen los derechos sobre creaciones intelectuales, como marcas, patentes y derechos de autor, frente a su infracción."
+c19bd5a08393,Derecho de propiedad y derechos reales,"Conocimiento de la legislación sobre las formas de propiedad, los tipos de bienes, los litigios sobre inmuebles y las normas de los contratos relativos a la propiedad."
+b149b825b672,Derecho del consumidor,"Conocimiento de la normativa que regula la relación entre consumidores y proveedores de bienes o servicios, incluida la protección al consumidor y las prácticas comerciales."
+f37b1ba7e4a7,Derecho informático y de ciberseguridad,"Conocimiento de las normas que protegen los sistemas de información, redes y datos, y de las consecuencias jurídicas derivadas de su uso indebido."
+9deac29786ec,Derecho laboral,"Conocimiento de la legislación que regula la relación entre trabajadores y empleadores, incluidos los derechos derivados del contrato de trabajo."
+f366aa95f0c0,Derecho mercantil,"Conocimiento de la rama del Derecho que regula la actividad comercial entre empresas y particulares y sus relaciones jurídicas, con vínculos al Derecho tributario y laboral."
+0b03bf9ecfc8,Derecho mercantil,"Conocimiento de las normas jurídicas que rigen la actividad comercial, los actos de comercio y las relaciones entre empresas."
+fb82f9e7d3cc,Derecho penal,"Conocimiento de las normas jurídicas aplicables a los delitos, las penas y la responsabilidad penal de los infractores."
+915340e4ee30,Derecho procesal civil,Conocimiento de las normas y procedimientos que aplican los órganos jurisdiccionales en la tramitación de los procesos civiles.
+7cbca20707a9,Derecho tributario,"Conocimiento de la legislación fiscal aplicable a ámbitos específicos, como impuestos a la importación o impuestos nacionales."
+cc17d206d2b9,Derechos humanos y justicia social,"Conocimiento del desarrollo y los principios de los derechos humanos y la justicia social, y de su aplicación mediante el análisis caso por caso."
+284820325d5a,Desarrollo con cadena de bloques,"Desarrollo e integración de la tecnología de cadena de bloques en infraestructuras de TI nuevas o existentes, abordando sus principales retos."
+393f605331a1,Desarrollo con servicios en la nube,"Escritura de código que interactúa con servicios en la nube mediante interfaces de programación, kits de desarrollo e interfaces de línea de comandos."
+6ad9e4170b9a,Desarrollo de aplicaciones de procesamiento de datos,"Creación de software a medida para procesar datos, seleccionando el lenguaje de programación adecuado para que el sistema produzca la información requerida."
+3fa872d05994,Desarrollo de estrategias de comunicación,"Concepción y aplicación de planes de comunicación interna y externa de una organización, incluida su presencia en línea."
+8a361dec18f4,Desarrollo de productos,Conversión de los requisitos y necesidades del mercado en el diseño y desarrollo de nuevos productos alineados con la estrategia comercial de la empresa.
+337f9b080b1d,Desarrollo del talento organizacional,"Diagnosticar necesidades y diseñar estrategias de capacitación, aprendizaje y desarrollo del talento alineadas con objetivos organizacionales."
+a85b9d4f0ef3,Desarrollo ágil de software,Modelo de desarrollo ágil para diseñar sistemas y aplicaciones de software de forma iterativa e incremental con entregas frecuentes.
+9f0c618659c9,Despliegue de sistemas de TI,"Entrega e instalación de computadoras o sistemas de TI, asegurando que se prueben y queden listos para su uso."
+96356b3b6c78,Detección de fraude y delitos financieros,"Técnicas para identificar, investigar y reportar actividades fraudulentas y delitos financieros, como lavado de activos o evasión tributaria, en cuentas y operaciones."
+b38a95b68123,DevOps,"Enfoque de desarrollo que integra a programadores y equipos de operaciones de TI para diseñar, entregar y operar sistemas y aplicaciones de software de forma colaborativa y automatizada."
+2e189c4ac2c1,Diagnóstico de cultura y clima organizacional,Seleccionar y aplicar métodos para diagnosticar cultura y clima organizacional e interpretar brechas para orientar planes de acción.
+75fe9c892d0c,Dibujo asistido por computadora (CAD),"Uso de software especializado de diseño y dibujo asistido por computadora para crear, modificar, analizar y optimizar planos y modelos técnicos de obras civiles."
+29de00b00abd,Dirección creativa publicitaria,"Supervisión del equipo que crea los contenidos y la representación visual de piezas publicitarias, asegurando coherencia con la estrategia y los requisitos del cliente."
+32733e2cf1c2,Dirección de audiencias judiciales,"Supervisión de las audiencias para garantizar que se desarrollen conforme a la normativa, de manera ordenada y sin transgredir límites éticos o legales."
+5c77a37ccbb5,Dirección de gerencias de área,"Orientación a los gerentes de las distintas áreas de la empresa sobre objetivos, acciones y expectativas de su ámbito de gestión."
+746d2631996b,Dirección de marketing,"Conocimiento de los procesos, funciones, terminología y rol del área de marketing en la organización, incluyendo investigación de mercados, estrategias y campañas."
+a453ebbd2a7b,Dirección de operaciones logísticas,"Dirección de las operaciones de distribución y logística de la empresa asegurando la máxima precisión, puntualidad y productividad en la entrega de mercancías."
+aa3848ef1a45,Dirección de reparto y equipo técnico,"Dirección del reparto y del equipo técnico de una producción audiovisual, comunicando la visión creativa y gestionando las actividades diarias de rodaje."
+e9f6000443ea,Dirección y supervisión de personal,"Planificación, asignación y supervisión del trabajo de colaboradores, individualmente o en equipo, para maximizar su rendimiento y su contribución a los objetivos de la organización."
+f4ce4932b8c9,Diseño arquitectónico,"Proceso de concepción de edificaciones y proyectos que busca equilibrio y armonía entre los elementos espaciales, funcionales, constructivos y estéticos."
+c51655850063,Diseño asistido por computadora (CAD),"Uso de sistemas de diseño y dibujo asistido por computadora para crear, modificar, analizar y documentar diseños y planos arquitectónicos detallados."
+78e3f12c269f,Diseño bioclimático pasivo,"Diseño de estrategias pasivas como iluminación y ventilación natural y control solar, basadas en el análisis del microclima del sitio, para lograr desempeño energético."
+9d1a1838e590,Diseño de arquitecturas en la nube,"Diseño de soluciones de arquitectura en la nube de varios niveles, tolerantes a fallas, elásticas y adaptadas a la carga de trabajo y necesidades del negocio."
+68c2ac9f9883,Diseño de interfaces de componentes,Uso de métodos y herramientas para diseñar y programar las interfaces de software y de los componentes de un sistema.
+45932e884851,Diseño de interfaces web,Desarrollo del diseño de interfaz de sitios web y mejora del servicio al usuario a partir de conceptos de diseño definidos.
+2b900f0efc7d,Diseño de interiores,"Desarrollo de diseños conceptuales de interiores coherentes con el ambiente deseado y las normas de calidad, incluyendo asesoría al cliente sobre mobiliario, acabados y color."
+9c57fca4fd56,Diseño de intervenciones psicopedagógicas,Diseñar actividades e intervenciones psicopedagógicas basadas en teorías del aprendizaje y necesidades del contexto educativo.
+700c7d819e5b,Diseño de procedimientos contables,"Establecimiento de métodos y directrices estándar para las operaciones contables, incluido el sistema contable a utilizar y el tratamiento de los registros."
+34e0896363f8,Diseño de procesos,"Identificación de flujos de trabajo y recursos de un proceso usando herramientas como simulación de procesos, diagramas de flujo y modelos a escala."
+b91e1e181cf9,Diseño de programas de capacitación,Diseño de programas de formación para que los colaboradores adquieran o amplíen las competencias necesarias para su trabajo.
+05625d5bb7f1,Diseño de programas de orientación vocacional,Diseñar y ejecutar programas de orientación vocacional y ocupacional coherentes con el diagnóstico y las decisiones académicas o laborales.
+a9696f655728,Diseño de redes de tuberías,"Diseño de infraestructura de tuberías aplicando principios de ingeniería, incluyendo modelamiento, mediciones en sitio, definición de materiales y propuestas constructivas."
+b8c9b1383e6d,Diseño de sistemas,"Proceso de definición de la arquitectura, componentes, módulos y datos de un sistema para satisfacer requisitos específicos."
+5c3e4c34746d,Diseño de sistemas de control,Desarrollo de dispositivos que controlan y gestionan el comportamiento de otros sistemas aplicando principios de ingeniería de control.
+2876b5356d80,Diseño de sistemas de información,"Definición de la arquitectura, componentes, módulos, interfaces y datos de sistemas de información integrados de hardware, software y red según los requisitos especificados."
+1cc83f3f31eb,Diseño de sistemas eléctricos,"Diseño de sistemas, productos y componentes eléctricos y de sus diagramas de conexión con software de diseño asistido por computadora."
+d677fc79a080,Diseño gráfico,Aplicación de técnicas para crear representaciones visuales de ideas y mensajes en piezas de comunicación impresas y digitales.
+4169c2b3d081,Diseño instruccional y recursos de aprendizaje,Diseñar programas formativos y recursos de aprendizaje aplicando modelos instruccionales y teorías del aprendizaje.
+e4ed00f8e4f1,Diseño visual a partir de requerimientos,"Desarrollo del diseño visual de piezas como logotipos, gráficos web o juegos a partir de especificaciones y del análisis del público objetivo."
+cbeadce3eb78,Diseño y construcción sostenible,"Prácticas de diseño y construcción de edificaciones ambientalmente responsables, rentables y eficientes en el uso de recursos a lo largo de todo su ciclo de vida."
+5fe5d55321aa,Divulgación científica,Difusión de hallazgos científicos al público general para aumentar su comprensión y valoración de la ciencia y promover el uso de sus resultados.
+14dc8a837ae9,Documentación de comercio exterior,"Supervisión y preparación de los documentos de las transacciones comerciales internacionales, como facturas, cartas de crédito, órdenes de pedido y embarque y certificados de origen."
+f1947795f440,Documentación de procesos,Elaboración y documentación de los procesos de la organización y de sus definiciones asociadas para estandarizarlos y facilitar su mejora.
+a841c208bee7,Documentación de proyectos,"Redacción de planes de proyecto, planes de trabajo, informes de avance y matrices de interesados."
+8f3dedfbebd3,Documentación de proyectos de construcción,"Redacción, actualización y archivo de documentos de planificación y ejecución de obras, incluida información de seguridad y documentación técnica."
+f5e9ce74cf8a,Documentación de transporte internacional,Preparación y tramitación de los documentos oficiales requeridos para envíos internacionales por transportistas y países de importación o tránsito.
+adc1489e4ad1,Documentación del sistema de calidad,"Revisión y control de la documentación del sistema de calidad, incluyendo codificación, creación, revisión y seguimiento de documentos."
+44f2efb43906,Documentación y reporte de pruebas de software,Descripción de los procedimientos de prueba al equipo técnico y comunicación de los resultados a usuarios y clientes sobre el estado y la eficiencia del software.
+48ffa5e334e2,Economía matemática,Aplicación de principios matemáticos para construir modelos de teoría económica y derivar conclusiones verificables.
+fa286fa9329d,Economía política,"Análisis de las sociedades modernas que combina factores políticos y económicos, como producción, comercio y su relación con el Derecho y el Gobierno."
+88d3348e371e,Edición de imágenes,"Edición de imágenes digitales y analógicas, como fotografías e ilustraciones, para su uso en piezas de comunicación y contenidos de marca."
+e1a3de7599cb,Edición de video,"Edición y montaje de secuencias de video en posproducción, aplicando corrección de color y efectos, para producir piezas audiovisuales de comunicación comercial."
+104869e7a1db,Educación y sensibilización ambiental,Promoción de la sostenibilidad y concientización sobre los impactos ambientales de actividades humanas e industriales a partir de indicadores como la huella de carbono.
+f04525a163c6,Eficiencia energética,"Prácticas para reducir el consumo de energía en procesos y servicios, sustituyendo usos ineficientes y promoviendo la sostenibilidad de las operaciones."
+e9ac1f636dc8,Ejecución de planes de marketing,Realización de las actividades necesarias para alcanzar objetivos de marketing específicos dentro de un plazo determinado.
+0b0eb492697e,Elaboración de conocimientos de embarque,Preparación de conocimientos de embarque y documentación relacionada con el transporte marítimo de acuerdo con las disposiciones legales y aduaneras.
+40d958bb8c02,Elaboración de especificaciones técnicas,"Definición de las propiedades técnicas de materiales, métodos, procesos y servicios requeridos para satisfacer las necesidades del proyecto."
+0e868ccb49b3,Elaboración de informes de gestión,"Preparación y presentación de informes sobre operaciones, logros y resultados de la organización dirigidos a la alta dirección."
+9bbb0fc6f936,Elaboración de informes financieros de gestión,"Preparación de informes estadísticos y financieros periódicos sobre operaciones, logros y resultados para la alta dirección y los órganos de gestión."
+1943dac24236,Elaboración de informes psicológicos,"Elaborar informes psicológicos que integren antecedentes, procedimientos, resultados, interpretación, conclusiones y recomendaciones de acuerdo con el contexto de evaluación."
+fcc461cd895e,Elaboración de materiales de presentación,"Preparación de documentos, diapositivas, carteles y otros soportes visuales adaptados a públicos específicos."
+b379c24911cd,Elaboración de planes de negocio,"Planificación y redacción de planes de negocio que integran estrategia de mercado, análisis competitivo, diseño operativo, gestión y proyecciones financieras de la empresa."
+44743078cc4b,Elaboración de planes maestros,"Preparación de planes maestros y planes de desarrollo detallados con especificaciones conformes a la legislación, y revisión de planes de desarrollo privados para verificar su adecuación."
+84d0e41876c1,Elaboración de planos de obra terminada,"Creación en sistemas CAD de planos que reflejen lo efectivamente construido, para registro y operación de la infraestructura."
+6f88dae2c17d,Elaboración de planos técnicos,"Preparación de planos a escala con vistas, cortes y detalles que especifican dimensiones, materiales y componentes de estructuras y edificaciones a partir de bocetos e instrucciones."
+f1bcd90a087e,Elaboración de reportes de ventas,"Registro y reporte de volúmenes de venta, cuentas nuevas y costos asociados en un periodo para el control comercial."
+05b9e6f9069f,Emplazamiento y preparación de cámaras,Colocación y preparación de las cámaras en el set o locación para su uso en grabaciones fotográficas o audiovisuales.
+6f10f6bc8c11,Entrevista de investigación jurídica,"Aplicación de técnicas profesionales de entrevista para recopilar hechos y datos pertinentes de clientes, testigos u otras personas en el marco de un caso."
+3732f0625be9,Envases y embalajes para exportación,Tipos de materiales de envase y embalaje para envíos industriales según la mercancía a transportar.
+1be8dd0dbc90,Equipos audiovisuales,Conocimiento de las características y el uso de herramientas y equipos de imagen y sonido empleados en producciones audiovisuales.
+7a17198eea33,Escritura de diálogos,"Escritura de conversaciones entre personajes para guiones de cine, televisión u otros formatos narrativos."
+ec3184f38b0f,Especificaciones técnicas de diseño,"Redacción de especificaciones de diseño que detallan materiales y componentes a utilizar, acompañadas de una estimación de costos."
+34a556e7b0bd,Establecimiento de objetivos de ventas,"Definición de metas y objetivos de ventas para un equipo en un plazo determinado, como montos de venta y captación de nuevos clientes."
+5b223c437c8a,Estados financieros,"Conocimiento de los registros financieros que muestran la situación de la empresa al cierre de un periodo: situación financiera, resultados, patrimonio, flujos de efectivo y notas."
+1ca438f89893,Estadística,"Teoría, métodos y prácticas estadísticas para recolectar, organizar, analizar, interpretar y presentar datos, incluyendo el diseño de encuestas y experimentos."
+04e9b8387d5b,Estimación de costos de diseño,Cálculo de los costos asociados al diseño de productos o proyectos para asegurar su viabilidad financiera antes de su ejecución.
+679e78f141b7,Estimación de costos de insumos,Cálculo de las cantidades y los costos de los suministros e insumos necesarios para las operaciones de la organización.
+ceb3b7626c4c,Estimación de costos operativos,"Estimación de los costos de operación de procesos o instalaciones en mano de obra, consumibles y mantenimiento para su planificación y control."
+00f2aaef3b45,Estrategia de marketing digital,"Desarrollo de estrategias de marketing en entornos digitales, incluyendo sitios web, tecnología para celulares y redes sociales, para alcanzar e interactuar con clientes y consumidores."
+0d7d1d6cabfd,Estrategia de precios,"Técnicas, teorías y métodos para fijar precios de productos según condiciones del mercado, competencia y costos, y su relación con los resultados comerciales."
+caeaf329c83a,Estrategia de seguridad de la información,"Plan organizacional que define objetivos de seguridad de la información, medidas de mitigación de riesgos, objetivos de control, métricas y referencias legales."
+3d6f22a3991c,Estrategias de crecimiento empresarial,"Diseño y ejecución de estrategias y planes orientados a lograr un crecimiento sostenido de la empresa, aumentando ingresos y flujos de caja positivos."
+285fb643c4e8,Estrategias de engagement de clientes,"Aplicación de métodos para involucrar a los clientes con una empresa o marca, como la humanización de la marca y el uso de redes sociales."
+12b9ed7a5ab1,Estrategias de generación de ingresos,Diseño de metodologías mediante las cuales la empresa comercializa y vende sus productos o servicios para generar ingresos.
+5ecd1dfe28d8,Estrategias de importación y exportación,"Desarrollo y planificación de estrategias de importación y exportación según el tamaño de la empresa, la naturaleza de sus productos y las condiciones de los mercados internacionales."
+557f6f389800,Estrategias de precios,"Métodos para fijar precios considerando condiciones de mercado, competencia, costos de insumos y otros factores."
+a0429e9ffa39,Estrategias de venta,Principios sobre el comportamiento de los clientes y los mercados objetivo aplicados a la promoción y venta de un producto o servicio.
+629cb1d3c582,Estrategias de venta,Diseño e implementación de planes para obtener ventaja competitiva posicionando la marca o producto y dirigiéndose al público adecuado según el comportamiento del cliente.
+f832dac1aad1,Evaluación crediticia,"Análisis de la capacidad de pago, historial y clasificaciones crediticias de clientes, socios o empresas para estimar su solvencia y probabilidad de incumplimiento."
+6a6fbf95fe17,Evaluación de campañas publicitarias,"Evaluación del rendimiento de una campaña publicitaria tras su ejecución, verificando el cumplimiento de objetivos y su efectividad."
+0fab8bacda7d,Evaluación de candidatos,"Evaluación de competencias, capacidades y conocimientos de candidatos mediante exámenes, entrevistas, simulaciones y pruebas según procedimientos establecidos."
+56c1aa99f858,Evaluación de desempeño de proveedores,"Evaluación del cumplimiento contractual, de requisitos y de calidad de los proveedores para identificar riesgos en el abastecimiento."
+60fc6e5e83d8,Evaluación de planes de proyecto,Evaluación de propuestas y planes de proyecto para valorar su viabilidad antes de su aprobación.
+3c5c328e10cd,Evaluación de programas de capacitación,"Evaluación del logro de los objetivos de aprendizaje y de la calidad de la capacitación, con retroalimentación a instructores y participantes."
+3040eb38bc52,Evaluación de viabilidad financiera,"Análisis de información financiera de proyectos, como presupuesto, volumen de negocio previsto y riesgos, para determinar sus beneficios y costos."
+3a190036018c,Evaluación del desempeño laboral,"Diseñar, aplicar e interpretar procesos de evaluación del desempeño de colaboradores con criterios y evidencias definidas."
+e8e229394503,Evaluación presupuestal,"Revisión de planes presupuestarios, análisis de ingresos y gastos previstos y verificación de su alineamiento con los planes de la empresa."
+23d3bacd8d82,Evaluación psicológica clínica,"Aplicar técnicas de evaluación clínica y valorar la salud, el funcionamiento psicológico y su impacto en la experiencia de la persona para orientar la formulación del caso y la intervención."
+e85b2e1ef317,Evaluación psicológica del funcionamiento y rendimiento,Realizar evaluaciones psicológicas orientadas a describir el funcionamiento y el rendimiento psicológico mediante procedimientos de valoración pertinentes al contexto.
+9e7ef80020d8,Evaluación y gestión de transportistas,"Evaluación del desempeño, fortalezas, debilidades, red e infraestructura de los transportistas para seleccionarlos y gestionarlos eficientemente."
+6b1ea4368a02,Evaluación y mejora de políticas empresariales,Supervisión de la aplicación de las políticas de la empresa y formulación de propuestas para mejorarlas según los objetivos de la organización.
+e551cd61dce4,Fijación de precios basada en costos,"Elaboración periódica de modelos de costos y precios considerando materiales, cadena de suministro, personal y gastos operativos."
+50ce0bff0a9f,Fiscalización de documentación tributaria,Revisión de declaraciones y documentación tributaria para verificar que no existan irregularidades o fraude y que se cumpla la legislación.
+abd0d6497383,Formulación de casos clínicos,"Conceptualización de las necesidades del paciente, integrando la información del caso para definir posibles soluciones y tratamientos psicológicos."
+022958c0300a,Formulación de estrategias empresariales,"Concepción, planificación y desarrollo de estrategias para empresas, como la apertura de nuevos mercados o la renovación de capacidades productivas."
+f44d8143aff3,Formulación de políticas comerciales,Desarrollo de estrategias que apoyen el crecimiento económico y faciliten relaciones comerciales productivas a nivel nacional e internacional.
+f1f238a06129,Formulación de políticas y normas organizacionales,"Redacción, aplicación y supervisión de normas y políticas internas que documentan los procedimientos de la organización según su planificación estratégica."
+25c3ed8019a6,Fundamentos de contabilidad,"Registro, documentación y tratamiento de los datos relativos a las actividades financieras de la organización como base para la información de gestión."
+42571b40b1a4,Fundamentos de economía,"Conocimiento de principios y prácticas económicas, mercados financieros y de materias primas, banca y análisis de datos financieros."
+09e6a2e8a13a,Fundamentos de ingeniería civil,"Conocimiento de la disciplina que estudia el diseño, la construcción y el mantenimiento de obras como carreteras, edificaciones, canales y otras infraestructuras."
+d1c97a8eb9a7,Fundamentos de ingeniería industrial,"Conocimiento de la disciplina que desarrolla, mejora e implementa sistemas complejos que integran personas, conocimiento, equipos, materiales e información para producir bienes y servicios."
+571f11fdbaca,Fundamentos de marketing,Conocimiento de los principios de gestión de la relación entre consumidores y productos o servicios para aumentar ventas y mejorar la publicidad.
+90431c437b45,Fundamentos de psiquiatría,"Conocimiento de la especialidad médica que estudia, diagnostica y trata los trastornos mentales, necesario para el trabajo coordinado del psicólogo."
+f65719f73e94,Fusiones y adquisiciones,"Conocimiento del proceso de combinación y adquisición de empresas, así como de sus acuerdos financieros, implicancias tributarias y consolidación de registros."
+d800406855d0,Geomática,"Recolección, almacenamiento y procesamiento de información geográfica para el análisis territorial y el diseño de proyectos de ingeniería."
+a9757a252706,Gestión de acciones correctivas,Implementación de acciones correctivas y planes de mejora derivados de auditorías internas y externas para cumplir indicadores de calidad y seguridad en plazos acordados.
+e8839775b17e,Gestión de agencias de publicidad,Coordinación con agencias de publicidad para transmitir objetivos y especificaciones del plan de marketing y servir de enlace en el desarrollo de campañas.
+d8144921e04d,Gestión de almacenes,"Principios y prácticas de las operaciones de almacén, como almacenamiento de mercancías y organización física del almacén."
+d2b8a740a67e,Gestión de calidad en proyectos,"Aplicación de normas, especificaciones y procedimientos de aseguramiento y control de calidad para que el diseño y la obra cumplan los requisitos establecidos."
+f65b31f8e2e4,Gestión de cambios del proyecto,"Gestión de cambios solicitados sobre la planificación original del proyecto, evaluando su necesidad, comunicándolos y actualizando la documentación correspondiente."
+cd064b3747b8,Gestión de cambios en la producción,Planificación y supervisión oportuna de cambios de producción y actividades relacionadas para cumplir el programa de producción.
+ef657cd23c71,Gestión de cambios en sistemas de TI,"Planificación, ejecución y control de cambios y mejoras en sistemas, conservando versiones anteriores y revirtiendo a una versión segura cuando sea necesario."
+08e32e7887c2,Gestión de canales de distribución,"Supervisión, control y exploración de nuevas vías directas e intermedias de acceso al mercado para productos y servicios."
+69b472abb265,Gestión de carteras de inversión,"Construcción, revisión y actualización de carteras de inversión según los objetivos y riesgos del cliente para incrementar su patrimonio a lo largo del tiempo."
+3e80fe6a38f4,Gestión de compras,"Coordinación de los procesos de adquisición y alquiler, incluyendo planificación, seguimiento y reporte de manera rentable para la organización."
+959064a00bb6,Gestión de comunidades en línea,"Elaboración de planes para hacer crecer comunidades en línea, fomentar su uso, retener usuarios y aumentar su participación con la marca."
+8d56637a123f,Gestión de configuración y control de versiones,"Uso de herramientas de control de versiones y gestión de configuración de software para identificar, controlar, reportar y auditar los cambios del código."
+40a75674cc98,Gestión de contenidos web,"Mantenimiento de contenidos de sitios web actualizados, organizados y atractivos según las necesidades del público y los requisitos de la organización."
+337785065f45,Gestión de contratos,"Negociación y administración de términos, condiciones y costos de contratos, verificando su cumplimiento legal y su ejecución."
+45a5842b2083,Gestión de controversias contractuales,Seguimiento de los conflictos surgidos entre las partes de un contrato y propuesta de soluciones jurídicas para evitar litigios o demandas.
+58170b20075a,Gestión de costos,"Planificación, seguimiento y ajuste de gastos e ingresos de la empresa para lograr mayor rentabilidad y capacidad para asumir costos."
+c39caa2d93cc,Gestión de cuentas bancarias empresariales,"Administración de las cuentas bancarias de la empresa según sus fines, vigilando saldos, tasas de interés y comisiones."
+a1c917071a6e,Gestión de cuentas contables,"Administración de las cuentas y actividades financieras de una organización, asegurando la correcta conservación de documentos, información y cálculos."
+1ff955864e47,Gestión de datos,"Administración de recursos de datos durante su ciclo de vida mediante perfilado, análisis, normalización, resolución de identidades, limpieza, mejora y auditoría de la información."
+bafebc468f4b,Gestión de datos cuantitativos,"Recolección, procesamiento y presentación de datos cuantitativos con programas y métodos adecuados para validarlos, organizarlos e interpretarlos."
+e20647e492d1,Gestión de datos de investigación,"Producción, análisis, almacenamiento y conservación de datos cualitativos y cuantitativos de investigación, facilitando su acceso y reutilización."
+87ef047adb4c,Gestión de datos de producto,"Uso de sistemas informáticos para registrar la información de un producto, como especificaciones técnicas, planos, diseño y costos de producción."
+23d0bc3ac28c,Gestión de empresas de producción,"Planificación de estrategias y programas de producción, incluyendo abastecimiento de insumos, materiales y equipos, y organización del personal."
+e533d43649f6,Gestión de ensayos de productos,Supervisión de procedimientos de ensayo para asegurar que el producto final cumpla requisitos de calidad y seguridad.
+ff35e494c43e,Gestión de equipos de trabajo,Gestión de un equipo asegurando canales de comunicación claros con otras áreas y el cumplimiento de estándares y objetivos.
+548681ff1664,Gestión de flujos de trabajo creativos,"Diseño, documentación y aplicación de procesos de tráfico y flujos de trabajo entre áreas como cuentas y dirección creativa en una agencia u organización."
+4693f0778221,Gestión de identidades y accesos,"Administración de la identificación, autenticación y autorización de usuarios en un sistema, controlando su acceso a recursos según derechos y restricciones."
+e74250a44028,Gestión de inventarios,Control del inventario de productos y mercancías equilibrando su disponibilidad para atender la demanda con los costos de almacenamiento y capital inmovilizado.
+cdc1a5e54adf,Gestión de la arquitectura de datos,"Definición de la arquitectura de los sistemas de información y control de la recolección, almacenamiento, consolidación y uso de los datos de la organización."
+fc18ead5a788,Gestión de la cadena de suministro,"Planificación y control del flujo de materias primas, inventarios en proceso y productos terminados, incluyendo traslado y almacenamiento desde el origen hasta el consumo."
+ce89ef0eb718,Gestión de la calidad de datos,"Aplicación de técnicas de análisis, validación y verificación de la calidad de los datos para comprobar su integridad y confiabilidad."
+049f3c7c9f6a,Gestión de la cultura organizacional,"Identificación y definición de elementos de la cultura corporativa para reforzar valores, creencias y comportamientos alineados con los objetivos de la empresa."
+490b2f34f381,Gestión de la información de proyectos,Provisión oportuna de información precisa y pertinente a todas las partes interesadas de un proyecto.
+cd9d39d78b5f,Gestión de la innovación tecnológica,"Dirección de actividades de innovación e investigación tecnológica en una organización, alineadas a sus objetivos estratégicos de crecimiento."
+cd9b68a38bfe,Gestión de la mejora continua,"Implementación de prácticas de gestión como mejora continua y mantenimiento preventivo, promoviendo la resolución sistemática de problemas en el entorno de trabajo."
+e64723ec10b7,Gestión de la productividad,"Desarrollo de métodos para medir y mejorar la productividad, ajustando metas, tiempos y recursos necesarios."
+9cb8a67ae8ef,Gestión de la relación con clientes (CRM),"Establecimiento de relaciones duraderas con clientes para asegurar su satisfacción y fidelidad mediante asesoramiento, apoyo y oferta de productos adecuados."
+4fdeef9e5831,Gestión de la rentabilidad,Revisión periódica de ventas y evolución de beneficios para tomar acciones que mejoren la rentabilidad de la empresa.
+b41ad7bfb4dd,Gestión de la seguridad de sistemas,"Análisis de activos críticos para identificar debilidades y vulnerabilidades, aplicando técnicas de detección y protección frente a intrusiones y ataques."
+1915a590b96a,Gestión de licencias de importación y exportación,Gestión de la obtención y emisión oportuna de permisos y licencias requeridos en los procesos de importación y exportación de mercancías.
+6983c7d72c29,Gestión de marketing,"Función organizacional centrada en investigación de mercados, desarrollo de mercados y campañas para dar a conocer productos y servicios."
+61b2720ab010,Gestión de métricas de proyectos,"Recopilación, análisis y reporte de las métricas clave de un proyecto para cuantificar su avance y su éxito frente a los objetivos."
+a861f267c409,Gestión de negocios internacionales,"Comprensión y gestión de los procesos de producción, comercialización y distribución de bienes y servicios a través de las fronteras entre países."
+f671d5946c50,Gestión de operaciones,Gestión de las funciones operativas internas de la organización orientadas a lograr alta eficiencia y rentabilidad en la producción de bienes y servicios.
+8bb5ba3616fc,Gestión de operaciones financieras,"Administración de divisas, depósitos, pagos y cobros empresariales, así como de cuentas de clientes y operaciones de intercambio financiero."
+65fa2f4d161f,Gestión de operadores logísticos,Coordinación de proveedores externos de servicios de almacenamiento y transporte para asegurar el cumplimiento de niveles de servicio.
+8befc0b5fd24,Gestión de permisos de uso de imagen,Obtención de los permisos necesarios para utilizar grabaciones audiovisuales e imágenes de personas en piezas de promoción y difusión.
+cd65569a66c3,Gestión de planillas,"Administración de remuneraciones de los colaboradores, revisión de sueldos y beneficios, y asesoría a la gerencia sobre condiciones laborales."
+ecdf7551fb17,Gestión de procedimientos de distribución,Desarrollo y revisión de procedimientos de distribución para minimizar costos y maximizar la satisfacción del cliente.
+876c90bd60be,Gestión de procesos,"Definición, medición, control y mejora de procesos para cumplir los requisitos del cliente de manera rentable."
+189faaff3f66,Gestión de procesos de innovación,Revisión y orientación de los procesos de innovación y desarrollo de la organización para mejorar la eficiencia y reducir costos.
+6c650aa0ebf7,Gestión de procesos de licitación,Organización de la elaboración de propuestas técnicas y económicas para concursos y licitaciones de obras y servicios.
+9c29ef02c56e,Gestión de procesos de negocio,Análisis de la contribución de los procesos de trabajo a los objetivos de la organización y control de su eficiencia y productividad.
+90f25a01d5f4,Gestión de procesos judiciales,"Conocimiento del desarrollo de una causa judicial desde su inicio hasta su conclusión, incluyendo documentos requeridos, actores de cada etapa y requisitos que deben cumplirse."
+2b4b44cc8f64,Gestión de programas,Gestión de un conjunto de proyectos vinculados por un área de impacto común y alineados con objetivos empresariales para mejorar el desempeño organizacional.
+942650735770,Gestión de proveedores,Métodos y técnicas para asegurar que los bienes y servicios externos estén disponibles según lo solicitado y acordado con los proveedores.
+b7eb1dc265a8,Gestión de proyectos,"Planificación, ejecución y control de proyectos considerando alcance, tiempos, recursos, requerimientos, plazos y respuesta a imprevistos, mediante metodologías y herramientas de gestión."
+f334b777475e,Gestión de proyectos,"Planificación y control de recursos humanos, presupuesto, plazos, resultados y calidad de proyectos psicosociales, de investigación o de intervención."
+03f1effecb0d,Gestión de proyectos,"Planificación y control de recursos humanos, presupuesto, plazos, resultados y calidad de un proyecto, con seguimiento de su avance hasta alcanzar los objetivos definidos."
+476ecbb09c0c,Gestión de proyectos de contenido,"Planificación e implementación de la creación, entrega y gestión de contenidos digitales o impresos, definiendo el proceso editorial y de publicación."
+779511b3168f,Gestión de proyectos de ingeniería,"Gestión de recursos, presupuesto, plazos, personal y actividades técnicas de proyectos de ingeniería desde su planificación hasta su cierre."
+791fbbd18397,Gestión de proyectos de TI,"Planificación, organización, control y documentación de procedimientos y recursos humanos, técnicos y de alcance para cumplir objetivos de proyectos de TI dentro de plazo y presupuesto."
+eb907dc219bd,Gestión de reclamos de clientes,Administración de reclamos y opiniones negativas de clientes para atender sus preocupaciones y recuperar el servicio.
+c4f56597ac0c,Gestión de recursos humanos,"Función organizacional dedicada a la contratación, el desarrollo y la optimización del rendimiento de los colaboradores."
+133c7c23922b,Gestión de recursos humanos,Función organizacional dedicada a la contratación de personal y a la optimización del desempeño de los trabajadores.
+d77b3c11e5c8,Gestión de recursos productivos,"Gestión del personal, la maquinaria y los equipos para optimizar los resultados de producción conforme a las políticas y planes de la empresa."
+abe816f621ce,Gestión de redes sociales,"Planificación, desarrollo y aplicación de estrategias para administrar plataformas de redes sociales, publicaciones, herramientas de gestión y la imagen de la organización."
+c40dfffed7f8,Gestión de relaciones comerciales,"Establecimiento de relaciones positivas de largo plazo con proveedores, distribuidores, accionistas y otros grupos de interés para informarles sobre la organización y sus objetivos."
+ec6a35a1f619,Gestión de relaciones públicas,Gestión de la difusión de información entre una persona u organización y sus públicos para construir y mantener su imagen.
+a5a25c675252,Gestión de requisitos de seguridad informática,"Conducción de la aplicación y cumplimiento de normas del sector, buenas prácticas y requisitos legales en materia de seguridad de la información."
+415ba26655bd,Gestión de riesgos,"Proceso de identificación, evaluación y priorización de riesgos de todo tipo y su origen, y de la respuesta para mitigarlos."
+33ff200ecfea,Gestión de riesgos de TI,"Políticas internas para identificar, evaluar y priorizar riesgos en entornos de TI, y métodos para minimizar, monitorear y controlar su probabilidad e impacto."
+7c5c3c9502e1,Gestión de sistemas administrativos,Gestión y mantenimiento de los sistemas administrativos necesarios para el funcionamiento diario de la organización.
+e74d0c930110,Gestión de sistemas de producción,"Organización y gestión integral de la producción, incluyendo diseño de producto, planificación de la producción y sistemas de control."
+4ffbc7299d50,Gestión de sistemas de recolección de datos,Desarrollo y gestión de métodos y estrategias de recolección de datos que maximicen su calidad y eficiencia estadística para su procesamiento posterior.
+8bb3f5c7be52,Gestión de tesorería y liquidez,"Teoría, prácticas y sistemas para gestionar la liquidez y los flujos de efectivo de la empresa y cumplir sus obligaciones con terceros sin comprometer su salud financiera."
+79e9e5d0d12b,Gestión de áreas legales corporativas,"Conocimiento de los procesos, funciones y asuntos propios del área legal de una organización, como patentes, litigios y cumplimiento normativo."
+30396c7e27ae,Gestión del cambio organizacional,Planificación y conducción de cambios en la organización anticipando su impacto y tomando decisiones de gestión que minimicen las alteraciones para las personas y procesos implicados.
+75cbb9729d86,Gestión del estrés laboral,"Identificación y manejo de fuentes de estrés laboral y organizacional, promoviendo el bienestar de los trabajadores y previniendo el agotamiento profesional."
+62566e2fc9fe,Gestión del financiamiento público,"Control del presupuesto proveniente de financiamiento público, asegurando recursos suficientes para cubrir los costos de la organización o proyecto."
+08eba560ddf2,Gestión del mantenimiento de equipos,"Planificación de inspecciones periódicas, mantenimiento rutinario y reparaciones de los equipos necesarios para las operaciones."
+6c7293556b7f,Gestión del riesgo de crédito,"Aplicación de políticas y procedimientos de control de crédito para otorgarlo a clientes adecuados, asegurar pagos oportunos y mantener el riesgo crediticio controlado."
+2431abe173b8,Gestión del riesgo en comercio internacional,"Evaluación y gestión de la posibilidad de pérdidas financieras e impagos en transacciones internacionales, considerando el mercado de divisas y aplicando instrumentos como cartas de crédito."
+29e659dbf81c,Gestión del riesgo financiero,Predicción y gestión de riesgos financieros e identificación de procedimientos para evitarlos o reducir su impacto.
+4c1967fe01bd,Gestión del servicio al cliente,"Gestión y supervisión de la prestación del servicio al cliente según la política de la empresa, buscando y aplicando mejoras."
+f75d18a5626f,Gestión del talento,Estrategias para seleccionar el talento adecuado y optimizar sus trayectorias de desarrollo en consonancia con los objetivos de la empresa.
+02b3adb89fb0,Gestión del transporte de mercancías,"Gestión del despacho de mercancías desde almacenes considerando requisitos legales, de seguridad y los riesgos asociados a cada tipo de carga."
+42cbbaa56294,Gestión financiera,"Análisis de procesos y herramientas para asignar recursos financieros, incluida la estructura de las empresas, las fuentes de inversión y el aumento de valor."
+7f21297747c0,Gestión logística,"Diseño y gestión del sistema logístico para el transporte de mercancías a clientes y la recepción de devoluciones, con seguimiento de procesos y directrices logísticas."
+3da530a6225a,Gestión presupuestaria,"Planificación, seguimiento y reporte del presupuesto asignado a un área o proyecto, controlando la ejecución de los gastos frente a lo planificado y preparando presupuestos de operación."
+cd5077440714,Gestión presupuestaria de proyectos,"Estimación, planificación y control del presupuesto de un proyecto arquitectónico, seguimiento de costos y ajuste de trabajos y materiales para no excederlo."
+e438634a4918,Gestión ágil de proyectos,"Enfoque ágil para planificar, gestionar y supervisar recursos de TI en proyectos, usando herramientas de gestión de proyectos para cumplir objetivos específicos."
+08457ff4a311,Gobernanza corporativa de TI,"Aplicación de principios y mecanismos de dirección organizacional, procedimientos de información, control y toma de decisiones, incluidos los relativos a la tecnología."
+f9112e21c140,Hacking ético,Acciones para detectar vulnerabilidades en sistemas informáticos y corregir brechas de seguridad mediante pruebas autorizadas que mejoren la protección de la organización.
+e62d6f5bbf06,Higiene industrial,"Evaluación de agentes químicos, físicos y biológicos en entornos industriales para proteger la salud de los trabajadores."
+ad90000d1727,Hojas de estilo en cascada (CSS),Lenguajes de hojas de estilo que definen la presentación de documentos estructurados en aplicaciones y sitios web.
+3b3ff5772fe1,Identificación de acciones preventivas,"Anticipación de situaciones que podrían afectar el lugar de trabajo y sus procesos, proponiendo acciones preventivas."
+208b3f0485dd,Identificación de oportunidades comerciales,Búsqueda de clientes o productos potenciales que generen ventas adicionales y aseguren el crecimiento comercial de la empresa.
+b38d6618e74e,Identificación de proveedores,"Identificación de proveedores potenciales considerando calidad del producto, sostenibilidad, abastecimiento local, estacionalidad y cobertura para futuras negociaciones."
+a36c294578f4,Identificación de requisitos legales,"Investigación de normas y procedimientos aplicables para analizar y determinar los requisitos legales que afectan a una organización, sus políticas y sus productos."
+2fe4bd217154,Identificación de riesgos de seguridad de TI,"Aplicación de métodos y herramientas para identificar amenazas, violaciones de seguridad y factores de riesgo en sistemas, redes y datos."
+2d49687616da,Implementación de cortafuegos,"Instalación, actualización y configuración de sistemas cortafuegos para impedir accesos no autorizados a una red privada."
+409a2c0b83c3,Implementación de planes de manejo ambiental,"Aplicación de planes que gestionan los aspectos ambientales de proyectos, intervenciones en espacios naturales y empresas."
+1b9457574ea0,Implementación de planes operativos,"Ejecución del plan estratégico y del plan operativo de la organización mediante delegación, seguimiento de avances y ajustes oportunos."
+d3ad6810dc89,Implementación de sistemas de gestión,Ejecución y supervisión de cambios en los procesos empresariales para implantar un sistema que gestione de forma integrada distintas áreas de la organización.
+e86b5c1c5a56,Implementación de sistemas de gestión de calidad,Impulso de nuevos procesos y procedimientos organizacionales que permitan implantar un sistema de gestión de la calidad y corregir no conformidades.
+7b70ea781e33,Implementación de soluciones de software,"Tecnologías y estándares aplicables a la instalación, implementación y mantenimiento de funcionalidades de software en una organización."
+c2c9058f082a,Indicadores clave de desempeño,Identificación y seguimiento de medidas cuantificables que permiten evaluar el cumplimiento de objetivos operativos y estratégicos de la organización.
+60f62bf000c7,Industria de consumo masivo,"Conocimiento del sector que produce y comercializa bienes para consumo directo, sus categorías, actores y dinámicas comerciales relevantes para la gestión de marcas."
+757029328898,Informe de ejecución presupuestal,Cierre económico de un proyecto comparando el presupuesto previsto con el real y extrayendo conclusiones sobre las diferencias.
+bff81e55faa1,Informes de auditoría financiera,"Elaboración de informes con los resultados de auditorías de estados financieros y de la gestión financiera, señalando posibilidades de mejora y confirmando su gobernabilidad."
+a32752eb798e,Informes y mapas de riesgos,"Elaboración de informes y representaciones visuales que analizan los riesgos financieros detectados, su naturaleza, impacto y posibles soluciones."
+f00459b69c5a,Infraestructura de TI,"Sistemas, redes, aplicaciones, componentes de hardware y software, dispositivos y procesos usados para desarrollar, probar, entregar, monitorear y dar soporte a servicios de TI."
+f856d88297b9,Ingeniería ambiental aplicada,"Aplicación de principios científicos y de ingeniería para mejorar el ambiente y asegurar aire, agua y suelo adecuados en proyectos de infraestructura."
+f9adc34d4cdc,Ingeniería de datos,"Desarrollo y construcción de sistemas y canalizaciones para recolectar, transformar, almacenar y analizar datos a gran escala."
+31d2baf88ba7,Ingeniería de redes,"Gestión de la conectividad de redes de datos, voz e inalámbricas mediante el diseño y operación de sus servicios."
+c8ffd958bd5c,Ingeniería de seguridad,"Campo interdisciplinario orientado a construir sistemas seguros y tecnologías que protejan la información frente a actos maliciosos, errores o accesos no autorizados."
+697630d524e6,Ingeniería de seguridad,"Estudio de riesgos asociados a diseños y sistemas de ingeniería, prevención de accidentes y cumplimiento de normas de seguridad."
+3036a15b8ed6,Ingeniería de transportes,"Subdisciplina de la ingeniería civil que planifica, diseña y gestiona el transporte de personas y mercancías de forma segura, eficiente y sostenible."
+fcc11baae873,Ingeniería eléctrica,"Campo de la ingeniería dedicado al estudio y la aplicación de la electricidad, la electrónica y el electromagnetismo."
+ec3ad223b41c,Ingeniería mecánica,"Aplicación de principios de física, ingeniería y ciencia de materiales para diseñar, analizar, fabricar y mantener sistemas mecánicos."
+bfd467a22b17,Inspecciones de seguridad industrial,Ejecución de inspecciones en áreas de riesgo para identificar peligros o incumplimientos de seguridad y proponer medidas que eleven el nivel de seguridad.
+430198301a29,Inspección de edificaciones,"Inspección de edificios y sistemas como instalaciones sanitarias y eléctricas para verificar el cumplimiento normativo, con registro y redacción de informes de resultados."
+2c5bd32d180f,Inspección de gestión de residuos,Inspección de la aplicación de procedimientos de gestión y reciclaje de residuos y de la legislación aplicable en organizaciones.
+593d6cee1dd4,Instrumentos y productos financieros,"Conocimiento de valores e instrumentos negociados en mercados financieros, como acciones, bonos, opciones y fondos, y de su uso en la gestión de tesorería."
+b0fa73889baa,Integración de sistemas de TI,"Principios y técnicas para integrar componentes y productos de TI de diversas fuentes en un sistema operativo, garantizando interoperabilidad e interfaces adecuadas."
+cfe4441d3157,Inteligencia de negocios,Herramientas y técnicas para transformar grandes cantidades de datos sin procesar en información relevante y útil para la gestión de las organizaciones.
+1b861b6a4f59,Intermediación de servicios de transporte,Actuación como intermediario entre el cliente y diversos servicios de transporte para organizar el traslado de mercancías.
+c9dd2637796f,Interpretación de briefs del cliente,Interpretación y atención de los requisitos y expectativas establecidos en el brief acordado con el cliente para orientar el trabajo.
+78f69f1bfdb6,Interpretación de documentación técnica,"Lectura y comprensión de textos técnicos, como manuales y guías, que explican paso a paso cómo realizar tareas sobre sistemas, software o equipos."
+65dc98985f3b,Interpretación de información comercial,"Recuperación y análisis de distintos tipos de información de gestión del negocio para extraer conclusiones sobre proyectos, estrategias y desarrollos."
+59f9347146ab,Interpretación de la comunicación no verbal,"Observación e interpretación de las señales corporales y no verbales de las personas, incluidas las propias, durante la entrevista y la intervención."
+709599d9cf80,Interpretación de requisitos técnicos,"Análisis, comprensión y aplicación de la información proporcionada sobre las condiciones técnicas de un sistema o proyecto."
+17397e6ac6c0,Interpretación jurídica,"Interpretación de normas legales aplicadas a un caso para identificar el procedimiento correcto, la situación procesal, las partes implicadas y los argumentos más favorables al resultado buscado."
+6a9ff28a3945,Intervención en conductas de riesgo,"Aplicación de medidas psicológicas a personas y grupos sobre comportamientos de riesgo para la salud, como consumo de sustancias o mala alimentación."
+b4cde3fcb7c1,Investigación científica en economía,"Formulación de preguntas de investigación y desarrollo de conceptos, teorías, modelos y técnicas basados en evidencia empírica u observable."
+524e7ad04ab8,Investigación cuantitativa,"Investigación empírica sistemática de fenómenos observables mediante técnicas estadísticas, matemáticas o computacionales aplicadas a problemas de gestión."
+aa608259c241,Investigación de mercados,Procesos y técnicas para recoger información de clientes y definir segmentos y objetivos como base de la estrategia comercial.
+09c2f2bc0a75,Investigación de mercados,"Recopilación, evaluación y presentación de datos sobre el mercado objetivo y los clientes para sustentar el desarrollo estratégico, los estudios de viabilidad y la identificación de tendencias."
+391568a9fb74,Investigación de operaciones,"Aplicación de métodos científicos y cuantitativos para resolver problemas de gestión en sistemas organizados industriales, comerciales o públicos."
+740f2d262b2b,Investigación de palabras clave,Uso de herramientas digitales de búsqueda de palabras clave y metadatos para optimizar contenidos y su recuperación en buscadores.
+ca3c797b8f5a,Investigación de violaciones de derechos humanos,Investigación de casos de posible vulneración de normas de derechos humanos para identificar los problemas y definir la actuación jurídica adecuada.
+6badeb1b5615,Investigación geotécnica de campo,"Planificación y ejecución de exploraciones de campo, perforaciones y análisis de muestras de suelos y rocas para caracterizar el terreno."
+ccb0b5ed1d1f,Investigación jurídica,"Métodos y procedimientos para investigar asuntos jurídicos, analizar normas y fuentes, recopilar información relevante y adaptar la metodología al caso concreto."
+378b1c634e13,Investigación y análisis de mercados,Conocimiento del análisis e investigación de mercados y de sus métodos específicos de estudio.
+7b9834597318,Investigación y desarrollo industrial,"Actividades que realizan las empresas para innovar e introducir nuevos productos, servicios o procesos de producción en el mercado."
+0a61502eb011,Legislación concursal,Normas jurídicas que regulan la incapacidad de pago de las deudas a su vencimiento y los procedimientos de reestructuración o liquidación.
+650207a31f74,Legislación de contrataciones públicas,"Conocimiento de la legislación que regula la contratación pública y de las ramas del Derecho vinculadas, junto con sus implicancias en los procesos de contratación estatal."
+f895b62970a2,Legislación de protección de datos personales,"Normas que regulan el tratamiento de datos personales y su libre circulación, protegiendo los derechos de las personas sobre su información."
+4f2f815b9314,Levantamiento de información de riesgos ambientales,Aplicación de encuestas y relevamientos para recopilar información destinada al análisis y la gestión de riesgos ambientales.
+3b832f0a1459,Licitaciones de obras y servicios,"Preparación de documentación, propuestas y garantías para participar en licitaciones públicas y privadas, y ejecución de lo acordado en el proceso."
+7506ff660781,Litigación y patrocinio judicial,"Representación de clientes ante tribunales, presentando alegatos y pruebas a su favor para obtener una resolución favorable en el proceso."
+700df50aba0d,Logística de comercio exterior,"Coordinación de las operaciones de transporte de exportación e importación, considerando estrategias, servicios y procesos de comercio exterior de la empresa."
+6cb41121aa65,Mantenimiento predictivo,Uso de análisis de datos y cálculos matemáticos para monitorear el estado de máquinas y procesos y anticipar fallas.
+42e73661483d,Maquinaria y equipos de construcción,"Conocimiento de la maquinaria y equipos para construcción e ingeniería civil, sus funciones, propiedades y requisitos para su selección en obra."
+a1eab6203e93,Marco profesional de la psicología clínica,"Condiciones institucionales, jurídicas y psicosociales del ejercicio de la psicología clínica y la psicoterapia en los servicios de salud."
+cadfdb49a38c,Marketing de canales de distribución,Estrategias y prácticas de venta por canales que distribuyen productos de forma directa e indirecta a través de socios comerciales hasta llegar al consumidor final.
+90f093548a51,Marketing de contenidos,Conocimiento del proceso de creación y difusión de contenidos mediáticos y publicaciones para atraer y fidelizar clientes.
+52d3ac9a4440,Marketing por correo electrónico,"Conceptualización, redacción y gestión de campañas de correo electrónico a clientes para programas de marketing de la marca, cuidando su efectividad."
+bf0210b589c1,Marketing relacional,"Enfoque de gestión de relaciones con clientes centrado en su retención, satisfacción y valor a lo largo del tiempo."
+c056a26aa517,Medición del desempeño en sostenibilidad,Seguimiento de indicadores de sostenibilidad y análisis de resultados de la empresa frente a los Objetivos de Desarrollo Sostenible.
+f5d9b7688e79,Mejora de procesos de negocio,Análisis y rediseño de las operaciones de una organización para lograr eficiencia y alcanzar nuevos objetivos empresariales.
+5667577d00d9,Mejora de procesos financieros,"Identificación de mejoras en el rendimiento operativo y financiero para aumentar la productividad, la eficiencia y la racionalización de procesos."
+dabe426e67d7,Mejora del flujo de producción,Análisis y desarrollo de planes logísticos que optimicen el flujo de trabajo de los productos en producción y distribución.
+2a5ee4aad3fe,Mercado inmobiliario,"Conocimiento de tendencias de compra, venta y alquiler de inmuebles, terrenos y edificaciones, y de las categorías de bienes inmuebles."
+b62a0d2bf549,Mercados financieros,Conocimiento de la infraestructura financiera que permite negociar valores emitidos por empresas y particulares dentro de los marcos regulatorios correspondientes.
+69136a6246f5,Metodologías de desarrollo de software,"Metodologías como Scrum, modelo en V y desarrollo en cascada para diseñar y construir sistemas y aplicaciones de software."
+5ec106260876,Metodologías de gestión de proyectos de TI,"Modelos para planificar, gestionar y supervisar recursos de TI en proyectos, como cascada, incremental, modelo en V, Scrum o ágil, y sus herramientas."
+51ed2a5536c5,Metrados y presupuestos de obra,"Estimación, planificación y seguimiento de cantidades y costos de construcción en proyectos, con uso eficiente de recursos y análisis de riesgos."
+e1d849d2bae6,Mezcla de marketing,"Conocimiento del modelo que articula producto, plaza, precio y promoción como elementos fundamentales de las estrategias de marketing y comunicación comercial."
+521c0dfb47e4,Migración de datos,"Aplicación de métodos de migración y conversión para transferir datos existentes entre formatos, sistemas de almacenamiento o sistemas informáticos distintos."
+a77ccf8914a0,Modelado de datos,"Análisis de los requisitos de datos de los procesos de negocio para crear modelos conceptuales, lógicos y físicos con técnicas y metodologías específicas."
+02b26883d39d,Modelado de información de construcción (BIM),"Metodología y plataformas digitales que integran diseño, modelado, planificación y colaboración mediante una representación digital del edificio durante todo su ciclo de vida."
+88bbd6025135,Modelado de procesos de negocio,"Métodos, notaciones y herramientas, como BPMN, para describir y analizar procesos de negocio y su desarrollo."
+3208c8ba65b0,Modelamiento estadístico,Aplicación de análisis estadístico a conjuntos de datos en ciencia de datos para formular predicciones mediante modelos e hipótesis estadísticas.
+2df2b773ad06,Moderación de negociaciones,"Supervisión de negociaciones entre dos partes como tercero imparcial para que se desarrollen de forma productiva, se alcance un acuerdo y este se ajuste a la normativa."
+415af63ba522,Modificación de diseños técnicos,"Ajuste de diseños de productos o componentes para que cumplan requisitos técnicos, de fabricación, calidad o costo establecidos por el proyecto o el cliente."
+bd8ec40e2a56,Monitoreo de tendencias en redes sociales,"Seguimiento constante de tendencias, temas y personas influyentes en redes sociales para orientar la producción y estrategia de contenidos."
+63ab0dfd1fe8,Monitoreo del mercado de valores,Observación y análisis diario del mercado de valores y sus tendencias para obtener información actualizada y diseñar estrategias de inversión.
+6dd29d7bdd5b,Monitoreo del mercado internacional,Seguimiento continuo del desempeño del mercado internacional y de las tendencias del comercio mediante medios especializados.
+f392e83941be,Monitoreo del rendimiento de sistemas,"Medición de la confiabilidad y el rendimiento del sistema antes, durante y después de la integración de componentes y durante su operación, con herramientas especializadas."
+de3eb64f12fc,Negociación comercial,"Negociación con socios comerciales de términos y condiciones de venta, como especificaciones, plazos de entrega y precios, para alcanzar acuerdos beneficiosos."
+70a2403604ce,Negociación con grupos de interés,"Negociación de acuerdos con proveedores, clientes y otros grupos de interés buscando los resultados más beneficiosos para la empresa."
+d10084dd1044,Negociación con proveedores,"Negociación de precio, cantidad, calidad y plazos de entrega con proveedores para obtener condiciones de compra ventajosas."
+e0bc1650d0bc,Negociación de condiciones laborales,"Negociación entre empleador y postulantes sobre remuneración, condiciones de trabajo y beneficios adicionales a los establecidos por ley."
+55d51ead6320,Negociación de precios,Concertación de acuerdos sobre el precio de productos o servicios suministrados u ofrecidos por la empresa.
+a7df84ee0657,Negociación de valores,Compra y venta de valores de renta variable y deuda por cuenta propia o de clientes.
+786256ca3489,Negociación jurídica,"Negociación en representación del cliente durante la tramitación de un caso, buscando el resultado más beneficioso y asegurando que los acuerdos se ajusten a la normativa."
+6fb87536976f,Negociación y formalización de acuerdos comerciales,"Negociación, revisión y firma de documentos mercantiles como contratos, acuerdos comerciales y títulos valores, cuidando los intereses de la organización."
+1c4d57edcd11,Ofrecimiento y actuación de pruebas,Presentación de pruebas en procesos civiles o penales de forma convincente y adecuada para sustentar la posición del cliente y lograr una resolución favorable.
+b91508ecef2b,Operaciones y productos bancarios,"Conocimiento de las actividades y productos financieros de la banca personal, empresarial, de inversión y privada, seguros, divisas y comercio de materias primas."
+de57af5667f5,Optimización del rendimiento de bases de datos,"Cálculo de parámetros de la base de datos, aplicación de nuevas versiones y tareas de mantenimiento periódicas como estrategias de respaldo y eliminación de fragmentación."
+fcc4644b533f,Optimización estadística de procesos,"Conducción de la optimización de procesos con datos estadísticos, diseño de experimentos en la línea de producción y modelos de control de procesos."
+c5d1dd2460a9,Organización de conferencias de prensa,Planificación y organización de encuentros con periodistas para realizar anuncios o responder preguntas sobre un asunto concreto de una organización.
+3bb760febda6,Organización del sistema de transporte,"Organización del sistema de transporte para entregar productos al comprador u obtenerlos del proveedor, incluidos los trámites aduaneros."
+170acb2ed4b9,Orientación psicopedagógica al estudiante,"Asesoría a estudiantes con dificultades educativas, vocacionales o personales, como el ajuste escolar, la integración social y la planificación académica."
+e7385b840190,Orientación vocacional y profesional,"Asesoría a personas sobre sus opciones profesionales futuras mediante entrevistas de orientación, pruebas y evaluaciones vocacionales."
+41d731ba7b18,Participación en ferias comerciales,"Gestión de la participación de la empresa en ferias, exposiciones y concursos locales o internacionales para promocionar marcas y productos."
+fa8f11a8fb89,Pensamiento de diseño,"Método centrado en el usuario para resolver problemas creativamente en cinco etapas: empatizar, definir, idear, prototipar y probar."
+6422b6552de8,Plan de comunicación digital de marca,"Diseño del contenido y la presentación de una marca en plataformas interactivas en línea, de acuerdo con su identidad y objetivos de comunicación."
+471f2838392b,Plan de continuidad del negocio,Actualización de la metodología y pasos que aseguran que la organización y sus sistemas sigan operando ante una amplia gama de eventos imprevistos.
+f6597586705a,Plan de negocio de comercio electrónico,"Elaboración de un documento estructurado que define el proyecto comercial de venta en línea, incluyendo mercado, propuesta, canales y proyecciones."
+134dbb78bb80,Planes de eficiencia logística,"Elaboración e implementación de planes para incrementar la eficiencia y reducir desperdicios en las operaciones logísticas de almacenamiento, transporte y distribución."
+41c612bcac2e,Planificación de auditorías,"Definición de tareas, momentos, lugares y secuencia de una auditoría, con listas de verificación de los temas a auditar."
+40406d2cb58d,Planificación de campañas publicitarias,"Diseño de la estrategia para promocionar un producto mediante distintos canales, como televisión, radio, prensa, plataformas en línea y redes sociales."
+e62ff9730da5,Planificación de estrategias de marketing,"Definición de los objetivos de la estrategia comercial, sea imagen, precio o difusión del producto, y diseño de los enfoques para alcanzarlos en los mercados objetivo."
+f3b4a928c29b,Planificación de estrategias de relaciones públicas,"Planificación, coordinación y ejecución de estrategias de relaciones públicas, incluyendo definición de objetivos, preparación de comunicaciones, contacto con aliados y difusión de información."
+5ef74ae24516,Planificación de grabaciones audiovisuales,"Planificación de las grabaciones de una producción audiovisual, organizando recursos, tiempos, locaciones y requerimientos técnicos."
+89807d6ee9cc,Planificación de intervenciones psicológicas,"Planificar intervenciones psicológicas integrando diagnóstico, objetivos, estrategias, técnicas, evaluación y contexto ético-profesional."
+5e84b044aac6,Planificación de medios,"Selección de los medios más adecuados para alcanzar los objetivos de marketing y publicidad, considerando audiencias, alcance y costos."
+c3da005b6b9b,Planificación de obras de vivienda,"Dibujo de planos de viviendas y edificaciones, estimación de materiales y coordinación de las actividades de ejecución de la obra."
+54b468b42263,Planificación de operaciones de transporte,"Planificación de la movilidad y el transporte de equipos y materiales, negociando tarifas de entrega y seleccionando las opciones más confiables y eficientes."
+0dcaf80c71c2,Planificación de productos,"Identificación de los requisitos del mercado que definen las características del producto, como base para decisiones de precio, distribución y promoción."
+b9513c42ee08,Planificación de rutas de envío,Organización de la distribución de la carga considerando instrucciones del cliente y determinando rutas regulares o alternativas.
+b37438aa23e4,Planificación estratégica,"Elementos que definen la base de una organización, como su misión, visión, valores y objetivos."
+766f00868156,Planificación estratégica de marca,"Gestión del proceso de planificación estratégica de la marca, incorporando innovación metodológica y mejoras en la comunicación con el consumidor."
+b66eda97c06e,Planificación financiera,"Elaboración de planes financieros conforme a la regulación y a las necesidades del cliente, incluyendo perfil de inversor y estrategias de transacción."
+bb70ba7f09a5,Planificación tributaria,Asesoramiento sobre estrategias para incorporar los tributos en el plan financiero de la empresa y reducir legalmente la carga tributaria.
+3bdaaafdbc00,Planificación y control de la producción,"Planificación, coordinación y dirección de las actividades de producción para elaborar productos a tiempo, en el orden correcto y con la calidad adecuada."
+121ebfd74fb2,Posicionamiento en buscadores (SEO/SEM),Investigación y estrategias de marketing en motores de búsqueda para aumentar el tráfico y la visibilidad en línea de sitios web.
+dab226cd38b7,Preparación de auditorías de cumplimiento,Mantenimiento de certificaciones y seguimiento de procedimientos para asegurar el cumplimiento constante de normas y requisitos ante auditorías.
+6241cc557236,Presentación de propuestas de diseño,"Preparación y exposición de propuestas de diseño detalladas ante clientes y equipos técnicos, artísticos y directivos para su revisión y aprobación."
+4993a9842a3d,Presupuestación financiera,Estimación de los recursos financieros futuros necesarios para proyectos u operaciones según la disponibilidad de fondos.
+5910573a8121,Principios de administración,"Principios que rigen la gestión empresarial, como planificación estratégica, métodos de producción eficiente y coordinación de personas y recursos."
+9d4366391f1c,Principios de ingeniería,"Aplicación de criterios de funcionalidad, replicabilidad y costos en el diseño y la ejecución de proyectos de ingeniería en contextos productivos y de servicios."
+d914cfde14a6,Procedimientos de planta industrial,"Desarrollo de políticas y procedimientos aplicados en una planta, como normas de trabajo y procedimientos de seguridad."
+cfbbaaac50cb,Procedimientos tributarios,"Investigación de los procedimientos que regulan las actividades tributarias, como el cálculo de impuestos, la fiscalización y las declaraciones."
+879a2d08f1a2,Procesamiento de datos,"Uso de herramientas informáticas para aplicar procesos matemáticos, algorítmicos u otros de manipulación de datos con el fin de generar información útil."
+a0e7fda7d1a8,Procesos de desarrollo de contenidos,"Conocimiento de las técnicas para diseñar, escribir, compilar, editar y organizar contenidos digitales como textos, gráficos y videos."
+f5fe3c00c2d9,Procesos de ingeniería,"Enfoque sistemático para desarrollar, implementar y mantener sistemas de ingeniería a lo largo de su ciclo de vida."
+e3d3a2ace18f,Procesos del área contable,"Procesos, funciones, terminología y rol del área contable dentro de la organización, como contabilidad, facturación, registros contables e impuestos."
+66ef67fac5ef,Procesos del área de finanzas,"Procesos, funciones, terminología y organización del área financiera, incluidos estados financieros, inversiones y políticas de divulgación."
+bce4cf6c9e71,Procesos del área de operaciones,"Procesos, funciones, terminología y organización del área de operaciones y producción, como compras, procesos de la cadena de suministro y manejo de bienes."
+1776c035824d,Procesos del área de recursos humanos,"Procesos, funciones y terminología del área de recursos humanos, como reclutamiento, sistemas de pensiones y programas de desarrollo del personal."
+7ae1522052d8,Procesos ETL,"Herramientas de extracción, transformación y carga que integran información de múltiples aplicaciones en una estructura de datos coherente y transparente."
+cea8e962bc18,Producción de material promocional,"Planificación y coordinación con terceros de la producción y entrega de materiales promocionales, cuidando plazos, logística y calidad."
+db475f9fcfcc,Productos financieros,"Conocimiento de los instrumentos para gestionar flujos de caja disponibles en el mercado, como acciones, bonos, opciones o fondos."
+f58193163791,Programación con scripts,Creación de código interpretado mediante lenguajes de scripting para extender aplicaciones y automatizar operaciones de sistemas.
+058d4018d3a6,Programación de obras,"Planificación, programación y seguimiento de los procesos de construcción para garantizar que el proyecto concluya dentro del plazo establecido."
+1e39fc4bb4dd,Programación de sistemas,"Métodos y herramientas para desarrollar software de sistemas, especificar arquitecturas y diseñar interfaces entre la red y los módulos y componentes del sistema."
+a7ddaebeb3cf,Programación del trabajo según demanda,"Programación de tareas según los pedidos entrantes, estimando y asignando recursos, horas de trabajo y equipos necesarios."
+c4875c6374d8,Programación web,Paradigma de desarrollo que combina lenguajes de marcado con código de programación para crear contenido web dinámico e interactivo en aplicaciones web.
+b11fdeb5493f,Programas de inserción laboral,"Diseño e implementación de programas de capacitación, talleres y proyectos que mejoran las posibilidades de las personas de conseguir empleo."
+127c74f6a92e,Programas de promoción de la salud,"Planificación, ejecución y evaluación de proyectos de promoción de la salud en escuelas, centros laborales, comunidades y atención primaria."
+7e337a399168,Promoción de derechos humanos,"Impulso de programas y acuerdos en materia de derechos humanos orientados a reducir la discriminación, la violencia y otras vulneraciones de derechos."
+530f01675039,Pronósticos estadísticos,Examen estadístico sistemático de datos históricos y predictores para elaborar pronósticos del comportamiento de un sistema.
+10c97bf095e8,Prospección de clientes,"Desarrollo de actividades para atraer nuevos clientes mediante recomendaciones, referencias y búsqueda activa de clientes potenciales en el mercado."
+395df5e8fcdb,Protección de datos personales,"Protección de datos personales y de la privacidad en entornos digitales, comprendiendo cómo usar y compartir información personal y las políticas de privacidad aplicables."
+b9466345b95b,Proyecciones financieras,Herramienta de gestión financiera para identificar tendencias de ingresos y estimar condiciones financieras futuras.
+82cd1f2892f5,Proyectos de diseño paisajístico,"Preparación de diseños, planos, modelos a escala, especificaciones y presupuestos para parques, áreas recreativas y paisajismo vial."
+527e87abf881,Pruebas de seguridad informática,"Ejecución de controles de seguridad como pruebas de penetración de red, pruebas de dispositivos inalámbricos, revisión de código y evaluación de cortafuegos."
+0277319e42a8,Pruebas de sensores,"Prueba de sensores con equipos adecuados, recolección y análisis de datos y evaluación del desempeño del sistema."
+f5d962b428b2,Pruebas de sistema,"Selección, ejecución y seguimiento de pruebas sobre software o hardware para detectar defectos en unidades integradas, interconexiones y en el sistema completo."
+a4ae141794c4,Pruebas de software,"Ejecución de pruebas para verificar que un producto de software funciona según los requisitos especificados e identificar defectos y fallas, usando herramientas y técnicas especializadas."
+34ccfae7ac05,Publicidad digital,"Técnicas para planificar y ejecutar campañas de marketing en plataformas de publicidad en línea, incluyendo segmentación, presupuesto y medición de resultados."
+faf21aa2d8a6,Reclutamiento y selección de personal,"Contratación de personal mediante la definición del puesto, convocatoria, entrevistas y selección de candidatos según políticas y legislación vigentes."
+a1d3cd9dfd0b,Reclutamiento y selección de personal,"Contratación de nuevos colaboradores definiendo el puesto, convocando, entrevistando y seleccionando según la política de la empresa y la legislación."
+41ce922062e0,Recopilación y consolidación de información financiera,"Recopilación, revisión y consolidación de datos financieros de distintas fuentes y áreas para elaborar cuentas o planes unificados y analizar escenarios."
+f813514b5a71,Redacción de contenidos,"Comunicación de información escrita en medios digitales o impresos según el público objetivo, estructurando el contenido de acuerdo con especificaciones y normas."
+3016b2cea4b9,Redacción de documentos técnicos,"Redacción y edición de textos técnicos y científicos sobre temas tecnológicos, como informes, manuales o artículos."
+2385c214f654,Redacción de notas de prensa,Recopilación de información y redacción de comunicados de prensa adaptando el registro al público objetivo y asegurando la correcta transmisión del mensaje.
+0dbef77f047f,Redacción de publicaciones científicas,"Presentación de hipótesis, hallazgos y conclusiones de una investigación económica en publicaciones profesionales o académicas."
+245032b46553,Redacción publicitaria (copywriting),Redacción de textos creativos dirigidos a un público específico con fines de marketing y publicidad para persuadir a potenciales clientes.
+7eedca9afe96,Registro de asientos contables,"Registro de las operaciones financieras en libros o sistemas contables con su fecha, importe, cuentas afectadas y documentos sustentatorios vinculados."
+229aede5cced,Regulación financiera,Conocimiento de las normas y procedimientos financieros aplicables en una jurisdicción y de los organismos reguladores competentes.
+3096b30a0e5e,Reingeniería de procesos con TI,Identificación de oportunidades para reestructurar una empresa o parte de sus operaciones aprovechando las tecnologías de la información.
+a1ff5cf74309,Relaciones comunitarias,Establecimiento de vínculos duraderos con comunidades locales mediante programas especiales y acciones que fortalezcan la relación con la organización.
+d66ff03c6683,Relaciones con medios de comunicación,"Gestión profesional de la relación con periodistas y medios, atendiendo eficazmente sus solicitudes de información en representación de una organización."
+a8fcbc450d8f,Relación con accionistas,"Comunicación con los accionistas sobre sus inversiones, rendimientos y planes de largo plazo de la empresa para aumentar la rentabilidad."
+8f7227ff58a0,Reporte de resultados de análisis,"Elaboración de documentos o presentaciones que comunican los resultados de un análisis, indicando procedimientos, métodos y posibles interpretaciones."
+407eaee20bf4,Requisitos de usuario de sistemas de información,"Identificación y análisis de las necesidades de usuarios y organizaciones respecto de un sistema, considerando las tecnologías disponibles y las técnicas de obtención de requisitos."
+d340e8b5ddab,Resolución de incidencias de sistemas de TI,"Identificación de fallas en componentes, monitoreo, documentación y comunicación de incidentes, y aplicación de herramientas de diagnóstico para restablecer el servicio con mínima interrupción."
+631a42a7b009,Respaldo y recuperación de datos,"Implementación de procedimientos y herramientas de copias de seguridad de datos y sistemas para archivarlos, garantizar su integridad y recuperarlos ante pérdidas o fallas."
+cfc893ef3199,Responsabilidad social empresarial,"Gestión de los procesos empresariales de forma responsable y ética, equilibrando la responsabilidad económica con la responsabilidad social y ambiental frente a los grupos de interés."
+5a4fcdeb3210,Respuesta a incidentes en la nube,"Resolución de problemas en la nube y diseño y automatización de estrategias de recuperación ante desastres, evaluando puntos de falla."
+5ca81cd8523d,Revisión de documentos legales,Lectura e interpretación de documentos legales y pruebas relacionadas con los hechos de un caso para determinar sus efectos jurídicos.
+e0e515529653,Revisión de expedientes de proyectos,"Revisión de documentos y solicitudes de proyectos inmobiliarios, coordinación de cambios con contratistas y remisión a las autoridades urbanísticas cuando corresponda."
+1bf265134420,Revisión de registros contables,Revisión periódica de registros contables para asegurar que reflejen con exactitud las transacciones y para detectar y corregir errores.
+d5fb9467726a,Revisión y aprobación de piezas publicitarias,"Revisión y aprobación de anuncios y materiales comerciales para asegurar que cumplan los requisitos del cliente, los objetivos de marketing y el público destinatario."
+ac5284990767,Salud ocupacional,"Promoción del bienestar, la salud y la seguridad en el trabajo y prevención de riesgos psicosociales en trabajadores de todos los perfiles."
+569d882bbdd8,Segmentación de mercados,"Análisis de la composición de los mercados, su división en segmentos y la identificación de nichos y oportunidades para nuevos productos."
+ad7ed146e367,Seguimiento de cambios normativos,"Actualización permanente sobre la normativa vigente y sus modificaciones, identificando su impacto en la organización, sus operaciones o un caso concreto."
+20764cdb152c,Seguimiento de cambios normativos ambientales,"Monitoreo de cambios en normas, políticas y legislación e identificación de su impacto en las operaciones de la organización."
+5d0d93863c77,Seguimiento de envíos,Seguimiento de la organización logística de productos para asegurar que sean transportados de manera correcta y oportuna.
+1fa534f71226,Seguimiento de la actualidad informativa,"Monitoreo sistemático de los acontecimientos de actualidad en política, economía, sociedad, cultura, ámbito internacional y deportes para la producción de información y contenidos."
+e2c72f512c1d,Seguimiento posventa,Aplicación de estrategias para dar seguimiento a la satisfacción y fidelización de los clientes después de la venta.
+b4ea0bf2259b,Seguridad y salud en el trabajo,Gestión de medidas que aseguren la salud y la seguridad del personal durante los procesos de fabricación.
+2e2906fbaa2b,Seguridad y salud en obras de construcción,"Aplicación y supervisión de procedimientos y medidas de seguridad y salud ocupacional en obra para prevenir accidentes, contaminación y otros riesgos durante la construcción."
+c5ca8e808fca,Seguros y transferencia de riesgos,Conocimiento de técnicas para transferir pasivos y riesgos a terceros especializados y de los tipos de seguros disponibles para proteger las operaciones.
+b001b052fd80,Servicios de psicología clínica,"Servicios especializados de psicología clínica, como la psicoterapia o la terapia cognitivo-conductual, y sus características de prestación."
+fbc370726983,Simulación de negocios,Uso de programas de simulación para fortalecer el análisis financiero y de mercado y la toma de decisiones empresariales.
+9fefb808391c,Sistema de aplicación de la ley,Conocimiento de las organizaciones que intervienen en la aplicación de la ley y de las normas que rigen sus procedimientos.
+89b2c0c1c6dc,Sistema de gestión de seguridad (SGSI),"Diseño, implementación, monitoreo y revisión de un SGSI que preserve la confidencialidad, integridad y disponibilidad de la información mediante gestión de riesgos."
+c2228a15a4e1,Sistemas de apoyo a decisiones,"Conocimiento de los sistemas de información que respaldan la toma de decisiones empresariales u organizacionales mediante datos, modelos y análisis."
+661e6970f949,Sistemas de gestión de almacenes,"Selección y uso de sistemas informáticos para la gestión de almacenes, evaluando sus funcionalidades y el valor que aportan a las operaciones de almacenamiento."
+fbb34a7872e3,Sistemas de gestión de bases de datos,"Herramientas para crear, actualizar y administrar bases de datos, como los principales sistemas gestores relacionales del mercado."
+0639999f4041,Sistemas de gestión de envíos y rutas,"Uso de sistemas informáticos de despacho para generar órdenes de trabajo, planificar rutas y coordinar actividades de distribución."
+f3ab7684a9a6,Sistemas digitales de información,"Conocimiento de los sistemas de hardware, software y redes que almacenan, procesan y difunden información en formato digital, y de las formas en que se utilizan."
+2ee2bece2f55,Sistemas multimedia,"Conocimiento de los métodos, procedimientos y técnicas de funcionamiento de sistemas que combinan software y hardware para presentar video, audio y otros medios."
+9277d0f1fc21,Sistemas operativos,"Funciones, estructuras, limitaciones y características de los sistemas operativos de computadoras, como base para administrar, programar y configurar sistemas."
+2710e630b008,Soporte técnico a usuarios,"Orientación a usuarios finales en el uso de herramientas y sistemas, aplicando métodos de soporte de TI para resolver problemas y detectar efectos colaterales."
+25f056684b6e,Sostenibilidad corporativa,"Práctica empresarial orientada al crecimiento sostenible de largo plazo con estrategias ambientales, económicas y sociales."
+3ef59318b7a0,Supervisión de la edición audiovisual,Supervisión del equipo de edición de video y cine para que el montaje se realice a tiempo y conforme a la visión creativa de la producción.
+fab161c4c133,Supervisión de obras,"Control de la ejecución de obras para asegurar el cumplimiento de la licencia, los planos, las especificaciones de diseño y los parámetros de calidad, costo y plazo."
+add69e9528f1,Supervisión de operaciones bancarias,Supervisión y revisión de préstamos y otras transacciones bancarias para garantizar su legalidad y el cumplimiento normativo.
+00cdb19401df,Supervisión de operaciones contables,Coordinación y supervisión de las operaciones del área contable para garantizar un registro y una información precisos sobre las operaciones financieras.
+3d8b03eba4b7,Supervisión del control de calidad,"Supervisión de que los factores de producción cumplan los requisitos de calidad, incluyendo inspecciones y pruebas de productos."
+1144016e72d5,Supervisión del desarrollo de software,"Organización, planificación y supervisión del desarrollo de aplicaciones desde las primeras fases hasta las pruebas del producto final."
+e45221922f31,Supervisión y evaluación de contratistas,"Evaluación y documentación del desempeño de contratistas respecto a normas de seguridad, ambiente, calidad de diseño, construcción y costos, con medidas correctivas cuando corresponda."
+438b081f0ced,Sustentación de registros contables,"Explicación de cómo se registraron y trataron las operaciones en las cuentas ante personal, proveedores y auditores, y atención de sus consultas durante revisiones."
+f008751f0041,Tecnologías sostenibles,"Tecnologías orientadas a reducir riesgos ambientales logrando a la vez impactos económicos, sociales y ambientales positivos."
+b6e6d4d52301,Terminología financiera y comercial,Comprensión de los conceptos y términos financieros y comerciales básicos utilizados en empresas e instituciones u organizaciones financieras.
+bedc9a177076,Terminología jurídica,"Dominio de los términos y expresiones técnicas propias del ámbito jurídico, necesarias para redactar, interpretar y argumentar con precisión en escritos y procesos legales."
+af97e9f54735,Toma de decisiones estratégicas,"Análisis de información empresarial para decidir sobre aspectos que afectan la productividad, la perspectiva y la sostenibilidad de la empresa, evaluando alternativas con la alta dirección."
+99584d79b37f,Trade marketing,Coordinación con responsables de puntos de distribución para planificar y acordar acciones promocionales que impulsen las marcas y productos en el canal.
+7e882fcaf9dc,Tratamiento de datos,"Recolección, procesamiento, análisis, almacenamiento y actualización de datos e información pertinentes, representándolos mediante gráficos y diagramas estadísticos para su interpretación."
+df62a726d4de,Técnicas contables,"Técnicas de registro, clasificación y resumen de transacciones empresariales y financieras, así como de análisis, verificación y reporte de sus resultados."
+ee52428f6ec8,Uso de sistemas de bases de datos,"Uso de herramientas de software para gestionar y organizar datos estructurados en tablas, atributos y relaciones, consultando y modificando la información almacenada."
+f3e002db2f10,Vigilancia tecnológica,"Recopilación de información actualizada sobre soluciones de sistemas de información existentes que integran software, hardware y componentes de red."
+69074ad21d26,Visualización de datos financieros,Uso de aplicaciones de visualización que crean representaciones gráficas de datos complejos para facilitar su comprensión e interpretación.
+881041d36c9c,Vocería ante medios de comunicación,"Preparación y realización de entrevistas en medios como radio, televisión, web o prensa, adaptando el mensaje al contexto y tipo de medio."
+2a6198a42536,Zonificación y usos del suelo,"Conocimiento de la división del territorio urbano en zonas con usos permitidos, como residencial, comercial o industrial, y de los parámetros urbanísticos que condicionan el proyecto."
+55bf9a8fa54e,Ética de datos,"Evaluación ética de las prácticas de recolección, análisis y difusión de datos estructurados y no estructurados que pueden afectar a las personas y a la sociedad."
+94dbe9aa0ab9,Ética y políticas de uso de TI,Cumplimiento de leyes y políticas éticas escritas sobre el uso y la administración adecuados de los sistemas de tecnologías de la información.

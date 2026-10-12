@@ -1,0 +1,305 @@
+{
+  "id_ejecucion": "NOR_b82569d400af457c",
+  "tipo": "empleabilidad",
+  "archivo": "data_empleabilidad_por_anio.xlsx",
+  "parametros": {
+    "hoja": "2025",
+    "limite_prueba": "3"
+  },
+  "configuracion_curricular": null,
+  "estado": "no_publicado",
+  "creada_en": "2026-10-09T17:41:09.841225+00:00",
+  "actualizada_en": "2026-10-09T17:41:30.575874+00:00",
+  "cancelacion_solicitada": false,
+  "cancelada_en": null,
+  "validacion": {
+    "archivo": "data_empleabilidad_por_anio.xlsx",
+    "sha256": "70cbe7273785aa677fdec79d8e78dc45cf6dc5ed8b12f753f22e55a09d89aebf",
+    "valida": true,
+    "hojas": [
+      {
+        "nombre": "2025",
+        "rol": "publicaciones",
+        "anios": [
+          2025
+        ],
+        "encabezado_fila": 1,
+        "filas_datos": 9754,
+        "columnas": [
+          "Año de la vacante",
+          "RUC",
+          "Razón Social",
+          "Identificación",
+          "Tipo de puesto",
+          "Fecha de publicación",
+          "Fecha de finalización",
+          "Creado_Empleo",
+          "Área",
+          "Área específica",
+          "Cargo",
+          "Cargo específico",
+          "Posición a publicar",
+          "Carrera resumen",
+          "Cantidad de vacantes en número original",
+          "Cantidad de vacantes en número",
+          "Mes de publicación",
+          "Ciclo",
+          "CTA GENRAL CIIU 4",
+          "CIIU 4 txt",
+          "Funciones",
+          "Nivel",
+          "Top 1000 2024"
+        ]
+      }
+    ],
+    "hallazgos": []
+  },
+  "validacion_silabos": null,
+  "limpieza": {
+    "registros_por_universo": {
+      "convenios": 0,
+      "informes": 0,
+      "publicaciones": 3
+    },
+    "outputs": [
+      {
+        "tipo": "staging_jsonl",
+        "universo": "convenios",
+        "archivo": "limpios/convenios.jsonl",
+        "registros": 0,
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "tipo": "staging_jsonl",
+        "universo": "informes",
+        "archivo": "limpios/informes.jsonl",
+        "registros": 0,
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "tipo": "staging_jsonl",
+        "universo": "publicaciones",
+        "archivo": "limpios/publicaciones.jsonl",
+        "registros": 3,
+        "bytes": 4872,
+        "sha256": "258bc633787f76a7befa87d0ff943c43b7b1801ca1e9eb36630c3d62444c9441"
+      }
+    ],
+    "hallazgos": []
+  },
+  "limpieza_silabos": null,
+  "normalizacion": {
+    "publicable": false,
+    "registros_procesados": {
+      "publicaciones": 3,
+      "informes": 0
+    },
+    "relaciones": 2,
+    "cuarentena": 1,
+    "outputs": [
+      {
+        "tipo": "csv",
+        "archivo": "salidas/empresa.csv",
+        "registros": 3,
+        "bytes": 365,
+        "sha256": "c2be4087ebe7e16066d246399b99c9ddc7c2ff80cec102934a9e2ce498b7033b"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/oferta_laboral.csv",
+        "registros": 3,
+        "bytes": 2976,
+        "sha256": "499e50a1031fd549819c00640d55564901d6602808073ab0a026c0a1cc7c8acb"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/puesto.csv",
+        "registros": 3,
+        "bytes": 231,
+        "sha256": "a081ba905ec48e386fe1861a8059b9d16f9697abd328444f5e2f1547e8d28377"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/evaluacion_desempenio.csv",
+        "registros": 0,
+        "bytes": 149,
+        "sha256": "09f3bd0c7e683375315a999aee1c1a4c935bb09846bf561e44096345e402d917"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/catalogo_empleabilidad.csv",
+        "registros": 0,
+        "bytes": 85,
+        "sha256": "0297a10d0d7bf559ae883dbeecc64e2201056705ff29ced29a2dfceed8e6f623"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/habilidades_empleabilidad.csv",
+        "registros": 2,
+        "bytes": 471,
+        "sha256": "23d64f8ae0806ef2121c7482bb6796667ad7b51db009acf91796cffe47d74aaa"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/herramientas_empleabilidad.csv",
+        "registros": 0,
+        "bytes": 68,
+        "sha256": "7b797aed74a74c8dea76f46a3ce8060cfbfb04a7851a062ba84bde4adb5af815"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/requerimiento_laboral.csv",
+        "registros": 2,
+        "bytes": 306,
+        "sha256": "5f81d6172fc58bcdfa640309f5f93a579abbb32b386c3742002126d9345786f9"
+      },
+      {
+        "tipo": "reporte",
+        "archivo": "salidas/reportes/cuarentena.jsonl",
+        "registros": 1,
+        "bytes": 1838,
+        "sha256": "eb164eb6495a3f2fd29e81b058b2a10a7de73bbec1b1bb9b56080af0b8588778"
+      },
+      {
+        "tipo": "reporte",
+        "archivo": "salidas/reportes/evidencias_chh.jsonl",
+        "registros": 2,
+        "bytes": 808,
+        "sha256": "1661367ad68d21f60d6a5d238dac6a221b6be2e8488ce5d0ec15913a3f17799f"
+      },
+      {
+        "tipo": "reporte",
+        "archivo": "salidas/reportes/propuestas_herramienta.jsonl",
+        "registros": 0,
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "tipo": "reporte",
+        "archivo": "salidas/reportes/resumen.json",
+        "registros": 1,
+        "bytes": 752,
+        "sha256": "174d48fa72166424f08f15f7b5fc865eee3db1bdfb73172a0c0230189288cc18"
+      }
+    ],
+    "hallazgos": [
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 3,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      }
+    ]
+  },
+  "release_gate": null,
+  "aprobacion_curricular": null,
+  "catalogo_chh": {
+    "disponible": false,
+    "error": "FileNotFoundError: No se encontraron los tres catálogos CHH requeridos en C:\\Users\\I13305\\Desktop\\Normalizacion CIAR\\catalogos"
+  },
+  "fuente": null,
+  "progreso_fuente": null,
+  "progreso_llm": null,
+  "hallazgos": [
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 3,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    }
+  ],
+  "outputs": [
+    {
+      "tipo": "csv",
+      "archivo": "salidas/empresa.csv",
+      "registros": 3,
+      "bytes": 365,
+      "sha256": "c2be4087ebe7e16066d246399b99c9ddc7c2ff80cec102934a9e2ce498b7033b"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/oferta_laboral.csv",
+      "registros": 3,
+      "bytes": 2976,
+      "sha256": "499e50a1031fd549819c00640d55564901d6602808073ab0a026c0a1cc7c8acb"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/puesto.csv",
+      "registros": 3,
+      "bytes": 231,
+      "sha256": "a081ba905ec48e386fe1861a8059b9d16f9697abd328444f5e2f1547e8d28377"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/evaluacion_desempenio.csv",
+      "registros": 0,
+      "bytes": 149,
+      "sha256": "09f3bd0c7e683375315a999aee1c1a4c935bb09846bf561e44096345e402d917"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/catalogo_empleabilidad.csv",
+      "registros": 0,
+      "bytes": 85,
+      "sha256": "0297a10d0d7bf559ae883dbeecc64e2201056705ff29ced29a2dfceed8e6f623"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/habilidades_empleabilidad.csv",
+      "registros": 2,
+      "bytes": 471,
+      "sha256": "23d64f8ae0806ef2121c7482bb6796667ad7b51db009acf91796cffe47d74aaa"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/herramientas_empleabilidad.csv",
+      "registros": 0,
+      "bytes": 68,
+      "sha256": "7b797aed74a74c8dea76f46a3ce8060cfbfb04a7851a062ba84bde4adb5af815"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/requerimiento_laboral.csv",
+      "registros": 2,
+      "bytes": 306,
+      "sha256": "5f81d6172fc58bcdfa640309f5f93a579abbb32b386c3742002126d9345786f9"
+    },
+    {
+      "tipo": "reporte",
+      "archivo": "salidas/reportes/cuarentena.jsonl",
+      "registros": 1,
+      "bytes": 1838,
+      "sha256": "eb164eb6495a3f2fd29e81b058b2a10a7de73bbec1b1bb9b56080af0b8588778"
+    },
+    {
+      "tipo": "reporte",
+      "archivo": "salidas/reportes/evidencias_chh.jsonl",
+      "registros": 2,
+      "bytes": 808,
+      "sha256": "1661367ad68d21f60d6a5d238dac6a221b6be2e8488ce5d0ec15913a3f17799f"
+    },
+    {
+      "tipo": "reporte",
+      "archivo": "salidas/reportes/propuestas_herramienta.jsonl",
+      "registros": 0,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "tipo": "reporte",
+      "archivo": "salidas/reportes/resumen.json",
+      "registros": 1,
+      "bytes": 752,
+      "sha256": "174d48fa72166424f08f15f7b5fc865eee3db1bdfb73172a0c0230189288cc18"
+    }
+  ]
+}

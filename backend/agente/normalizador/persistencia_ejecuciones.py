@@ -16,7 +16,10 @@ from agente.normalizador.modelos import (
     EstadoEjecucion,
     Hallazgo,
     ProgresoLimpiezaLLM,
+    ResultadoLimpieza,
     ResultadoLimpiezaSilabos,
+    ResultadoNormalizacion,
+    ResultadoValidacionEntrada,
     ResultadoValidacionSilabos,
 )
 from agente.normalizador.silabos.contrato_salidas import (
@@ -62,8 +65,12 @@ class EjecucionPersistible(Protocol):
     actualizada_en: str
     cancelacion_solicitada: bool
     cancelada_en: str | None
+    validacion: ResultadoValidacionEntrada | None
     validacion_silabos: ResultadoValidacionSilabos | None
+    limpieza: ResultadoLimpieza | None
     limpieza_silabos: ResultadoLimpiezaSilabos | None
+    normalizacion: ResultadoNormalizacion | None
+    catalogo_chh: dict[str, object] | None
     hallazgos: list[Hallazgo]
     progreso_llm: ProgresoLimpiezaLLM | None
     fuente: dict[str, object] | None
@@ -283,7 +290,15 @@ class RepositorioEjecucionesPersistidas:
             if isinstance(contenido_gate, dict):
                 release_gate = contenido_gate
 
-        outputs_procesamiento = list(limpieza_actual.outputs) if limpieza_actual else []
+        outputs_procesamiento = (
+            list(ejecucion.normalizacion.outputs)
+            if ejecucion.normalizacion
+            else list(ejecucion.limpieza.outputs)
+            if ejecucion.limpieza
+            else list(limpieza_actual.outputs)
+            if limpieza_actual
+            else []
+        )
         outputs = [*ejecucion.outputs_fuente, *outputs_procesamiento]
         outputs = _actualizar_metadatos_outputs(ejecucion.directorio, outputs)
         aprobacion_curricular = (
@@ -330,12 +345,16 @@ class RepositorioEjecucionesPersistidas:
             "actualizada_en": ejecucion.actualizada_en,
             "cancelacion_solicitada": ejecucion.cancelacion_solicitada,
             "cancelada_en": ejecucion.cancelada_en,
+            "validacion": ejecucion.validacion.a_dict() if ejecucion.validacion else None,
             "validacion_silabos": (
                 ejecucion.validacion_silabos.a_dict() if ejecucion.validacion_silabos else None
             ),
+            "limpieza": ejecucion.limpieza.a_dict() if ejecucion.limpieza else None,
             "limpieza_silabos": limpieza_silabos,
+            "normalizacion": ejecucion.normalizacion.a_dict() if ejecucion.normalizacion else None,
             "release_gate": release_gate,
             "aprobacion_curricular": aprobacion_curricular,
+            "catalogo_chh": ejecucion.catalogo_chh,
             "fuente": ejecucion.fuente,
             "progreso_fuente": ejecucion.progreso_fuente,
             "progreso_llm": ejecucion.progreso_llm.a_dict() if ejecucion.progreso_llm else None,

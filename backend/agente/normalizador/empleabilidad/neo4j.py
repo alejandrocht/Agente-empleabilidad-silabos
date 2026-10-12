@@ -44,27 +44,35 @@ class ImportadorEmpleabilidadNeo4j:
 
     def previsualizar(self, id_ejecucion: str) -> dict[str, object]:
         filas, fingerprint = self._cargar(id_ejecucion)
+        ofertas_publicables, ofertas_cuarentena = self._ofertas_publicables(filas)
         existentes = self._ofertas_existentes(
-            [fila["id_ofe_laboral"] for fila in filas["oferta_laboral.csv"]]
+            [fila["id_ofe_laboral"] for fila in ofertas_publicables]
         )
         nuevas = [
-            fila
-            for fila in filas["oferta_laboral.csv"]
-            if fila["id_ofe_laboral"] not in existentes
+            fila for fila in ofertas_publicables if fila["id_ofe_laboral"] not in existentes
         ]
+        resumen = {
+            "publicaciones_nuevas": len(nuevas),
+            "publicaciones_existentes": len(existentes),
+            "consultas_ejecutadas": 1,
+        }
+        if ofertas_cuarentena:
+            resumen["publicaciones_en_cuarentena"] = len(ofertas_cuarentena)
         return {
             "id_ejecucion": id_ejecucion,
             "fingerprint": fingerprint,
             "puede_importar": True,
-            "mensaje": "La consulta de duplicados se ejecutó correctamente.",
-            "resumen": {
-                "publicaciones_nuevas": len(nuevas),
-                "publicaciones_existentes": len(existentes),
-                "consultas_ejecutadas": 1,
-            },
+            "mensaje": (
+                "La consulta se ejecutó; las ofertas sin requerimiento HAB_TEC "
+                "quedarán en cuarentena."
+                if ofertas_cuarentena
+                else "La consulta de duplicados se ejecutó correctamente."
+            ),
+            "resumen": resumen,
             "ofertas": {
                 "nuevas": [fila["id_ofe_laboral"] for fila in nuevas],
                 "existentes": sorted(existentes),
+                "cuarentena": [fila["id_ofe_laboral"] for fila in ofertas_cuarentena],
             },
         }
 
@@ -77,34 +85,83 @@ class ImportadorEmpleabilidadNeo4j:
                 "Las salidas cambiaron desde la previsualización. Vuelve a revisar la carga.",
                 409,
             )
+        ofertas_publicables, ofertas_cuarentena = self._ofertas_publicables(filas)
         existentes = self._ofertas_existentes(
-            [fila["id_ofe_laboral"] for fila in filas["oferta_laboral.csv"]]
+            [fila["id_ofe_laboral"] for fila in ofertas_publicables]
         )
         ofertas_nuevas = [
-            fila for fila in filas["oferta_laboral.csv"] if fila["id_ofe_laboral"] not in existentes
+            fila for fila in ofertas_publicables if fila["id_ofe_laboral"] not in existentes
         ]
         ids_nuevos = {fila["id_ofe_laboral"] for fila in ofertas_nuevas}
         if ofertas_nuevas:
             self._escribir(filas, ofertas_nuevas, ids_nuevos)
+        resumen = {
+            "publicaciones_creadas": len(ofertas_nuevas),
+            "publicaciones_omitidas": len(existentes),
+            "consultas_ejecutadas": 1,
+        }
+        if ofertas_cuarentena:
+            resumen["publicaciones_en_cuarentena"] = len(ofertas_cuarentena)
         return {
             "id_ejecucion": id_ejecucion,
-            "mensaje": "La consulta fue ejecutada; solo se insertaron publicaciones nuevas.",
-            "resumen": {
-                "publicaciones_creadas": len(ofertas_nuevas),
-                "publicaciones_omitidas": len(existentes),
-                "consultas_ejecutadas": 1,
-            },
+            "mensaje": (
+                "Se insertaron solo publicaciones nuevas con requerimiento HAB_TEC; "
+                "las ofertas en cuarentena no se publicaron."
+                if ofertas_cuarentena
+                else "La consulta fue ejecutada; solo se insertaron publicaciones nuevas."
+            ),
+            "resumen": resumen,
         }
+
+    @staticmethod
+    def _ofertas_publicables(
+        filas: dict[str, list[dict[str, str]]],
+    ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+        """Separa ofertas con requerimientos de las que quedaron en cuarentena.
+
+        En el flujo vectorial una oferta sin requerimiento no tiene una relación
+        laboral válida. No se publican como oferta huérfana, aunque permanezcan
+        disponibles en los CSV y en el reporte de cuarentena.
+        """
+
+        requerimientos = filas["requerimiento_laboral.csv"]
+        ids_con_requerimiento = {
+            fila.get("id_oferta_laboral", "")
+            for fila in requerimientos
+            if fila.get("id_oferta_laboral", "")
+        }
+        ofertas = filas["oferta_laboral.csv"]
+        if not ids_con_requerimiento:
+            return ofertas, []
+        publicables = [
+            fila for fila in ofertas if fila.get("id_ofe_laboral", "") in ids_con_requerimiento
+        ]
+        cuarentena = [
+            fila for fila in ofertas if fila.get("id_ofe_laboral", "") not in ids_con_requerimiento
+        ]
+        return publicables, cuarentena
 
     def _cargar(self, id_ejecucion: str) -> tuple[dict[str, list[dict[str, str]]], str]:
         try:
             estado = self.gestor.obtener(id_ejecucion)
         except KeyError as exc:
             raise ImportacionEmpleabilidadError("La ejecución no existe.", 404) from exc
-        if estado.get("tipo") != "empleabilidad" or estado.get("estado") not in {
-            "normalizado",
-            "normalizado_con_advertencias",
-        }:
+        estado_actual = str(estado.get("estado") or "")
+        hallazgos = estado.get("hallazgos") or []
+        codigos_hallazgos = {
+            str(hallazgo.get("codigo") or "").upper()
+            for hallazgo in hallazgos
+            if isinstance(hallazgo, dict)
+        }
+        publicacion_parcial_segura = (
+            estado_actual == "no_publicado"
+            and bool(codigos_hallazgos)
+            and codigos_hallazgos <= {"OFERTA_SIN_HAB_TEC"}
+        )
+        if estado.get("tipo") != "empleabilidad" or (
+            estado_actual not in {"normalizado", "normalizado_con_advertencias"}
+            and not publicacion_parcial_segura
+        ):
             raise ImportacionEmpleabilidadError(
                 "La ejecución laboral no tiene salidas publicables.", 409
             )

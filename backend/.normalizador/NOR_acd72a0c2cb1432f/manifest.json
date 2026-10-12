@@ -1,0 +1,556 @@
+{
+  "id_ejecucion": "NOR_acd72a0c2cb1432f",
+  "tipo": "empleabilidad",
+  "archivo": "data_empleabilidad_por_anio.xlsx",
+  "parametros": {
+    "hoja": "2025"
+  },
+  "configuracion_curricular": null,
+  "estado": "no_publicado",
+  "creada_en": "2026-10-09T17:59:24.574631+00:00",
+  "actualizada_en": "2026-10-09T18:56:09.406305+00:00",
+  "cancelacion_solicitada": false,
+  "cancelada_en": null,
+  "validacion": {
+    "archivo": "data_empleabilidad_por_anio.xlsx",
+    "sha256": "70cbe7273785aa677fdec79d8e78dc45cf6dc5ed8b12f753f22e55a09d89aebf",
+    "valida": true,
+    "hojas": [
+      {
+        "nombre": "2025",
+        "rol": "publicaciones",
+        "anios": [
+          2025
+        ],
+        "encabezado_fila": 1,
+        "filas_datos": 9754,
+        "columnas": [
+          "Año de la vacante",
+          "RUC",
+          "Razón Social",
+          "Identificación",
+          "Tipo de puesto",
+          "Fecha de publicación",
+          "Fecha de finalización",
+          "Creado_Empleo",
+          "Área",
+          "Área específica",
+          "Cargo",
+          "Cargo específico",
+          "Posición a publicar",
+          "Carrera resumen",
+          "Cantidad de vacantes en número original",
+          "Cantidad de vacantes en número",
+          "Mes de publicación",
+          "Ciclo",
+          "CTA GENRAL CIIU 4",
+          "CIIU 4 txt",
+          "Funciones",
+          "Nivel",
+          "Top 1000 2024"
+        ]
+      }
+    ],
+    "hallazgos": []
+  },
+  "validacion_silabos": null,
+  "limpieza": {
+    "registros_por_universo": {
+      "convenios": 0,
+      "informes": 0,
+      "publicaciones": 9754
+    },
+    "outputs": [
+      {
+        "tipo": "staging_jsonl",
+        "universo": "convenios",
+        "archivo": "limpios/convenios.jsonl",
+        "registros": 0,
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "tipo": "staging_jsonl",
+        "universo": "informes",
+        "archivo": "limpios/informes.jsonl",
+        "registros": 0,
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "tipo": "staging_jsonl",
+        "universo": "publicaciones",
+        "archivo": "limpios/publicaciones.jsonl",
+        "registros": 9754,
+        "bytes": 14588985,
+        "sha256": "1f9836439203e0bd307a6bedc3a7949448277f1760173a3e6494170abfad82b4"
+      }
+    ],
+    "hallazgos": []
+  },
+  "limpieza_silabos": null,
+  "normalizacion": {
+    "publicable": false,
+    "registros_procesados": {
+      "publicaciones": 9754,
+      "informes": 0
+    },
+    "relaciones": 9739,
+    "cuarentena": 15,
+    "outputs": [
+      {
+        "tipo": "csv",
+        "archivo": "salidas/empresa.csv",
+        "registros": 1558,
+        "bytes": 156453,
+        "sha256": "3e789e4e21510855ef84f6f38b7f2e58e1c3190310bc92e36803c65e021b7d54"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/oferta_laboral.csv",
+        "registros": 9754,
+        "bytes": 7369467,
+        "sha256": "f624aa3d022646d0fc34e2621dae0f3fa3a2ddae51477ffed12ad0df57ed03e8"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/puesto.csv",
+        "registros": 9754,
+        "bytes": 686455,
+        "sha256": "d7e61356a6b6db2578ddcf4e8c4b9ffe0bfd8d08d19d3bbbfc3fef2682a423e8"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/evaluacion_desempenio.csv",
+        "registros": 0,
+        "bytes": 149,
+        "sha256": "09f3bd0c7e683375315a999aee1c1a4c935bb09846bf561e44096345e402d917"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/catalogo_empleabilidad.csv",
+        "registros": 0,
+        "bytes": 85,
+        "sha256": "0297a10d0d7bf559ae883dbeecc64e2201056705ff29ced29a2dfceed8e6f623"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/habilidades_empleabilidad.csv",
+        "registros": 619,
+        "bytes": 122942,
+        "sha256": "38f94490b61f419f7098df272c15998525ed7241c1ae8dcf7c6b410f1e728d21"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/herramientas_empleabilidad.csv",
+        "registros": 0,
+        "bytes": 68,
+        "sha256": "7b797aed74a74c8dea76f46a3ce8060cfbfb04a7851a062ba84bde4adb5af815"
+      },
+      {
+        "tipo": "csv",
+        "archivo": "salidas/requerimiento_laboral.csv",
+        "registros": 9739,
+        "bytes": 972749,
+        "sha256": "5be4acabdd080f03db6db02447e166d312e0d31a3a428fb76615c9d7b7d4a204"
+      },
+      {
+        "tipo": "reporte",
+        "archivo": "salidas/reportes/cuarentena.jsonl",
+        "registros": 15,
+        "bytes": 31035,
+        "sha256": "7454389b995edd82847491a0e8f1a36a7e228f0dfaba51f2ec105b71d26c4225"
+      },
+      {
+        "tipo": "reporte",
+        "archivo": "salidas/reportes/evidencias_chh.jsonl",
+        "registros": 9739,
+        "bytes": 4346116,
+        "sha256": "4b867fd654109e18e10ca74a9a41421f63facd97859a1fce0c0056a9831cac3e"
+      },
+      {
+        "tipo": "reporte",
+        "archivo": "salidas/reportes/propuestas_herramienta.jsonl",
+        "registros": 0,
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "tipo": "reporte",
+        "archivo": "salidas/reportes/resumen.json",
+        "registros": 15,
+        "bytes": 5409,
+        "sha256": "b3209965dea32c0b68eaf21d640beac58d74d717480c9bf5c9a379d1cd3e4ce7"
+      }
+    ],
+    "hallazgos": [
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 405,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 1351,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 1363,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 2568,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 2994,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 3027,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 3915,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 4057,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 4064,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 4282,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 4426,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 4839,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 5122,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 5798,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      },
+      {
+        "codigo": "OFERTA_SIN_HAB_TEC",
+        "severidad": "error",
+        "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+        "hoja": "2025",
+        "fila": 8489,
+        "campo": null,
+        "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+      }
+    ]
+  },
+  "release_gate": null,
+  "aprobacion_curricular": null,
+  "catalogo_chh": {
+    "disponible": false,
+    "error": "FileNotFoundError: No se encontraron los tres catálogos CHH requeridos en C:\\Users\\I13305\\Desktop\\Normalizacion CIAR\\catalogos"
+  },
+  "fuente": null,
+  "progreso_fuente": null,
+  "progreso_llm": null,
+  "hallazgos": [
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 405,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 1351,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 1363,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 2568,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 2994,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 3027,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 3915,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 4057,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 4064,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 4282,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 4426,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 4839,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 5122,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 5798,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    },
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 8489,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    }
+  ],
+  "outputs": [
+    {
+      "tipo": "csv",
+      "archivo": "salidas/empresa.csv",
+      "registros": 1558,
+      "bytes": 156453,
+      "sha256": "3e789e4e21510855ef84f6f38b7f2e58e1c3190310bc92e36803c65e021b7d54"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/oferta_laboral.csv",
+      "registros": 9754,
+      "bytes": 7369467,
+      "sha256": "f624aa3d022646d0fc34e2621dae0f3fa3a2ddae51477ffed12ad0df57ed03e8"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/puesto.csv",
+      "registros": 9754,
+      "bytes": 686455,
+      "sha256": "d7e61356a6b6db2578ddcf4e8c4b9ffe0bfd8d08d19d3bbbfc3fef2682a423e8"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/evaluacion_desempenio.csv",
+      "registros": 0,
+      "bytes": 149,
+      "sha256": "09f3bd0c7e683375315a999aee1c1a4c935bb09846bf561e44096345e402d917"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/catalogo_empleabilidad.csv",
+      "registros": 0,
+      "bytes": 85,
+      "sha256": "0297a10d0d7bf559ae883dbeecc64e2201056705ff29ced29a2dfceed8e6f623"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/habilidades_empleabilidad.csv",
+      "registros": 619,
+      "bytes": 122942,
+      "sha256": "38f94490b61f419f7098df272c15998525ed7241c1ae8dcf7c6b410f1e728d21"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/herramientas_empleabilidad.csv",
+      "registros": 0,
+      "bytes": 68,
+      "sha256": "7b797aed74a74c8dea76f46a3ce8060cfbfb04a7851a062ba84bde4adb5af815"
+    },
+    {
+      "tipo": "csv",
+      "archivo": "salidas/requerimiento_laboral.csv",
+      "registros": 9739,
+      "bytes": 972749,
+      "sha256": "5be4acabdd080f03db6db02447e166d312e0d31a3a428fb76615c9d7b7d4a204"
+    },
+    {
+      "tipo": "reporte",
+      "archivo": "salidas/reportes/cuarentena.jsonl",
+      "registros": 15,
+      "bytes": 31035,
+      "sha256": "7454389b995edd82847491a0e8f1a36a7e228f0dfaba51f2ec105b71d26c4225"
+    },
+    {
+      "tipo": "reporte",
+      "archivo": "salidas/reportes/evidencias_chh.jsonl",
+      "registros": 9739,
+      "bytes": 4346116,
+      "sha256": "4b867fd654109e18e10ca74a9a41421f63facd97859a1fce0c0056a9831cac3e"
+    },
+    {
+      "tipo": "reporte",
+      "archivo": "salidas/reportes/propuestas_herramienta.jsonl",
+      "registros": 0,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "tipo": "reporte",
+      "archivo": "salidas/reportes/resumen.json",
+      "registros": 15,
+      "bytes": 5409,
+      "sha256": "b3209965dea32c0b68eaf21d640beac58d74d717480c9bf5c9a379d1cd3e4ce7"
+    }
+  ]
+}

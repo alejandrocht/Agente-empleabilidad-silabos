@@ -594,6 +594,7 @@ function conteosDe(manifest) {
 
 const ESTADOS_POLLING = new Set([
   "recibido",
+  "seleccionando_hoja",
   "extrayendo",
   "validando",
   "validado",
@@ -603,6 +604,7 @@ const ESTADOS_POLLING = new Set([
 ]);
 const ESTADOS_CANCELABLES = new Set([
   "recibido",
+  "seleccionando_hoja",
   "extrayendo",
   "validando",
   "limpiando",

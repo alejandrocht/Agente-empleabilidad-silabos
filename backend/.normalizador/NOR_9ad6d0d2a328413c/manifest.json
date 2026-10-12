@@ -1,0 +1,82 @@
+{
+  "id_ejecucion": "NOR_9ad6d0d2a328413c",
+  "tipo": "empleabilidad",
+  "archivo": "data_empleabilidad_por_anio.xlsx",
+  "parametros": {
+    "hoja": "2025",
+    "limite_prueba": "3"
+  },
+  "configuracion_curricular": null,
+  "estado": "error",
+  "creada_en": "2026-10-09T17:38:11.591511+00:00",
+  "actualizada_en": "2026-10-09T17:38:31.090006+00:00",
+  "cancelacion_solicitada": false,
+  "cancelada_en": null,
+  "validacion": {
+    "archivo": "data_empleabilidad_por_anio.xlsx",
+    "sha256": "70cbe7273785aa677fdec79d8e78dc45cf6dc5ed8b12f753f22e55a09d89aebf",
+    "valida": true,
+    "hojas": [
+      {
+        "nombre": "2025",
+        "rol": "publicaciones",
+        "anios": [
+          2025
+        ],
+        "encabezado_fila": 1,
+        "filas_datos": 9754,
+        "columnas": [
+          "Año de la vacante",
+          "RUC",
+          "Razón Social",
+          "Identificación",
+          "Tipo de puesto",
+          "Fecha de publicación",
+          "Fecha de finalización",
+          "Creado_Empleo",
+          "Área",
+          "Área específica",
+          "Cargo",
+          "Cargo específico",
+          "Posición a publicar",
+          "Carrera resumen",
+          "Cantidad de vacantes en número original",
+          "Cantidad de vacantes en número",
+          "Mes de publicación",
+          "Ciclo",
+          "CTA GENRAL CIIU 4",
+          "CIIU 4 txt",
+          "Funciones",
+          "Nivel",
+          "Top 1000 2024"
+        ]
+      }
+    ],
+    "hallazgos": []
+  },
+  "validacion_silabos": null,
+  "limpieza": null,
+  "limpieza_silabos": null,
+  "normalizacion": null,
+  "release_gate": null,
+  "aprobacion_curricular": null,
+  "catalogo_chh": {
+    "disponible": false,
+    "error": "FileNotFoundError: No se encontraron los tres catálogos CHH requeridos en C:\\Users\\I13305\\Desktop\\Normalizacion CIAR\\catalogos"
+  },
+  "fuente": null,
+  "progreso_fuente": null,
+  "progreso_llm": null,
+  "hallazgos": [
+    {
+      "codigo": "ERROR_INTERNO_LIMPIEZA",
+      "severidad": "error",
+      "mensaje": "La limpieza o normalización terminó con un error interno.",
+      "hoja": null,
+      "fila": null,
+      "campo": null,
+      "detalle": "FileNotFoundError: No se encontraron los tres catálogos CHH requeridos en C:\\Users\\I13305\\Desktop\\Normalizacion CIAR\\catalogos"
+    }
+  ],
+  "outputs": []
+}

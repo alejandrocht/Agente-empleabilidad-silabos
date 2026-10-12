@@ -36,7 +36,13 @@ errores_tecnicos = import_module("agente.normalizador.silabos.errores_tecnicos")
 
 
 MAX_UPLOAD_BYTES = entero("NORMALIZADOR_MAX_UPLOAD_BYTES", 100 * 1024 * 1024)
-_UPLOAD_PATHS = frozenset({"/normalizador/silabos"})
+_UPLOAD_PATHS = frozenset(
+    {
+        "/normalizador/silabos",
+        "/normalizador/empleabilidad",
+        "/normalizador/empleabilidad/inspeccionar",
+    }
+)
 _GENERIC_UPLOAD_LIMIT_DETAIL = "La carga excede el límite permitido."
 
 
@@ -117,6 +123,80 @@ def obtener_catalogo_hab_tec(id_catalogo: str) -> dict[str, object]:
         return gestor_catalogos_hab_tec.obtener(id_catalogo)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Catálogo no encontrado.") from exc
+
+
+class SeleccionarHojaEmpleabilidadIn(BaseModel):
+    """Hoja elegida después de inspeccionar el XLSX de empleabilidad."""
+
+    hoja: str = Field(..., min_length=1, max_length=200)
+    limite_prueba: int = Field(default=0, ge=0, le=100)
+
+
+def _guardar_upload_empleabilidad(archivo: UploadFile) -> tuple[str, Path]:
+    """Guarda el XLSX en un directorio aislado antes de procesarlo."""
+
+    nombre = Path(archivo.filename or "entrada.xlsx").name
+    id_ejecucion, directorio = gestor_ejecuciones.crear("empleabilidad", nombre)
+    ruta_entrada = directorio / "entrada" / nombre
+    try:
+        with ruta_entrada.open("wb") as destino:
+            shutil.copyfileobj(archivo.file, destino, length=1024 * 1024)
+    finally:
+        archivo.file.close()
+    tamano = ruta_entrada.stat().st_size
+    if tamano > MAX_UPLOAD_BYTES:
+        gestor_ejecuciones.marcar_rechazo(
+            id_ejecucion,
+            Hallazgo(
+                codigo="ARCHIVO_DEMASIADO_GRANDE",
+                severidad="error",
+                mensaje="El archivo supera el límite permitido.",
+                detalle=f"bytes={tamano}; máximo={MAX_UPLOAD_BYTES}",
+            ),
+        )
+    return id_ejecucion, ruta_entrada
+
+
+@router.post("/empleabilidad/inspeccionar", status_code=202)
+def inspeccionar_empleabilidad(archivo: UploadFile = File(...)) -> dict[str, object]:
+    """Recibe un XLSX y lista sus hojas antes de iniciar la normalización."""
+
+    id_ejecucion, ruta_entrada = _guardar_upload_empleabilidad(archivo)
+    estado = gestor_ejecuciones.obtener(id_ejecucion)
+    if estado.get("estado") == "rechazado":
+        return estado
+    return gestor_ejecuciones.inspeccionar_empleabilidad(id_ejecucion, ruta_entrada)
+
+
+@router.post("/empleabilidad/{id_ejecucion}/iniciar", status_code=202)
+def iniciar_empleabilidad_desde_hoja(
+    id_ejecucion: str,
+    solicitud: SeleccionarHojaEmpleabilidadIn,
+) -> dict[str, object]:
+    """Arranca la normalización sobre una hoja de publicaciones seleccionada."""
+
+    _exigir_ejecucion_normalizador(id_ejecucion)
+    try:
+        gestor_ejecuciones.iniciar_empleabilidad_hoja(
+            id_ejecucion,
+            solicitud.hoja.strip(),
+            solicitud.limite_prueba,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return gestor_ejecuciones.obtener(id_ejecucion)
+
+
+@router.post("/empleabilidad", status_code=202)
+def iniciar_empleabilidad(archivo: UploadFile = File(...)) -> dict[str, object]:
+    """Recibe un XLSX y ejecuta el pipeline de empleabilidad en segundo plano."""
+
+    id_ejecucion, ruta_entrada = _guardar_upload_empleabilidad(archivo)
+    estado = gestor_ejecuciones.obtener(id_ejecucion)
+    if estado.get("estado") == "rechazado":
+        return estado
+    gestor_ejecuciones.iniciar_validacion(id_ejecucion, ruta_entrada)
+    return gestor_ejecuciones.obtener(id_ejecucion)
 
 
 class DecisionCurricularIn(BaseModel):

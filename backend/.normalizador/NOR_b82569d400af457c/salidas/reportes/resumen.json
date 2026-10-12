@@ -1,0 +1,27 @@
+{
+  "publicable": false,
+  "registros_procesados": {
+    "publicaciones": 3,
+    "informes": 0
+  },
+  "relaciones": 2,
+  "cuarentena": 1,
+  "catalogo_chh": {
+    "disponible": false,
+    "modo": "hab_tec_vectorial",
+    "motivo": "No requerido para la normalización semántica HAB_TEC."
+  },
+  "motor_habilidades": "hab_tec_qwen_vectorial",
+  "reglas_chh": "empleabilidad-chh-0.1.0",
+  "hallazgos": [
+    {
+      "codigo": "OFERTA_SIN_HAB_TEC",
+      "severidad": "error",
+      "mensaje": "No se obtuvo una coincidencia HAB_TEC para la carrera indicada.",
+      "hoja": "2025",
+      "fila": 3,
+      "campo": null,
+      "detalle": "El registro queda fuera de las relaciones candidatas para revisión residual."
+    }
+  ]
+}
