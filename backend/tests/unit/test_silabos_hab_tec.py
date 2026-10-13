@@ -151,8 +151,11 @@ def test_no_infiere_habilidad_desde_un_logro_sin_nombre_explicito(indice, monkey
     registro["datos"]["logro_general"] = "Diseña estructuras y patrones mantenibles."
     # Nombre de curso y descripción del catálogo no cuentan como evidencia de habilidad.
     monkeypatch.setattr(HabTecRetriever, "_embedding", lambda *_args: pytest.fail("Sin mención"))
-    assert _inferir([registro]) == []
-    assert llamadas == []
+    trazas = []
+    assert _inferir([registro], al_actualizar_progreso_silabo=trazas.append) == []
+    assert len(llamadas) >= 1
+    assert trazas[-1].latencia_modelo_ms is not None
+    assert trazas[-1].estado_analisis == "sin_propuesta"
 
 
 def test_modelo_no_puede_devolver_dos_habilidades_por_silabo(indice, monkeypatch):
@@ -473,17 +476,17 @@ def test_cactus_docx_pipeline_y_cli_verifican_llm_y_habilidades(
             cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path / "cli")
 
 
-def test_sin_candidatos_o_logros_no_invoca_modelo(
+def test_sin_candidatos_o_logros_analiza_sin_inventar_habilidades(
     indice: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    llamadas = _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+    llamadas = _modelo(monkeypatch, [{"competencias": []}])
     registro = _registro()
     registro["carrera"] = "Carrera sin catálogo"
     assert _inferir([registro]) == []
     registro = _registro()
     registro["datos"]["logro_general"] = ""
     assert _inferir([registro]) == []
-    assert llamadas == []
+    assert len(llamadas) == 2
 
 
 def test_sin_indice_falla_sin_inventar_catalogo(tmp_path: Path, monkeypatch) -> None:

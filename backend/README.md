@@ -98,11 +98,11 @@ trabajo anterior ni reintenta automáticamente solicitudes de creación sin resp
 Antes de descargar, el script consulta `GET /normalizador/configuracion/curricular` y
 exige que el backend tenga `NORMALIZADOR_CURRICULAR_LLM=true`. Muestra el proveedor
 y modelo efectivos; cambiar esa variable en la terminal del script no cambia el backend
-ya iniciado. El progreso distingue sílabos con respuesta del modelo de los omitidos
-sin logros o candidatos. No marca éxito solo por `ALLOW_IMPORT`: exige análisis LLM
-completado con sílabos atendidos por el modelo, o una omisión auditada porque ningún
-sílabo contiene menciones explícitas del catálogo. Una carrera sin coincidencias
-puede dejar habilidades vacías; no se fuerzan habilidades ni llamadas al modelo.
+ya iniciado. El analista recibe cada sílabo extraído, incluso sin logros o candidatos;
+en ese caso puede responder con una lista vacía. El progreso registra las llamadas reales
+y su latencia. No marca éxito solo por `ALLOW_IMPORT`: exige una respuesta válida del
+LLM por cada sílabo detectado y la fase completada. Si falta análisis, detiene la secuencia.
+Una carrera puede dejar habilidades vacías después del LLM; no se fuerzan habilidades.
 
 Para revisar los IDs de la última corrida sin descargar otra vez ni pedir credenciales:
 

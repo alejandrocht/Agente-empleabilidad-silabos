@@ -189,14 +189,13 @@ def ejecutar(
             raise
         gate = estado.get("release_gate") or {}
         publicada = gate.get("decision") == "ALLOW_IMPORT"
-        sin_coincidencias = (
-            analisis["politica_habilidades"] == "extraccion_explicita_max_1"
-            and analisis["silabos_detectados"] > 0
-            and analisis["silabos_sin_mencion_explicita"] == analisis["silabos_detectados"]
+        esperados = analisis["silabos_detectados"] or len(
+            (estado.get("progreso_llm") or {}).get("silabos") or []
         )
         if publicada and (
             analisis["llm_habilitado"] is not True
-            or not (analisis["silabos_modelo"] or sin_coincidencias)
+            or not esperados
+            or analisis["silabos_modelo"] != esperados
             or analisis["fase_llm"] != "completado"
         ):
             raise RuntimeError(
@@ -213,11 +212,6 @@ def ejecutar(
                 flush=True,
             )
         else:
-            if sin_coincidencias:
-                print(
-                    "  Sin habilidades: no hay menciones explícitas; no se forzó el LLM.",
-                    flush=True,
-                )
             print("  Publicación permitida; los CSV están en la ejecución del backend.", flush=True)
     print(
         f"\nFinalizado: {len(resumen)} carreras; {fallos} sin publicación. Resumen: {destino}",

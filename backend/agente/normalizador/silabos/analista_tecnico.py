@@ -762,14 +762,14 @@ def inferir_competencias_tecnicas(
     analista: Any | None = None
     resultado: list[dict[str, object]] = []
     vistos: set[tuple[str, str]] = set()
-    silabos_seleccionados: set[str] = set()
+    silabos_analizados: set[str] = set()
     total_silabos = len(registros)
     for indice, registro in enumerate(registros, start=1):
         if cancelada is not None and cancelada():
             raise CancelacionSolicitada()
         carrera = _texto(registro.get("carrera"))
         id_silabo = _texto(registro.get("id_silabo"))
-        if id_silabo and id_silabo in silabos_seleccionados:
+        if id_silabo and id_silabo in silabos_analizados:
             continue
         candidatos_lista = catalogo.para_carrera(carrera) if catalogo is not None else ()
         contexto = construir_contexto_tecnico(registro, candidatos_lista)
@@ -809,35 +809,6 @@ def inferir_competencias_tecnicas(
         )
         if al_actualizar_progreso_silabo is not None:
             al_actualizar_progreso_silabo(traza_base)
-        if not logros_totales or not candidatos:
-            if al_actualizar_progreso_silabo is not None:
-                al_actualizar_progreso_silabo(
-                    replace(
-                        traza_base,
-                        estado_analisis="sin_propuesta",
-                        logros_procesados=0,
-                        propuestas_validas=0,
-                        error_codigo=(
-                            "SIN_MENCION_EXPLICITA_CATALOGO" if sin_mencion_explicita else None
-                        ),
-                    )
-                )
-            if auditoria is not None:
-                auditoria.append(
-                    {
-                        "codigo": "SILABO_SIN_PROPUESTA_TECNICA",
-                        "severidad": "info",
-                        "id_silabo": _texto(contexto.get("id_silabo")) or "<sin id>",
-                        "mensaje": (
-                            "No hay menciones explícitas de habilidades del catálogo en el sílabo."
-                            if sin_mencion_explicita
-                            else "El sílabo no contiene resultados de aprendizaje utilizables "
-                            "o candidatos del catálogo."
-                        ),
-                    }
-                )
-            continue
-
         if analista is None:
             llm = obtener_llm("analista_curricular", configuracion_curricular=configuracion)
             analista = llm.with_structured_output(
@@ -914,8 +885,8 @@ def inferir_competencias_tecnicas(
 
         propuestas_validas = len(propuestas_validas_filas)
         resultado.extend(propuestas_validas_filas)
-        if propuestas_validas and id_silabo:
-            silabos_seleccionados.add(id_silabo)
+        if id_silabo:
+            silabos_analizados.add(id_silabo)
         if al_actualizar_progreso_silabo is not None:
             al_actualizar_progreso_silabo(
                 replace(
@@ -924,6 +895,9 @@ def inferir_competencias_tecnicas(
                     logros_procesados=logros_totales,
                     latencia_modelo_ms=round((perf_counter() - inicio_modelo) * 1000, 2),
                     propuestas_validas=propuestas_validas,
+                    error_codigo=(
+                        "SIN_MENCION_EXPLICITA_CATALOGO" if sin_mencion_explicita else None
+                    ),
                 )
             )
         if auditoria is not None and referencia_rechazada:

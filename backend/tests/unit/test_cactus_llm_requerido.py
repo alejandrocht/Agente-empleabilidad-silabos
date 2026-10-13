@@ -100,7 +100,7 @@ def test_diagnostico_consulta_ids_existentes_sin_post(monkeypatch, tmp_path, cap
     assert "Administración" in capsys.readouterr().out
 
 
-def test_sin_menciones_explicitas_no_fuerza_habilidad_ni_llm(monkeypatch, tmp_path):
+def test_sin_menciones_explicitas_exige_llm_sin_forzar_habilidades(monkeypatch, tmp_path):
     def solicitar(*_args):
         return {
             "id_ejecucion": "NOR_0000000000000001",
@@ -124,4 +124,27 @@ def test_sin_menciones_explicitas_no_fuerza_habilidad_ni_llm(monkeypatch, tmp_pa
         }
 
     monkeypatch.setattr(cli, "solicitar", solicitar)
-    assert cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=14) == 0
+    with pytest.raises(RuntimeError, match="LLM"):
+        cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=14)
+
+
+def test_no_basta_analizar_solo_un_silabo_de_la_carrera(monkeypatch, tmp_path):
+    def solicitar(*_args):
+        return {
+            "id_ejecucion": "NOR_0000000000000001",
+            "estado": "limpiado",
+            "configuracion_curricular": {"usar_llm": True},
+            "release_gate": {"decision": "ALLOW_IMPORT"},
+            "progreso_llm": {
+                "fase": "completado",
+                "silabos_detectados": 2,
+                "silabos": [
+                    {"estado_analisis": "completado", "latencia_modelo_ms": 10},
+                    {"estado_analisis": "sin_propuesta", "latencia_modelo_ms": None},
+                ],
+            },
+        }
+
+    monkeypatch.setattr(cli, "solicitar", solicitar)
+    with pytest.raises(RuntimeError, match="LLM"):
+        cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=14)
