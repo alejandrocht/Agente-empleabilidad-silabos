@@ -189,6 +189,12 @@ def cargar_retriever_hab_tec(
         fuente = (directorio / "catalogo_normalizado.jsonl").read_bytes()
         sha256_catalogo = hashlib.sha256(fuente).hexdigest()
         if sha256_catalogo != manifest["sha256_catalogo"]:
+            # Existing Windows checkouts may have converted LF to CRLF before
+            # .gitattributes protected these artifacts. Accept only that change;
+            # the expected fingerprint still rejects any altered catalog data.
+            fuente = fuente.replace(b"\r\n", b"\n")
+            sha256_catalogo = hashlib.sha256(fuente).hexdigest()
+        if sha256_catalogo != manifest["sha256_catalogo"]:
             raise ErrorHabTecRetriever("El índice no corresponde al catálogo HAB_TEC vigente.")
         registros = [
             json.loads(linea) for linea in fuente.decode("utf-8").splitlines() if linea.strip()

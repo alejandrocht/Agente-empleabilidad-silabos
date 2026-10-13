@@ -131,6 +131,54 @@ def test_recupera_por_carrera_y_usa_modelo_del_indice(indice: Path) -> None:
     assert [m.nombre for m in recuperador.buscar(LOGRO, "INGENIERIA_DE_SISTEMAS")] == [NOMBRE]
 
 
+def test_catalogo_del_pull_windows_con_crlf_conserva_hash_del_indice(indice):
+    anterior = cargar_retriever_hab_tec()
+    fuente = indice / "catalogo_normalizado.jsonl"
+    fuente.write_bytes(fuente.read_bytes().replace(b"\n", b"\r\n"))
+    actual = cargar_retriever_hab_tec()
+    assert anterior is not None and actual is not None
+    assert actual.sha256_catalogo == anterior.sha256_catalogo
+    assert actual.documentos == anterior.documentos
+
+
+def test_crlf_no_oculta_alteraciones_del_catalogo(indice):
+    fuente = indice / "catalogo_normalizado.jsonl"
+    fuente.write_bytes(
+        fuente.read_bytes().replace(b"\n", b"\r\n").replace(b"HAB_TEC_001", b"HAB_TEC_999")
+    )
+    with pytest.raises(ErrorHabTecRetriever, match="no corresponde"):
+        cargar_retriever_hab_tec()
+
+
+@pytest.mark.parametrize("motivo", ["sin_catalogo", "hash_distinto", "faltan_carreras"])
+def test_comprobacion_explica_por_que_rechaza_catalogo(indice, monkeypatch, motivo):
+    from api import servidor
+
+    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_LLM", "true")
+    if motivo == "sin_catalogo":
+        monkeypatch.setenv("NORMALIZADOR_HAB_TEC_DIR", str(indice.parent / "otra_carpeta"))
+    elif motivo == "hash_distinto":
+        fuente = indice / "catalogo_normalizado.jsonl"
+        fuente.write_bytes(fuente.read_bytes().replace(b"HAB_TEC_001", b"HAB_TEC_999"))
+    monkeypatch.setattr(
+        analista_tecnico, "obtener_llm", lambda *_a, **_k: pytest.fail("No consultar LLM")
+    )
+    respuesta = TestClient(servidor.app, client=("127.0.0.1", 0)).post(cli_ruta_comprobacion())
+    assert respuesta.status_code == 503
+    detalle = respuesta.json()["detail"]
+    if motivo == "faltan_carreras":
+        assert "Administración" in detalle["carreras_faltantes"]
+        assert "Marketing" not in detalle["carreras_faltantes"]
+    else:
+        assert (
+            detalle["motivo"]
+            == {
+                "sin_catalogo": "CATALOGO_NO_ENCONTRADO",
+                "hash_distinto": "CATALOGO_HASH_DISTINTO",
+            }[motivo]
+        )
+
+
 def test_modelo_selecciona_referencia_y_python_copia_campos_exactos(
     indice: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

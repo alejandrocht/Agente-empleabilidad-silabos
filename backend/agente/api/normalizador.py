@@ -27,6 +27,7 @@ from agente.normalizador.ejecuciones import (
     HistorialNoEliminable,
     gestor_ejecuciones,
 )
+from agente.normalizador.empleabilidad.hab_tec_retriever import ErrorHabTecRetriever
 from agente.normalizador.modelos import Hallazgo, ProgresoSilaboLLM
 from agente.normalizador.silabos import analista_tecnico
 from agente.normalizador.silabos.entrada import CARRERAS_ULIMA
@@ -254,10 +255,12 @@ def comprobar_configuracion_curricular() -> dict[str, object]:
     if not config.usar_llm:
         raise HTTPException(status_code=409, detail={"codigo": "LLM_DESACTIVADO"})
     etapa = "CATALOGO_NO_DISPONIBLE"
+    faltantes: list[str] = []
     try:
         catalogo = analista_tecnico.cargar_catalogo_hab_tec()
         recuperador = catalogo.recuperador
-        if recuperador is None or not all(catalogo.para_carrera(c) for c in CARRERAS_ULIMA):
+        faltantes = [c for c in CARRERAS_ULIMA if not catalogo.para_carrera(c)]
+        if recuperador is None or faltantes:
             raise ValueError("El índice debe cubrir las 14 carreras.")
         etapa = "EMBEDDING_NO_DISPONIBLE"
         candidato = catalogo.candidatos[0]
@@ -274,9 +277,23 @@ def comprobar_configuracion_curricular() -> dict[str, object]:
         traza = trazas[-1]
         if traza.latencia_modelo_ms is None or traza.estado_analisis != "sin_propuesta":
             raise ValueError("El modelo no completó la comprobación.")
+    except ErrorHabTecRetriever as exc:
+        # Only translate fixed internal catalog messages, never echo exceptions.
+        motivo = {
+            (
+                "No hay un catálogo HAB_TEC vectorizado. "
+                "Cargalo y vectorizalo en Catálogo HAB_TEC."
+            ): "CATALOGO_NO_ENCONTRADO",
+            "El índice no corresponde al catálogo HAB_TEC vigente.": "CATALOGO_HASH_DISTINTO",
+            "El índice HAB_TEC está incompleto o inconsistente.": "CATALOGO_INCOMPLETO",
+            "No se pudo cargar el índice local HAB_TEC.": "CATALOGO_INDICE_ILEGIBLE",
+        }.get(str(exc), "")
+        raise HTTPException(status_code=503, detail={"codigo": etapa, "motivo": motivo}) from None
     except Exception:
         # No devolver excepciones de proveedores: podrían incluir cabeceras o secretos.
-        raise HTTPException(status_code=503, detail={"codigo": etapa}) from None
+        raise HTTPException(
+            status_code=503, detail={"codigo": etapa, "carreras_faltantes": faltantes}
+        ) from None
     return {
         "lista_para_normalizar": True,
         "configuracion_curricular": config.a_dict(),

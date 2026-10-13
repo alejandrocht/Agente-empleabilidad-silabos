@@ -105,6 +105,13 @@ credenciales ULima ni descarga carreras. No descarga modelos ni regenera los vec
 el timeout de la comprobación respeta los límites efectivos del backend. El resultado
 sin secretos queda en `comprobacion.json` junto al resumen de la corrida.
 
+Los archivos del catálogo publicado conservan sus bytes mediante `.gitattributes`.
+Si un checkout anterior en Windows convirtió LF a CRLF, el lector acepta únicamente
+ese cambio cuando recupera el hash exacto del índice; cambios en IDs, nombres o
+descripciones siguen rechazados. La comprobación diferencia carpeta sin catálogo,
+hash distinto, índice incompleto y carreras ausentes. No hace falta revectorizar
+por un cambio de saltos de línea.
+
 La comprobación y las ejecuciones usan el proveedor
 y modelo efectivos; cambiar esa variable en la terminal del script no cambia el backend
 ya iniciado. El analista recibe cada sílabo extraído, incluso sin logros o candidatos;

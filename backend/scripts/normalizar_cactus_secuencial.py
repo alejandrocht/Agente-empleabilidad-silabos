@@ -33,6 +33,14 @@ ERRORES_COMPROBACION = {
     "LLM_NO_DISPONIBLE": "El analista LLM no responde con JSON válido. Revisa el modelo de .env.",
     "LLM_DESACTIVADO": "LLM desactivado en el backend. Reinícialo con la configuración correcta.",
 }
+MOTIVOS_CATALOGO = {
+    "CATALOGO_NO_ENCONTRADO": (
+        "No se encontró un catálogo vectorizado. Revisa NORMALIZADOR_HAB_TEC_DIR."
+    ),
+    "CATALOGO_HASH_DISTINTO": "El hash del catálogo no corresponde al índice vectorizado.",
+    "CATALOGO_INCOMPLETO": "Los registros o los archivos del índice están incompletos.",
+    "CATALOGO_INDICE_ILEGIBLE": "No se pudieron leer los archivos del catálogo o del índice.",
+}
 
 
 def solicitar(
@@ -48,11 +56,19 @@ def solicitar(
     except HTTPError as exc:
         if ruta == RUTA_COMPROBACION:
             try:
-                codigo = json.load(exc).get("detail", {}).get("codigo")
+                detalle = json.load(exc).get("detail", {})
+                codigo = detalle.get("codigo")
             except (ValueError, AttributeError):
                 codigo = None
             if codigo in ERRORES_COMPROBACION:
-                raise RuntimeError(ERRORES_COMPROBACION[codigo]) from None
+                mensaje = ERRORES_COMPROBACION[codigo]
+                mensaje = MOTIVOS_CATALOGO.get(detalle.get("motivo"), mensaje)
+                faltantes = detalle.get("carreras_faltantes")
+                if isinstance(faltantes, list):
+                    carreras = [c for c in CARRERAS_ULIMA if c in faltantes]
+                    if carreras:
+                        mensaje += " Carreras ausentes: " + ", ".join(carreras) + "."
+                raise RuntimeError(mensaje) from None
         # Una respuesta de validación podría incluir la solicitud con credenciales.
         raise RuntimeError(
             f"La API respondió HTTP {exc.code}; no se repetirá la solicitud."

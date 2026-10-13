@@ -1,6 +1,8 @@
 """Una publicación vacía sin analista no demuestra normalización LLM."""
 
 import json
+from io import BytesIO
+from urllib.error import HTTPError
 
 import pytest
 from fastapi.testclient import TestClient
@@ -177,3 +179,30 @@ def test_comprobacion_real_antes_de_credenciales_y_descargas(monkeypatch, correc
     assert len(rutas) == 3
     salida = capsys.readouterr()
     assert "Comprobación OK" in salida.out if correcta else "LLM no responde" in salida.err
+
+
+@pytest.mark.parametrize("causa", ["sin_catalogo", "hash_distinto", "faltan_carreras"])
+def test_cli_muestra_causa_del_catalogo_sin_exponer_respuesta_cruda(monkeypatch, causa):
+    detalle = {"codigo": "CATALOGO_NO_DISPONIBLE", "secreto": "no-mostrar"}
+    if causa == "faltan_carreras":
+        detalle["carreras_faltantes"] = ["Psicología"]
+    else:
+        detalle["motivo"] = {
+            "sin_catalogo": "CATALOGO_NO_ENCONTRADO",
+            "hash_distinto": "CATALOGO_HASH_DISTINTO",
+        }[causa]
+
+    def fallar(*_a, **_k):
+        raise HTTPError(
+            "http://localhost", 503, "", {}, BytesIO(json.dumps({"detail": detalle}).encode())
+        )
+
+    monkeypatch.setattr(cli, "urlopen", fallar)
+    with pytest.raises(RuntimeError) as error:
+        cli.solicitar("http://localhost", cli.RUTA_COMPROBACION, {})
+    assert "no-mostrar" not in str(error.value)
+    assert {
+        "sin_catalogo": "NORMALIZADOR_HAB_TEC_DIR",
+        "hash_distinto": "hash",
+        "faltan_carreras": "Psicología",
+    }[causa] in str(error.value)
