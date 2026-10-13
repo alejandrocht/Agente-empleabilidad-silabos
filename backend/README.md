@@ -97,6 +97,15 @@ trabajo anterior ni reintenta automáticamente solicitudes de creación sin resp
 
 Antes de descargar, el script consulta `GET /normalizador/configuracion/curricular` y
 exige que el backend tenga `NORMALIZADOR_CURRICULAR_LLM=true`. Muestra el proveedor
+y realiza `POST /normalizador/configuracion/curricular/comprobar`: valida el índice,
+su cobertura de las 14 carreras, un embedding de consulta y una respuesta estructurada
+del analista usando la misma fábrica de modelos que la ejecución. Si falla, no pide
+credenciales ULima ni descarga carreras. No descarga modelos ni regenera los vectores.
+`--comprobar` ejecuta solo esta prueba. La carga inicial del modelo puede tardar;
+el timeout de la comprobación respeta los límites efectivos del backend. El resultado
+sin secretos queda en `comprobacion.json` junto al resumen de la corrida.
+
+La comprobación y las ejecuciones usan el proveedor
 y modelo efectivos; cambiar esa variable en la terminal del script no cambia el backend
 ya iniciado. El analista recibe cada sílabo extraído, incluso sin logros o candidatos;
 en ese caso puede responder con una lista vacía. El progreso registra las llamadas reales

@@ -27,7 +27,9 @@ from agente.normalizador.ejecuciones import (
     HistorialNoEliminable,
     gestor_ejecuciones,
 )
-from agente.normalizador.modelos import Hallazgo
+from agente.normalizador.modelos import Hallazgo, ProgresoSilaboLLM
+from agente.normalizador.silabos import analista_tecnico
+from agente.normalizador.silabos.entrada import CARRERAS_ULIMA
 from agente.normalizador.silabos.salida_catalogos import ARCHIVOS_CATALOGO
 from agente.observabilidad.logger import log_paso
 
@@ -240,6 +242,52 @@ def consultar_configuracion_curricular() -> dict[str, object]:
         return configuracion_normalizador_curricular().a_dict()
     except ValueError:
         raise HTTPException(status_code=503, detail="Configuración curricular inválida.") from None
+
+
+@router.post("/configuracion/curricular/comprobar")
+def comprobar_configuracion_curricular() -> dict[str, object]:
+    """Prueba índice, embeddings y analista reales sin crear una ejecución."""
+    try:
+        config = configuracion_normalizador_curricular()
+    except ValueError:
+        raise HTTPException(status_code=503, detail="Configuración curricular inválida.") from None
+    if not config.usar_llm:
+        raise HTTPException(status_code=409, detail={"codigo": "LLM_DESACTIVADO"})
+    etapa = "CATALOGO_NO_DISPONIBLE"
+    try:
+        catalogo = analista_tecnico.cargar_catalogo_hab_tec()
+        recuperador = catalogo.recuperador
+        if recuperador is None or not all(catalogo.para_carrera(c) for c in CARRERAS_ULIMA):
+            raise ValueError("El índice debe cubrir las 14 carreras.")
+        etapa = "EMBEDDING_NO_DISPONIBLE"
+        candidato = catalogo.candidatos[0]
+        recuperador.buscar(candidato.nombre, candidato.carrera)
+        etapa = "LLM_NO_DISPONIBLE"
+        trazas: list[ProgresoSilaboLLM] = []
+        # El mismo contrato estructurado y fábrica que recibe los sílabos reales.
+        analista_tecnico.inferir_competencias_tecnicas(
+            [{"id_silabo": "COMPROBACION", "carrera": candidato.carrera, "datos": {}}],
+            config,
+            catalogo,
+            al_actualizar_progreso_silabo=trazas.append,
+        )
+        traza = trazas[-1]
+        if traza.latencia_modelo_ms is None or traza.estado_analisis != "sin_propuesta":
+            raise ValueError("El modelo no completó la comprobación.")
+    except Exception:
+        # No devolver excepciones de proveedores: podrían incluir cabeceras o secretos.
+        raise HTTPException(status_code=503, detail={"codigo": etapa}) from None
+    return {
+        "lista_para_normalizar": True,
+        "configuracion_curricular": config.a_dict(),
+        "catalogo": {
+            **catalogo.a_dict(),
+            "modelo_embedding": recuperador.modelo,
+            "dimension": len(recuperador.documentos[0].vector),
+            "carreras": len(CARRERAS_ULIMA),
+        },
+        "prueba_llm": traza.a_dict(),
+    }
 
 
 @router.post("/eventos/hitl", status_code=204)

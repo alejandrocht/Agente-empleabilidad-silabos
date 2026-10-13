@@ -148,3 +148,32 @@ def test_no_basta_analizar_solo_un_silabo_de_la_carrera(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "solicitar", solicitar)
     with pytest.raises(RuntimeError, match="LLM"):
         cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=14)
+
+
+@pytest.mark.parametrize("correcta", [False, True])
+def test_comprobacion_real_antes_de_credenciales_y_descargas(monkeypatch, correcta, capsys):
+    monkeypatch.setattr(cli.sys, "argv", ["script", "--comprobar"])
+    rutas = []
+
+    def solicitar(_base, ruta, datos=None, *, timeout=60):
+        rutas.append(ruta)
+        if ruta == "/health":
+            return {}
+        if ruta == "/normalizador/configuracion/curricular":
+            return {"usar_llm": True, "timeout_llm_seconds": 600, "max_reintentos_llm": 2}
+        assert ruta == cli.RUTA_COMPROBACION and datos == {} and timeout == 1980
+        if not correcta:
+            raise RuntimeError("El analista LLM no responde")
+        return {
+            "lista_para_normalizar": True,
+            "catalogo": {"id_catalogo": "HABTEC_prueba", "modelo_embedding": "modelo-vector"},
+            "prueba_llm": {"latencia_modelo_ms": 5.0},
+        }
+
+    monkeypatch.setattr(cli, "solicitar", solicitar)
+    monkeypatch.setattr(cli, "getpass", lambda *_args: pytest.fail("No pedir secretos"))
+    monkeypatch.setattr("builtins.input", lambda *_args: pytest.fail("No pedir usuario"))
+    assert cli.main() == (0 if correcta else 1)
+    assert len(rutas) == 3
+    salida = capsys.readouterr()
+    assert "Comprobación OK" in salida.out if correcta else "LLM no responde" in salida.err

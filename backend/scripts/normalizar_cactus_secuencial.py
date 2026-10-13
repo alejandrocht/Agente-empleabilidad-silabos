@@ -26,17 +26,33 @@ TERMINALES = {
     "error",
     "cancelado",
 }
+RUTA_COMPROBACION = "/normalizador/configuracion/curricular/comprobar"
+ERRORES_COMPROBACION = {
+    "CATALOGO_NO_DISPONIBLE": "Falta un catálogo vectorizado válido con las 14 carreras.",
+    "EMBEDDING_NO_DISPONIBLE": "El modelo de embeddings del índice no responde. Revisa Ollama.",
+    "LLM_NO_DISPONIBLE": "El analista LLM no responde con JSON válido. Revisa el modelo de .env.",
+    "LLM_DESACTIVADO": "LLM desactivado en el backend. Reinícialo con la configuración correcta.",
+}
 
 
-def solicitar(base: str, ruta: str, datos: dict[str, Any] | None = None) -> dict[str, Any]:
+def solicitar(
+    base: str, ruta: str, datos: dict[str, Any] | None = None, *, timeout: float = 60
+) -> dict[str, Any]:
     cuerpo = json.dumps(datos).encode("utf-8") if datos is not None else None
     solicitud = Request(
         base.rstrip("/") + ruta, data=cuerpo, headers={"Content-Type": "application/json"}
     )
     try:
-        with urlopen(solicitud, timeout=60) as respuesta:
+        with urlopen(solicitud, timeout=timeout) as respuesta:
             resultado = json.load(respuesta)
     except HTTPError as exc:
+        if ruta == RUTA_COMPROBACION:
+            try:
+                codigo = json.load(exc).get("detail", {}).get("codigo")
+            except (ValueError, AttributeError):
+                codigo = None
+            if codigo in ERRORES_COMPROBACION:
+                raise RuntimeError(ERRORES_COMPROBACION[codigo]) from None
         # Una respuesta de validación podría incluir la solicitud con credenciales.
         raise RuntimeError(
             f"La API respondió HTTP {exc.code}; no se repetirá la solicitud."
@@ -240,6 +256,11 @@ def main() -> int:
     )
     parser.add_argument("--salida", type=Path)
     parser.add_argument(
+        "--comprobar",
+        action="store_true",
+        help="Prueba catálogo, embeddings y una llamada LLM sin descargar carreras.",
+    )
+    parser.add_argument(
         "--diagnosticar",
         action="store_true",
         help="Consulta los IDs de la última corrida, sin descargar ni pedir claves.",
@@ -259,7 +280,30 @@ def main() -> int:
             )
         print("API disponible. Mantén el backend abierto durante toda la corrida.")
         print(f"LLM habilitado: {config.get('proveedor_llm')} / {config.get('modelo_analista')}")
-        print("Se usará el catálogo vectorizado del backend.")
+        print(
+            "Comprobando índice, embeddings y respuesta LLM. La carga del modelo puede tardar.",
+            flush=True,
+        )
+        timeout = (
+            float(config.get("timeout_llm_seconds", 600))
+            * (int(config.get("max_reintentos_llm", 2)) + 1)
+            + 180
+        )
+        prueba = solicitar(args.api, RUTA_COMPROBACION, {}, timeout=timeout)
+        if prueba.get("lista_para_normalizar") is not True:
+            raise RuntimeError("El backend no confirmó índice, embeddings y LLM disponibles.")
+        catalogo = prueba.get("catalogo") or {}
+        print(
+            f"Comprobación OK: {catalogo.get('id_catalogo')}; "
+            f"{catalogo.get('candidatos')} registros; "
+            f"embeddings={catalogo.get('modelo_embedding')}; "
+            f"LLM respondió en {(prueba.get('prueba_llm') or {}).get('latencia_modelo_ms')} ms.",
+            flush=True,
+        )
+        if args.comprobar:
+            return 0
+        destino.mkdir(parents=True, exist_ok=True)
+        guardar(destino / "comprobacion.json", prueba)
         usuario = input("Usuario ULima: ").strip()
         contrasena = getpass("Contraseña ULima (oculta): ")
         if not usuario or not contrasena or len(usuario) > 200 or len(contrasena) > 200:

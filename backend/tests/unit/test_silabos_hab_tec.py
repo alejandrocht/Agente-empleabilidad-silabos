@@ -26,6 +26,8 @@ from agente.normalizador.empleabilidad.hab_tec_retriever import (
 from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.silabos import analista_tecnico, salida_catalogos
 
+EMBEDDING_REAL = HabTecRetriever._embedding
+
 CARRERA = "Ingeniería de Sistemas"
 NOMBRE = "Arquitectura de software"
 DESCRIPCION = "Diseña estructuras y patrones técnicos."
@@ -487,6 +489,112 @@ def test_sin_candidatos_o_logros_analiza_sin_inventar_habilidades(
     registro["datos"]["logro_general"] = ""
     assert _inferir([registro]) == []
     assert len(llamadas) == 2
+
+
+def test_comprobacion_usa_http_real_del_analista_y_embedding(indice, monkeypatch):
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from agente.api import normalizador
+    from api import servidor
+
+    peticiones = []
+
+    class Ollama(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_POST(self):
+            datos = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            peticiones.append((self.path, datos["model"]))
+            if self.path == "/api/embed":
+                assert datos["model"] == "modelo-del-indice"
+                respuesta = {"embeddings": [[1, 0]]}
+            else:
+                assert self.path == "/v1/chat/completions"
+                assert datos["model"] == "modelo-analista-prueba"
+                assert datos["response_format"]["type"] == "json_schema"
+                respuesta = {
+                    "id": "prueba",
+                    "model": datos["model"],
+                    "created": 0,
+                    "object": "chat.completion",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "stop",
+                            "message": {
+                                "role": "assistant",
+                                "content": '{"competencias": []}',
+                            },
+                        }
+                    ],
+                }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(respuesta).encode())
+
+    proveedor = ThreadingHTTPServer(("127.0.0.1", 0), Ollama)
+    hilo = threading.Thread(target=proveedor.serve_forever, daemon=True)
+    hilo.start()
+    base = f"http://127.0.0.1:{proveedor.server_port}"
+    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_LLM", "true")
+    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_OLLAMA_MODEL", "modelo-analista-prueba")
+    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL", base + "/v1")
+    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES", "0")
+    monkeypatch.setenv("NORMALIZADOR_HAB_TEC_EMBEDDING_ENDPOINT", base + "/api/embed")
+    monkeypatch.setattr(normalizador, "CARRERAS_ULIMA", (CARRERA, "Marketing"))
+    monkeypatch.setattr(HabTecRetriever, "_embedding", EMBEDDING_REAL)
+    try:
+        respuesta = TestClient(servidor.app, client=("127.0.0.1", 0)).post(cli_ruta_comprobacion())
+    finally:
+        proveedor.shutdown()
+        proveedor.server_close()
+        hilo.join()
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["catalogo"]["id_catalogo"] == indice.name
+    assert respuesta.json()["prueba_llm"]["latencia_modelo_ms"] is not None
+    assert peticiones == [
+        ("/api/embed", "modelo-del-indice"),
+        ("/v1/chat/completions", "modelo-analista-prueba"),
+    ]
+
+
+def cli_ruta_comprobacion():
+    from scripts.normalizar_cactus_secuencial import RUTA_COMPROBACION
+
+    return RUTA_COMPROBACION
+
+
+@pytest.mark.parametrize("fallo", ["catalogo", "embedding", "analista"])
+def test_comprobacion_falla_por_etapa_sin_filtrar_secretos(indice, monkeypatch, fallo):
+    from agente.api import normalizador
+    from api import servidor
+
+    monkeypatch.setenv("NORMALIZADOR_CURRICULAR_LLM", "true")
+    if fallo != "catalogo":
+        monkeypatch.setattr(normalizador, "CARRERAS_ULIMA", (CARRERA, "Marketing"))
+
+    def fallar(*_args, **_kwargs):
+        raise RuntimeError("secreto-no-mostrar")
+
+    monkeypatch.setattr(
+        HabTecRetriever, "_embedding", fallar if fallo == "embedding" else lambda *_args: (1, 0)
+    )
+    monkeypatch.setattr(analista_tecnico, "obtener_llm", fallar)
+    respuesta = TestClient(servidor.app, client=("127.0.0.1", 0)).post(cli_ruta_comprobacion())
+    assert respuesta.status_code == 503
+    assert (
+        respuesta.json()["detail"]["codigo"]
+        == {
+            "catalogo": "CATALOGO_NO_DISPONIBLE",
+            "embedding": "EMBEDDING_NO_DISPONIBLE",
+            "analista": "LLM_NO_DISPONIBLE",
+        }[fallo]
+    )
+    assert "secreto-no-mostrar" not in respuesta.text
 
 
 def test_sin_indice_falla_sin_inventar_catalogo(tmp_path: Path, monkeypatch) -> None:
