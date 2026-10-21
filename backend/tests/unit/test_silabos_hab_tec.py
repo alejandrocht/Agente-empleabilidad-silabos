@@ -465,23 +465,41 @@ def test_respuesta_vacia_reenvia_silabo_hasta_habilidad_valida(
     assert auditoria == []
 
 
-def test_quinto_intento_puede_completar_habilidad(indice: Path, monkeypatch) -> None:
+def test_tercer_intento_puede_completar_habilidad(indice: Path, monkeypatch) -> None:
     llamadas = _modelo(
         monkeypatch,
-        [{"competencias": []}] * 4 + [{"competencias": [_propuesta()]}],
+        [{"competencias": []}] * 2 + [{"competencias": [_propuesta()]}],
     )
     assert len(_inferir([_registro()])) == 1
-    assert len(llamadas) == 5
+    assert len(llamadas) == 3
 
 
-def test_cinco_respuestas_vacias_bloquean_silabo(indice: Path, monkeypatch) -> None:
-    llamadas = _modelo(monkeypatch, [{"competencias": []}])
+def test_tres_respuestas_vacias_omiten_silabo_y_continuan(indice: Path, monkeypatch) -> None:
+    llamadas = _modelo(
+        monkeypatch,
+        [{"competencias": []}] * 3 + [{"competencias": [_propuesta()]}],
+    )
     trazas = []
-    with pytest.raises(analista_tecnico.HabilidadMinimaNoCumplida, match="tras 5 intentos"):
-        _inferir([_registro()], al_actualizar_progreso_silabo=trazas.append)
-    assert len(llamadas) == 5
-    assert trazas[-1].estado_analisis == "error"
-    assert trazas[-1].error_codigo == "HABILIDAD_MINIMA_NO_CUMPLIDA"
+    auditoria = []
+    propuestas = _inferir(
+        [_registro(), _registro("SIL_2")],
+        auditoria=auditoria,
+        al_actualizar_progreso_silabo=trazas.append,
+    )
+    assert len(llamadas) == 4
+    assert [propuesta["id_silabo"] for propuesta in propuestas] == ["SIL_2"]
+    assert any(
+        traza.id_silabo == "SIL_1"
+        and traza.estado_analisis == "sin_propuesta"
+        and traza.error_codigo == "HABILIDAD_MINIMA_NO_CUMPLIDA"
+        for traza in trazas
+    )
+    assert auditoria == [{
+        "codigo": "HABILIDAD_MINIMA_NO_CUMPLIDA",
+        "severidad": "warning",
+        "id_silabo": "SIL_1",
+        "mensaje": "El sílabo no produjo una habilidad válida del catálogo tras 3 intentos.",
+    }]
 
 
 @pytest.mark.parametrize("habilitado", [False, True])
@@ -701,8 +719,8 @@ def test_evidencia_inexistente_es_rechazada(indice: Path, monkeypatch) -> None:
 def test_cancelacion_detiene_reintentos_sin_habilidad(indice: Path, monkeypatch) -> None:
     llamadas = _modelo(monkeypatch, [{"competencias": []}])
     with pytest.raises(CancelacionSolicitada):
-        _inferir([_registro()], cancelada=lambda: len(llamadas) >= 3)
-    assert len(llamadas) == 3
+        _inferir([_registro()], cancelada=lambda: len(llamadas) >= 2)
+    assert len(llamadas) == 2
 
 
 def test_cancelacion_se_respeta_entre_silabos(indice: Path, monkeypatch) -> None:

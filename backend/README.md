@@ -140,9 +140,10 @@ propuestas válidas y hallazgos. No modifica las ejecuciones ni sus CSV.
 El analista procesa cada sílabo con los candidatos vectorizados de su propia carrera.
 La política `catalogo_min_1_max_1` queda en el snapshot de cada ejecución. Python exige
 una habilidad válida del catálogo por sílabo y reenvía el mismo contexto al LLM cuando
-la respuesta está vacía o no pasa la validación, hasta un máximo de cinco llamadas por
-sílabo. Si ninguna sirve, esa carrera queda sin publicación y registra
-`HABILIDAD_MINIMA_NO_CUMPLIDA`. La habilidad puede estar sustentada por los logros
+la respuesta está vacía o no pasa la validación, hasta un máximo de tres llamadas por
+sílabo. Si ninguna sirve, registra `HABILIDAD_MINIMA_NO_CUMPLIDA` y continúa con el
+siguiente sílabo. Esa carrera queda sin publicación hasta resolver los faltantes.
+La habilidad puede estar sustentada por los logros
 sin que su nombre aparezca literalmente. Python comprueba la referencia, la evidencia
 del logro y el límite de una habilidad. La publicación se bloquea si algún sílabo queda
 sin habilidad. Una habilidad seleccionada puede conservar varios logros y coberturas.

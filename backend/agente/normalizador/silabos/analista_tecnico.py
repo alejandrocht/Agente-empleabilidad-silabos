@@ -28,7 +28,7 @@ from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import ProgresoSilaboLLM
 
 COLUMNAS_CATALOGO_TECNICO_XLSX = ("Carrera", "Habilidad tecnica", "Descripcion")
-MAX_INTENTOS_HABILIDAD_POR_SILABO = 5
+MAX_INTENTOS_HABILIDAD_POR_SILABO = 3
 
 
 COLUMNAS_MAPA_CARRERA_COMPETENCIA = (
@@ -51,10 +51,6 @@ COLUMNAS_CATALOGO_TECNICO_CSV = (
     "descripciones_alternativas",
 )
 _FilaCatalogo = tuple[int, str, str, str]
-
-
-class HabilidadMinimaNoCumplida(ValueError):
-    """El analista agotó los intentos sin una habilidad válida para el sílabo."""
 
 
 @dataclass(frozen=True)
@@ -807,14 +803,22 @@ def inferir_competencias_tecnicas(
                 al_actualizar_progreso_silabo(
                     replace(
                         traza_base,
-                        estado_analisis="error",
+                        estado_analisis="sin_propuesta",
                         error_codigo="HABILIDAD_MINIMA_NO_CUMPLIDA",
                     )
                 )
-            raise HabilidadMinimaNoCumplida(
-                f"El sílabo {id_silabo or '<sin id>'} no tiene logros o candidatos "
-                "del catálogo para asignar una habilidad válida."
-            )
+            if auditoria is not None:
+                auditoria.append(
+                    {
+                        "codigo": "HABILIDAD_MINIMA_NO_CUMPLIDA",
+                        "severidad": "warning",
+                        "id_silabo": id_silabo or "<sin id>",
+                        "mensaje": "El sílabo no tiene logros o candidatos del catálogo.",
+                    }
+                )
+            if id_silabo:
+                silabos_analizados.add(id_silabo)
+            continue
         if analista is None:
             llm = obtener_llm("analista_curricular", configuracion_curricular=configuracion)
             analista = llm.with_structured_output(
@@ -888,7 +892,7 @@ def inferir_competencias_tecnicas(
                 al_actualizar_progreso_silabo(
                     replace(
                         traza_base,
-                        estado_analisis="error" if sin_mas_intentos else "procesando",
+                        estado_analisis="sin_propuesta" if sin_mas_intentos else "procesando",
                         logros_procesados=logros_totales,
                         latencia_modelo_ms=round((perf_counter() - inicio_modelo) * 1000, 2),
                         error_codigo=(
@@ -899,10 +903,7 @@ def inferir_competencias_tecnicas(
                     )
                 )
             if sin_mas_intentos:
-                raise HabilidadMinimaNoCumplida(
-                    f"El sílabo {id_silabo or '<sin id>'} no produjo una habilidad válida "
-                    f"del catálogo tras {MAX_INTENTOS_HABILIDAD_POR_SILABO} intentos."
-                )
+                break
         propuestas_validas = len(propuestas_validas_filas)
         resultado.extend(propuestas_validas_filas)
         if id_silabo:
@@ -915,9 +916,26 @@ def inferir_competencias_tecnicas(
                     logros_procesados=logros_totales,
                     latencia_modelo_ms=round((perf_counter() - inicio_modelo) * 1000, 2),
                     propuestas_validas=propuestas_validas,
+                    error_codigo=(
+                        "HABILIDAD_MINIMA_NO_CUMPLIDA"
+                        if exigir_habilidad and not propuestas_validas
+                        else None
+                    ),
                 )
             )
-        if auditoria is not None and referencia_rechazada:
+        if auditoria is not None and exigir_habilidad and not propuestas_validas:
+            auditoria.append(
+                {
+                    "codigo": "HABILIDAD_MINIMA_NO_CUMPLIDA",
+                    "severidad": "warning",
+                    "id_silabo": id_silabo or "<sin id>",
+                    "mensaje": (
+                        f"El sílabo no produjo una habilidad válida del catálogo tras "
+                        f"{MAX_INTENTOS_HABILIDAD_POR_SILABO} intentos."
+                    ),
+                }
+            )
+        elif auditoria is not None and referencia_rechazada and not propuestas_validas:
             auditoria.append(
                 {
                     "codigo": "HABILIDAD_FUERA_CATALOGO",
