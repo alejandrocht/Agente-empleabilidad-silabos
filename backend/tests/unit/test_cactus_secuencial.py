@@ -11,7 +11,7 @@ import pytest
 from scripts import normalizar_cactus_secuencial as cli
 
 
-def test_catorce_carreras_por_http_esperan_llm_y_continuan_tras_error(tmp_path: Path):
+def test_doce_carreras_por_http_esperan_llm_y_continuan_tras_error(tmp_path: Path):
     pedidos = []
     activo = None
     consultas = 0
@@ -94,12 +94,14 @@ def test_catorce_carreras_por_http_esperan_llm_y_continuan_tras_error(tmp_path: 
         servidor.server_close()
         hilo.join()
     assert codigo == 1
-    assert pedidos == list(cli.CARRERAS_ULIMA)
+    assert pedidos == list(cli.CARRERAS_CATALOGO_ACTUAL)
+    assert "Ingeniería Ambiental" not in pedidos
+    assert "Ingeniería Mecatrónica" not in pedidos
     resumen = json.loads((tmp_path / "resumen.json").read_text())
-    assert len(resumen) == 14
-    assert sum(r["publicada"] for r in resumen) == 13
+    assert len(resumen) == 12
+    assert sum(r["publicada"] for r in resumen) == 11
     assert resumen[1]["estado"] == "error"
-    assert len(list(tmp_path.glob("*_NOR_*.json"))) == 14
+    assert len(list(tmp_path.glob("*_NOR_*.json"))) == 12
     for archivo in tmp_path.glob("*.json"):
         assert "secreto-prueba" not in archivo.read_text()
         assert "usuario-prueba" not in archivo.read_text()
@@ -117,7 +119,7 @@ def test_desde_psicologia_solicita_solo_ultima_carrera(monkeypatch, tmp_path):
         }
 
     monkeypatch.setattr(cli, "solicitar", solicitar)
-    assert cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=14) == 1
+    assert cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=12) == 1
     assert [p["carrera"] for p in pedidos] == ["Psicología"]
 
 
@@ -169,3 +171,27 @@ def test_cli_comprueba_backend_antes_de_pedir_credenciales(monkeypatch, capsys):
     monkeypatch.setattr(cli, "getpass", no_pedir)
     assert cli.main() == 1
     assert "Sin respuesta" in capsys.readouterr().err
+
+
+def test_cli_rechaza_otra_version_de_catalogo_antes_de_pedir_credenciales(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(cli.sys, "argv", ["normalizar_cactus_secuencial.py"])
+
+    def solicitar(_base, ruta, _datos=None, **_kwargs):
+        if ruta == "/health":
+            return {"status": "ok"}
+        if ruta == "/normalizador/configuracion/curricular":
+            return {"usar_llm": True}
+        return {
+            "lista_para_normalizar": True,
+            "catalogo": {"id_catalogo": "HABTEC_179ad280a3f043d1"},
+        }
+
+    def no_pedir(*_args):
+        pytest.fail("No pedir secretos con el catálogo incorrecto")
+
+    monkeypatch.setattr(cli, "solicitar", solicitar)
+    monkeypatch.setattr(cli, "getpass", no_pedir)
+    assert cli.main() == 1
+    assert cli.CATALOGO_OBJETIVO in capsys.readouterr().err

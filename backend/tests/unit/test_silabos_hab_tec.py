@@ -543,7 +543,6 @@ def test_comprobacion_usa_http_real_del_analista_y_embedding(indice, monkeypatch
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    from agente.api import normalizador
     from api import servidor
 
     peticiones = []
@@ -593,16 +592,18 @@ def test_comprobacion_usa_http_real_del_analista_y_embedding(indice, monkeypatch
     monkeypatch.setenv("NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL", base + "/v1")
     monkeypatch.setenv("NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES", "0")
     monkeypatch.setenv("NORMALIZADOR_HAB_TEC_EMBEDDING_ENDPOINT", base + "/api/embed")
-    monkeypatch.setattr(normalizador, "CARRERAS_ULIMA", (CARRERA, "Marketing"))
     monkeypatch.setattr(HabTecRetriever, "_embedding", EMBEDDING_REAL)
     try:
-        respuesta = TestClient(servidor.app, client=("127.0.0.1", 0)).post(cli_ruta_comprobacion())
+        respuesta = TestClient(servidor.app, client=("127.0.0.1", 0)).post(
+            cli_ruta_comprobacion(), json={"carreras": [CARRERA, "Marketing"]}
+        )
     finally:
         proveedor.shutdown()
         proveedor.server_close()
         hilo.join()
     assert respuesta.status_code == 200, respuesta.text
     assert respuesta.json()["catalogo"]["id_catalogo"] == indice.name
+    assert respuesta.json()["catalogo"]["carreras"] == 2
     assert respuesta.json()["prueba_llm"]["latencia_modelo_ms"] is not None
     assert peticiones == [
         ("/api/embed", "modelo-del-indice"),
@@ -614,6 +615,16 @@ def cli_ruta_comprobacion():
     from scripts.normalizar_cactus_secuencial import RUTA_COMPROBACION
 
     return RUTA_COMPROBACION
+
+
+@pytest.mark.parametrize("carreras", [[], [CARRERA, CARRERA], ["Carrera inexistente"]])
+def test_comprobacion_rechaza_lista_de_carreras_invalida(carreras):
+    from api import servidor
+
+    respuesta = TestClient(servidor.app, client=("127.0.0.1", 0)).post(
+        cli_ruta_comprobacion(), json={"carreras": carreras}
+    )
+    assert respuesta.status_code == 422
 
 
 @pytest.mark.parametrize("fallo", ["catalogo", "embedding", "analista"])
@@ -725,6 +736,16 @@ def test_catalogo_nuevo_no_cambia_version_de_propuesta_aprobada(
     assert cargar_retriever_hab_tec().id_catalogo == nuevo.name
     candidato = analista_tecnico.validar_habilidad_catalogo(propuesta, CARRERA)
     assert candidato.nombre == NOMBRE
+
+
+def test_catalogo_configurado_prevalece_sobre_el_mas_reciente(
+    indice: Path, monkeypatch
+) -> None:
+    nuevo = _vectorizar(indice.parent, monkeypatch)
+    assert cargar_retriever_hab_tec().id_catalogo == nuevo.name
+    monkeypatch.setenv("NORMALIZADOR_HAB_TEC_ID", indice.name)
+    assert cargar_retriever_hab_tec().id_catalogo == indice.name
+    assert cargar_retriever_hab_tec(nuevo.name).id_catalogo == nuevo.name
 
 
 @pytest.mark.parametrize(

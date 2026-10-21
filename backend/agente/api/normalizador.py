@@ -236,6 +236,10 @@ class EventoHitlIn(BaseModel):
     hitl: Literal[0, 1]
 
 
+class ComprobacionCurricularIn(BaseModel):
+    carreras: list[str] | None = None
+
+
 @router.get("/configuracion/curricular")
 def consultar_configuracion_curricular() -> dict[str, object]:
     """Expone la configuración efectiva sin secretos antes de una descarga."""
@@ -246,8 +250,21 @@ def consultar_configuracion_curricular() -> dict[str, object]:
 
 
 @router.post("/configuracion/curricular/comprobar")
-def comprobar_configuracion_curricular() -> dict[str, object]:
+def comprobar_configuracion_curricular(
+    solicitud: ComprobacionCurricularIn | None = None,
+) -> dict[str, object]:
     """Prueba índice, embeddings y analista reales sin crear una ejecución."""
+    carreras = (
+        tuple(solicitud.carreras)
+        if solicitud and solicitud.carreras is not None
+        else CARRERAS_ULIMA
+    )
+    if (
+        not carreras
+        or len(carreras) != len(set(carreras))
+        or not set(carreras) <= set(CARRERAS_ULIMA)
+    ):
+        raise HTTPException(status_code=422, detail="Lista de carreras inválida.")
     try:
         config = configuracion_normalizador_curricular()
     except ValueError:
@@ -259,11 +276,11 @@ def comprobar_configuracion_curricular() -> dict[str, object]:
     try:
         catalogo = analista_tecnico.cargar_catalogo_hab_tec()
         recuperador = catalogo.recuperador
-        faltantes = [c for c in CARRERAS_ULIMA if not catalogo.para_carrera(c)]
+        faltantes = [c for c in carreras if not catalogo.para_carrera(c)]
         if recuperador is None or faltantes:
-            raise ValueError("El índice debe cubrir las 14 carreras.")
+            raise ValueError("El índice debe cubrir las carreras solicitadas.")
         etapa = "EMBEDDING_NO_DISPONIBLE"
-        candidato = catalogo.candidatos[0]
+        candidato = catalogo.para_carrera(carreras[0])[0]
         recuperador.buscar(candidato.nombre, candidato.carrera)
         etapa = "LLM_NO_DISPONIBLE"
         trazas: list[ProgresoSilaboLLM] = []
@@ -301,7 +318,7 @@ def comprobar_configuracion_curricular() -> dict[str, object]:
             **catalogo.a_dict(),
             "modelo_embedding": recuperador.modelo,
             "dimension": len(recuperador.documentos[0].vector),
-            "carreras": len(CARRERAS_ULIMA),
+            "carreras": len(carreras),
         },
         "prueba_llm": traza.a_dict(),
     }

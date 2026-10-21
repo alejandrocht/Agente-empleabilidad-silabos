@@ -32,7 +32,7 @@ def test_no_da_exito_a_csv_permitidos_sin_analista(monkeypatch, tmp_path, habili
     monkeypatch.setattr(cli, "solicitar", solicitar)
     with pytest.raises(RuntimeError, match="LLM"):
         cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path)
-    assert len(pedidos) == 1  # No repetir el problema en las otras 13 carreras.
+    assert len(pedidos) == 1  # No repetir el problema en las otras 11 carreras.
     resumen = json.loads((tmp_path / "resumen.json").read_text())
     assert resumen[0]["publicada"] is False
 
@@ -57,7 +57,7 @@ def test_llm_real_sin_coincidencias_es_valido_sin_forzar_habilidades(monkeypatch
         }
 
     monkeypatch.setattr(cli, "solicitar", solicitar)
-    assert cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=14) == 0
+    assert cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=12) == 0
 
 
 def test_preflight_usa_config_real_del_backend_sin_descargar_o_pedir_secretos(monkeypatch):
@@ -127,7 +127,7 @@ def test_sin_menciones_explicitas_exige_llm_sin_forzar_habilidades(monkeypatch, 
 
     monkeypatch.setattr(cli, "solicitar", solicitar)
     with pytest.raises(RuntimeError, match="LLM"):
-        cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=14)
+        cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=12)
 
 
 def test_no_basta_analizar_solo_un_silabo_de_la_carrera(monkeypatch, tmp_path):
@@ -149,7 +149,7 @@ def test_no_basta_analizar_solo_un_silabo_de_la_carrera(monkeypatch, tmp_path):
 
     monkeypatch.setattr(cli, "solicitar", solicitar)
     with pytest.raises(RuntimeError, match="LLM"):
-        cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=14)
+        cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=12)
 
 
 @pytest.mark.parametrize("correcta", [False, True])
@@ -163,12 +163,17 @@ def test_comprobacion_real_antes_de_credenciales_y_descargas(monkeypatch, correc
             return {}
         if ruta == "/normalizador/configuracion/curricular":
             return {"usar_llm": True, "timeout_llm_seconds": 600, "max_reintentos_llm": 2}
-        assert ruta == cli.RUTA_COMPROBACION and datos == {} and timeout == 1980
+        assert ruta == cli.RUTA_COMPROBACION
+        assert datos == {"carreras": list(cli.CARRERAS_CATALOGO_ACTUAL)}
+        assert timeout == 1980
         if not correcta:
             raise RuntimeError("El analista LLM no responde")
         return {
             "lista_para_normalizar": True,
-            "catalogo": {"id_catalogo": "HABTEC_prueba", "modelo_embedding": "modelo-vector"},
+            "catalogo": {
+                "id_catalogo": cli.CATALOGO_OBJETIVO,
+                "modelo_embedding": "modelo-vector",
+            },
             "prueba_llm": {"latencia_modelo_ms": 5.0},
         }
 

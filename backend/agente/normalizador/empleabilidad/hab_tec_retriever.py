@@ -162,6 +162,7 @@ def cargar_retriever_hab_tec(
     """Carga el índice vectorial vigente; devuelve None si aún no existe."""
 
     base = Path(texto("NORMALIZADOR_HAB_TEC_DIR") or BASE_DIR / ".normalizador" / "hab_tec")
+    id_catalogo = id_catalogo or texto("NORMALIZADOR_HAB_TEC_ID")
     if id_catalogo and not re.fullmatch(r"HABTEC_[0-9a-f]{16}", id_catalogo):
         raise ErrorHabTecRetriever("Identificador de catálogo HAB_TEC inválido.")
     candidatos: list[tuple[str, Path]] = []

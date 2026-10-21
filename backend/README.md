@@ -76,29 +76,38 @@ con carpetas explícitas, por ejemplo `ARQUITECTURA/2026-2/Ciclo_01/curso.docx` 
 manual se procesan las carreras presentes en el ZIP; no se descargan las faltantes.
 El límite multicarrera es de 7000 archivos, conservando los límites de tamaño del ZIP.
 
-Para correr sin frontend y aislar los fallos por carrera, mantén la API en el puerto 8001
+Para correr sin frontend las 12 carreras cubiertas por el catálogo vigente y aislar los
+fallos por carrera, mantén la API en el puerto 8001
 y ejecuta desde `backend`:
 
 ```powershell
 uv run --locked python scripts/normalizar_cactus_secuencial.py --periodo 2026-2
 ```
 
+La corrida queda fijada a `HABTEC_38b1f27240cb401a` y se detiene antes de pedir
+credenciales si el backend usa otro catálogo. Puedes indicar otra versión con
+`--catalogo-id HABTEC_...`; configura también `NORMALIZADOR_HAB_TEC_ID` en el
+backend y reinícialo. El catálogo publicado el 21/10/2026 contiene 12 carreras:
+faltan Ingeniería Ambiental e Ingeniería Mecatrónica. Este script las excluye
+explícitamente de la comprobación y de la descarga. La comprobación general de
+la API sin lista de carreras sigue exigiendo las 14.
+
 El script pide usuario y contraseña ULima (oculta) una vez, y espera hasta que termine
 la normalización de cada carrera antes de solicitar la siguiente, de Administración
-a Psicología. Crea 14 ejecuciones independientes, no un paquete conjunto. Usa `hitl=0`
+a Psicología. Crea 12 ejecuciones independientes, no un paquete conjunto. Usa `hitl=0`
 por defecto; `--hitl 1` exige revisión humana. Cada ejecución conserva el LLM y el
 catálogo vectorizado del backend, y sus CSV siguen sujetos al release gate. Los estados,
 IDs y hallazgos se guardan bajo `backend/resultados_cactus/<fecha>/`, sin credenciales.
 Un error terminal de una carrera no impide intentar las siguientes. Si se pierde conexión,
 se interrumpe con Ctrl+C o aparece un estado desconocido, el script se detiene: el trabajo
 actual puede seguir activo en el backend. Revisa su ID antes de lanzar otra corrida.
-`--desde 2` empieza en Arquitectura; `--desde 14` solo pide Psicología. No reanuda el
+`--desde 2` empieza en Arquitectura; `--desde 12` solo pide Psicología. No reanuda el
 trabajo anterior ni reintenta automáticamente solicitudes de creación sin respuesta.
 
 Antes de descargar, el script consulta `GET /normalizador/configuracion/curricular` y
 exige que el backend tenga `NORMALIZADOR_CURRICULAR_LLM=true`. Muestra el proveedor
-y realiza `POST /normalizador/configuracion/curricular/comprobar`: valida el índice,
-su cobertura de las 14 carreras, un embedding de consulta y una respuesta estructurada
+y realiza `POST /normalizador/configuracion/curricular/comprobar` con las 12 carreras:
+valida el índice, su cobertura, un embedding de consulta y una respuesta estructurada
 del analista usando la misma fábrica de modelos que la ejecución. Si falla, no pide
 credenciales ULima ni descarga carreras. No descarga modelos ni regenera los vectores.
 `--comprobar` ejecuta solo esta prueba. La carga inicial del modelo puede tardar;
