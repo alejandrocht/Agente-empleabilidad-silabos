@@ -140,14 +140,12 @@ Muestra LLM habilitado, modelo, logros detectados, sílabos con respuesta, omiti
 propuestas válidas y hallazgos. No modifica las ejecuciones ni sus CSV.
 
 El analista procesa cada sílabo con los candidatos vectorizados de su propia carrera.
-La política `extraccion_explicita_max_1` queda en el snapshot de cada ejecución.
-Solo admite habilidades cuyo nombre completo aparezca en los logros o en el programa
-analítico del sílabo. Para reconocer la mención se ignoran mayúsculas, tildes y espacios;
-el ID, nombre y descripción exportados permanecen idénticos al catálogo. No admite
-sinónimos, paráfrasis ni habilidades implícitas. La similitud vectorial no prueba una mención.
-El LLM selecciona como máximo una habilidad técnica para todo el sílabo. Python vuelve
-a comprobar la mención y el límite al exportar, incluso con aprobación automática.
-Si no hay coincidencia explícita, se registra `SIN_MENCION_EXPLICITA_CATALOGO` y queda
+La política `catalogo_min_1_max_1` queda en el snapshot de cada ejecución. Python exige
+una habilidad válida del catálogo por sílabo y reenvía el mismo contexto al LLM cuando
+la respuesta está vacía o no pasa la validación. Los reintentos continúan hasta obtenerla
+o cancelar la ejecución. La habilidad puede estar sustentada semánticamente por los logros
+sin que su nombre aparezca literalmente. Python comprueba la referencia, la evidencia
+del logro y el límite de una habilidad. La publicación se bloquea si algún sílabo queda
 sin habilidad. Una habilidad seleccionada puede conservar varios logros y coberturas.
 Los nombres, descripciones e IDs se copian exactamente del catálogo HAB_TEC. Una
 habilidad compartida conserva una fila por carrera cuando su texto oficial varía.

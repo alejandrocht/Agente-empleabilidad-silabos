@@ -89,6 +89,25 @@ def _leer_csv(ruta: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(archivo))
 
 
+def test_corrida_llm_bloquea_silabo_sin_habilidad(tmp_path: Path) -> None:
+    registro = _registro()
+    resultado = construir_salidas_tecnicas(
+        [registro],
+        tmp_path,
+        carrera="SISTEMAS",
+        periodo_academico="2026-2",
+        analisis_tecnico={
+            "estado": "COMPLETADO",
+            "politica_habilidades": "catalogo_min_1_max_1",
+        },
+    )
+    assert resultado.publicable is False
+    assert "SYLLABUS_WITHOUT_SKILL" in resultado.release_gate["blockers"]
+    assert resultado.release_gate["checks"]["skills_per_syllabus"]["missing_syllabus_ids"] == [
+        registro["id_silabo"]
+    ]
+
+
 def test_catalogo_competencias_emite_header_publico_y_conserva_descripcion(
     tmp_path: Path,
 ) -> None:

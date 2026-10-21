@@ -646,6 +646,7 @@ def limpiar_archivo(
                         "COMPLETADO_CON_ADVERTENCIAS" if advertencias_tecnicas else "COMPLETADO"
                     ),
                     "modo_analista": "technical",
+                    "politica_habilidades": "catalogo_min_1_max_1",
                     "propuestas_pendientes": len(propuestas_tecnicas),
                 }
                 if auditoria_tecnica:
@@ -681,6 +682,7 @@ def limpiar_archivo(
                 analisis_tecnico = {
                     "estado": "FALLBACK_DETERMINISTA",
                     "modo_analista": "technical",
+                    "politica_habilidades": "catalogo_min_1_max_1",
                     "error": f"{type(exc).__name__}: {str(exc)[:300]}",
                     "propuestas_pendientes": 0,
                 }

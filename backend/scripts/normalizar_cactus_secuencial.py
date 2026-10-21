@@ -115,12 +115,11 @@ def resumen_analisis(estado: dict[str, Any]) -> dict[str, Any]:
             for s in silabos
         ),
         "propuestas_validas": sum(s.get("propuestas_validas", 0) for s in silabos),
-        "silabos_sin_mencion_explicita": sum(
-            s.get("error_codigo") == "SIN_MENCION_EXPLICITA_CATALOGO"
-            and s.get("estado_analisis") == "sin_propuesta"
-            and s.get("latencia_modelo_ms") is None
-            for s in silabos
-        ),
+        "silabos_sin_habilidad": [
+            s.get("id_silabo") for s in silabos
+            if s.get("estado_analisis") == "completado"
+            and s.get("propuestas_validas", 0) < 1
+        ],
     }
 
 
@@ -238,10 +237,12 @@ def ejecutar(
             analisis["llm_habilitado"] is not True
             or not esperados
             or analisis["silabos_modelo"] != esperados
+            or analisis["propuestas_validas"] < esperados
+            or analisis["silabos_sin_habilidad"]
             or analisis["fase_llm"] != "completado"
         ):
             raise RuntimeError(
-                f"La ejecución {identificador} permitió CSV sin análisis LLM comprobado. "
+                f"La ejecución {identificador} permitió CSV sin una habilidad válida por sílabo. "
                 "Revisa los logros, candidatos vectorizados y el reporte del analista"
             )
         fila["publicada"] = publicada

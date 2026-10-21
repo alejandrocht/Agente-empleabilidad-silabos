@@ -290,6 +290,7 @@ def comprobar_configuracion_curricular(
             config,
             catalogo,
             al_actualizar_progreso_silabo=trazas.append,
+            exigir_habilidad=False,
         )
         traza = trazas[-1]
         if traza.latencia_modelo_ms is None or traza.estado_analisis != "sin_propuesta":

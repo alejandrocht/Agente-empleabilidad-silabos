@@ -91,14 +91,14 @@ def _propuesta(ref: str | None = "HAB_TEC_001") -> dict[str, Any]:
     }
 
 
-def _modelo(monkeypatch: pytest.MonkeyPatch, respuestas: list[dict[str, Any]]) -> list[Any]:
+def _modelo(monkeypatch: pytest.MonkeyPatch, respuestas: list[dict[str, Any] | None]) -> list[Any]:
     llamadas: list[Any] = []
 
     class Modelo:
         def with_structured_output(self, *_args: Any, **_kwargs: Any) -> Modelo:
             return self
 
-        def invoke(self, mensajes: Any) -> dict[str, Any]:
+        def invoke(self, mensajes: Any) -> dict[str, Any] | None:
             llamadas.append(mensajes)
             return deepcopy(respuestas.pop(0) if len(respuestas) > 1 else respuestas[0])
 
@@ -195,17 +195,21 @@ def test_modelo_selecciona_referencia_y_python_copia_campos_exactos(
     assert payload["syllabus_context"]["logros"] == [{"texto": LOGRO}]
 
 
-def test_no_infiere_habilidad_desde_un_logro_sin_nombre_explicito(indice, monkeypatch):
-    llamadas = _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+def test_acepta_habilidad_sustentada_sin_nombre_explicito(indice, monkeypatch):
     registro = _registro()
-    registro["datos"]["logro_general"] = "Diseña estructuras y patrones mantenibles."
-    # Nombre de curso y descripción del catálogo no cuentan como evidencia de habilidad.
-    monkeypatch.setattr(HabTecRetriever, "_embedding", lambda *_args: pytest.fail("Sin mención"))
+    logro = "Diseña estructuras y patrones mantenibles."
+    registro["datos"]["logro_general"] = logro
+    propuesta = {
+        **_propuesta(),
+        "logros": [logro],
+        "evidencia": [{"fuente": "logro", "fragmento": logro}],
+    }
+    llamadas = _modelo(monkeypatch, [{"competencias": [propuesta]}])
     trazas = []
-    assert _inferir([registro], al_actualizar_progreso_silabo=trazas.append) == []
-    assert len(llamadas) >= 1
+    assert len(_inferir([registro], al_actualizar_progreso_silabo=trazas.append)) == 1
+    assert len(llamadas) == 1
     assert trazas[-1].latencia_modelo_ms is not None
-    assert trazas[-1].estado_analisis == "sin_propuesta"
+    assert trazas[-1].estado_analisis == "completado"
 
 
 def test_modelo_no_puede_devolver_dos_habilidades_por_silabo(indice, monkeypatch):
@@ -242,20 +246,22 @@ def test_exportacion_rechaza_segunda_habilidad_aun_aprobada(indice, monkeypatch,
     assert not (tmp_path / "catalogo_habilidades.csv").exists()
 
 
-def test_exportacion_revalida_mencion_y_rechaza_inferencia_aprobada(indice, monkeypatch, tmp_path):
+def test_exportacion_acepta_habilidad_semantica_aprobada(indice, monkeypatch, tmp_path):
     _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
     registro = _registro()
     aprobada = {**_inferir([registro])[0], "estado_aprobacion": "APROBADA"}
-    registro["datos"]["logro_general"] = "Diseña estruturas y patrones mantenibles."
-    with pytest.raises(ValueError, match="mencionada explícitamente"):
-        salida_catalogos.construir_catalogos_curriculares(
-            [registro],
-            tmp_path,
-            carrera="INGENIERIA_DE_SISTEMAS",
-            periodo_academico="2026-2",
-            competencias_tecnicas=[aprobada],
-        )
-    assert not (tmp_path / "catalogo_habilidades.csv").exists()
+    logro = "Diseña estruturas y patrones mantenibles."
+    registro["datos"]["logro_general"] = logro
+    aprobada["logros"] = [logro]
+    aprobada["evidencia"] = [{"fuente": "logro", "fragmento": logro}]
+    salida_catalogos.construir_catalogos_curriculares(
+        [registro],
+        tmp_path,
+        carrera="INGENIERIA_DE_SISTEMAS",
+        periodo_academico="2026-2",
+        competencias_tecnicas=[aprobada],
+    )
+    assert (tmp_path / "catalogo_habilidades.csv").exists()
 
 
 @pytest.mark.parametrize(
@@ -280,8 +286,8 @@ def test_rechaza_inventadas_y_referencias_no_recuperadas(
 ) -> None:
     llamadas = _modelo(monkeypatch, [{"competencias": [_propuesta(ref)]}])
     auditoria: list[dict[str, object]] = []
-    assert _inferir([_registro()], auditoria=auditoria) == []
-    assert len(llamadas) == 2
+    assert _inferir([_registro()], auditoria=auditoria, exigir_habilidad=False) == []
+    assert len(llamadas) == 1
     assert auditoria[0]["codigo"] == "HABILIDAD_FUERA_CATALOGO"
 
 
@@ -445,14 +451,18 @@ def test_api_multicarrera_normaliza_aprueba_y_publica_un_solo_paquete(
     assert len(list((tmp_path / "ejecuciones").glob("NOR_*"))) == 1
 
 
-def test_sin_coincidencias_no_fuerza_propuesta_ni_reintenta(
+def test_respuesta_vacia_reenvia_silabo_hasta_habilidad_valida(
     indice: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    llamadas = _modelo(monkeypatch, [{"competencias": []}])
+    llamadas = _modelo(monkeypatch, [
+        None,
+        {"competencias": []},
+        {"competencias": [_propuesta()]},
+    ])
     auditoria: list[dict[str, object]] = []
-    assert _inferir([_registro()], auditoria=auditoria) == []
-    assert len(llamadas) == 1
-    assert auditoria[0]["severidad"] == "info"
+    assert len(_inferir([_registro()], auditoria=auditoria)) == 1
+    assert len(llamadas) == 3
+    assert auditoria == []
 
 
 @pytest.mark.parametrize("habilitado", [False, True])
@@ -532,10 +542,10 @@ def test_sin_candidatos_o_logros_analiza_sin_inventar_habilidades(
     llamadas = _modelo(monkeypatch, [{"competencias": []}])
     registro = _registro()
     registro["carrera"] = "Carrera sin catálogo"
-    assert _inferir([registro]) == []
+    assert _inferir([registro], exigir_habilidad=False) == []
     registro = _registro()
     registro["datos"]["logro_general"] = ""
-    assert _inferir([registro]) == []
+    assert _inferir([registro], exigir_habilidad=False) == []
     assert len(llamadas) == 2
 
 
@@ -666,7 +676,14 @@ def test_evidencia_inexistente_es_rechazada(indice: Path, monkeypatch) -> None:
     propuesta = _propuesta()
     propuesta["evidencia"][0]["fragmento"] = "Una evidencia ajena al sílabo."
     _modelo(monkeypatch, [{"competencias": [propuesta]}])
-    assert _inferir([_registro()]) == []
+    assert _inferir([_registro()], exigir_habilidad=False) == []
+
+
+def test_cancelacion_detiene_reintentos_sin_habilidad(indice: Path, monkeypatch) -> None:
+    llamadas = _modelo(monkeypatch, [{"competencias": []}])
+    with pytest.raises(CancelacionSolicitada):
+        _inferir([_registro()], cancelada=lambda: len(llamadas) >= 3)
+    assert len(llamadas) == 3
 
 
 def test_cancelacion_se_respeta_entre_silabos(indice: Path, monkeypatch) -> None:

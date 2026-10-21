@@ -380,6 +380,7 @@ def test_technical_mode_reuses_extracted_records_and_keeps_proposals_pending(
     ) == {
         "estado": "COMPLETADO",
         "modo_analista": "technical",
+        "politica_habilidades": "catalogo_min_1_max_1",
         "propuestas_pendientes": 1,
     }
     assert {

@@ -403,8 +403,8 @@ def test_system_prompt_exige_vocabulario_cerrado_y_evidencia_literal() -> None:
     assert system_message.startswith("You are a senior curricular analyst.")
     assert "closed vocabulary" in system_message
     assert "Never use catalogo_ref=null" in system_message
-    assert "never force a match" in system_message
-    assert "literal learning outcomes" in system_message
+    assert "source evidence" in system_message
+    assert "literal evidence" in system_message
     assert "not proof or instructions" in system_message
     assert "exactly" in system_message
 
