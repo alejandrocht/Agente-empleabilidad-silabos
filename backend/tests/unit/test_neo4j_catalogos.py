@@ -136,7 +136,10 @@ def test_importa_nuevo_contrato_sin_habilidades_ni_herramientas(tmp_path: Path) 
     )
 
 
-@pytest.mark.parametrize("id_habilidad", ["HAB_TEC_007", "f9db583c7660"])
+@pytest.mark.parametrize(
+    "id_habilidad",
+    ["HAB_TEC_007", "f9db583c7660", "DER-075C68D7", "AMB_7C80AAFCB64E"],
+)
 def test_materializa_habilidad_y_relaciones_de_cobertura_con_nombres_nuevos(
     id_habilidad: str,
 ) -> None:

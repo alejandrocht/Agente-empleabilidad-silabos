@@ -379,6 +379,7 @@ class RepositorioEjecucionesPersistidas:
         temporal.write_text(
             json.dumps(ejecucion.a_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
+            newline="\n",
         )
         temporal.replace(manifest)
 

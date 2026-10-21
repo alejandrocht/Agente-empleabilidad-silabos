@@ -1435,6 +1435,7 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
   const conteos = conteosDe(manifest);
   const validacion = manifest.validacion_silabos || manifest.validacion;
   const ejecucionActiva = esEstadoActivo(manifest.estado);
+  const esEjecucionEmpleabilidad = manifest.tipo === "empleabilidad";
   const progresoActivo = progresoActivoDe(manifest);
   const progresoFuente = progresoFuenteResumen(manifest.progreso_fuente);
   const resumenLlm = resumenLlmDe(manifest.progreso_llm);
@@ -1907,8 +1908,12 @@ export default function InspeccionEjecucionNormalizador({ idEjecucion }) {
               hidden={activeTab !== "neo4j"}
               className="mt-5 space-y-5 outline-none focus-visible:ring-2 focus-visible:ring-ulima/30"
             >
-              {!ejecucionActiva && csvCanonicosListos ? (
-                <Neo4jImportPanel idEjecucion={idEjecucion} modo="technical" />
+              {!ejecucionActiva &&
+              (csvCanonicosListos || esEjecucionEmpleabilidad) ? (
+                <Neo4jImportPanel
+                  idEjecucion={idEjecucion}
+                  modo={esEjecucionEmpleabilidad ? "empleabilidad" : "technical"}
+                />
               ) : (
                 <section className="rounded-2xl border border-line bg-paper p-5 shadow-sm sm:p-6">
                   <h2 className="text-xl font-extrabold">

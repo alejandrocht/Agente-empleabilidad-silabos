@@ -1,0 +1,725 @@
+{
+  "id_catalogo": "HABTEC_38b1f27240cb401a",
+  "archivo": "catalogo_hab_tec.xlsx",
+  "estado": "vectorizado",
+  "creado_en": "2026-10-21T14:39:28.100444+00:00",
+  "actualizada_en": "2026-10-21T14:39:56.566179+00:00",
+  "hoja": "HAB_TEC",
+  "valido": true,
+  "resumen": {
+    "habilidades": 1223,
+    "errores": 0,
+    "advertencias": 0,
+    "modelo_embedding": "qwen3-embedding:0.6b",
+    "dimension_embedding": 1024,
+    "neo4j": {
+      "habilidades": 1098,
+      "asociaciones": 1223
+    }
+  },
+  "preview": [
+    {
+      "carrera": "Psicologia",
+      "id": "3f5deab8a6af",
+      "nombre": "Psicopatología",
+      "descripcion": "Conocer trastornos y alteraciones psicológicas y psiquiátricas, sus manifestaciones, causas, modelos explicativos, criterios de comprensión y bases de tratamiento para fundamentar la evaluación y la intervención psicológica.",
+      "fila": 2
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "b952d492f6eb",
+      "nombre": "Diagnóstico psicológico",
+      "descripcion": "Integrar antecedentes, entrevistas, observaciones e instrumentos para formular diagnósticos contextualizados; aplicar sistemas de clasificación y criterios diferenciales para distinguir condiciones de síntomas similares en distintos grupos de edad.",
+      "fila": 3
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "309a98fe3c2d",
+      "nombre": "Entrevista psicológica",
+      "descripcion": "Conducir entrevistas de evaluación, intervención o selección; observar e interpretar la comunicación verbal y no verbal, incluidas las propias señales, y registrar sistemáticamente la información para su análisis.",
+      "fila": 4
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "fcc273942e91",
+      "nombre": "Análisis de patrones psicológicos",
+      "descripcion": "Identificar e interpretar patrones de comportamiento y emociones mediante pruebas e instrumentos para comprender los factores que los explican.",
+      "fila": 5
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "c3fe79f367f5",
+      "nombre": "Elaboración de perfiles psicológicos",
+      "descripcion": "Construcción del perfil de una persona describiendo sus características, personalidad, habilidades y motivaciones a partir de entrevistas o cuestionarios.",
+      "fila": 6
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "4827ad882a73",
+      "nombre": "Evaluación y formulación clínica",
+      "descripcion": "Evaluar la salud y el funcionamiento psicológico y su impacto en la experiencia de la persona; integrar los hallazgos y las necesidades del paciente en una formulación del caso que oriente posibles soluciones e intervenciones.",
+      "fila": 7
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "3875085d0463",
+      "nombre": "Evaluación del riesgo de daño",
+      "descripcion": "Valoración del riesgo de que una persona se dañe a sí misma o a terceros, con intervención y medidas preventivas para reducirlo al mínimo.",
+      "fila": 8
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "35d4d7de438e",
+      "nombre": "Identificación de síntomas psiquiátricos",
+      "descripcion": "Reconocimiento de síntomas psiquiátricos, neurológicos y médicos frecuentes, como delirio, demencia, conductas autolesivas o violentas, para orientar la evaluación y la derivación.",
+      "fila": 9
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "a5278da5d9b8",
+      "nombre": "Elaboración de informes psicológicos",
+      "descripcion": "Elaborar informes psicológicos, incluidos los clínicos, integrando antecedentes, procedimientos, resultados, interpretación, diagnóstico cuando corresponda, conclusiones y recomendaciones según el contexto de evaluación.",
+      "fila": 10
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "2f90fad158ee",
+      "nombre": "Técnicas de evaluación educativa y del desempeño",
+      "descripcion": "Técnicas, teorías e instrumentos para evaluar a estudiantes, participantes de programas y empleados, incluidas la evaluación inicial, formativa y sumativa.",
+      "fila": 11
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "9c102cc6f881",
+      "nombre": "Emisión de opiniones expertas en psicología clínica",
+      "descripcion": "Elaborar y comunicar opiniones expertas en psicología clínica sustentadas en evidencia científica y conocimiento especializado.",
+      "fila": 12
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "186b6efd6a0a",
+      "nombre": "Evaluación psicológica infantojuvenil",
+      "descripcion": "Evaluar necesidades y problemas de niños y adolescentes integrando aspectos físicos, evolutivos, emocionales, cognitivos, educativos, familiares y sociales para orientar la intervención.",
+      "fila": 13
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "02887b8c8987",
+      "nombre": "Aplicación e interpretación de pruebas psicológicas",
+      "descripcion": "Administrar pruebas psicológicas estandarizadas siguiendo procedimientos técnicos de aplicación y registro, e interpretar sus resultados sobre inteligencia, logros, intereses y personalidad.",
+      "fila": 14
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "3f04513ff1b8",
+      "nombre": "Aplicación e interpretación de técnicas proyectivas",
+      "descripcion": "Administrar, analizar e integrar técnicas proyectivas de personalidad para sustentar hipótesis psicológicas.",
+      "fila": 15
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "c6c3ffb6e194",
+      "nombre": "Construcción y validación de instrumentos psicológicos",
+      "descripcion": "Definir constructos, elaborar ítems y planificar procedimientos de medición; analizar validez, confiabilidad, error de medida, normas y puntuaciones para construir instrumentos y valorar su calidad psicométrica.",
+      "fila": 16
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "ceb315019da5",
+      "nombre": "Evaluación psicológica del funcionamiento y rendimiento",
+      "descripcion": "Realizar evaluaciones psicológicas orientadas a describir el funcionamiento y el rendimiento psicológico mediante procedimientos de valoración pertinentes al contexto.",
+      "fila": 17
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "8fe7e8780968",
+      "nombre": "Consejería psicológica",
+      "descripcion": "Aplicar técnicas de consejería a personas y grupos, incluidos contextos clínicos, para abordar problemas y posibilidades de cambio; facilitar autoevaluación, reflexión y decisiones autónomas, clarificar contenidos y emplear procedimientos de supervisión y mediación del proceso cuando correspondan.",
+      "fila": 18
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "d87608626871",
+      "nombre": "Fundamentos de intervención en crisis",
+      "descripcion": "Conocimiento de mecanismos y técnicas para ayudar a las personas a afrontar situaciones de crisis, superar temores y prevenir el sufrimiento psicológico agudo.",
+      "fila": 19
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "c61e55da7e30",
+      "nombre": "Evaluación de necesidades psicológicas asociadas al trauma",
+      "descripcion": "Evaluación de las competencias, necesidades y limitaciones de personas afectadas por traumas, con derivación a servicios especializados cuando corresponda.",
+      "fila": 20
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "e9296936d917",
+      "nombre": "Terapia sistémica",
+      "descripcion": "Intervención terapéutica que aborda a las personas en sus relaciones, trabajando las interacciones, patrones y dinámicas de familias y grupos.",
+      "fila": 21
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "b79f29ebaaea",
+      "nombre": "Fundamentos y técnicas de terapia de conducta",
+      "descripcion": "Bases y técnicas de la terapia conductual, centrada en modificar comportamientos no deseados a partir del análisis de la conducta actual.",
+      "fila": 22
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "b07f88947901",
+      "nombre": "Terapia cognitivo-conductual",
+      "descripcion": "Aplicación de técnicas cognitivo-conductuales para abordar emociones disfuncionales, conductas desadaptativas y procesos cognitivos mediante reestructuración y entrenamiento de habilidades.",
+      "fila": 23
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "823957cfbc73",
+      "nombre": "Psicoterapia centrada en el cliente",
+      "descripcion": "Enfoque terapéutico que anima al consultante a centrarse en cómo se siente en el momento presente para encontrar sus propias soluciones.",
+      "fila": 24
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "94bc69395a5b",
+      "nombre": "Fundamentos del enfoque psicodinámico",
+      "descripcion": "Analizar conceptos y fundamentos del enfoque psicodinámico para comprender su formulación del funcionamiento psicológico y sus implicancias para la intervención.",
+      "fila": 25
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "d00cc3f8e626",
+      "nombre": "Práctica del psicoanálisis",
+      "descripcion": "Práctica psicoterapéutica centrada en las fuerzas inconscientes que influyen negativamente en el bienestar psicológico del paciente.",
+      "fila": 26
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "9c77483b571a",
+      "nombre": "Métodos de intervención psicológica",
+      "descripcion": "Características de los métodos y procedimientos psicológicos destinados a generar cambios en el comportamiento humano en diversos contextos.",
+      "fila": 27
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "5f7b03ac0f1e",
+      "nombre": "Métodos de psicología de emergencias y desastres",
+      "descripcion": "Métodos psicológicos para atender a personas y comunidades afectadas por traumas, emergencias o catástrofes y favorecer su recuperación emocional.",
+      "fila": 28
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "246732d3d1b8",
+      "nombre": "Intervención psicoterapéutica",
+      "descripcion": "Planificar y conducir sesiones individuales o grupales en un entorno controlado y aplicar estrategias y técnicas sobre patrones psicológicos, adecuadas al enfoque, trastornos, síntomas, edades, fases del tratamiento, necesidades y contexto de atención.",
+      "fila": 29
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "998f4e4b3b0a",
+      "nombre": "Aplicación de protocolos clínicos",
+      "descripcion": "Uso de guías de práctica clínica y protocolos acordados por instituciones de salud, asociaciones profesionales y entidades científicas en la atención psicológica.",
+      "fila": 30
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "108c152540f5",
+      "nombre": "Atención psicológica de abuso y maltrato",
+      "descripcion": "Intervención con personas afectadas por abusos sexuales, maltrato y traumas físicos, psicológicos, culturales o por negligencia.",
+      "fila": 31
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "21c9c35ab22b",
+      "nombre": "Cierre del proceso terapéutico",
+      "descripcion": "Identificación, junto con el paciente, del momento adecuado para finalizar la intervención terapéutica según los objetivos planteados al inicio.",
+      "fila": 32
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "3b5f8ef42d78",
+      "nombre": "Encuadre y alianza terapéutica",
+      "descripcion": "Establecer y mantener un espacio terapéutico seguro, acogedor y coherente con las necesidades del paciente, junto con una relación colaborativa de confianza y cooperación durante el tratamiento.",
+      "fila": 33
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "064e628bb43c",
+      "nombre": "Selección del tratamiento psicológico",
+      "descripcion": "Analizar modelos psicoterapéuticos y su aplicabilidad para indicar, orientar y conducir el tratamiento adecuado a las características, necesidades y problemas mentales, emocionales o conductuales del paciente.",
+      "fila": 34
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "a94f480c6748",
+      "nombre": "Seguimiento y evaluación terapéutica",
+      "descripcion": "Monitorear y registrar el proceso, progreso, impacto y resultados del tratamiento mediante observación, escucha y medición, considerando la percepción del paciente y ajustando la intervención según su respuesta.",
+      "fila": 35
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "1c5044eb26b6",
+      "nombre": "Psicoeducación con pacientes y familias",
+      "descripcion": "Desarrollar acciones educativas con pacientes y familias para comprender la condición de salud, sus implicancias psicológicas, el tratamiento y las estrategias de afrontamiento.",
+      "fila": 36
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "01cd9159c22e",
+      "nombre": "Manejo de reacciones emocionales extremas",
+      "descripcion": "Respuesta profesional ante pacientes en pánico, angustia extrema, agresividad, conductas violentas o riesgo suicida, aplicando técnicas de contención y estabilización emocional.",
+      "fila": 37
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "cf392a7e796f",
+      "nombre": "Planificación de intervenciones psicológicas",
+      "descripcion": "Diseñar planes de intervención psicológica, incluidos tratamientos individualizados acordados con el paciente, articulando diagnóstico, objetivos, metas, estrategias, técnicas, evaluación y contexto ético-profesional.",
+      "fila": 38
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "ffa6a773a7e6",
+      "nombre": "Prevención de recaídas",
+      "descripcion": "Apoyo al paciente para identificar situaciones de alto riesgo y desencadenantes, y desarrollar estrategias de afrontamiento y planes de contingencia.",
+      "fila": 39
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "4c40dbae6d8e",
+      "nombre": "Técnicas de motivación para el cambio",
+      "descripcion": "Uso de técnicas y procedimientos que fomentan la motivación del paciente para el cambio y su compromiso sostenido con el tratamiento psicológico.",
+      "fila": 40
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "98825d31c081",
+      "nombre": "Fundamentos de psicología de la salud",
+      "descripcion": "Conocer conceptos y fundamentos psicológicos y sus aplicaciones a la comprensión de conductas, la prevención, la promoción y la atención en salud.",
+      "fila": 41
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "b6eaf2d779e3",
+      "nombre": "Organización de servicios de atención psicológica",
+      "descripcion": "Conocer características, organización y formas de prestación de servicios psicológicos ambulatorios y hospitalarios, incluidos servicios clínicos especializados de psicoterapia.",
+      "fila": 42
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "d170c6a85d06",
+      "nombre": "Acompañamiento de pacientes con medicación",
+      "descripcion": "Trabajo psicológico con pacientes que reciben tratamiento farmacológico, considerando su adherencia y los efectos de la medicación en la intervención.",
+      "fila": 43
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "cc08ba559a83",
+      "nombre": "Análisis de procesos de atención sanitaria",
+      "descripcion": "Analizar procesos y factores que influyen en la prestación de la atención sanitaria desde una perspectiva psicológica y de servicios de salud.",
+      "fila": 44
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "2cf96da739ff",
+      "nombre": "Asesoramiento en políticas de atención sanitaria",
+      "descripcion": "Asesorar a responsables de políticas o gestión sobre aspectos relacionados con la atención sanitaria, incorporando evidencia relevante para la toma de decisiones.",
+      "fila": 45
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "e588a6f9ecfd",
+      "nombre": "Asesoría psicológica en salud y salud mental",
+      "descripcion": "Asesorar a personas, grupos e instituciones sobre factores personales, sociales y estructurales de la salud mental, conductas de riesgo para la salud, sus causas y opciones de cambio.",
+      "fila": 46
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "36f029f33ed6",
+      "nombre": "Detección de problemas de salud mental",
+      "descripcion": "Reconocimiento y evaluación crítica de posibles problemas o trastornos de salud mental en personas de distintos grupos y contextos.",
+      "fila": 47
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "6f1225d0dbab",
+      "nombre": "Educación para la salud",
+      "descripcion": "Aplicar estrategias educativas y psicológicas basadas en evidencia para promover actividad física, alimentación, higiene y controles preventivos, así como prevenir y manejar enfermedades en personas y grupos.",
+      "fila": 48
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "220e945ef8ef",
+      "nombre": "Intervención en conductas de riesgo",
+      "descripcion": "Aplicación de medidas psicológicas a personas y grupos sobre comportamientos de riesgo para la salud, como consumo de sustancias o mala alimentación.",
+      "fila": 49
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "2a39c33445db",
+      "nombre": "Promoción de la salud mental",
+      "descripcion": "Promover acciones de educación psicosocial y factores de bienestar emocional, autoaceptación, crecimiento personal, propósito vital y relaciones positivas para favorecer la comprensión de problemas de salud mental y la convivencia.",
+      "fila": 50
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "0391c038b1d1",
+      "nombre": "Programas de promoción de la salud",
+      "descripcion": "Planificación, ejecución y evaluación de proyectos de promoción de la salud en escuelas, centros laborales, comunidades y atención primaria.",
+      "fila": 51
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "93a408cfd943",
+      "nombre": "Abordaje psicosomático",
+      "descripcion": "Abordaje de la relación entre procesos mentales y corporales, como enfermedades psicosomáticas y el espectro de la sexualidad humana.",
+      "fila": 52
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "2940aaa2a81d",
+      "nombre": "Intervención psicológica ante la enfermedad",
+      "descripcion": "Analizar el impacto psicológico de la enfermedad e intervenir con pacientes, familiares y cuidadores para favorecer autocuidado, afrontamiento del dolor y adaptación, incluidas enfermedades crónicas como cáncer y diabetes.",
+      "fila": 53
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "9ab24a08ca42",
+      "nombre": "Telesalud y salud digital",
+      "descripcion": "Uso de aplicaciones y servicios en línea de salud digital para brindar atención, seguimiento e intervención psicológica a distancia.",
+      "fila": 54
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "e66ffd17db89",
+      "nombre": "Dificultades de aprendizaje",
+      "descripcion": "Trastornos específicos del aprendizaje en contextos académicos, como dislexia, discalculia y trastornos de déficit de atención.",
+      "fila": 55
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "188f0970fecd",
+      "nombre": "Diseño de experiencias de aprendizaje",
+      "descripcion": "Aplicar teorías y principios del aprendizaje para analizar situaciones educativas y profesionales y diseñar programas formativos y recursos mediante modelos instruccionales.",
+      "fila": 56
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "ef00d18d1824",
+      "nombre": "Evaluación psicopedagógica",
+      "descripcion": "Planificar e integrar evaluaciones de necesidades educativas y dificultades escolares; observar la conducta social y aplicar pruebas psicoeducativas de intereses, personalidad, cognición, lenguaje y habilidades matemáticas para orientar decisiones y apoyos.",
+      "fila": 57
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "9c76e14e95f1",
+      "nombre": "Evaluación e intervención para la inclusión",
+      "descripcion": "Evaluar discapacidad, diversidad funcional y altas capacidades mediante criterios biopsicosociales, diagnósticos y de funcionamiento, y diseñar programas de intervención e inclusión basados en evidencia y necesidades.",
+      "fila": 58
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "7caad252840c",
+      "nombre": "Diseño de intervenciones psicopedagógicas",
+      "descripcion": "Diseñar actividades e intervenciones psicopedagógicas basadas en teorías del aprendizaje y necesidades del contexto educativo.",
+      "fila": 59
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "1e369474d0d7",
+      "nombre": "Orientación psicopedagógica al estudiante",
+      "descripcion": "Asesoría a estudiantes con dificultades educativas, vocacionales o personales, como el ajuste escolar, la integración social y la planificación académica.",
+      "fila": 60
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "23491ffff4f5",
+      "nombre": "Evaluación y orientación vocacional",
+      "descripcion": "Evaluar intereses, competencias y condiciones educativas y laborales mediante entrevistas, pruebas y otros procedimientos para formular un diagnóstico vocacional y asesorar decisiones académicas, ocupacionales y profesionales.",
+      "fila": 61
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "2ccc163357be",
+      "nombre": "Diseño de programas de orientación vocacional",
+      "descripcion": "Diseñar y ejecutar programas de orientación vocacional y ocupacional coherentes con el diagnóstico y las decisiones académicas o laborales.",
+      "fila": 62
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "82be32725f0d",
+      "nombre": "Psicología educativa",
+      "descripcion": "Estudio del comportamiento y el rendimiento humano en los procesos escolares, las necesidades de aprendizaje y las pruebas psicológicas aplicadas en educación.",
+      "fila": 63
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "e31da9142887",
+      "nombre": "Coordinación con la comunidad educativa",
+      "descripcion": "Trabajo conjunto con docentes, directivos, tutores y familias para abordar el bienestar, la conducta y el rendimiento académico de los estudiantes.",
+      "fila": 64
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "45c902d5a564",
+      "nombre": "Capacitación y desarrollo del talento",
+      "descripcion": "Identificar brechas y necesidades de formación y diseñar y ejecutar estrategias de capacitación, aprendizaje y desarrollo de trabajadores, adaptadas al grupo y alineadas con los objetivos organizacionales.",
+      "fila": 65
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "e7f333acb94a",
+      "nombre": "Diagnóstico de cultura y clima organizacional",
+      "descripcion": "Seleccionar y aplicar métodos para diagnosticar cultura y clima organizacional e interpretar brechas para orientar planes de acción.",
+      "fila": 66
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "7feda8a4719d",
+      "nombre": "Análisis del comportamiento organizacional",
+      "descripcion": "Analizar problemas y procesos de comportamiento organizacional mediante conceptos, modelos y evidencia psicológica aplicada a las organizaciones.",
+      "fila": 67
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "2bd00b3e2269",
+      "nombre": "Investigación del comportamiento organizacional",
+      "descripcion": "Diseñar y ejecutar investigación aplicada sobre comportamiento y procesos organizacionales para sustentar decisiones e intervenciones.",
+      "fila": 68
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "669492a66a34",
+      "nombre": "Diseño de intervenciones organizacionales",
+      "descripcion": "Diseñar intervenciones organizacionales fundamentadas en diagnósticos, datos y modelos psicológicos para abordar necesidades de personas, equipos u organizaciones.",
+      "fila": 69
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "3c1f425f421b",
+      "nombre": "Coaching y desarrollo personal",
+      "descripcion": "Acompañamiento a personas para su desarrollo personal y profesional, ayudándolas a definir objetivos, priorizar y planificar acciones adaptadas a sus necesidades.",
+      "fila": 70
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "a88005f37731",
+      "nombre": "Equidad de género en el trabajo",
+      "descripcion": "Diseño de estrategias justas y transparentes para la igualdad de género en promociones, remuneraciones, capacitación y conciliación familiar en la organización.",
+      "fila": 71
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "7f921318b958",
+      "nombre": "Gestión de personas",
+      "descripcion": "Diseñar intervenciones de gestión de personas vinculadas con contratación, desempeño y etapas del ciclo laboral, alineadas con necesidades de los colaboradores y de la organización.",
+      "fila": 72
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "620a92d050d5",
+      "nombre": "Inclusión laboral de personas con discapacidad",
+      "descripcion": "Promoción de oportunidades de empleo para personas con discapacidad mediante ajustes razonables en el puesto, conforme a las políticas de accesibilidad.",
+      "fila": 73
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "a84851d9a1d2",
+      "nombre": "Programas de inserción laboral",
+      "descripcion": "Diseño e implementación de programas de capacitación, talleres y proyectos que mejoran las posibilidades de las personas de conseguir empleo.",
+      "fila": 74
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "9b340a03409d",
+      "nombre": "Evaluación del desempeño laboral",
+      "descripcion": "Diseñar, aplicar e interpretar procesos de evaluación del desempeño de colaboradores con criterios y evidencias definidas.",
+      "fila": 75
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "b30c85da6de8",
+      "nombre": "Legislación laboral",
+      "descripcion": "Normas y principios que regulan las relaciones laborales y las condiciones de trabajo, aplicados a la gestión de personas y organizaciones.",
+      "fila": 76
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "7deff873a249",
+      "nombre": "Reclutamiento y selección de personal",
+      "descripcion": "Definir puestos, convocar y seleccionar candidatos; evaluar competencias, capacidades y conocimientos mediante entrevistas, exámenes, simulaciones y pruebas, según procedimientos, políticas y legislación aplicables.",
+      "fila": 77
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "07f0ecf91050",
+      "nombre": "Fundamentos de salud ocupacional",
+      "descripcion": "Conocer principios de promoción del bienestar, salud y seguridad en el trabajo y de prevención de riesgos psicosociales.",
+      "fila": 78
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "c4f750af3472",
+      "nombre": "Gestión de riesgos y salud en el trabajo",
+      "descripcion": "Identificar peligros y evaluar riesgos de seguridad, salud y bienestar ocupacional y diseñar medidas, controles y componentes de sistemas de gestión a partir de los riesgos identificados.",
+      "fila": 79
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "540223b1c3cd",
+      "nombre": "Gestión del estrés laboral",
+      "descripcion": "Identificación y manejo de fuentes de estrés laboral y organizacional, promoviendo el bienestar de los trabajadores y previniendo el agotamiento profesional.",
+      "fila": 80
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "2e2294e25272",
+      "nombre": "Consejería psicosocial",
+      "descripcion": "Acompañamiento y orientación a personas para que comprendan y superen problemas personales, sociales o psicológicos mediante técnicas de consejería psicológica.",
+      "fila": 81
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "057ffc27d35f",
+      "nombre": "Evaluación psicosocial",
+      "descripcion": "Evaluación de la situación social de las personas considerando su familia, organizaciones y comunidad, identificando necesidades, recursos y riesgos asociados.",
+      "fila": 82
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "1c7916ca17e1",
+      "nombre": "Promoción del cambio social",
+      "descripcion": "Impulso de cambios en las relaciones entre personas, familias, grupos, organizaciones y comunidades, a nivel micro, meso y macro social.",
+      "fila": 83
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "b8f377ba1aac",
+      "nombre": "Trabajo con la red de apoyo",
+      "descripcion": "Coordinación con familiares, amigos y otros actores relevantes del paciente en tratamiento, respetando las condiciones de confidencialidad y transparencia.",
+      "fila": 84
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "3e7c31cc9953",
+      "nombre": "Diseño de intervenciones preventivas psicosociales",
+      "descripcion": "Diseñar intervenciones preventivas psicosociales ajustadas a necesidades del desarrollo, factores de riesgo y características del contexto.",
+      "fila": 85
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "b776bca24dab",
+      "nombre": "Entrenamiento en habilidades sociales",
+      "descripcion": "Diseñar y aplicar técnicas para desarrollar habilidades sociales, percepción de claves interpersonales y conductas adaptativas en personas o grupos.",
+      "fila": 86
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "c2464b68d0cb",
+      "nombre": "Análisis de dinámicas grupales y factores psicosociales",
+      "descripcion": "Analizar estructura, interacción, influencia y factores psicosociales que explican el funcionamiento de grupos y colectivos.",
+      "fila": 87
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "1bea9e54df4f",
+      "nombre": "Facilitación e intervención grupal",
+      "descripcion": "Seleccionar, diseñar y aplicar técnicas de intervención grupal según objetivos, características del grupo y contexto.",
+      "fila": 88
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "3e054cc2e40d",
+      "nombre": "Diseño de proyectos sociales con marco lógico",
+      "descripcion": "Jerarquizar problemas y necesidades y estructurar proyectos de desarrollo social mediante el enfoque de marco lógico.",
+      "fila": 89
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "83e4838bec4f",
+      "nombre": "Evaluación de proyectos sociales y comunitarios",
+      "descripcion": "Diseñar y aplicar criterios, indicadores e instrumentos para monitorear y evaluar implementación, resultados y oportunidades de mejora de proyectos sociales y programas psicosociales comunitarios.",
+      "fila": 90
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "e8151414dfdc",
+      "nombre": "Diagnóstico psicológico comunitario",
+      "descripcion": "Analizar dinámicas, necesidades y recursos de comunidades para formular diagnósticos psicológicos comunitarios.",
+      "fila": 91
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "97e45de04a69",
+      "nombre": "Diseño de programas comunitarios",
+      "descripcion": "Diseñar programas y proyectos de intervención psicosocial comunitaria a partir de necesidades, objetivos, estrategias y características del contexto, promoviendo participación de la población y bienestar comunitario.",
+      "fila": 92
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "295ff6210bdd",
+      "nombre": "Fundamentos de psicología forense",
+      "descripcion": "Comprender marcos conceptuales, jurídicos y ámbitos de actuación de la psicología forense y jurídica.",
+      "fila": 93
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "733010f3db54",
+      "nombre": "Fundamentos de psiquiatría forense",
+      "descripcion": "Métodos, organización y obligaciones de la evaluación psiquiátrica y psicológica aplicada en el marco de la justicia penal y civil.",
+      "fila": 94
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "aadf95a0301c",
+      "nombre": "Testimonio pericial psicológico",
+      "descripcion": "Declaración ante tribunales de justicia como perito psicólogo en relación con asuntos sociales y otros hechos materia de proceso.",
+      "fila": 95
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "7971c7677bae",
+      "nombre": "Elaboración de informes periciales psicológicos",
+      "descripcion": "Elaborar informes periciales psicológicos con metodología explícita, integración de hallazgos, conclusiones técnicas y consideración de criterios éticos y jurídicos.",
+      "fila": 96
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "31d63ec2ece2",
+      "nombre": "Análisis de bases fisiológicas del ejercicio",
+      "descripcion": "Analizar bases fisiológicas y biológicas relacionadas con el ejercicio y el rendimiento deportivo como contexto para la intervención psicológica en deporte.",
+      "fila": 97
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "702d4b770bc4",
+      "nombre": "Planificación del entrenamiento deportivo",
+      "descripcion": "Planificar componentes del entrenamiento deportivo considerando principios del entrenamiento y bases biológicas pertinentes al contexto del rendimiento.",
+      "fila": 98
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "14c14abad903",
+      "nombre": "Evaluación psicológica en deporte",
+      "descripcion": "Evaluar variables cognitivas, emocionales y conductuales relevantes para el rendimiento y la práctica deportiva.",
+      "fila": 99
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "afb6db0d762b",
+      "nombre": "Diseño de intervenciones en deporte",
+      "descripcion": "Diseñar y seleccionar técnicas de intervención psicológica ajustadas a necesidades del deportista, modalidad y contexto de rendimiento.",
+      "fila": 100
+    },
+    {
+      "carrera": "Psicologia",
+      "id": "9bfa28da7738",
+      "nombre": "Fundamentos de neurología",
+      "descripcion": "Conocimiento de la especialidad médica que estudia el sistema nervioso y sus trastornos, como base de la neuropsicología y la evaluación clínica.",
+      "fila": 101
+    }
+  ],
+  "hallazgos": [],
+  "error": null,
+  "sha256_fuente": "99ef03cc833dcffe42bf0a773462758df3f0b079c0a164aeb64a33ff11fb1eb9"
+}

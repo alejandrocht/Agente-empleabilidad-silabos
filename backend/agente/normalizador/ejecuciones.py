@@ -277,7 +277,10 @@ class GestorEjecuciones:
     def cancelar(self, id_ejecucion: str) -> dict[str, object]:
         """Solicita una cancelación cooperativa y la persiste inmediatamente."""
 
-        ejecucion = self._obtener_objeto(id_ejecucion)
+        try:
+            ejecucion = self._obtener_objeto(id_ejecucion)
+        except KeyError:
+            return self._cancelar_ejecucion_huerfana(id_ejecucion)
         if ejecucion.estado == "cancelado":
             return ejecucion.a_dict()
         if ejecucion.estado not in _ESTADOS_CANCELABLES:
@@ -294,6 +297,62 @@ class GestorEjecuciones:
             "Cancelación solicitada. El lote que ya está en curso puede terminar; "
             "no se enviará otro lote al LLM."
         )
+        return respuesta
+
+    def _cancelar_ejecucion_huerfana(self, id_ejecucion: str) -> dict[str, object]:
+        """Cancela un manifest activo cuyo worker ya no existe tras reiniciar la API."""
+
+        try:
+            directorio = self._persistencia.directorio_seguro(id_ejecucion)
+            manifest = directorio / "manifest.json"
+            datos = json.loads(manifest.read_text(encoding="utf-8"))
+        except (KeyError, OSError, ValueError, json.JSONDecodeError) as exc:
+            raise KeyError(id_ejecucion) from exc
+        if not isinstance(datos, dict):
+            raise KeyError(id_ejecucion)
+
+        estado = str(datos.get("estado") or "")
+        if estado == "cancelado":
+            return self._persistencia.obtener(id_ejecucion)
+        if estado not in _ESTADOS_CANCELABLES:
+            raise EjecucionNoCancelable(
+                f"La ejecución está en estado {estado} y ya no admite cancelación."
+            )
+
+        ahora = _ahora()
+        hallazgos = datos.get("hallazgos")
+        if not isinstance(hallazgos, list):
+            hallazgos = []
+        if not any(
+            isinstance(hallazgo, dict) and hallazgo.get("codigo") == "PROCESAMIENTO_CANCELADO"
+            for hallazgo in hallazgos
+        ):
+            hallazgos.append(
+                Hallazgo(
+                    "PROCESAMIENTO_CANCELADO",
+                    "warning",
+                    "La ejecución fue cancelada porque su worker ya no estaba disponible.",
+                    "La API se reinició o el proceso anterior no llegó a continuar la ejecución.",
+                ).a_dict()
+            )
+        datos.update(
+            {
+                "estado": "cancelado",
+                "cancelacion_solicitada": True,
+                "cancelada_en": datos.get("cancelada_en") or ahora,
+                "actualizada_en": ahora,
+                "hallazgos": hallazgos,
+            }
+        )
+        temporal = manifest.with_suffix(".json.tmp")
+        temporal.write_text(
+            json.dumps(datos, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+            newline="\n",
+        )
+        temporal.replace(manifest)
+        respuesta = self._persistencia.obtener(id_ejecucion)
+        respuesta["mensaje"] = "Ejecución huérfana cancelada tras reiniciar la API."
         return respuesta
 
     def listar_historial(self, limite: int = 20) -> dict[str, object]:

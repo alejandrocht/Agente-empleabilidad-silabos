@@ -1,8 +1,8 @@
-"""Elimina todos los datos de la base Neo4j de desarrollo de CIAR.
+"""Limpia los datos reimportables de la base Neo4j de desarrollo de CIAR.
 
-El script conserva el esquema (índices y restricciones) y borra únicamente nodos
-y relaciones. Por seguridad, sin ``--confirmar-eliminacion-total`` solo muestra
-el inventario de la base.
+El script conserva el esquema (índices y restricciones) y los nodos ``Carrera``.
+Elimina todas las relaciones y los demás nodos. Por seguridad, sin
+``--confirmar-eliminacion-total`` solo muestra el inventario de la base.
 
 Usa primero las credenciales ``NEO4J_INGEST_*``. Si no se han definido, usa el
 grupo ``NEO4J_*``; este último debe pertenecer a un usuario con permiso de
@@ -133,15 +133,38 @@ def imprimir_inventario(inventario: dict[str, Any]) -> None:
             print(f"  - {fila['tipo']}: {fila['total']}")
 
 
+def eliminar_relaciones_por_lotes(session: Any, lote: int) -> int:
+    """Borra todas las relaciones en transacciones acotadas."""
+
+    eliminadas = 0
+    while True:
+        resultado = session.execute_write(
+            lambda tx: tx.run(
+                "CALL { "
+                "MATCH ()-[r]->() WITH r LIMIT $lote "
+                "DELETE r "
+                "RETURN count(r) AS eliminadas "
+                "} "
+                "RETURN eliminadas",
+                lote=lote,
+            ).single()
+        )
+        cantidad = int(resultado["eliminadas"])
+        eliminadas += cantidad
+        if cantidad == 0:
+            return eliminadas
+        print(f"Eliminadas {eliminadas} relaciones...", flush=True)
+
+
 def eliminar_por_lotes(session: Any, lote: int) -> int:
-    """Borra los nodos junto a sus relaciones en transacciones acotadas."""
+    """Borra nodos que no sean Carrera en transacciones acotadas."""
 
     eliminados = 0
     while True:
         resultado = session.execute_write(
             lambda tx: tx.run(
                 "CALL { "
-                "MATCH (n) WITH n LIMIT $lote "
+                "MATCH (n) WHERE NOT n:Carrera WITH n LIMIT $lote "
                 "DETACH DELETE n "
                 "RETURN count(n) AS eliminados "
                 "} "
@@ -161,7 +184,7 @@ def argumentos(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         CONFIRMACION,
         action="store_true",
-        help="confirma el borrado de TODOS los nodos y relaciones de la base configurada",
+        help="confirma la limpieza conservando los nodos Carrera de la base configurada",
     )
     parser.add_argument(
         "--lote",
@@ -199,15 +222,16 @@ def main(argv: list[str] | None = None) -> int:
             imprimir_inventario(inventario)
             if not args.confirmar_eliminacion_total:
                 print(
-                    "\nNo se eliminó nada. Para borrar todos esos datos ejecute:\n"
+                    "\nNo se eliminó nada. Para limpiar los datos y conservar Carrera ejecute:\n"
                     "  python scripts/limpiar_datos_neo4j.py --confirmar-eliminacion-total"
                 )
                 return 0
 
             print(
-                "\nEliminando todos los nodos y relaciones. "
-                "Se conservarán índices y restricciones."
+                "\nEliminando todas las relaciones y los nodos que no sean Carrera. "
+                "Se conservarán Carrera, índices y restricciones."
             )
+            relaciones_eliminadas = eliminar_relaciones_por_lotes(session, args.lote)
             eliminados = eliminar_por_lotes(session, args.lote)
             restante = obtener_inventario(session)
     except Exception as exc:
@@ -217,7 +241,8 @@ def main(argv: list[str] | None = None) -> int:
         driver.close()
 
     print(
-        f"\nLimpieza terminada: {eliminados} nodos eliminados; "
+        "\nLimpieza terminada: "
+        f"{relaciones_eliminadas} relaciones y {eliminados} nodos eliminados; "
         f"restan {restante['nodos']} nodos y {restante['relaciones']} relaciones."
     )
     return 0

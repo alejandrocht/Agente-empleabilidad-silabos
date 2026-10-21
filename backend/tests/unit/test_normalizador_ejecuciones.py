@@ -395,6 +395,23 @@ def test_cancelar_persiste_la_solicitud_y_el_worker_cierra_como_cancelado(
     assert manifest["estado"] == "cancelado"
 
 
+def test_cancelar_ejecucion_huerfana_persistida_despues_de_reiniciar(tmp_path: Path) -> None:
+    gestor, id_ejecucion, directorio = _gestor_con_ejecucion(tmp_path)
+    gestor._persistir(gestor._obtener_objeto(id_ejecucion))
+    gestor_reiniciado = GestorEjecuciones(tmp_path)
+
+    respuesta = gestor_reiniciado.cancelar(id_ejecucion)
+
+    assert respuesta["estado"] == "cancelado"
+    assert respuesta["cancelacion_solicitada"] is True
+    assert "huérfana cancelada" in str(respuesta["mensaje"])
+    manifest = json.loads((directorio / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["estado"] == "cancelado"
+    assert any(
+        hallazgo["codigo"] == "PROCESAMIENTO_CANCELADO" for hallazgo in manifest["hallazgos"]
+    )
+
+
 def test_cancelar_estado_terminal_devuelve_conflicto(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

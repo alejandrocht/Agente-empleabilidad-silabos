@@ -34,6 +34,17 @@ function esPreviewTecnico(preview, modo) {
 
 function resumenDe(preview, modo) {
   const resumen = preview?.resumen || {};
+  if (
+    modo === "empleabilidad" ||
+    Object.prototype.hasOwnProperty.call(resumen, "publicaciones_nuevas")
+  ) {
+    return [
+      ["Ofertas nuevas", resumen.publicaciones_nuevas],
+      ["Ofertas existentes", resumen.publicaciones_existentes],
+      ["Ofertas en cuarentena", resumen.publicaciones_en_cuarentena],
+      ["Consultas ejecutadas", resumen.consultas_ejecutadas],
+    ];
+  }
   if (esPreviewTecnico(preview, modo)) {
     return [
       ["Cursos nuevos", resumen.nuevos_cursos],
@@ -130,9 +141,10 @@ export default function Neo4jImportPanel({ idEjecucion, modo = "legacy" }) {
       );
       setDialogo(null);
       setPreview(null);
-      setMensaje(
-        `${datos.mensaje || "La data fue agregada a Neo4j."} ID: ${datos.id_importacion}`,
-      );
+      const identificador = datos.id_importacion
+        ? ` ID: ${datos.id_importacion}`
+        : "";
+      setMensaje(`${datos.mensaje || "La data fue agregada a Neo4j."}${identificador}`);
       await cargarHistorial();
     } catch (errorImportacion) {
       setError(
@@ -186,7 +198,9 @@ export default function Neo4jImportPanel({ idEjecucion, modo = "legacy" }) {
                   id="neo4j-import-title"
                   className="mt-1 text-lg font-extrabold tracking-[-0.02em]"
                 >
-                  Subir catálogos a Neo4j
+                  {modo === "empleabilidad"
+                    ? "Publicar ofertas en Neo4j"
+                    : "Subir catálogos a Neo4j"}
                 </h3>
               </div>
             </div>
