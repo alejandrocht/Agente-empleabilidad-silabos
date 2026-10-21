@@ -8,6 +8,7 @@ __pycache__/
 !backend/tests/fixtures/catalogos/
 !backend/tests/fixtures/catalogos/matches/
 !backend/tests/fixtures/catalogos/matches/*.csv
+!backend/catalogos/carrera_competencia_oficial.csv
 .env
 .serena
 .claude
@@ -24,3 +25,5 @@ backend/resultados_cactus/
 # Local env backups — never commit secrets
 .env.*
 !.env.example
+# Local Pi runtime state
+.atl/

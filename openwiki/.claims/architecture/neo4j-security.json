@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f78feb0de15485b093056209fcb8b5666a391b63eb80b263170dd5023eac55d9",
+  "claims": [
+    {
+      "id": "claim_019653ae44db46bda4dd5af5d0fb6f68",
+      "statement": "El acceso a Neo4j se realiza con una compuerta asíncrona estricta de solo lectura utilizando RoutingControl.READ en todas las sesiones de dominio.",
+      "evidence": [
+        {
+          "resource": "repo://backend/agente/utils/db.py#L865-L875",
+          "version": "repo-lines-v1:sha256:6709feca1c1c19d4f4e022710c3cdf62dd840acb8f4ef14e0456dbb8e7f477f1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhlZTJkMmViZDk1N2QyMDg3NzczNDNhMzEyNDg3ZGU0YmM4YTM4NzkwM2FjMWY3YjJhNjM5MjQ2ZDIwYmU4NGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiOWQwYmZhYzU3MDU2ODQxZTlmY2Y3NGZkZTRlOTVmMWRlNTc5M2IzZWZhOGRiN2E0M2MyYzU2ZDhhZWE5MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYxZmU1ZDc3NzcyYjI0YWY1YTc5N2U3ZmFlNmI2MDNkZDM2NzE3MTZiNzQ5ZDM0NGQ3Zjc2YWMyMzRmMzU5ZDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQwMTU3YjExMmNiYzIxYmJlNjM5YjE1MDA1MzRjMWZlZGVkMzk4OWM4N2I2ZTc4Mzc2ZGE3MjQ1MTY0N2JjMGUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_72a4a86d687e49fdb2366fb114455ba7",
+      "statement": "La compuerta estática Cypher Guard evalúa consultas antes de ejecutarlas, rechazando de forma conservadora cualquier sentencia con palabras mutacionales o administrativas como CREATE, MERGE, DELETE, SET o CALL.",
+      "evidence": [
+        {
+          "resource": "repo://backend/agente/nodos/cypher_guard.py#L29-L48",
+          "version": "repo-lines-v1:sha256:9da5aa08efb49116030554cb84e7106f66c5e6b69ad54db4ccb2e4b208095d32:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkYTVjNjZlMTdiMTQ1Mzk3ODM0YjhjODU0ZGM0MTkzZTIxMjUxODBhODk5NmExNGMzMTg4MzMyNmIyZWZiY2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAzMWU1NTlhOTJkNjZkM2MyZjUxYTA3YzhiMjI3YTA3ZWQ5MGM5YWY4M2IwYjBjODNiY2EyOWMwNDg0NTRmODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNhMjI1MmU2Mjg2N2IyMTkwOGQ2YzFjZGJmNDM5NWM4ZmMzNTU1NzZjOGJhMzRiNzllNzcxN2RiOGI2MGNlMjQifQ"
+        },
+        {
+          "resource": "repo://backend/agente/utils/cypher_guard.py#L59-L80",
+          "version": "repo-lines-v1:sha256:4d873fd0a7362dd2f0a3276404d9d3e9a6b9341a7235fbd5da119eea048b795d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3YjMwYzJkNjc5Njg0ZjQ2ODRiZjYyNDk2MDcyNDI4NjYyZThmYzcyNzUzMjRkNGE0NjE0OTE4Nzg3MzQyNjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5MjkzNmNkN2JlNTEyODhjNzcyNzg4ODhlOTIzMGJkMjZmY2Y0Y2IwNDQzNmMwODI2NzY5NmQwNjg0NzJmZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE5OGFjMzVlY2ZiMWY4ODY4ZjEzZjI4ZWM2OTcyYTk5MWZmNDAxODQ5NWQ2MjNiZjBlNWZlMWQzMWJkMmRiOTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYwY2NmNmY3MWYwN2EyMTZhMWY1NmU1ZjRkYTZkN2YwZGJjMWFhMDVhZTY1MDQwN2M1ZDU2NTAzNTE1YzI2MzYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_702c357e248b47759d75c332f36eeb25",
+      "statement": "Las consultas Cypher generadas están estrictamente acotadas con un límite máximo de resultados (MAX_QUERY_LIMIT = 100) y exigen parametrización explícita.",
+      "evidence": [
+        {
+          "resource": "repo://backend/agente/nodos/cypher_guard.py#L54-L60",
+          "version": "repo-lines-v1:sha256:4c81e02a4dd25d6977b89476d12d6185036d60e3053ca5f5fbe19a37b704f341:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2RlNjU3N2Q3ZDhmYzUwMDgzODIxM2Y0ZDBlNjRmOGRkYTRmYWQ5YWMwMTI5M2E4MGU0Yjg4MzVkZDhkMTExNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTgzNGE2ZjdkMGY0OGVlMzY1OGFkZTcyYmVkMTcxNDFjOWVhNTc5MzNiMTJiNDAxZjcxZWExNWU0ZDA2NmUwZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTBkZDUyNWNlY2Y5MzM2ZjBlZThhYjkwNmMzNjE0MDU2MzhmOGRjYmYwNWFhMzE0YzQyY2NlNmU1ZTcyNWQ2ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTJhZGY3MWU2YmMzNTBmMGY0MjIxM2VkZDRiZjAwMzk1OTFhOGE3MzlkYjZiYjg4NTQxMDg0MjdiNDM0Njk3MCJ9"
+        },
+        {
+          "resource": "repo://backend/agente/utils/cypher_guard.py#L16-L17",
+          "version": "repo-lines-v1:sha256:03c455c764cc510c9b76eeb0736552c016a35342b1b2c286e0dc82d6bcbc63e1:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTg1ZmI3ZjEyZjQ0MDNlODYzM2EyNWVkNTEzMjhiMzQzMGVmMWFmODVmY2VjYTQ2OTliMzM0NjcwZDQzZDA0MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjFlNTQ2YTYxMWNmZmE0NWFkNzRiZDFkNTgwYjI4YTU5ZDc2M2YxMzE0NWY0YTMxN2MxNTliMmY2M2VmMWIyZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzVkNTgxNTIzNDMzZTY1ZDQ5NzMyYTk0MDNhY2U3OTUzOTlhNTI2OTUyOWE3MzY5NTg4NDMwNTQyNzViMDRmOSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_f0e0bd65ba6545d2a7101dfdc4d1b649",
+      "statement": "El nodo resuelve_entidades normaliza y concilia parámetros de texto contra el esquema antes de delegar a la compuerta de seguridad final.",
+      "evidence": [
+        {
+          "resource": "repo://backend/agente/nodos/resuelve_entidades.py#L23-L45",
+          "version": "repo-lines-v1:sha256:025dcf9d09deee3ad8211d5ec667e3a6980ac0edc0eb3c596b3e97eff4d43791:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxNTY4NGZkMTI3ZGJmNjk5MTk0Y2QzYjI1NmVjMTllYWRiMGU3MWNlNDMyOWY4OWJiNDFmYjkwY2UwNDUwODYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjA0NDkxNDY5NzIyZTgzNjNhOTRlNDA0NDUzOGUwMTNhMmEyMTdlMzZiMWU1NjhiYTYwYWNiN2I0YzhmMmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE0NTVkYWE0NjJlZjJmMDJhYjY3MDJmM2NkZWRhOWQ5NTcxMDhmNGM3MjMxYjY3ZmMxN2UyOGUxMDRjMDE3ZjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNlMjdiYjU3MzdhMDY4NjE2YjcxNjc1YjJjMWI2OTg2ZTFmYzgwNDNjNTEwYjhhOGE0ZmZmYmUzOTExNjA2YzMifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.1",
+    "at": "2026-09-15T01:46:01.029Z"
+  }
+}

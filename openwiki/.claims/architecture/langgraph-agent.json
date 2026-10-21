@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:e574033314f757c2ee1a50900b97d6f25d5ad1eef3836ef4dca9920712abbf65",
+  "claims": [
+    {
+      "id": "claim_2228e9842d184d9480a9e37e33587798",
+      "statement": "El grafo de LangGraph se compila como un StateGraph sobre el TypedDict Estado, orquestando la ejecución secuencial y condicional de nodos sin checkpointer persistente.",
+      "evidence": [
+        {
+          "resource": "repo://backend/agente/grafo/constructor.py#L44-L56",
+          "version": "repo-lines-v1:sha256:6928ca35f98aa5bbdc22668885db293db29836bdaeccfb13863c2cec2f29e0e2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4Yzk0YjIyMDNiN2VlMTFiZjNkODlhOTJjZjdiM2MyNGU0OWNhNWFlNDYwMWJlNTA4ZGFlOTViZmRhN2E2YzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjMjllMmY1NzZjYzhiYzU1NzgxZDBmNDIzYmE5ZTdjZTI2MTgyOGU2ZWE2ZTU2MmQ0YzE5NDg4MjgwNWQyMjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3MjUzYjNhZDhkZTYzZDMzYjkwODJiMThjYzNlZmY4NjVmYjQ0N2IyYzkzNDk2ZDUyODAxM2MyM2Q3ODc3MWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJiYzBhNzliNmUwOGNhYmM2Mzg0YWM5MTViYjk5MTA1YmEyNzcyMmE2OWEyMjhkNzY5YzVlNzBlNDM1ZGM4YmIifQ"
+        },
+        {
+          "resource": "repo://backend/agente/grafo/estado.py#L6-L23",
+          "version": "repo-lines-v1:sha256:85a710beab046dc99eeb1d3629845d3435a9103f188661b3f772fd089fc4f865:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwYzg2YmQyNTU2NWI3N2VlYWNhM2I2M2RjMzY0NzU1NmM4NDFlMjBhYmVjNmRiZDIxMDNhOGUyMDE3YzI4OTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJmM2I2Y2FmYjMyZTQ4OGE1YThhOWYxMWRmOWM2M2ZkZTYxMGI3YjQ5ODA1MjNhNjNlYjEzMTg2MzY1YzAwZTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk2Zjg0Y2EyYzY4YTRjMDhmNDM1NGM2M2ExMzM4NDgyM2NiZWRiZjBmNTc0MDJlM2ZiNWEzNjE1Y2MzZTVmN2YifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_dcfac20164fa469ea1281e2a88c0c9ab",
+      "statement": "El nodo orquestador bifurca el flujo: dirige preguntas conversacionales hacia responder_directo, mientras que preguntas de dominio continúan hacia obtiene_schema y la generación Cypher.",
+      "evidence": [
+        {
+          "resource": "repo://backend/agente/grafo/constructor.py#L297-L316",
+          "version": "repo-lines-v1:sha256:8f7c12c0549d3f6dccbd8324cad7cf66339fae0281202ec24a7dbbf6a41b1ef7:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ5YTM5YWJhMzc0NWIzYTk4NmNhNTFiMzdlODZkZWQ5OGMwN2IzZmVjMTA0OGM4ZDk0ZjQxZDNkY2UwZTg2YmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhMzBkZjMwZTQzYjhlYjM2NzJlMDIzNWQ4MmEwYWRiN2RmMWY4ZWNhNzU0ZTE2YTAyNjNkNjYxNGViY2M2MDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRlM2NiNjFhOGRjNGIxMDNkMGFlOWFjNTQ2NDE0ZDFlNDJhYmU4YzA2Y2E5NjBkMWE1MzIwNjVjYWNkMDI2MWQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7cc5cdbbbe3c49b7b848d76da52f1a51",
+      "statement": "El pipeline de consulta a Neo4j sigue la cadena secuencial estricta obtiene_schema -> construye_cypher -> resuelve_entidades -> cypher_guard -> devuelve_respuesta -> redacta_respuesta -> guarda_memoria_corta.",
+      "evidence": [
+        {
+          "resource": "repo://backend/agente/grafo/constructor.py#L318-L323",
+          "version": "repo-lines-v1:sha256:7037ae7c4ca0185f62600288db3d9e256b610d06a851c33896386ade55e23249:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDY5YmE5NmRiNzJlNWE4MjE0ZmVmOGVhM2FhM2U1MTBmNTdkYTA0YjdjOTVhYTJmZGYxODIzNGI2NTI3NDY0NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzBkZTQzMjY5ZjllYTA0ZTY1OGZmZmE2M2RhYjFlMDFiOTQ3MzBhYzU0MDU4ZThiZTBiNjY3MjE0ZmE2MjRhMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2MyZDhkMmMzNGQ4MGQzMmQzYmIyOGZjZjA4MTMzZWQyNTk4NmFjYTk2NWNjNmZlYzQzMmNjMTM4MWFmM2M5NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzBhNjk1MDFjZDk2ZWRmYzE1ZDMwMmMyNDI3MjBiMTJmNDQ1MTU4MTUyNzM1MDI3ZDkyMTNjODE3MjA5NGM2NCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_fe7f5e5dd16445a8b5250b5d1968c158",
+      "statement": "La memoria conversacional es local al proceso, acotada por defecto a 4 turnos con un TTL de 30 minutos, y no reescribe preguntas posteriores.",
+      "evidence": [
+        {
+          "resource": "repo://backend/agente/grafo/constructor.py#L288-L295",
+          "version": "repo-lines-v1:sha256:61e4f2ae20c33c7ebc51211a9da6ad72e5d682d190b7870d7d5e83b302083926:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmYzMjBkOTdlYmMwMGQwZGVkZGE3YmZkYzRlN2E1YjQ3NzE2MzFhZWU5OGI3Y2I0NjE4NTY2MmU2Y2ExYzg3YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDc3YzdjNmI3N2VkYTQ5ODcwOGQ1ZWNkYWIwOTk5YjAyMjU1MGUxNzkwZDBkNzhhYTE3MWI5MWVhYzJiMzdmMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzgwZGZjYmNiZjIwYTA5YWM1MTQyNDlmZmVhNWQzZDI4MTg4YjhhMzU1YThmNzMxYjlmNTlmNTlmYmY1ZGIyZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODhlOTBmODdkMTBjYWFjMjJmZmZjYzM1MThhYWJjMWUzZjJjYzdkYjZiYzU2MDdkZmE4NWE4OTYzOWMzMWNkYyJ9"
+        },
+        {
+          "resource": "repo://backend/agente/memoria_corta.py#L21-L24",
+          "version": "repo-lines-v1:sha256:756dd9aa9c1705d1b1e591badbd36e54d02b1b490603aaee7614328c0c77a2b2:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjM2MjE2MWQ1ODljN2QzOTFjYzE5MjQ3MGI4OTQ3MTg0N2MwYWRhMjZiNjc0ZjVjYWE4MmFiMzAwMjAwNzhkZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2I1MDcyZjYxMDNjNDNlZWRiYzljNDM0NjhlYmMxODI0NzlhNjZkODVmNTczMzZhZGFmMDBiMjMzZWVmZTkxMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGVlNjdmOTQ4NWNkNDc3YjAzYWRjZjA3MTRhYzczNDBkYjQ4OTYxYTU3YjAzMzdiYjE4ZGM2ZWVlZDQ4Nzk4MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZThiOWU3YzE4ZDM3NzhjMzI4NTJlMmE1NzM0NzcwODc1ZmRjYTI1YTI0ZGY5MDgxMTgzZjM2ODVjOWNjNzBlNCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.1",
+    "at": "2026-09-15T01:46:01.029Z"
+  }
+}
