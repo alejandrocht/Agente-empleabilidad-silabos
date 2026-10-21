@@ -52,6 +52,7 @@ from agente.normalizador.silabos.fuente_cactus import (
 )
 from agente.normalizador.silabos.limpieza import limpiar_archivo as limpiar_silabos
 from agente.observabilidad.langsmith import contexto_ejecucion, ejecutar_flujo
+from agente.observabilidad.logger import log_paso
 
 
 def _ahora() -> str:
@@ -159,6 +160,16 @@ class GestorEjecuciones:
         with self._bloqueo:
             self._ejecuciones[id_ejecucion] = ejecucion
         self._persistir(ejecucion)
+        if tipo == "silabos":
+            hitl = str(ejecucion.parametros.get("hitl", "1"))
+            log_paso(
+                "normalizador",
+                "ejecucion_aceptada",
+                data={
+                    "hitl": hitl,
+                    "modo": ("aprobacion_automatica" if hitl == "0" else "revision_humana"),
+                },
+            )
         return id_ejecucion, directorio
 
     def iniciar_validacion(self, id_ejecucion: str, ruta_entrada: Path) -> None:
@@ -497,6 +508,11 @@ class GestorEjecuciones:
             return
         propuestas = ejecucion.directorio / "salidas" / "reportes" / "propuestas_tecnicas.jsonl"
         if not propuestas.is_file():
+            log_paso(
+                "normalizador",
+                "aprobacion_tecnica_automatica",
+                data={"resultado": "sin_propuestas_pendientes", "cantidad": 0},
+            )
             return
 
         try:
@@ -529,6 +545,11 @@ class GestorEjecuciones:
                 else []
             )
             if not decisiones:
+                log_paso(
+                    "normalizador",
+                    "aprobacion_tecnica_automatica",
+                    data={"resultado": "sin_propuestas_pendientes", "cantidad": 0},
+                )
                 return
             resultado = modulo.aplicar_decisiones(
                 ejecucion.directorio,
@@ -552,7 +573,18 @@ class GestorEjecuciones:
                     release_gate=dict(gate),
                 )
             ejecucion.estado = cast(EstadoEjecucion, resultado["estado"])
+            log_paso(
+                "normalizador",
+                "aprobacion_tecnica_automatica",
+                data={"resultado": "propuestas_agregadas", "cantidad": len(decisiones)},
+            )
         except Exception as exc:
+            log_paso(
+                "normalizador",
+                "aprobacion_tecnica_automatica_fallida",
+                data={"tipo_excepcion": type(exc).__name__},
+                nivel="warning",
+            )
             ejecucion.hallazgos.append(
                 Hallazgo(
                     codigo="AUTO_APROBACION_TECNICA_FALLIDA",

@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agente.api import normalizador, servidor
+from agente.normalizador import ejecuciones as ejecuciones_mod
 from agente.normalizador.ejecuciones import GestorEjecuciones
 from agente.normalizador.modelos import Hallazgo, ResultadoLimpiezaSilabos
 from agente.normalizador.silabos import aprobaciones_tecnicas
@@ -118,6 +119,183 @@ def test_decision_tecnica_discard_acepta_sin_motivo_y_normaliza_la_razon() -> No
             "decision": "DISCARD",
             "reason": "Fuera del alcance curricular.",
             "id_propuesta": "PROP_TEC_1",
+        }
+    ]
+
+
+def test_crear_registra_hitl_aceptado_despues_de_persistir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    eventos: list[dict[str, object]] = []
+
+    def capturar_evento(
+        nodo: str,
+        evento: str,
+        data: dict[str, object] | None = None,
+        **_kwargs: object,
+    ) -> None:
+        eventos.append({"nodo": nodo, "evento": evento, "data": data or {}})
+
+    monkeypatch.setattr(ejecuciones_mod, "log_paso", capturar_evento)
+    gestor = GestorEjecuciones(tmp_path)
+
+    _id_ejecucion, directorio = gestor.crear(
+        "silabos",
+        "paquete.zip",
+        {"carrera": "Marketing", "periodo": "2026-1", "hitl": "0"},
+    )
+
+    manifest = json.loads((directorio / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["parametros"]["hitl"] == "0"
+    assert eventos == [
+        {
+            "nodo": "normalizador",
+            "evento": "ejecucion_aceptada",
+            "data": {"hitl": "0", "modo": "aprobacion_automatica"},
+        }
+    ]
+
+
+def test_auto_aprobacion_registra_sin_propuestas_pendientes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    eventos: list[dict[str, object]] = []
+
+    def capturar_evento(
+        nodo: str,
+        evento: str,
+        data: dict[str, object] | None = None,
+        **_kwargs: object,
+    ) -> None:
+        eventos.append({"nodo": nodo, "evento": evento, "data": data or {}})
+
+    class ModuloAprobaciones:
+        @staticmethod
+        def pendientes_para_api(*_args: object, **_kwargs: object) -> dict[str, object]:
+            return {"filas": [], "total": 0}
+
+        @staticmethod
+        def resumen_aprobacion_curricular(_directorio: Path) -> dict[str, object]:
+            return {}
+
+    monkeypatch.setattr(ejecuciones_mod, "log_paso", capturar_evento)
+    monkeypatch.setattr(ejecuciones_mod, "import_module", lambda _nombre: ModuloAprobaciones)
+    gestor = GestorEjecuciones(tmp_path)
+    _id_ejecucion, directorio = gestor.crear("silabos", "paquete.zip", {"hitl": "0"})
+    reportes = directorio / "salidas" / "reportes"
+    reportes.mkdir(parents=True)
+    (reportes / "propuestas_tecnicas.jsonl").write_text("{}\n", encoding="utf-8")
+    ejecucion = gestor._obtener_objeto(_id_ejecucion)
+    ejecucion.estado = "limpiado"
+
+    gestor._finalizar(ejecucion)
+
+    assert [evento for evento in eventos if evento["evento"] != "ejecucion_aceptada"] == [
+        {
+            "nodo": "normalizador",
+            "evento": "aprobacion_tecnica_automatica",
+            "data": {"resultado": "sin_propuestas_pendientes", "cantidad": 0},
+        }
+    ]
+
+
+def test_auto_aprobacion_registra_propuestas_agregadas(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    eventos: list[dict[str, object]] = []
+
+    def capturar_evento(
+        nodo: str,
+        evento: str,
+        data: dict[str, object] | None = None,
+        **_kwargs: object,
+    ) -> None:
+        eventos.append({"nodo": nodo, "evento": evento, "data": data or {}})
+
+    class ModuloAprobaciones:
+        @staticmethod
+        def resumen_aprobacion_curricular(_directorio: Path) -> dict[str, object]:
+            return {}
+
+        @staticmethod
+        def pendientes_para_api(*_args: object, **_kwargs: object) -> dict[str, object]:
+            return {
+                "filas": [{"id_pendiente": "PROP_1", "decision": None}],
+                "total": 1,
+                "revision": "revision-segura",
+            }
+
+        @staticmethod
+        def aplicar_decisiones(*_args: object, **_kwargs: object) -> dict[str, object]:
+            return {
+                "estado": "limpiado",
+                "aprobacion": {
+                    "release_gate": {"decision": "ALLOW_IMPORT"},
+                    "materializacion": {"outputs": []},
+                    "remaining_pending": 0,
+                },
+            }
+
+    monkeypatch.setattr(ejecuciones_mod, "log_paso", capturar_evento)
+    monkeypatch.setattr(ejecuciones_mod, "import_module", lambda _nombre: ModuloAprobaciones)
+    gestor = GestorEjecuciones(tmp_path)
+    _id_ejecucion, directorio = gestor.crear("silabos", "paquete.zip", {"hitl": "0"})
+    reportes = directorio / "salidas" / "reportes"
+    reportes.mkdir(parents=True)
+    (reportes / "propuestas_tecnicas.jsonl").write_text("{}\n", encoding="utf-8")
+    ejecucion = gestor._obtener_objeto(_id_ejecucion)
+    ejecucion.estado = "limpiado"
+
+    gestor._finalizar(ejecucion)
+
+    assert [evento for evento in eventos if evento["evento"] != "ejecucion_aceptada"] == [
+        {
+            "nodo": "normalizador",
+            "evento": "aprobacion_tecnica_automatica",
+            "data": {"resultado": "propuestas_agregadas", "cantidad": 1},
+        }
+    ]
+
+
+def test_auto_aprobacion_registra_solo_tipo_de_excepcion_en_fallo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    eventos: list[dict[str, object]] = []
+
+    def capturar_evento(
+        nodo: str,
+        evento: str,
+        data: dict[str, object] | None = None,
+        **_kwargs: object,
+    ) -> None:
+        eventos.append({"nodo": nodo, "evento": evento, "data": data or {}})
+
+    class ModuloAprobaciones:
+        @staticmethod
+        def resumen_aprobacion_curricular(_directorio: Path) -> dict[str, object]:
+            return {}
+
+        @staticmethod
+        def pendientes_para_api(*_args: object, **_kwargs: object) -> dict[str, object]:
+            raise RuntimeError("password=secret source=/private/path/raw.txt")
+
+    monkeypatch.setattr(ejecuciones_mod, "log_paso", capturar_evento)
+    monkeypatch.setattr(ejecuciones_mod, "import_module", lambda _nombre: ModuloAprobaciones)
+    gestor = GestorEjecuciones(tmp_path)
+    _id_ejecucion, directorio = gestor.crear("silabos", "paquete.zip", {"hitl": "0"})
+    reportes = directorio / "salidas" / "reportes"
+    reportes.mkdir(parents=True)
+    (reportes / "propuestas_tecnicas.jsonl").write_text("{}\n", encoding="utf-8")
+    ejecucion = gestor._obtener_objeto(_id_ejecucion)
+    ejecucion.estado = "limpiado"
+
+    gestor._finalizar(ejecucion)
+
+    assert [evento for evento in eventos if evento["evento"] != "ejecucion_aceptada"] == [
+        {
+            "nodo": "normalizador",
+            "evento": "aprobacion_tecnica_automatica_fallida",
+            "data": {"tipo_excepcion": "RuntimeError"},
         }
     ]
 
