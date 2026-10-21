@@ -62,6 +62,11 @@ def _salidas_curriculares() -> tuple[dict[str, object], ...]:
         },
         {
             "tipo": "csv_curricular",
+            "archivo": "salidas/catalogo_habilidades.csv",
+            "registros": 1,
+        },
+        {
+            "tipo": "csv_curricular",
             "archivo": "salidas/catalogo_logros.csv",
             "registros": 1,
         },
@@ -370,6 +375,7 @@ def test_a_dict_filtra_salidas_y_reportes_tecnicos_por_gate(tmp_path: Path) -> N
         "salidas/curso.csv",
         "salidas/silabo.csv",
         "salidas/catalogo_competencias.csv",
+        "salidas/catalogo_habilidades.csv",
         "salidas/catalogo_logros.csv",
         "salidas/cobertura_curricular.csv",
     )

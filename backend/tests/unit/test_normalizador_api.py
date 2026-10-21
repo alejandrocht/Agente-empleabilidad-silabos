@@ -266,7 +266,7 @@ def test_inicia_silabos_rechaza_hitl_invalido(
 def test_inicia_y_consulta_ejecucion_de_silabos(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """La fuente curricular completa la limpieza y expone sus outputs."""
+    """La fuente curricular produce los seis CSV del contrato y expone sus outputs."""
 
     gestor = GestorEjecuciones(tmp_path)
     futuros: list[Future[object]] = []
