@@ -195,6 +195,56 @@ def test_modelo_selecciona_referencia_y_python_copia_campos_exactos(
     assert payload["syllabus_context"]["logros"] == [{"texto": LOGRO}]
 
 
+def test_contenido_completo_sustenta_habilidad_sin_logros(indice, monkeypatch, tmp_path):
+    registro = _registro()
+    registro["id_curso"] = "CUR_" + "1" * 16
+    registro["id_silabo"] = "SIL_" + "2" * 16
+    texto = "Evaluación práctica: diseña estructuras y patrones técnicos de software."
+    registro["datos"]["logro_general"] = ""
+    registro["datos"]["sumilla"] = "Diseño de sistemas mantenibles."
+    registro["datos"]["texto_fuente"] = texto
+    consultas = []
+    buscar = HabTecRetriever.buscar
+
+    def buscar_con_registro(recuperador, consulta, carrera):
+        consultas.append(consulta)
+        return buscar(recuperador, consulta, carrera)
+
+    monkeypatch.setattr(HabTecRetriever, "buscar", buscar_con_registro)
+    propuesta = {
+        **_propuesta(),
+        "logros": [],
+        "evidencia": [{"fuente": "silabo", "fragmento": texto}],
+    }
+    llamadas = _modelo(monkeypatch, [{"competencias": [propuesta]}])
+    propuestas = _inferir([registro])
+    assert len(propuestas) == 1
+    assert texto in consultas
+    assert propuestas[0]["logros"] == []
+    payload = json.loads(llamadas[0][1][1].split("\n", 1)[1])
+    assert payload["syllabus_context"]["texto_fuente"] == texto
+    assert payload["syllabus_context"]["sumilla"] == registro["datos"]["sumilla"]
+    salida_catalogos.construir_catalogos_curriculares(
+        [registro], tmp_path,
+        carrera="INGENIERIA_DE_SISTEMAS", periodo_academico="2026-2",
+        competencias_tecnicas=[{**propuestas[0], "estado_aprobacion": "APROBADA"}],
+    )
+    from agente.db.neo4j_catalogos import leer_catalogos
+
+    paquete = leer_catalogos(tmp_path)
+    assert len(paquete["catalogo_habilidades.csv"]) == 1
+    assert paquete["cobertura_curricular.csv"][0]["id_logro"] == ""
+    with pytest.raises(ValueError, match="evidencia literal"):
+        salida_catalogos.construir_catalogos_curriculares(
+            [registro], tmp_path / "evidencia_falsa",
+            carrera="INGENIERIA_DE_SISTEMAS", periodo_academico="2026-2",
+            competencias_tecnicas=[{
+                **propuestas[0], "estado_aprobacion": "APROBADA",
+                "evidencia": [{"fuente": "silabo", "fragmento": "Evidencia inventada."}],
+            }],
+        )
+
+
 def test_acepta_habilidad_sustentada_sin_nombre_explicito(indice, monkeypatch):
     registro = _registro()
     logro = "Diseña estructuras y patrones mantenibles."

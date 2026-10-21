@@ -123,7 +123,7 @@ por un cambio de saltos de línea.
 
 La comprobación y las ejecuciones usan el proveedor y modelo efectivos; cambiar esa
 variable en la terminal del script no cambia el backend ya iniciado. El progreso registra
-las llamadas reales y su latencia. Si un sílabo carece de logros o candidatos del catálogo,
+las llamadas reales y su latencia. Si un sílabo carece de texto o candidatos del catálogo,
 la ejecución queda sin publicación. El script exige análisis LLM completo y al menos una
 propuesta válida por sílabo antes de aceptar `ALLOW_IMPORT`.
 
@@ -137,15 +137,19 @@ El diagnóstico consulta el estado actual y guarda `diagnostico.json` junto al r
 Muestra LLM habilitado, modelo, logros detectados, sílabos con respuesta, omitidos,
 propuestas válidas y hallazgos. No modifica las ejecuciones ni sus CSV.
 
-El analista procesa cada sílabo con los candidatos vectorizados de su propia carrera.
+El analista recibe el texto fuente completo extraído del DOCX o PDF, junto con la sumilla,
+los logros y el programa analítico estructurados. La búsqueda vectorial consulta el texto
+fuente y los logros para recuperar candidatos de la misma carrera, sin modificar el catálogo.
 La política `catalogo_min_1_max_1` queda en el snapshot de cada ejecución. Python exige
 una habilidad válida del catálogo por sílabo y reenvía el mismo contexto al LLM cuando
 la respuesta está vacía o no pasa la validación, hasta un máximo de tres llamadas por
 sílabo. Si ninguna sirve, registra `HABILIDAD_MINIMA_NO_CUMPLIDA` y continúa con el
 siguiente sílabo. Esa carrera queda sin publicación hasta resolver los faltantes.
-La habilidad puede estar sustentada por los logros
-sin que su nombre aparezca literalmente. Python comprueba la referencia, la evidencia
-del logro y el límite de una habilidad. La publicación se bloquea si algún sílabo queda
+La habilidad puede sustentarse en cualquier parte del sílabo sin que su nombre aparezca
+literalmente. Python comprueba la referencia, la cita literal de la sección declarada
+(`logro`, `sumilla`, `contenido` o `silabo`) y el límite de una habilidad. Si la evidencia
+no corresponde a un logro, la cobertura se relaciona directamente al sílabo sin inventar
+logros. La publicación se bloquea si algún sílabo queda
 sin habilidad. Una habilidad seleccionada puede conservar varios logros y coberturas.
 Los nombres, descripciones e IDs se copian exactamente del catálogo HAB_TEC. Una
 habilidad compartida conserva una fila por carrera cuando su texto oficial varía.

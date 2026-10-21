@@ -20,6 +20,8 @@ from agente.normalizador.modelos import Hallazgo
 from agente.normalizador.silabos.analista_tecnico import (
     CatalogoTecnico,
     cargar_catalogo_hab_tec,
+    construir_contexto_tecnico,
+    evidencia_tecnica_valida,
     validar_habilidad_catalogo,
 )
 from agente.normalizador.silabos.entrada import es_todas_carreras
@@ -572,9 +574,16 @@ def construir_catalogos_curriculares(
                 referencias_logro.append(id_logro_resuelto)
         ids_logro = list(dict.fromkeys(referencias_logro))
         if not ids_logro:
-            raise ValueError(
-                f"La competencia técnica aprobada debe referenciar un logro de {id_silabo}"
-            )
+            registro_fuente = next(r for r in registros if _texto(r.get("id_silabo")) == id_silabo)
+            if not evidencia_tecnica_valida(
+                tecnica.get("evidencia"), construir_contexto_tecnico(registro_fuente)
+            ):
+                raise ValueError(
+                    f"La competencia técnica aprobada debe referenciar un logro de {id_silabo} "
+                    "o evidencia literal del sílabo"
+                )
+            # La habilidad queda relacionada al sílabo sin inventar un logro fuente.
+            ids_logro = [""]
         for id_logro in ids_logro:
             fila = _cobertura(id_curso, id_silabo, "", id_habilidad, id_logro)
             coberturas[fila["id_cobertura_curricular"]] = fila
