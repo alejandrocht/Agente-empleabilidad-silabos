@@ -366,6 +366,16 @@ El origen debe tener carpetas por carrera y periodo. La salida contiene cinco CS
 curriculares; no genera `catalogo_habilidades.csv`. Esta exportación es independiente
 de la corrida Cactus con catálogo HAB TEC vectorizado.
 
+## Respuestas técnicas preparadas en sesión
+
+El modo opcional `NORMALIZADOR_CURRICULAR_SESSION_ANALYST_JSONL` permite aportar
+respuestas técnicas ya redactadas para una ejecución curricular con LLM habilitado.
+Cada línea JSON debe incluir `id_silabo`, `registro_sha256`, `catalogo_sha256` y
+`competencias`. El backend exige una respuesta por sílabo, vincula los hashes al
+registro extraído y al catálogo técnico oficial, y valida las citas y evidencias
+antes de materializar propuestas. Si falta una respuesta o cambia una fuente,
+la ejecución falla. Sin esa variable, se conserva el análisis LLM normal.
+
 ## Verification
 
 From `backend/`:

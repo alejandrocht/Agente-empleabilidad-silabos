@@ -5,13 +5,14 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import os
 import shutil
 import zipfile
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from time import perf_counter
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from docx import Document
 from openai import LengthFinishReasonError
@@ -32,6 +33,8 @@ from agente.normalizador.silabos import programa_pdf as _programa_pdf
 from agente.normalizador.silabos.entrada import carrera_del_archivo, es_todas_carreras
 from agente.normalizador.silabos.extraccion_curricular import distinguir_cursos_multicarrera
 from agente.normalizador.silabos.salida_catalogos import ResultadoCatalogosTecnicos
+
+session_analyst = cast(Any, importlib.import_module("agente.normalizador.silabos.session_analyst"))
 
 construir_salidas_tecnicas = salida_catalogos.construir_salidas_tecnicas
 
@@ -249,8 +252,16 @@ def limpiar_archivo(
     cuarentena: list[dict[str, object]] = []
     hallazgos: list[Hallazgo] = []
     registros: list[dict[str, object]] = []
+    ruta_respuestas_sesion = session_analyst.ruta_respuestas_sesion_activa(
+        usar_llm,
+        os.environ.get("NORMALIZADOR_CURRICULAR_SESSION_ANALYST_JSONL"),
+    )
     if usar_llm and configuracion_curricular is None:
         raise ValueError("La limpieza curricular con LLM requiere configuracion_curricular")
+    if ruta_respuestas_sesion and configuracion_curricular is None:
+        raise session_analyst.SessionAnalystInputError(
+            "El modo session-authored requiere configuracion_curricular para el catálogo oficial"
+        )
     silabos_iniciales = tuple(
         ProgresoSilaboLLM(indice=indice, total=len(validacion.archivos), archivo=archivo.nombre)
         for indice, archivo in enumerate(validacion.archivos, start=1)
@@ -522,6 +533,44 @@ def limpiar_archivo(
                 )
             )
 
+    respuestas_sesion: (
+        tuple[list[dict[str, object]], list[dict[str, object]], dict[str, str]] | None
+    ) = None
+    if ruta_respuestas_sesion:
+        assert configuracion_curricular is not None
+        if len(registros) != len(validacion.archivos):
+            raise session_analyst.SessionAnalystInputError(
+                "El modo session-authored requiere una extracción correcta de todos los archivos "
+                f"({len(registros)}/{len(validacion.archivos)} disponibles)"
+            )
+        respuestas_sesion = session_analyst.analizar_respuestas_sesion(
+            registros,
+            ruta_respuestas_sesion,
+            configuracion_curricular.ruta_catalogo_tecnico,
+        )
+        if usar_llm:
+            assert respuestas_sesion is not None
+            propuestas_por_silabo: dict[str, int] = {}
+            for propuesta in respuestas_sesion[0]:
+                id_silabo = str(propuesta["id_silabo"])
+                propuestas_por_silabo[id_silabo] = propuestas_por_silabo.get(id_silabo, 0) + 1
+            for indice, registro in enumerate(registros, start=1):
+                id_silabo = str(registro.get("id_silabo") or "")
+                contexto = analista_tecnico.construir_contexto_tecnico(registro)
+                logros_totales = len(analista_tecnico._lista_mapeos(contexto.get("logros")))
+                propuestas = propuestas_por_silabo.get(id_silabo, 0)
+                actualizar_traza_silabo(
+                    ProgresoSilaboLLM(
+                        indice=indice,
+                        total=len(registros),
+                        id_silabo=id_silabo,
+                        estado_analisis="completado" if propuestas else "sin_propuesta",
+                        logros_procesados=logros_totales,
+                        logros_totales=logros_totales,
+                        propuestas_validas=propuestas,
+                    )
+                )
+
     staging = limpios / "silabos.jsonl"
     verificar_cancelacion()
     with staging.open("w", encoding="utf-8", newline="\n") as salida_staging:
@@ -535,8 +584,31 @@ def limpiar_archivo(
         auditoria_tecnica: list[dict[str, object]] = []
         propuestas_tecnicas_path = reportes / "propuestas_tecnicas.jsonl"
         analisis_tecnico_path = reportes / "analisis_tecnico.json"
-        if not usar_llm:
-            analisis_tecnico: dict[str, object] = {
+        analisis_tecnico: dict[str, object]
+        if respuestas_sesion is not None:
+            assert ruta_respuestas_sesion is not None
+            propuestas_tecnicas, auditoria_tecnica, provenance_sesion = respuestas_sesion
+            for advertencia in auditoria_tecnica:
+                hallazgos.append(
+                    _hallazgo(
+                        str(advertencia["codigo"]),
+                        "warning",
+                        str(advertencia["mensaje"]),
+                        validacion.archivo,
+                        str(advertencia["id_silabo"]),
+                    )
+                )
+            analisis_tecnico = {
+                "estado": ("COMPLETADO_CON_ADVERTENCIAS" if auditoria_tecnica else "COMPLETADO"),
+                "modo_analista": "session-authored",
+                "modo_ejecucion": "SESSION_AUTHORED",
+                "propuestas_pendientes": len(propuestas_tecnicas),
+                **provenance_sesion,
+            }
+            if auditoria_tecnica:
+                analisis_tecnico["advertencias"] = auditoria_tecnica
+        elif not usar_llm:
+            analisis_tecnico = {
                 "estado": "COMPLETADO",
                 "modo_analista": "technical",
                 "modo_ejecucion": "DETERMINISTICO_SIN_LLM",
