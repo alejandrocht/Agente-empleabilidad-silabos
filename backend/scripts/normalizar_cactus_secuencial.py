@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 import time
+from collections import Counter
 from datetime import datetime
 from getpass import getpass
 from pathlib import Path
@@ -249,11 +250,23 @@ def ejecutar(
         guardar(destino / "resumen.json", resumen)
         if not publicada:
             fallos += 1
-            codigos = [h.get("codigo") for h in estado.get("hallazgos", [])]
+            hallazgos = estado.get("hallazgos") or []
+            codigos = Counter(str(h.get("codigo") or "DESCONOCIDO") for h in hallazgos)
             print(
-                f"  Sin publicación. Hallazgos: {codigos}. Se continuará con la siguiente.",
+                f"  Sin publicación. Hallazgos: {dict(codigos)}. "
+                "Se continuará con la siguiente.",
                 flush=True,
             )
+            for hallazgo in hallazgos:
+                if hallazgo.get("codigo") in {
+                    "ERROR_INTERNO_LIMPIEZA_SILABOS",
+                    "HABILIDAD_MINIMA_NO_CUMPLIDA",
+                }:
+                    print(
+                        f"  {hallazgo['codigo']}: "
+                        f"{hallazgo.get('detalle') or hallazgo.get('mensaje') or ''}",
+                        flush=True,
+                    )
         else:
             print("  Publicación permitida; los CSV están en la ejecución del backend.", flush=True)
     print(

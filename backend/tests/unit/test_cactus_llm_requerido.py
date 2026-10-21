@@ -61,6 +61,27 @@ def test_llm_real_sin_habilidades_no_publica(monkeypatch, tmp_path):
         cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=12)
 
 
+def test_cli_muestra_detalle_de_error_interno_sin_repetir_hallazgos(
+    monkeypatch, tmp_path, capsys
+):
+    estado = {
+        "id_ejecucion": "NOR_0000000000000001",
+        "estado": "error",
+        "configuracion_curricular": {"usar_llm": True},
+        "release_gate": {"decision": "BLOCK_IMPORT"},
+        "hallazgos": [
+            {"codigo": "ERROR_INTERNO_LIMPIEZA_SILABOS", "detalle": "TypeError: prueba"},
+            {"codigo": "LOGRO_SIN_COMPETENCIA"},
+            {"codigo": "LOGRO_SIN_COMPETENCIA"},
+        ],
+    }
+    monkeypatch.setattr(cli, "solicitar", lambda *_args, **_kwargs: estado)
+    assert cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=12) == 1
+    salida = capsys.readouterr().out
+    assert "'LOGRO_SIN_COMPETENCIA': 2" in salida
+    assert "ERROR_INTERNO_LIMPIEZA_SILABOS: TypeError: prueba" in salida
+
+
 def test_preflight_usa_config_real_del_backend_sin_descargar_o_pedir_secretos(monkeypatch):
     from api import servidor
 
