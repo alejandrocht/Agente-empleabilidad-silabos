@@ -29,6 +29,7 @@ from agente.normalizador.empleabilidad.hab_tec_retriever import (
 )
 from agente.normalizador.empleabilidad.limpieza import limpiar_archivo
 from agente.normalizador.empleabilidad.pipeline import normalizar_staging
+from agente.normalizador.escritura_atomica import escribir_texto_atomico
 from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import (
     EstadoEjecucion,
@@ -355,13 +356,10 @@ class GestorEjecuciones:
                 "hallazgos": hallazgos,
             }
         )
-        temporal = manifest.with_suffix(".json.tmp")
-        temporal.write_text(
+        escribir_texto_atomico(
+            manifest,
             json.dumps(datos, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-            newline="\n",
         )
-        temporal.replace(manifest)
         respuesta = self._persistencia.obtener(id_ejecucion)
         respuesta["mensaje"] = "Ejecución huérfana cancelada tras reiniciar la API."
         return respuesta

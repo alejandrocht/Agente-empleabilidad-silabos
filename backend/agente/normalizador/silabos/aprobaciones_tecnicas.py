@@ -14,6 +14,7 @@ from importlib import import_module
 from pathlib import Path
 from threading import RLock
 
+from agente.normalizador.escritura_atomica import escribir_texto_atomico
 from agente.normalizador.silabos import salida_catalogos
 from agente.normalizador.silabos.entrada import normalizar_carrera, normalizar_periodo
 from agente.normalizador.silabos.registro_habilidades import RegistroHabilidades
@@ -414,13 +415,7 @@ def _leer_registros(directorio: Path) -> list[dict[str, object]]:
 
 
 def _escribir_texto_atomico(ruta: Path, contenido: str) -> None:
-    ruta.parent.mkdir(parents=True, exist_ok=True)
-    temporal = ruta.with_name(f".{ruta.name}.technical.tmp")
-    try:
-        temporal.write_text(contenido, encoding="utf-8")
-        temporal.replace(ruta)
-    finally:
-        temporal.unlink(missing_ok=True)
+    escribir_texto_atomico(ruta, contenido)
 
 
 def _escribir_json_atomico(ruta: Path, valor: Mapping[str, object]) -> None:

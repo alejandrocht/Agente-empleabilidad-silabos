@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol, cast
 
+from agente.normalizador.escritura_atomica import escribir_texto_atomico
 from agente.normalizador.modelos import (
     EstadoEjecucion,
     Hallazgo,
@@ -375,13 +376,10 @@ class RepositorioEjecucionesPersistidas:
 
     def persistir(self, ejecucion: EjecucionPersistible) -> None:
         manifest = ejecucion.directorio / "manifest.json"
-        temporal = manifest.with_suffix(".json.tmp")
-        temporal.write_text(
+        escribir_texto_atomico(
+            manifest,
             json.dumps(ejecucion.a_dict(), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-            newline="\n",
         )
-        temporal.replace(manifest)
 
     def listar_historial(self, limite: int = 20) -> dict[str, object]:
         self.aplicar_retencion()
@@ -671,15 +669,7 @@ class RepositorioEjecucionesPersistidas:
 
     @staticmethod
     def _escribir_migracion_atomica(ruta: Path, contenido: str) -> None:
-        temporal = ruta.with_name(f".{ruta.name}.migracion.tmp")
-        try:
-            temporal.write_text(contenido, encoding="utf-8")
-            temporal.replace(ruta)
-        finally:
-            try:
-                temporal.unlink()
-            except FileNotFoundError:
-                pass
+        escribir_texto_atomico(ruta, contenido)
 
     @staticmethod
     def _actualizar_estado_migrado(manifest: dict[str, object]) -> None:

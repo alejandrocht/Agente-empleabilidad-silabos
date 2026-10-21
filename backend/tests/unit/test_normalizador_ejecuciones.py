@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from importlib import import_module
 from pathlib import Path
+from threading import Barrier
 from typing import cast
 
 import pytest
@@ -29,6 +31,88 @@ def _gestor_con_ejecucion(tmp_path: Path) -> tuple[GestorEjecuciones, str, Path]
         {"carrera": "Marketing", "periodo": "2026-1"},
     )
     return gestor, id_ejecucion, directorio
+
+
+@pytest.mark.parametrize("winerror", [5, 32, 33])
+def test_manifest_reintenta_bloqueo_transitorio_de_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, winerror: int
+) -> None:
+    gestor, identificador, directorio = _gestor_con_ejecucion(tmp_path)
+    ejecucion = gestor._obtener_objeto(identificador)
+    ejecucion.estado = "limpiando"
+    reemplazar = Path.replace
+    intentos = []
+
+    def reemplazo_bloqueado(temporal: Path, destino: Path) -> Path:
+        if destino == directorio / "manifest.json":
+            intentos.append(temporal)
+            if len(intentos) <= 2:
+                error = PermissionError(13, "Access is denied", str(temporal))
+                error.winerror = winerror
+                raise error
+        return reemplazar(temporal, destino)
+
+    monkeypatch.setattr(Path, "replace", reemplazo_bloqueado)
+    gestor._persistir(ejecucion)
+
+    assert len(intentos) == 3
+    assert json.loads((directorio / "manifest.json").read_text())["estado"] == "limpiando"
+    assert not list(directorio.glob("*.tmp"))
+
+
+def test_manifest_no_comparte_temporal_entre_escrituras_concurrentes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gestor, identificador, directorio = _gestor_con_ejecucion(tmp_path)
+    ejecucion = gestor._obtener_objeto(identificador)
+    barrera = Barrier(2)
+    reemplazar = Path.replace
+
+    def reemplazo_concurrente(temporal: Path, destino: Path) -> Path:
+        if destino == directorio / "manifest.json":
+            barrera.wait(timeout=5)
+        return reemplazar(temporal, destino)
+
+    monkeypatch.setattr(Path, "replace", reemplazo_concurrente)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futuros = [executor.submit(gestor._persistir, ejecucion) for _ in range(2)]
+        for futuro in futuros:
+            futuro.result(timeout=10)
+
+    assert json.loads((directorio / "manifest.json").read_text())["id_ejecucion"] == identificador
+    assert not list(directorio.glob("*.tmp"))
+
+
+@pytest.mark.parametrize("winerror,intentos_esperados", [(5, 8), (None, 1)])
+def test_manifest_conserva_version_anterior_si_el_permiso_no_se_recupera(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    winerror: int | None, intentos_esperados: int,
+) -> None:
+    from agente.normalizador import escritura_atomica
+
+    gestor, identificador, directorio = _gestor_con_ejecucion(tmp_path)
+    manifest = directorio / "manifest.json"
+    anterior = manifest.read_bytes()
+    ejecucion = gestor._obtener_objeto(identificador)
+    ejecucion.estado = "limpiando"
+    intentos = []
+
+    def reemplazo_denegado(temporal: Path, destino: Path) -> Path:
+        intentos.append(temporal)
+        assert destino == manifest
+        error = PermissionError(13, "Access is denied", str(temporal))
+        if winerror is not None:
+            error.winerror = winerror
+        raise error
+
+    monkeypatch.setattr(Path, "replace", reemplazo_denegado)
+    monkeypatch.setattr(escritura_atomica, "sleep", lambda _espera: None)
+    with pytest.raises(PermissionError):
+        gestor._persistir(ejecucion)
+
+    assert len(intentos) == intentos_esperados
+    assert manifest.read_bytes() == anterior
+    assert not list(directorio.glob("*.tmp"))
 
 
 def _mapping(value: object) -> Mapping[str, object]:
