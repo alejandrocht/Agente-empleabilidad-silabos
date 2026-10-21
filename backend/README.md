@@ -354,6 +354,18 @@ entity resolution or the domain query gateway.
 See `.env.example` for all current schema-cache, query-cache, logging, and role-specific
 OpenAI settings.
 
+## Exportación determinística de sílabos
+
+Para consolidar DOCX de varias carreras sin llamadas LLM, ejecuta desde `backend`:
+
+```powershell
+uv run --locked python -m agente.normalizador.silabos.exportacion_deterministica RUTA_SILABOS RUTA_SALIDA
+```
+
+El origen debe tener carpetas por carrera y periodo. La salida contiene cinco CSV
+curriculares; no genera `catalogo_habilidades.csv`. Esta exportación es independiente
+de la corrida Cactus con catálogo HAB TEC vectorizado.
+
 ## Verification
 
 From `backend/`:
