@@ -1,0 +1,13 @@
+# Spanish domain vocabulary used by the curricular normalizer tests and API.
+# Keep these exact words allowed; do not broaden this list into a dictionary.
+[default]
+extend-ignore-re = [
+  "(?s)(#|//)\\s*spellchecker:off.*?\\n\\s*(#|//)\\s*spellchecker:on",
+]
+
+[default.extend-words]
+configuracion = "configuracion"
+secretos = "secretos"
+limite = "limite"
+falso = "falso"
+Falso = "Falso"

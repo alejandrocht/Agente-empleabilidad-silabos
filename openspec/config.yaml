@@ -1,0 +1,65 @@
+project: Agente-empleabilidad-silabos
+language: en
+sdd:
+  strict_tdd: true
+  artifact_store: openspec
+  execution_mode: auto
+  delivery_strategy: auto-chain
+  chain_strategy: stacked-to-main
+  review_budget_lines: 400
+  scope:
+    branch: fix/high-severity-reliability
+    base_rollback_commit: c2bc753
+    selected_work: reliability-security
+    include:
+      - one critical severity finding
+      - seven high severity findings
+      - read-only architecture assessment of the curricular analyst system prompt
+    exclude:
+      - medium severity frontend polling issue
+      - functional source code changes during init
+      - real LLM calls
+      - external paid API calls
+  phase_rules:
+    init:
+      allowed_writes:
+        - openspec/config.yaml
+        - openspec/project-context.md
+      forbidden_writes:
+        - backend/**
+        - frontend/**
+        - functional source code
+    implementation:
+      test_first: true
+      use_fakes_or_contracts_only: true
+      no_live_llm_or_paid_external_api: true
+      protect_read_only_neo4j_boundary: true
+      auto_chain_on_review_budget_risk: true
+testing:
+  backend:
+    stack: Python 3.11+, FastAPI, LangGraph, Neo4j driver, LangChain Core, langchain-openai
+    package_manager: uv / pip editable install
+    commands:
+      install_dev: cd backend && python -m pip install -e ".[dev]"
+      lint: cd backend && python -m ruff check .
+      typecheck: cd backend && python -m mypy agente api
+      tests: cd backend && python -m pytest -q
+      compile: cd backend && python -m compileall -q agente api scripts
+    offline_controls:
+      - backend/tests/conftest.py sets LANGSMITH_TRACING=false
+      - backend/tests/conftest.py sets NORMALIZADOR_CURRICULAR_LLM=false for deterministic tests
+      - Use fakes/contracts instead of live OpenAI, Neo4j, LangSmith, or paid APIs for this selected work
+  frontend:
+    stack: Next.js 16, React 19, Vitest, jsdom
+    package_manager: npm
+    commands:
+      tests: cd frontend && npm run test
+      build: cd frontend && npm run build
+      check: cd frontend && npm run check
+    note: medium frontend polling issue is explicitly out of scope for the selected work
+quality_gates:
+  - OpenSpec artifacts remain in English
+  - No functional source-code modifications during init
+  - Strict TDD applies to later implementation phases
+  - Verification must be offline with fakes/contracts only for this work
+  - Use chained review slices when the forecast crosses the 400 changed-line review budget
