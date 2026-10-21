@@ -121,13 +121,11 @@ descripciones siguen rechazados. La comprobación diferencia carpeta sin catálo
 hash distinto, índice incompleto y carreras ausentes. No hace falta revectorizar
 por un cambio de saltos de línea.
 
-La comprobación y las ejecuciones usan el proveedor
-y modelo efectivos; cambiar esa variable en la terminal del script no cambia el backend
-ya iniciado. El analista recibe cada sílabo extraído, incluso sin logros o candidatos;
-en ese caso puede responder con una lista vacía. El progreso registra las llamadas reales
-y su latencia. No marca éxito solo por `ALLOW_IMPORT`: exige una respuesta válida del
-LLM por cada sílabo detectado y la fase completada. Si falta análisis, detiene la secuencia.
-Una carrera puede dejar habilidades vacías después del LLM; no se fuerzan habilidades.
+La comprobación y las ejecuciones usan el proveedor y modelo efectivos; cambiar esa
+variable en la terminal del script no cambia el backend ya iniciado. El progreso registra
+las llamadas reales y su latencia. Si un sílabo carece de logros o candidatos del catálogo,
+la ejecución queda sin publicación. El script exige análisis LLM completo y al menos una
+propuesta válida por sílabo antes de aceptar `ALLOW_IMPORT`.
 
 Para revisar los IDs de la última corrida sin descargar otra vez ni pedir credenciales:
 
