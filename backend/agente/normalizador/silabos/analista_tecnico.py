@@ -28,6 +28,9 @@ from agente.normalizador.excepciones import CancelacionSolicitada
 from agente.normalizador.modelos import ProgresoSilaboLLM
 
 COLUMNAS_CATALOGO_TECNICO_XLSX = ("Carrera", "Habilidad tecnica", "Descripcion")
+MAX_INTENTOS_HABILIDAD_POR_SILABO = 5
+
+
 COLUMNAS_MAPA_CARRERA_COMPETENCIA = (
     "id_carrera",
     "nombre_carrera",
@@ -48,6 +51,10 @@ COLUMNAS_CATALOGO_TECNICO_CSV = (
     "descripciones_alternativas",
 )
 _FilaCatalogo = tuple[int, str, str, str]
+
+
+class HabilidadMinimaNoCumplida(ValueError):
+    """El analista agotó los intentos sin una habilidad válida para el sílabo."""
 
 
 @dataclass(frozen=True)
@@ -795,6 +802,19 @@ def inferir_competencias_tecnicas(
         )
         if al_actualizar_progreso_silabo is not None:
             al_actualizar_progreso_silabo(traza_base)
+        if exigir_habilidad and (not candidatos or not logros_totales):
+            if al_actualizar_progreso_silabo is not None:
+                al_actualizar_progreso_silabo(
+                    replace(
+                        traza_base,
+                        estado_analisis="error",
+                        error_codigo="HABILIDAD_MINIMA_NO_CUMPLIDA",
+                    )
+                )
+            raise HabilidadMinimaNoCumplida(
+                f"El sílabo {id_silabo or '<sin id>'} no tiene logros o candidatos "
+                "del catálogo para asignar una habilidad válida."
+            )
         if analista is None:
             llm = obtener_llm("analista_curricular", configuracion_curricular=configuracion)
             analista = llm.with_structured_output(
@@ -802,11 +822,6 @@ def inferir_competencias_tecnicas(
                 method="json_schema",
             )
 
-        if exigir_habilidad and (not candidatos or not logros_totales):
-            raise ValueError(
-                f"El sílabo {id_silabo or '<sin id>'} no tiene logros o candidatos "
-                "del catálogo para asignar una habilidad válida."
-            )
         inicio_modelo = perf_counter()
         referencia_rechazada = False
 
@@ -868,14 +883,25 @@ def inferir_competencias_tecnicas(
             if propuestas_validas_filas or not exigir_habilidad:
                 break
             intento += 1
+            sin_mas_intentos = intento >= MAX_INTENTOS_HABILIDAD_POR_SILABO
             if al_actualizar_progreso_silabo is not None:
                 al_actualizar_progreso_silabo(
                     replace(
                         traza_base,
+                        estado_analisis="error" if sin_mas_intentos else "procesando",
                         logros_procesados=logros_totales,
                         latencia_modelo_ms=round((perf_counter() - inicio_modelo) * 1000, 2),
-                        error_codigo="HABILIDAD_NO_VALIDA_REINTENTO",
+                        error_codigo=(
+                            "HABILIDAD_MINIMA_NO_CUMPLIDA"
+                            if sin_mas_intentos
+                            else "HABILIDAD_NO_VALIDA_REINTENTO"
+                        ),
                     )
+                )
+            if sin_mas_intentos:
+                raise HabilidadMinimaNoCumplida(
+                    f"El sílabo {id_silabo or '<sin id>'} no produjo una habilidad válida "
+                    f"del catálogo tras {MAX_INTENTOS_HABILIDAD_POR_SILABO} intentos."
                 )
         propuestas_validas = len(propuestas_validas_filas)
         resultado.extend(propuestas_validas_filas)

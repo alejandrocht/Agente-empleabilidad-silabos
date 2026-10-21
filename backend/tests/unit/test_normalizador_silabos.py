@@ -556,6 +556,37 @@ def test_technical_analyzer_classifies_unrelated_failure_as_unavailable(
     )
 
 
+def test_technical_analyzer_reports_five_failed_skill_attempts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fuente = tmp_path / "Ciclo_03" / "DISENO_DE_BASES_DE_DATOS.docx"
+    fuente.parent.mkdir()
+    _crear_docx(fuente)
+    validacion = validar_archivo(fuente, "Ingeniería de Sistemas", "2030-1")
+    configuracion = settings.configuracion_normalizador_curricular()
+    monkeypatch.setattr(
+        analista_tecnico,
+        "inferir_competencias_tecnicas",
+        Mock(side_effect=analista_tecnico.HabilidadMinimaNoCumplida("SIL_TEST tras 5 intentos")),
+    )
+
+    resultado = limpiar_archivo(
+        fuente,
+        tmp_path / "ejecucion",
+        validacion,
+        usar_llm=True,
+        configuracion_curricular=configuracion,
+    )
+
+    assert resultado.publicable is False
+    assert "TECHNICAL_ANALYSIS_FAILED" in resultado.release_gate["blockers"]
+    hallazgo = next(
+        item for item in resultado.hallazgos
+        if item.codigo == "HABILIDAD_MINIMA_NO_CUMPLIDA"
+    )
+    assert "SIL_TEST tras 5 intentos" in hallazgo.mensaje
+
+
 def test_technical_analyzer_without_valid_proposals_records_warning(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -657,22 +657,31 @@ def limpiar_archivo(
                 raise
             except Exception as exc:
                 respuesta_truncada = isinstance(exc, LengthFinishReasonError)
+                sin_habilidad = isinstance(exc, analista_tecnico.HabilidadMinimaNoCumplida)
                 hallazgos.append(
                     _hallazgo(
                         (
-                            "ANALISTA_TECNICO_RESPUESTA_TRUNCADA"
-                            if respuesta_truncada
-                            else "ANALISTA_TECNICO_NO_DISPONIBLE"
+                            "HABILIDAD_MINIMA_NO_CUMPLIDA"
+                            if sin_habilidad
+                            else (
+                                "ANALISTA_TECNICO_RESPUESTA_TRUNCADA"
+                                if respuesta_truncada
+                                else "ANALISTA_TECNICO_NO_DISPONIBLE"
+                            )
                         ),
                         "warning",
                         (
-                            "El analista técnico respondió, pero su salida fue truncada "
-                            "al alcanzar el límite de contexto/longitud; se conservan "
-                            "los resultados deterministas."
-                            if respuesta_truncada
+                            str(exc)
+                            if sin_habilidad
                             else (
-                                "El analista técnico no estuvo disponible; se conserva "
-                                "el resultado determinista."
+                                "El analista técnico respondió, pero su salida fue truncada "
+                                "al alcanzar el límite de contexto/longitud; se conservan "
+                                "los resultados deterministas."
+                                if respuesta_truncada
+                                else (
+                                    "El analista técnico no estuvo disponible; se conserva "
+                                    "el resultado determinista."
+                                )
                             )
                         ),
                         validacion.archivo,

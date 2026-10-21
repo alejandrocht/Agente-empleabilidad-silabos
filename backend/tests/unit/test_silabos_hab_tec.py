@@ -465,6 +465,25 @@ def test_respuesta_vacia_reenvia_silabo_hasta_habilidad_valida(
     assert auditoria == []
 
 
+def test_quinto_intento_puede_completar_habilidad(indice: Path, monkeypatch) -> None:
+    llamadas = _modelo(
+        monkeypatch,
+        [{"competencias": []}] * 4 + [{"competencias": [_propuesta()]}],
+    )
+    assert len(_inferir([_registro()])) == 1
+    assert len(llamadas) == 5
+
+
+def test_cinco_respuestas_vacias_bloquean_silabo(indice: Path, monkeypatch) -> None:
+    llamadas = _modelo(monkeypatch, [{"competencias": []}])
+    trazas = []
+    with pytest.raises(analista_tecnico.HabilidadMinimaNoCumplida, match="tras 5 intentos"):
+        _inferir([_registro()], al_actualizar_progreso_silabo=trazas.append)
+    assert len(llamadas) == 5
+    assert trazas[-1].estado_analisis == "error"
+    assert trazas[-1].error_codigo == "HABILIDAD_MINIMA_NO_CUMPLIDA"
+
+
 @pytest.mark.parametrize("habilitado", [False, True])
 def test_cactus_docx_pipeline_y_cli_verifican_llm_y_habilidades(
     indice: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, habilitado: bool
