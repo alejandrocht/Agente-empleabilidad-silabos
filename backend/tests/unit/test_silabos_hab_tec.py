@@ -13,6 +13,8 @@ from zipfile import ZipFile
 import pytest
 from docx import Document
 from fastapi.testclient import TestClient
+from openai import LengthFinishReasonError
+from openai.types.chat import ChatCompletion
 from openpyxl import Workbook
 
 from agente.config.settings import configuracion_normalizador_curricular
@@ -90,7 +92,9 @@ def _propuesta(ref: str | None = "HAB_TEC_001") -> dict[str, Any]:
     }
 
 
-def _modelo(monkeypatch: pytest.MonkeyPatch, respuestas: list[dict[str, Any] | None]) -> list[Any]:
+def _modelo(
+    monkeypatch: pytest.MonkeyPatch, respuestas: list[dict[str, Any] | None | Exception]
+) -> list[Any]:
     llamadas: list[Any] = []
 
     class Modelo:
@@ -99,7 +103,10 @@ def _modelo(monkeypatch: pytest.MonkeyPatch, respuestas: list[dict[str, Any] | N
 
         def invoke(self, mensajes: Any) -> dict[str, Any] | None:
             llamadas.append(mensajes)
-            return deepcopy(respuestas.pop(0) if len(respuestas) > 1 else respuestas[0])
+            respuesta = respuestas.pop(0) if len(respuestas) > 1 else respuestas[0]
+            if isinstance(respuesta, Exception):
+                raise respuesta
+            return deepcopy(respuesta)
 
     monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: Modelo())
     return llamadas
@@ -554,6 +561,81 @@ def test_tercer_intento_puede_completar_habilidad(indice: Path, monkeypatch) -> 
     )
     assert len(_inferir([_registro()])) == 1
     assert len(llamadas) == 3
+
+
+def _truncada() -> LengthFinishReasonError:
+    return LengthFinishReasonError(completion=ChatCompletion(
+        id="test", created=0, model="test", object="chat.completion", choices=[]
+    ))
+
+
+def test_truncada_comparte_limite_de_tres_intentos(indice, monkeypatch):
+    llamadas = _modelo(monkeypatch, [
+        {"competencias": []}, _truncada(), {"competencias": [_propuesta()]},
+    ])
+    assert len(_inferir([_registro()])) == 1
+    assert len(llamadas) == 3
+
+
+def test_tres_truncadas_conservan_anteriores_y_siguen_con_el_siguiente(indice, monkeypatch):
+    llamadas = _modelo(monkeypatch, [
+        {"competencias": [_propuesta()]},
+        _truncada(), _truncada(), _truncada(),
+        {"competencias": [_propuesta()]},
+    ])
+    auditoria = []
+    resultado = _inferir(
+        [_registro(), _registro("SIL_2"), _registro("SIL_3")], auditoria=auditoria
+    )
+    assert len(llamadas) == 5
+    assert [p["id_silabo"] for p in resultado] == ["SIL_1", "SIL_3"]
+    assert auditoria[0]["id_silabo"] == "SIL_2"
+    assert auditoria[0]["codigo"] == "HABILIDAD_MINIMA_NO_CUMPLIDA"
+
+
+def test_recuperacion_conserva_resultados_y_reanuda_despues_de_un_corte(
+    indice, monkeypatch, tmp_path
+):
+    from scripts import recuperar_analisis_silabos as recovery
+
+    registros = [_registro("SIL_" + str(i) * 16) for i in (1, 2, 3)]
+    for i, registro in enumerate(registros, 1):
+        registro["id_curso"] = "CUR_" + str(i) * 16
+    catalogo = analista_tecnico.cargar_catalogo_hab_tec(indice.name)
+    monkeypatch.setattr(analista_tecnico, "cargar_catalogo_hab_tec", lambda *_: catalogo)
+    config = configuracion_normalizador_curricular({
+        "NORMALIZADOR_CURRICULAR_LLM": "true",
+        "NORMALIZADOR_CURRICULAR_LLM_TIMEOUT_SECONDS": "120",
+        "NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES": "2",
+        "NORMALIZADOR_CURRICULAR_LLM_BATCH_SIZE": "8",
+        "NORMALIZADOR_CURRICULAR_LLM_TEMPERATURE": "0",
+        "NORMALIZADOR_CURRICULAR_ANALYST_REASONING_EFFORT": "medium",
+    })
+    monkeypatch.setattr(recovery, "configuracion_normalizador_curricular", lambda: config)
+    _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+    anteriores = _inferir([registros[0]])
+    origen = tmp_path / "original"
+    staging = origen / "limpios/silabos.jsonl"
+    staging.parent.mkdir(parents=True)
+    (origen / "manifest.json").write_text(json.dumps({"parametros": {"hitl": "0"}}))
+    staging.write_text("\n".join(json.dumps(r) for r in registros), encoding="utf-8")
+    propuestas = origen / "salidas/reportes/propuestas_tecnicas.jsonl"
+    analista_tecnico.escribir_propuestas_tecnicas(propuestas, anteriores)
+    original = propuestas.read_bytes()
+    destino = tmp_path / "recuperacion"
+    llamadas = _modelo(monkeypatch, [
+        {"competencias": [_propuesta()]}, RuntimeError("Corte simulado"),
+    ])
+    with pytest.raises(RuntimeError, match="Corte simulado"):
+        recovery.recuperar(origen, destino)
+    assert len(llamadas) == 2
+    estado = json.loads((destino / "checkpoint.json").read_text())
+    assert estado["completados"] == [r["id_silabo"] for r in registros[:2]]
+    llamadas = _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+    resultado = recovery.recuperar(origen, destino)
+    assert len(llamadas) == 1
+    assert resultado["asignaciones"] == 3
+    assert propuestas.read_bytes() == original
 
 
 def test_tres_respuestas_vacias_omiten_silabo_y_continuan(indice: Path, monkeypatch) -> None:

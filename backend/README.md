@@ -154,6 +154,25 @@ logros. La publicación se bloquea si algún sílabo queda
 sin habilidad. Una habilidad seleccionada puede conservar varios logros y coberturas.
 Los nombres, descripciones e IDs se copian exactamente del catálogo HAB_TEC. Una
 habilidad compartida conserva una fila por carrera cuando su texto oficial varía.
+
+Una respuesta truncada también consume un intento del sílabo: comparte el máximo
+de tres llamadas con las respuestas vacías. Si no logra una habilidad válida, el
+analista conserva las propuestas anteriores y continúa con el siguiente sílabo.
+
+Para recuperar una corrida con los documentos ya descargados:
+
+```bash
+uv run --locked python scripts/recuperar_analisis_silabos.py --ejecucion NOR_... --salida recuperaciones_32k
+```
+
+El recuperador requiere `hitl=0`, conserva propuestas previas y analiza los sílabos
+sin resultados guardados. Guarda `checkpoint.json` después de cada sílabo y permite
+repetir el mismo comando tras un corte. Escribe los nuevos CSV en una carpeta separada;
+no reemplaza el historial original ni elimina controles de publicación. Si una corrida
+antigua perdió sus propuestas parciales por truncamiento, debe repetir ese análisis.
+`--resumen-secuenciador ruta/resumen.json --esperar-archivo ruta/corrida.exit` permite
+encolar la recuperación de las carreras no publicadas al terminar el secuenciador.
+
 Los cursos que comparten ID entre carreras reciben IDs de curso/sílabo diferenciados
 antes del análisis y la exportación. Los cursos sin colisión conservan sus IDs anteriores;
 los códigos del documento no cambian. Los nuevos IDs de cursos compartidos pertenecen

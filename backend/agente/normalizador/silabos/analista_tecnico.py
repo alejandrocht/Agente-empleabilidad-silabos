@@ -14,6 +14,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal
 
+from openai import LengthFinishReasonError
 from openpyxl import load_workbook
 from pydantic import BaseModel, Field
 
@@ -919,6 +920,10 @@ def inferir_competencias_tecnicas(
                     respuesta = RespuestaCompetenciasTecnicas.model_validate(respuesta)
             except CancelacionSolicitada:
                 raise
+            except LengthFinishReasonError:
+                # Comparte los tres intentos del sílabo con las respuestas vacías.
+                # No descartar las propuestas anteriores ni abortar la carrera.
+                respuesta = RespuestaCompetenciasTecnicas(competencias=[])
             except Exception:
                 if al_actualizar_progreso_silabo is not None:
                     al_actualizar_progreso_silabo(
