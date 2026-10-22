@@ -89,7 +89,8 @@ def _leer_csv(ruta: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(archivo))
 
 
-def test_corrida_llm_bloquea_silabo_sin_habilidad(tmp_path: Path) -> None:
+@pytest.mark.parametrize("politica", ["catalogo_min_1", "catalogo_min_1_max_1"])
+def test_corrida_llm_bloquea_silabo_sin_habilidad(tmp_path: Path, politica: str) -> None:
     registro = _registro()
     resultado = construir_salidas_tecnicas(
         [registro],
@@ -98,7 +99,7 @@ def test_corrida_llm_bloquea_silabo_sin_habilidad(tmp_path: Path) -> None:
         periodo_academico="2026-2",
         analisis_tecnico={
             "estado": "COMPLETADO",
-            "politica_habilidades": "catalogo_min_1_max_1",
+            "politica_habilidades": politica,
         },
     )
     assert resultado.publicable is False

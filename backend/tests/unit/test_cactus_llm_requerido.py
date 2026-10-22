@@ -131,7 +131,7 @@ def test_sin_habilidad_exige_reintento_del_backend(monkeypatch, tmp_path):
             "estado": "limpiado",
             "configuracion_curricular": {
                 "usar_llm": True,
-                "politica_habilidades": "catalogo_min_1_max_1",
+                "politica_habilidades": "catalogo_min_1",
             },
             "release_gate": {"decision": "ALLOW_IMPORT"},
             "progreso_llm": {

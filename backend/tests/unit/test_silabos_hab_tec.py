@@ -14,7 +14,6 @@ import pytest
 from docx import Document
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
-from pydantic import ValidationError
 
 from agente.config.settings import configuracion_normalizador_curricular
 from agente.normalizador.catalogo_hab_tec import GestorCatalogosHabTec
@@ -262,10 +261,29 @@ def test_acepta_habilidad_sustentada_sin_nombre_explicito(indice, monkeypatch):
     assert trazas[-1].estado_analisis == "completado"
 
 
-def test_modelo_no_puede_devolver_dos_habilidades_por_silabo(indice, monkeypatch):
-    _modelo(monkeypatch, [{"competencias": [_propuesta(), _propuesta()]}])
-    with pytest.raises(ValidationError):
-        _inferir([_registro()])
+@pytest.mark.parametrize("duplicar", [False, True])
+def test_modelo_acepta_varias_habilidades_y_deduplica_por_silabo(indice, monkeypatch, duplicar):
+    monkeypatch.setattr(HabTecRetriever, "_embedding", lambda *_args: (1.0, 1.0))
+    registro = _registro()
+    registro["datos"]["programa_analitico_detalle"] = [
+        {"tema": "Redes", "contenido": "Configura redes informáticas."}
+    ]
+    segunda = {
+        **_propuesta("HAB_TEC_002"),
+        "logros": [],
+        "evidencia": [{"fuente": "contenido", "fragmento": "Configura redes informáticas."}],
+    }
+    propuestas = [_propuesta(), segunda]
+    if duplicar:
+        propuestas.append(_propuesta())
+    llamadas = _modelo(monkeypatch, [{"competencias": propuestas}])
+    trazas = []
+    resultado = _inferir([registro], al_actualizar_progreso_silabo=trazas.append)
+    assert len(resultado) == 2
+    assert {p["catalogo_ref"] for p in resultado} == {"HAB_TEC_001", "HAB_TEC_002"}
+    assert {p["nombre_competencia"] for p in resultado} == {NOMBRE, "Redes"}
+    assert len(llamadas) == 1
+    assert trazas[-1].propuestas_validas == 2
 
 
 def test_registros_repetidos_no_agregan_otra_habilidad_al_mismo_silabo(indice, monkeypatch):
@@ -274,9 +292,13 @@ def test_registros_repetidos_no_agregan_otra_habilidad_al_mismo_silabo(indice, m
     assert len(llamadas) == 1
 
 
-def test_exportacion_rechaza_segunda_habilidad_aun_aprobada(indice, monkeypatch, tmp_path):
+def test_exportacion_conserva_varias_habilidades_aprobadas_por_silabo(
+    indice, monkeypatch, tmp_path
+):
     _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
     registro = _registro()
+    registro["id_curso"] = "CUR_" + "1" * 16
+    registro["id_silabo"] = "SIL_" + "2" * 16
     registro["datos"]["programa_analitico_detalle"] = [{"tema": "Redes", "contenido": ""}]
     primera = {**_inferir([registro])[0], "estado_aprobacion": "APROBADA"}
     segunda = {
@@ -285,15 +307,25 @@ def test_exportacion_rechaza_segunda_habilidad_aun_aprobada(indice, monkeypatch,
         "nombre_competencia": "Redes",
         "descripcion_breve_competencia": "Configura redes informáticas.",
     }
-    with pytest.raises(ValueError, match="una habilidad técnica por sílabo"):
-        salida_catalogos.construir_catalogos_curriculares(
-            [registro],
-            tmp_path,
-            carrera="INGENIERIA_DE_SISTEMAS",
-            periodo_academico="2026-2",
-            competencias_tecnicas=[primera, segunda],
-        )
-    assert not (tmp_path / "catalogo_habilidades.csv").exists()
+    salida_catalogos.construir_catalogos_curriculares(
+        [registro],
+        tmp_path,
+        carrera="INGENIERIA_DE_SISTEMAS",
+        periodo_academico="2026-2",
+        competencias_tecnicas=[primera, segunda],
+    )
+    from agente.db.neo4j_catalogos import leer_catalogos
+
+    paquete = leer_catalogos(tmp_path)
+    assert {h["id_habilidad"] for h in paquete["catalogo_habilidades.csv"]} == {
+        "HAB_TEC_001", "HAB_TEC_002"
+    }
+    relaciones = {
+        (r["id_silabo"], r["id_habilidad"])
+        for r in paquete["cobertura_curricular.csv"] if r["id_habilidad"]
+    }
+    assert len(relaciones) == 2
+    assert len({s for s, _ in relaciones}) == 1
 
 
 def test_exportacion_acepta_habilidad_semantica_aprobada(indice, monkeypatch, tmp_path):

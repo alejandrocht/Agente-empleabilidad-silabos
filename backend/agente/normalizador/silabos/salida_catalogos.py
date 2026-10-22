@@ -239,7 +239,8 @@ def construir_salidas_tecnicas(
     sin_habilidad = (
         resumen.get("silabos_sin_habilidad", [])
         if analisis_tecnico is not None
-        and analisis_tecnico.get("politica_habilidades") == "catalogo_min_1_max_1"
+        and analisis_tecnico.get("politica_habilidades")
+        in {"catalogo_min_1", "catalogo_min_1_max_1"}
         else []
     )
     if sin_habilidad:
@@ -494,7 +495,7 @@ def construir_catalogos_curriculares(
     inferencias: list[dict[str, object]] = []
     curso_por_silabo = {fila["id_silabo"]: fila["id_curso"] for fila in silabos.values()}
     catalogos_cerrados: dict[str, CatalogoTecnico] = {}
-    habilidad_por_silabo: dict[str, str] = {}
+    silabos_con_habilidad: set[str] = set()
     for tecnica in competencias_tecnicas:
         if tecnica.get("estado_aprobacion") != "APROBADA":
             raise ValueError(
@@ -519,9 +520,7 @@ def construir_catalogos_curriculares(
         candidato = validar_habilidad_catalogo(tecnica, carrera_tecnica, catalogo)
         nombre, descripcion = candidato.nombre, candidato.descripcion
         id_habilidad = candidato.referencia
-        anterior = habilidad_por_silabo.setdefault(id_silabo, id_habilidad)
-        if anterior != id_habilidad:
-            raise ValueError("Solo se permite una habilidad técnica por sílabo")
+        silabos_con_habilidad.add(id_silabo)
         # Legacy COMP catalogs are accepted only when explicitly supplied offline.
         if not catalogo.id_catalogo:
             coincidencia = re.fullmatch(r"COMP_TEC_(\d{4})", id_habilidad)
@@ -648,7 +647,7 @@ def construir_catalogos_curriculares(
 
     return {
         "archivos": {nombre: len(filas_por_archivo[nombre]) for nombre, _ in ARCHIVOS_CATALOGO},
-        "silabos_sin_habilidad": sorted(set(silabos) - set(habilidad_por_silabo)),
+        "silabos_sin_habilidad": sorted(set(silabos) - silabos_con_habilidad),
         "inferencias_tecnicas": len(inferencias),
         "carrera": carrera,
         "carreras": sorted(set(carrera_por_silabo.values())),
