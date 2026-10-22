@@ -160,15 +160,21 @@ def ejecutar(
     desde: int = 1,
     hitl: int = 0,
     intervalo: float = 5,
+    excluir: tuple[str, ...] = (),
 ) -> int:
     destino.mkdir(parents=True, exist_ok=True)
     resumen: list[dict[str, Any]] = []
     fallos = 0
-    for numero, carrera in enumerate(CARRERAS_CATALOGO_ACTUAL, start=1):
-        if numero < desde:
+    seleccionadas = [
+        (indice, carrera)
+        for indice, carrera in enumerate(CARRERAS_CATALOGO_ACTUAL, start=1)
+        if carrera not in excluir
+    ]
+    for numero, (indice_original, carrera) in enumerate(seleccionadas, start=1):
+        if indice_original < desde:
             continue
         print(
-            f"\n[{numero}/{len(CARRERAS_CATALOGO_ACTUAL)}] "
+            f"\n[{numero}/{len(seleccionadas)}] "
             f"{carrera}: solicitando ejecución...",
             flush=True,
         )
@@ -301,6 +307,10 @@ def main() -> int:
     )
     parser.add_argument("--salida", type=Path)
     parser.add_argument(
+        "--excluir", action="append", choices=CARRERAS_CATALOGO_ACTUAL, default=[],
+        help="Carrera que no se ejecutará; se puede repetir.",
+    )
+    parser.add_argument(
         "--comprobar",
         action="store_true",
         help="Prueba catálogo, embeddings y una llamada LLM sin descargar carreras.",
@@ -311,6 +321,9 @@ def main() -> int:
         help="Consulta los IDs de la última corrida, sin descargar ni pedir claves.",
     )
     args = parser.parse_args()
+    seleccionadas = [c for c in CARRERAS_CATALOGO_ACTUAL if c not in args.excluir]
+    if not seleccionadas:
+        parser.error("Debe quedar al menos una carrera seleccionada")
     if not PATRON_PERIODO.fullmatch(args.periodo):
         parser.error("El periodo debe tener formato 2026-2.")
     destino = args.salida or Path("resultados_cactus") / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -337,7 +350,7 @@ def main() -> int:
         prueba = solicitar(
             args.api,
             RUTA_COMPROBACION,
-            {"carreras": list(CARRERAS_CATALOGO_ACTUAL)},
+            {"carreras": seleccionadas},
             timeout=timeout,
         )
         if prueba.get("lista_para_normalizar") is not True:
@@ -364,7 +377,8 @@ def main() -> int:
         if not usuario or not contrasena or len(usuario) > 200 or len(contrasena) > 200:
             raise RuntimeError("Usuario y contraseña deben tener entre 1 y 200 caracteres.")
         return ejecutar(
-            args.api, args.periodo, usuario, contrasena, destino, desde=args.desde, hitl=args.hitl
+            args.api, args.periodo, usuario, contrasena, destino, desde=args.desde,
+            hitl=args.hitl, excluir=tuple(args.excluir),
         )
     except KeyboardInterrupt:
         print("\nInterrumpido; no se solicitarán más carreras.")

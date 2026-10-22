@@ -123,6 +123,24 @@ def test_desde_psicologia_solicita_solo_ultima_carrera(monkeypatch, tmp_path):
     assert [p["carrera"] for p in pedidos] == ["Psicología"]
 
 
+def test_once_carreras_excluyen_arquitectura(monkeypatch, tmp_path, capsys):
+    pedidos = []
+
+    def solicitar(_base, _ruta, datos=None):
+        pedidos.append(datos["carrera"])
+        return {
+            "id_ejecucion": f"NOR_{len(pedidos):016x}", "estado": "no_publicado",
+            "release_gate": {"decision": "BLOCK_IMPORT"},
+        }
+
+    monkeypatch.setattr(cli, "solicitar", solicitar)
+    cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path,
+                 excluir=("Arquitectura",))
+    assert pedidos == [c for c in cli.CARRERAS_CATALOGO_ACTUAL if c != "Arquitectura"]
+    assert len(pedidos) == 11
+    assert "[11/11]" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("motivo", ["estado_desconocido", "sin_conexion", "interrumpido"])
 def test_no_inicia_siguiente_si_no_confirma_fin(monkeypatch, tmp_path, motivo):
     pedidos = []

@@ -84,6 +84,9 @@ y ejecuta desde `backend`:
 uv run --locked python scripts/normalizar_cactus_secuencial.py --periodo 2026-2
 ```
 
+Para ejecutar las otras 11 carreras sin repetir Arquitectura, agrega
+`--excluir Arquitectura`. Se conserva el orden del catálogo vigente.
+
 La corrida queda fijada a `HABTEC_38b1f27240cb401a` y se detiene antes de pedir
 credenciales si el backend usa otro catálogo. Puedes indicar otra versión con
 `--catalogo-id HABTEC_...`; configura también `NORMALIZADOR_HAB_TEC_ID` en el
