@@ -115,29 +115,41 @@ con carpetas explícitas, por ejemplo `ARQUITECTURA/2026-2/Ciclo_01/curso.docx` 
 manual se procesan las carreras presentes en el ZIP; no se descargan las faltantes.
 El límite multicarrera es de 7000 archivos, conservando los límites de tamaño del ZIP.
 
-Para correr sin frontend y aislar los fallos por carrera, mantén la API en el puerto 8001
+Para correr sin frontend las 12 carreras cubiertas por el catálogo vigente y aislar los
+fallos por carrera, mantén la API en el puerto 8001
 y ejecuta desde `backend`:
 
 ```powershell
 uv run --locked python scripts/normalizar_cactus_secuencial.py --periodo 2026-2
 ```
 
+Para ejecutar las otras 11 carreras sin repetir Arquitectura, agrega
+`--excluir Arquitectura`. Se conserva el orden del catálogo vigente.
+
+La corrida queda fijada a `HABTEC_38b1f27240cb401a` y se detiene antes de pedir
+credenciales si el backend usa otro catálogo. Puedes indicar otra versión con
+`--catalogo-id HABTEC_...`; configura también `NORMALIZADOR_HAB_TEC_ID` en el
+backend y reinícialo. El catálogo publicado el 21/10/2026 contiene 12 carreras:
+faltan Ingeniería Ambiental e Ingeniería Mecatrónica. Este script las excluye
+explícitamente de la comprobación y de la descarga. La comprobación general de
+la API sin lista de carreras sigue exigiendo las 14.
+
 El script pide usuario y contraseña ULima (oculta) una vez, y espera hasta que termine
 la normalización de cada carrera antes de solicitar la siguiente, de Administración
-a Psicología. Crea 14 ejecuciones independientes, no un paquete conjunto. Usa `hitl=0`
+a Psicología. Crea 12 ejecuciones independientes, no un paquete conjunto. Usa `hitl=0`
 por defecto; `--hitl 1` exige revisión humana. Cada ejecución conserva el LLM y el
 catálogo vectorizado del backend, y sus CSV siguen sujetos al release gate. Los estados,
 IDs y hallazgos se guardan bajo `backend/resultados_cactus/<fecha>/`, sin credenciales.
 Un error terminal de una carrera no impide intentar las siguientes. Si se pierde conexión,
 se interrumpe con Ctrl+C o aparece un estado desconocido, el script se detiene: el trabajo
 actual puede seguir activo en el backend. Revisa su ID antes de lanzar otra corrida.
-`--desde 2` empieza en Arquitectura; `--desde 14` solo pide Psicología. No reanuda el
+`--desde 2` empieza en Arquitectura; `--desde 12` solo pide Psicología. No reanuda el
 trabajo anterior ni reintenta automáticamente solicitudes de creación sin respuesta.
 
 Antes de descargar, el script consulta `GET /normalizador/configuracion/curricular` y
 exige que el backend tenga `NORMALIZADOR_CURRICULAR_LLM=true`. Muestra el proveedor
-y realiza `POST /normalizador/configuracion/curricular/comprobar`: valida el índice,
-su cobertura de las 14 carreras, un embedding de consulta y una respuesta estructurada
+y realiza `POST /normalizador/configuracion/curricular/comprobar` con las 12 carreras:
+valida el índice, su cobertura, un embedding de consulta y una respuesta estructurada
 del analista usando la misma fábrica de modelos que la ejecución. Si falla, no pide
 credenciales ULima ni descarga carreras. No descarga modelos ni regenera los vectores.
 `--comprobar` ejecuta solo esta prueba. La carga inicial del modelo puede tardar;
@@ -151,13 +163,11 @@ descripciones siguen rechazados. La comprobación diferencia carpeta sin catálo
 hash distinto, índice incompleto y carreras ausentes. No hace falta revectorizar
 por un cambio de saltos de línea.
 
-La comprobación y las ejecuciones usan el proveedor
-y modelo efectivos; cambiar esa variable en la terminal del script no cambia el backend
-ya iniciado. El analista recibe cada sílabo extraído, incluso sin logros o candidatos;
-en ese caso puede responder con una lista vacía. El progreso registra las llamadas reales
-y su latencia. No marca éxito solo por `ALLOW_IMPORT`: exige una respuesta válida del
-LLM por cada sílabo detectado y la fase completada. Si falta análisis, detiene la secuencia.
-Una carrera puede dejar habilidades vacías después del LLM; no se fuerzan habilidades.
+La comprobación y las ejecuciones usan el proveedor y modelo efectivos; cambiar esa
+variable en la terminal del script no cambia el backend ya iniciado. El progreso registra
+las llamadas reales y su latencia. Si un sílabo carece de texto o candidatos del catálogo,
+la ejecución queda sin publicación. El script exige análisis LLM completo y al menos una
+propuesta válida por sílabo antes de aceptar `ALLOW_IMPORT`.
 
 Para revisar los IDs de la última corrida sin descargar otra vez ni pedir credenciales:
 
@@ -169,18 +179,42 @@ El diagnóstico consulta el estado actual y guarda `diagnostico.json` junto al r
 Muestra LLM habilitado, modelo, logros detectados, sílabos con respuesta, omitidos,
 propuestas válidas y hallazgos. No modifica las ejecuciones ni sus CSV.
 
-El analista procesa cada sílabo con los candidatos vectorizados de su propia carrera.
-La política `extraccion_explicita_max_1` queda en el snapshot de cada ejecución.
-Solo admite habilidades cuyo nombre completo aparezca en los logros o en el programa
-analítico del sílabo. Para reconocer la mención se ignoran mayúsculas, tildes y espacios;
-el ID, nombre y descripción exportados permanecen idénticos al catálogo. No admite
-sinónimos, paráfrasis ni habilidades implícitas. La similitud vectorial no prueba una mención.
-El LLM selecciona como máximo una habilidad técnica para todo el sílabo. Python vuelve
-a comprobar la mención y el límite al exportar, incluso con aprobación automática.
-Si no hay coincidencia explícita, se registra `SIN_MENCION_EXPLICITA_CATALOGO` y queda
+El analista recibe el texto fuente completo extraído del DOCX o PDF, junto con la sumilla,
+los logros y el programa analítico estructurados. La búsqueda vectorial consulta el texto
+fuente y los logros para recuperar candidatos de la misma carrera, sin modificar el catálogo.
+La política `catalogo_min_1` queda en el snapshot de cada ejecución. Python exige
+al menos una habilidad válida del catálogo por sílabo, sin un máximo de una, y conserva
+todas las habilidades distintas con evidencia válida. Reenvía el mismo contexto al LLM cuando
+la respuesta está vacía o no pasa la validación, hasta un máximo de tres llamadas por
+sílabo. Si ninguna sirve, registra `HABILIDAD_MINIMA_NO_CUMPLIDA` y continúa con el
+siguiente sílabo. Esa carrera queda sin publicación hasta resolver los faltantes.
+La habilidad puede sustentarse en cualquier parte del sílabo sin que su nombre aparezca
+literalmente. Python comprueba la referencia, la cita literal de la sección declarada
+(`logro`, `sumilla`, `contenido` o `silabo`) para cada habilidad y elimina duplicados. Si la evidencia
+no corresponde a un logro, la cobertura se relaciona directamente al sílabo sin inventar
+logros. La publicación se bloquea si algún sílabo queda
 sin habilidad. Una habilidad seleccionada puede conservar varios logros y coberturas.
 Los nombres, descripciones e IDs se copian exactamente del catálogo HAB_TEC. Una
 habilidad compartida conserva una fila por carrera cuando su texto oficial varía.
+
+Una respuesta truncada también consume un intento del sílabo: comparte el máximo
+de tres llamadas con las respuestas vacías. Si no logra una habilidad válida, el
+analista conserva las propuestas anteriores y continúa con el siguiente sílabo.
+
+Para recuperar una corrida con los documentos ya descargados:
+
+```bash
+uv run --locked python scripts/recuperar_analisis_silabos.py --ejecucion NOR_... --salida recuperaciones_32k
+```
+
+El recuperador requiere `hitl=0`, conserva propuestas previas y analiza los sílabos
+sin resultados guardados. Guarda `checkpoint.json` después de cada sílabo y permite
+repetir el mismo comando tras un corte. Escribe los nuevos CSV en una carpeta separada;
+no reemplaza el historial original ni elimina controles de publicación. Si una corrida
+antigua perdió sus propuestas parciales por truncamiento, debe repetir ese análisis.
+`--resumen-secuenciador ruta/resumen.json --esperar-archivo ruta/corrida.exit` permite
+encolar la recuperación de las carreras no publicadas al terminar el secuenciador.
+
 Los cursos que comparten ID entre carreras reciben IDs de curso/sílabo diferenciados
 antes del análisis y la exportación. Los cursos sin colisión conservan sus IDs anteriores;
 los códigos del documento no cambian. Los nuevos IDs de cursos compartidos pertenecen
@@ -383,6 +417,28 @@ entity resolution or the domain query gateway.
 
 See `.env.example` for all current schema-cache, query-cache, logging, and role-specific
 OpenAI settings.
+
+## Exportación determinística de sílabos
+
+Para consolidar DOCX de varias carreras sin llamadas LLM, ejecuta desde `backend`:
+
+```powershell
+uv run --locked python -m agente.normalizador.silabos.exportacion_deterministica RUTA_SILABOS RUTA_SALIDA
+```
+
+El origen debe tener carpetas por carrera y periodo. La salida contiene cinco CSV
+curriculares; no genera `catalogo_habilidades.csv`. Esta exportación es independiente
+de la corrida Cactus con catálogo HAB TEC vectorizado.
+
+## Respuestas técnicas preparadas en sesión
+
+El modo opcional `NORMALIZADOR_CURRICULAR_SESSION_ANALYST_JSONL` permite aportar
+respuestas técnicas ya redactadas para una ejecución curricular con LLM habilitado.
+Cada línea JSON debe incluir `id_silabo`, `registro_sha256`, `catalogo_sha256` y
+`competencias`. El backend exige una respuesta por sílabo, vincula los hashes al
+registro extraído y al catálogo técnico oficial, y valida las citas y evidencias
+antes de materializar propuestas. Si falta una respuesta o cambia una fuente,
+la ejecución falla. Sin esa variable, se conserva el análisis LLM normal.
 
 ## Verification
 

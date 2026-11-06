@@ -13,8 +13,9 @@ from zipfile import ZipFile
 import pytest
 from docx import Document
 from fastapi.testclient import TestClient
+from openai import LengthFinishReasonError
+from openai.types.chat import ChatCompletion
 from openpyxl import Workbook
-from pydantic import ValidationError
 
 from agente.config.settings import configuracion_normalizador_curricular
 from agente.normalizador.catalogo_hab_tec import GestorCatalogosHabTec
@@ -91,16 +92,21 @@ def _propuesta(ref: str | None = "HAB_TEC_001") -> dict[str, Any]:
     }
 
 
-def _modelo(monkeypatch: pytest.MonkeyPatch, respuestas: list[dict[str, Any]]) -> list[Any]:
+def _modelo(
+    monkeypatch: pytest.MonkeyPatch, respuestas: list[dict[str, Any] | None | Exception]
+) -> list[Any]:
     llamadas: list[Any] = []
 
     class Modelo:
         def with_structured_output(self, *_args: Any, **_kwargs: Any) -> Modelo:
             return self
 
-        def invoke(self, mensajes: Any) -> dict[str, Any]:
+        def invoke(self, mensajes: Any) -> dict[str, Any] | None:
             llamadas.append(mensajes)
-            return deepcopy(respuestas.pop(0) if len(respuestas) > 1 else respuestas[0])
+            respuesta = respuestas.pop(0) if len(respuestas) > 1 else respuestas[0]
+            if isinstance(respuesta, Exception):
+                raise respuesta
+            return deepcopy(respuesta)
 
     monkeypatch.setattr(analista_tecnico, "obtener_llm", lambda *_args, **_kwargs: Modelo())
     return llamadas
@@ -195,23 +201,96 @@ def test_modelo_selecciona_referencia_y_python_copia_campos_exactos(
     assert payload["syllabus_context"]["logros"] == [{"texto": LOGRO}]
 
 
-def test_no_infiere_habilidad_desde_un_logro_sin_nombre_explicito(indice, monkeypatch):
-    llamadas = _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+def test_contenido_completo_sustenta_habilidad_sin_logros(indice, monkeypatch, tmp_path):
     registro = _registro()
-    registro["datos"]["logro_general"] = "Diseña estructuras y patrones mantenibles."
-    # Nombre de curso y descripción del catálogo no cuentan como evidencia de habilidad.
-    monkeypatch.setattr(HabTecRetriever, "_embedding", lambda *_args: pytest.fail("Sin mención"))
+    registro["id_curso"] = "CUR_" + "1" * 16
+    registro["id_silabo"] = "SIL_" + "2" * 16
+    texto = "Evaluación práctica: diseña estructuras y patrones técnicos de software."
+    registro["datos"]["logro_general"] = ""
+    registro["datos"]["sumilla"] = "Diseño de sistemas mantenibles."
+    registro["datos"]["texto_fuente"] = texto
+    consultas = []
+    buscar = HabTecRetriever.buscar
+
+    def buscar_con_registro(recuperador, consulta, carrera):
+        consultas.append(consulta)
+        return buscar(recuperador, consulta, carrera)
+
+    monkeypatch.setattr(HabTecRetriever, "buscar", buscar_con_registro)
+    propuesta = {
+        **_propuesta(),
+        "logros": [],
+        "evidencia": [{"fuente": "silabo", "fragmento": texto}],
+    }
+    llamadas = _modelo(monkeypatch, [{"competencias": [propuesta]}])
+    propuestas = _inferir([registro])
+    assert len(propuestas) == 1
+    assert texto in consultas
+    assert propuestas[0]["logros"] == []
+    payload = json.loads(llamadas[0][1][1].split("\n", 1)[1])
+    assert payload["syllabus_context"]["texto_fuente"] == texto
+    assert payload["syllabus_context"]["sumilla"] == registro["datos"]["sumilla"]
+    salida_catalogos.construir_catalogos_curriculares(
+        [registro], tmp_path,
+        carrera="INGENIERIA_DE_SISTEMAS", periodo_academico="2026-2",
+        competencias_tecnicas=[{**propuestas[0], "estado_aprobacion": "APROBADA"}],
+    )
+    from agente.db.neo4j_catalogos import leer_catalogos
+
+    paquete = leer_catalogos(tmp_path)
+    assert len(paquete["catalogo_habilidades.csv"]) == 1
+    assert paquete["cobertura_curricular.csv"][0]["id_logro"] == ""
+    with pytest.raises(ValueError, match="evidencia literal"):
+        salida_catalogos.construir_catalogos_curriculares(
+            [registro], tmp_path / "evidencia_falsa",
+            carrera="INGENIERIA_DE_SISTEMAS", periodo_academico="2026-2",
+            competencias_tecnicas=[{
+                **propuestas[0], "estado_aprobacion": "APROBADA",
+                "evidencia": [{"fuente": "silabo", "fragmento": "Evidencia inventada."}],
+            }],
+        )
+
+
+def test_acepta_habilidad_sustentada_sin_nombre_explicito(indice, monkeypatch):
+    registro = _registro()
+    logro = "Diseña estructuras y patrones mantenibles."
+    registro["datos"]["logro_general"] = logro
+    propuesta = {
+        **_propuesta(),
+        "logros": [logro],
+        "evidencia": [{"fuente": "logro", "fragmento": logro}],
+    }
+    llamadas = _modelo(monkeypatch, [{"competencias": [propuesta]}])
     trazas = []
-    assert _inferir([registro], al_actualizar_progreso_silabo=trazas.append) == []
-    assert len(llamadas) >= 1
+    assert len(_inferir([registro], al_actualizar_progreso_silabo=trazas.append)) == 1
+    assert len(llamadas) == 1
     assert trazas[-1].latencia_modelo_ms is not None
-    assert trazas[-1].estado_analisis == "sin_propuesta"
+    assert trazas[-1].estado_analisis == "completado"
 
 
-def test_modelo_no_puede_devolver_dos_habilidades_por_silabo(indice, monkeypatch):
-    _modelo(monkeypatch, [{"competencias": [_propuesta(), _propuesta()]}])
-    with pytest.raises(ValidationError):
-        _inferir([_registro()])
+@pytest.mark.parametrize("duplicar", [False, True])
+def test_modelo_acepta_varias_habilidades_y_deduplica_por_silabo(indice, monkeypatch, duplicar):
+    monkeypatch.setattr(HabTecRetriever, "_embedding", lambda *_args: (1.0, 1.0))
+    registro = _registro()
+    registro["datos"]["programa_analitico_detalle"] = [
+        {"tema": "Redes", "contenido": "Configura redes informáticas."}
+    ]
+    segunda = {
+        **_propuesta("HAB_TEC_002"),
+        "logros": [],
+        "evidencia": [{"fuente": "contenido", "fragmento": "Configura redes informáticas."}],
+    }
+    propuestas = [_propuesta(), segunda]
+    if duplicar:
+        propuestas.append(_propuesta())
+    llamadas = _modelo(monkeypatch, [{"competencias": propuestas}])
+    trazas = []
+    resultado = _inferir([registro], al_actualizar_progreso_silabo=trazas.append)
+    assert len(resultado) == 2
+    assert {p["catalogo_ref"] for p in resultado} == {"HAB_TEC_001", "HAB_TEC_002"}
+    assert {p["nombre_competencia"] for p in resultado} == {NOMBRE, "Redes"}
+    assert len(llamadas) == 1
+    assert trazas[-1].propuestas_validas == 2
 
 
 def test_registros_repetidos_no_agregan_otra_habilidad_al_mismo_silabo(indice, monkeypatch):
@@ -220,9 +299,13 @@ def test_registros_repetidos_no_agregan_otra_habilidad_al_mismo_silabo(indice, m
     assert len(llamadas) == 1
 
 
-def test_exportacion_rechaza_segunda_habilidad_aun_aprobada(indice, monkeypatch, tmp_path):
+def test_exportacion_conserva_varias_habilidades_aprobadas_por_silabo(
+    indice, monkeypatch, tmp_path
+):
     _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
     registro = _registro()
+    registro["id_curso"] = "CUR_" + "1" * 16
+    registro["id_silabo"] = "SIL_" + "2" * 16
     registro["datos"]["programa_analitico_detalle"] = [{"tema": "Redes", "contenido": ""}]
     primera = {**_inferir([registro])[0], "estado_aprobacion": "APROBADA"}
     segunda = {
@@ -231,31 +314,43 @@ def test_exportacion_rechaza_segunda_habilidad_aun_aprobada(indice, monkeypatch,
         "nombre_competencia": "Redes",
         "descripcion_breve_competencia": "Configura redes informáticas.",
     }
-    with pytest.raises(ValueError, match="una habilidad técnica por sílabo"):
-        salida_catalogos.construir_catalogos_curriculares(
-            [registro],
-            tmp_path,
-            carrera="INGENIERIA_DE_SISTEMAS",
-            periodo_academico="2026-2",
-            competencias_tecnicas=[primera, segunda],
-        )
-    assert not (tmp_path / "catalogo_habilidades.csv").exists()
+    salida_catalogos.construir_catalogos_curriculares(
+        [registro],
+        tmp_path,
+        carrera="INGENIERIA_DE_SISTEMAS",
+        periodo_academico="2026-2",
+        competencias_tecnicas=[primera, segunda],
+    )
+    from agente.db.neo4j_catalogos import leer_catalogos
+
+    paquete = leer_catalogos(tmp_path)
+    assert {h["id_habilidad"] for h in paquete["catalogo_habilidades.csv"]} == {
+        "HAB_TEC_001", "HAB_TEC_002"
+    }
+    relaciones = {
+        (r["id_silabo"], r["id_habilidad"])
+        for r in paquete["cobertura_curricular.csv"] if r["id_habilidad"]
+    }
+    assert len(relaciones) == 2
+    assert len({s for s, _ in relaciones}) == 1
 
 
-def test_exportacion_revalida_mencion_y_rechaza_inferencia_aprobada(indice, monkeypatch, tmp_path):
+def test_exportacion_acepta_habilidad_semantica_aprobada(indice, monkeypatch, tmp_path):
     _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
     registro = _registro()
     aprobada = {**_inferir([registro])[0], "estado_aprobacion": "APROBADA"}
-    registro["datos"]["logro_general"] = "Diseña estruturas y patrones mantenibles."
-    with pytest.raises(ValueError, match="mencionada explícitamente"):
-        salida_catalogos.construir_catalogos_curriculares(
-            [registro],
-            tmp_path,
-            carrera="INGENIERIA_DE_SISTEMAS",
-            periodo_academico="2026-2",
-            competencias_tecnicas=[aprobada],
-        )
-    assert not (tmp_path / "catalogo_habilidades.csv").exists()
+    logro = "Diseña estruturas y patrones mantenibles."
+    registro["datos"]["logro_general"] = logro
+    aprobada["logros"] = [logro]
+    aprobada["evidencia"] = [{"fuente": "logro", "fragmento": logro}]
+    salida_catalogos.construir_catalogos_curriculares(
+        [registro],
+        tmp_path,
+        carrera="INGENIERIA_DE_SISTEMAS",
+        periodo_academico="2026-2",
+        competencias_tecnicas=[aprobada],
+    )
+    assert (tmp_path / "catalogo_habilidades.csv").exists()
 
 
 @pytest.mark.parametrize(
@@ -280,8 +375,8 @@ def test_rechaza_inventadas_y_referencias_no_recuperadas(
 ) -> None:
     llamadas = _modelo(monkeypatch, [{"competencias": [_propuesta(ref)]}])
     auditoria: list[dict[str, object]] = []
-    assert _inferir([_registro()], auditoria=auditoria) == []
-    assert len(llamadas) == 2
+    assert _inferir([_registro()], auditoria=auditoria, exigir_habilidad=False) == []
+    assert len(llamadas) == 1
     assert auditoria[0]["codigo"] == "HABILIDAD_FUERA_CATALOGO"
 
 
@@ -445,14 +540,130 @@ def test_api_multicarrera_normaliza_aprueba_y_publica_un_solo_paquete(
     assert len(list((tmp_path / "ejecuciones").glob("NOR_*"))) == 1
 
 
-def test_sin_coincidencias_no_fuerza_propuesta_ni_reintenta(
+def test_respuesta_vacia_reenvia_silabo_hasta_habilidad_valida(
     indice: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    llamadas = _modelo(monkeypatch, [{"competencias": []}])
+    llamadas = _modelo(monkeypatch, [
+        None,
+        {"competencias": []},
+        {"competencias": [_propuesta()]},
+    ])
     auditoria: list[dict[str, object]] = []
-    assert _inferir([_registro()], auditoria=auditoria) == []
+    assert len(_inferir([_registro()], auditoria=auditoria)) == 1
+    assert len(llamadas) == 3
+    assert auditoria == []
+
+
+def test_tercer_intento_puede_completar_habilidad(indice: Path, monkeypatch) -> None:
+    llamadas = _modelo(
+        monkeypatch,
+        [{"competencias": []}] * 2 + [{"competencias": [_propuesta()]}],
+    )
+    assert len(_inferir([_registro()])) == 1
+    assert len(llamadas) == 3
+
+
+def _truncada() -> LengthFinishReasonError:
+    return LengthFinishReasonError(completion=ChatCompletion(
+        id="test", created=0, model="test", object="chat.completion", choices=[]
+    ))
+
+
+def test_truncada_comparte_limite_de_tres_intentos(indice, monkeypatch):
+    llamadas = _modelo(monkeypatch, [
+        {"competencias": []}, _truncada(), {"competencias": [_propuesta()]},
+    ])
+    assert len(_inferir([_registro()])) == 1
+    assert len(llamadas) == 3
+
+
+def test_tres_truncadas_conservan_anteriores_y_siguen_con_el_siguiente(indice, monkeypatch):
+    llamadas = _modelo(monkeypatch, [
+        {"competencias": [_propuesta()]},
+        _truncada(), _truncada(), _truncada(),
+        {"competencias": [_propuesta()]},
+    ])
+    auditoria = []
+    resultado = _inferir(
+        [_registro(), _registro("SIL_2"), _registro("SIL_3")], auditoria=auditoria
+    )
+    assert len(llamadas) == 5
+    assert [p["id_silabo"] for p in resultado] == ["SIL_1", "SIL_3"]
+    assert auditoria[0]["id_silabo"] == "SIL_2"
+    assert auditoria[0]["codigo"] == "HABILIDAD_MINIMA_NO_CUMPLIDA"
+
+
+def test_recuperacion_conserva_resultados_y_reanuda_despues_de_un_corte(
+    indice, monkeypatch, tmp_path
+):
+    from scripts import recuperar_analisis_silabos as recovery
+
+    registros = [_registro("SIL_" + str(i) * 16) for i in (1, 2, 3)]
+    for i, registro in enumerate(registros, 1):
+        registro["id_curso"] = "CUR_" + str(i) * 16
+    catalogo = analista_tecnico.cargar_catalogo_hab_tec(indice.name)
+    monkeypatch.setattr(analista_tecnico, "cargar_catalogo_hab_tec", lambda *_: catalogo)
+    config = configuracion_normalizador_curricular({
+        "NORMALIZADOR_CURRICULAR_LLM": "true",
+        "NORMALIZADOR_CURRICULAR_LLM_TIMEOUT_SECONDS": "120",
+        "NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES": "2",
+        "NORMALIZADOR_CURRICULAR_LLM_BATCH_SIZE": "8",
+        "NORMALIZADOR_CURRICULAR_LLM_TEMPERATURE": "0",
+        "NORMALIZADOR_CURRICULAR_ANALYST_REASONING_EFFORT": "medium",
+    })
+    monkeypatch.setattr(recovery, "configuracion_normalizador_curricular", lambda: config)
+    _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+    anteriores = _inferir([registros[0]])
+    origen = tmp_path / "original"
+    staging = origen / "limpios/silabos.jsonl"
+    staging.parent.mkdir(parents=True)
+    (origen / "manifest.json").write_text(json.dumps({"parametros": {"hitl": "0"}}))
+    staging.write_text("\n".join(json.dumps(r) for r in registros), encoding="utf-8")
+    propuestas = origen / "salidas/reportes/propuestas_tecnicas.jsonl"
+    analista_tecnico.escribir_propuestas_tecnicas(propuestas, anteriores)
+    original = propuestas.read_bytes()
+    destino = tmp_path / "recuperacion"
+    llamadas = _modelo(monkeypatch, [
+        {"competencias": [_propuesta()]}, RuntimeError("Corte simulado"),
+    ])
+    with pytest.raises(RuntimeError, match="Corte simulado"):
+        recovery.recuperar(origen, destino)
+    assert len(llamadas) == 2
+    estado = json.loads((destino / "checkpoint.json").read_text())
+    assert estado["completados"] == [r["id_silabo"] for r in registros[:2]]
+    llamadas = _modelo(monkeypatch, [{"competencias": [_propuesta()]}])
+    resultado = recovery.recuperar(origen, destino)
     assert len(llamadas) == 1
-    assert auditoria[0]["severidad"] == "info"
+    assert resultado["asignaciones"] == 3
+    assert propuestas.read_bytes() == original
+
+
+def test_tres_respuestas_vacias_omiten_silabo_y_continuan(indice: Path, monkeypatch) -> None:
+    llamadas = _modelo(
+        monkeypatch,
+        [{"competencias": []}] * 3 + [{"competencias": [_propuesta()]}],
+    )
+    trazas = []
+    auditoria = []
+    propuestas = _inferir(
+        [_registro(), _registro("SIL_2")],
+        auditoria=auditoria,
+        al_actualizar_progreso_silabo=trazas.append,
+    )
+    assert len(llamadas) == 4
+    assert [propuesta["id_silabo"] for propuesta in propuestas] == ["SIL_2"]
+    assert any(
+        traza.id_silabo == "SIL_1"
+        and traza.estado_analisis == "sin_propuesta"
+        and traza.error_codigo == "HABILIDAD_MINIMA_NO_CUMPLIDA"
+        for traza in trazas
+    )
+    assert auditoria == [{
+        "codigo": "HABILIDAD_MINIMA_NO_CUMPLIDA",
+        "severidad": "warning",
+        "id_silabo": "SIL_1",
+        "mensaje": "El sílabo no produjo una habilidad válida del catálogo tras 3 intentos.",
+    }]
 
 
 @pytest.mark.parametrize("habilitado", [False, True])
@@ -532,10 +743,10 @@ def test_sin_candidatos_o_logros_analiza_sin_inventar_habilidades(
     llamadas = _modelo(monkeypatch, [{"competencias": []}])
     registro = _registro()
     registro["carrera"] = "Carrera sin catálogo"
-    assert _inferir([registro]) == []
+    assert _inferir([registro], exigir_habilidad=False) == []
     registro = _registro()
     registro["datos"]["logro_general"] = ""
-    assert _inferir([registro]) == []
+    assert _inferir([registro], exigir_habilidad=False) == []
     assert len(llamadas) == 2
 
 
@@ -543,7 +754,6 @@ def test_comprobacion_usa_http_real_del_analista_y_embedding(indice, monkeypatch
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    from agente.api import normalizador
     from api import servidor
 
     peticiones = []
@@ -593,16 +803,18 @@ def test_comprobacion_usa_http_real_del_analista_y_embedding(indice, monkeypatch
     monkeypatch.setenv("NORMALIZADOR_CURRICULAR_OLLAMA_BASE_URL", base + "/v1")
     monkeypatch.setenv("NORMALIZADOR_CURRICULAR_LLM_MAX_RETRIES", "0")
     monkeypatch.setenv("NORMALIZADOR_HAB_TEC_EMBEDDING_ENDPOINT", base + "/api/embed")
-    monkeypatch.setattr(normalizador, "CARRERAS_ULIMA", (CARRERA, "Marketing"))
     monkeypatch.setattr(HabTecRetriever, "_embedding", EMBEDDING_REAL)
     try:
-        respuesta = TestClient(servidor.app, client=("127.0.0.1", 0)).post(cli_ruta_comprobacion())
+        respuesta = TestClient(servidor.app, client=("127.0.0.1", 0)).post(
+            cli_ruta_comprobacion(), json={"carreras": [CARRERA, "Marketing"]}
+        )
     finally:
         proveedor.shutdown()
         proveedor.server_close()
         hilo.join()
     assert respuesta.status_code == 200, respuesta.text
     assert respuesta.json()["catalogo"]["id_catalogo"] == indice.name
+    assert respuesta.json()["catalogo"]["carreras"] == 2
     assert respuesta.json()["prueba_llm"]["latencia_modelo_ms"] is not None
     assert peticiones == [
         ("/api/embed", "modelo-del-indice"),
@@ -614,6 +826,16 @@ def cli_ruta_comprobacion():
     from scripts.normalizar_cactus_secuencial import RUTA_COMPROBACION
 
     return RUTA_COMPROBACION
+
+
+@pytest.mark.parametrize("carreras", [[], [CARRERA, CARRERA], ["Carrera inexistente"]])
+def test_comprobacion_rechaza_lista_de_carreras_invalida(carreras):
+    from api import servidor
+
+    respuesta = TestClient(servidor.app, client=("127.0.0.1", 0)).post(
+        cli_ruta_comprobacion(), json={"carreras": carreras}
+    )
+    assert respuesta.status_code == 422
 
 
 @pytest.mark.parametrize("fallo", ["catalogo", "embedding", "analista"])
@@ -655,7 +877,14 @@ def test_evidencia_inexistente_es_rechazada(indice: Path, monkeypatch) -> None:
     propuesta = _propuesta()
     propuesta["evidencia"][0]["fragmento"] = "Una evidencia ajena al sílabo."
     _modelo(monkeypatch, [{"competencias": [propuesta]}])
-    assert _inferir([_registro()]) == []
+    assert _inferir([_registro()], exigir_habilidad=False) == []
+
+
+def test_cancelacion_detiene_reintentos_sin_habilidad(indice: Path, monkeypatch) -> None:
+    llamadas = _modelo(monkeypatch, [{"competencias": []}])
+    with pytest.raises(CancelacionSolicitada):
+        _inferir([_registro()], cancelada=lambda: len(llamadas) >= 2)
+    assert len(llamadas) == 2
 
 
 def test_cancelacion_se_respeta_entre_silabos(indice: Path, monkeypatch) -> None:
@@ -725,6 +954,16 @@ def test_catalogo_nuevo_no_cambia_version_de_propuesta_aprobada(
     assert cargar_retriever_hab_tec().id_catalogo == nuevo.name
     candidato = analista_tecnico.validar_habilidad_catalogo(propuesta, CARRERA)
     assert candidato.nombre == NOMBRE
+
+
+def test_catalogo_configurado_prevalece_sobre_el_mas_reciente(
+    indice: Path, monkeypatch
+) -> None:
+    nuevo = _vectorizar(indice.parent, monkeypatch)
+    assert cargar_retriever_hab_tec().id_catalogo == nuevo.name
+    monkeypatch.setenv("NORMALIZADOR_HAB_TEC_ID", indice.name)
+    assert cargar_retriever_hab_tec().id_catalogo == indice.name
+    assert cargar_retriever_hab_tec(nuevo.name).id_catalogo == nuevo.name
 
 
 @pytest.mark.parametrize(

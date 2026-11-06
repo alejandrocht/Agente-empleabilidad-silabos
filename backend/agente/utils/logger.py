@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import sys
@@ -231,9 +232,7 @@ _SAFE_DIAGNOSTIC_VALUES: dict[str, frozenset[str]] = {
     "stage": frozenset(
         {"entity_resolution", "dynamic_generation", "dynamic_explain", "dynamic_execution"}
     ),
-    "neo4j_category": frozenset(
-        {"syntax", "schema", "auth", "transport", "timeout", "unknown"}
-    ),
+    "neo4j_category": frozenset({"syntax", "schema", "auth", "transport", "timeout", "unknown"}),
     "neo4j_classification": frozenset(
         {
             "cypher_error",
@@ -248,7 +247,7 @@ _SAFE_DIAGNOSTIC_VALUES: dict[str, frozenset[str]] = {
 _SAFE_ERROR_TYPE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:Error|Exception)$")
 _SAFE_HASH = re.compile(r"^[0-9a-f]{64}$")
 _SAFE_VALIDATION_DIAGNOSTIC = re.compile(
-            r"^loc=(?:plan|extra_field|accion|"
+    r"^loc=(?:plan|extra_field|accion|"
     r"usar_schema|template_id|parametros|objetivo_cypher) "
     r"type=[A-Za-z0-9_.-]{1,80}$"
 )
@@ -274,6 +273,8 @@ _SAFE_STEPS = frozenset(
 )
 _SAFE_GUARD_DECISIONS = frozenset({"accepted", "rejected"})
 _SAFE_EMISSIONS = frozenset({"text", "state", "end", "error"})
+
+
 class _CurrentStdoutHandler(logging.Handler):
     """Write JSON to the current stdout object so CLI and test capture both work."""
 
@@ -527,9 +528,7 @@ def _human_node_event(event: str, context: Mapping[str, object]) -> str | None:
     is_first_node = number == 1
     if tracker is None:
         question_snapshot = (
-            input_snapshot.get("pregunta")
-            if isinstance(input_snapshot, Mapping)
-            else None
+            input_snapshot.get("pregunta") if isinstance(input_snapshot, Mapping) else None
         )
         lines.extend(
             [
@@ -539,9 +538,7 @@ def _human_node_event(event: str, context: Mapping[str, object]) -> str | None:
         )
     elif is_first_node:
         question_snapshot = (
-            input_snapshot.get("pregunta")
-            if isinstance(input_snapshot, Mapping)
-            else None
+            input_snapshot.get("pregunta") if isinstance(input_snapshot, Mapping) else None
         )
         lines.extend(
             [
@@ -622,11 +619,7 @@ def _human_event_line(
         "question_improved",
         "model_driven",
     )
-    fields = [
-        f"{key}={_human_value(context[key])}"
-        for key in priority
-        if key in context
-    ]
+    fields = [f"{key}={_human_value(context[key])}" for key in priority if key in context]
     suffix = f" | {' '.join(fields)}" if fields else ""
     return f"[{trace_text}] [{component}] {event}{suffix}"
 
@@ -722,7 +715,7 @@ def _safe_value(key: str, value: object) -> object:
     if isinstance(value, int) and not isinstance(value, bool):
         return value
     if isinstance(value, float):
-        return value if value == value and abs(value) != float("inf") else None
+        return value if math.isfinite(value) else None
     if isinstance(value, str):
         if key == "trace_id":
             return value if _TRACE_ID_PATTERN.fullmatch(value) else None
@@ -762,7 +755,7 @@ def _safe_value(key: str, value: object) -> object:
             # Field names are safe metadata. Keep the graph's private state
             # names visible so the boundary summary matches the snapshots;
             # values remain gated by CIAR_NODE_LOG_VALUES and redaction.
-            private_fields = frozenset()
+            private_fields: frozenset[str] = frozenset()
             return [
                 item
                 for item in value[:32]
@@ -829,15 +822,15 @@ def log_event(
     active_attempt = _ATTEMPT.get()
     if active_attempt is not None and "attempt" not in merged_context:
         merged_context["attempt"] = active_attempt
+    safe_context = sanitize_context(merged_context)
     entry = {
         "timestamp": datetime.now(UTC).isoformat(),
         "level": level,
         "logger": _LOGGER_NAME,
         "component": component,
         "event": event,
-        "context": sanitize_context(merged_context),
+        "context": safe_context,
     }
-    safe_context = entry["context"]
     if (
         _configured_log_format() == "human"
         and component == "graph"

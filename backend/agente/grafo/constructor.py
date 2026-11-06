@@ -58,11 +58,7 @@ def construir_grafo(
     def state_keys(value: object) -> list[str]:
         if not isinstance(value, dict):
             return []
-        return sorted(
-            key
-            for key in value
-            if isinstance(key, str)
-        )
+        return sorted(key for key in value if isinstance(key, str))
 
     def state_size(value: object) -> int:
         return len(value) if isinstance(value, dict) else 0
@@ -111,13 +107,14 @@ def construir_grafo(
                 raise
             output = dict(result)
             output.setdefault("trace_id", active_trace)
+            typed_output = cast(Estado, output)
             duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
             verbose_step("graph", f"Fin nodo: {step}", duration_ms=duration_ms)
             log_event(
                 "graph",
                 "node_completed",
                 step=step,
-                status=node_status(estado, output),
+                status=node_status(estado, typed_output),
                 duration_ms=duration_ms,
                 input_keys=state_keys(estado),
                 output_keys=state_keys(output),
@@ -126,7 +123,7 @@ def construir_grafo(
                 # the accumulated state a second time in the completion event.
                 node_output=output,
             )
-            return cast(Estado, output)
+            return typed_output
 
     async def run_async_node(
         step: str,
@@ -170,13 +167,14 @@ def construir_grafo(
                 raise
             output = dict(result)
             output.setdefault("trace_id", active_trace)
+            typed_output = cast(Estado, output)
             duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
             verbose_step("graph", f"Fin nodo: {step}", duration_ms=duration_ms)
             log_event(
                 "graph",
                 "node_completed",
                 step=step,
-                status=node_status(estado, output),
+                status=node_status(estado, typed_output),
                 duration_ms=duration_ms,
                 input_keys=state_keys(estado),
                 output_keys=state_keys(output),
@@ -185,7 +183,7 @@ def construir_grafo(
                 # the accumulated state a second time in the completion event.
                 node_output=output,
             )
-            return cast(Estado, output)
+            return typed_output
 
     def question_node(estado: Estado) -> Estado:
         return run_sync_node("obtiene_pregunta", obtiene_pregunta, estado)
@@ -218,7 +216,8 @@ def construir_grafo(
     builder.add_node("orquestador", RunnableLambda(orchestrator_node))
 
     async def direct_response_node(estado: Estado) -> Estado:
-        if isinstance(estado.get("respuesta"), str) and estado["respuesta"]:
+        respuesta = estado.get("respuesta")
+        if isinstance(respuesta, str) and respuesta:
             # Keep the skipped branch visible in the per-node trace.
             return run_sync_node("responder_directo", lambda _value: {}, estado)
         return await run_async_node(
@@ -346,9 +345,7 @@ async def responder(
     with (
         trace_context(trace_id()) as active_trace,
         attempt_context(1),
-        verbose_scope(
-            verbose or os.getenv("CIAR_VERBOSE") == "1"
-        ),
+        verbose_scope(verbose or os.getenv("CIAR_VERBOSE") == "1"),
     ):
         verbose_step("request", "Solicitud recibida", f"input_size={len(pregunta)}")
         log_event("graph", "request_started", input_keys=["pregunta"], input_size=len(pregunta))

@@ -1,6 +1,8 @@
-"""Fail-closed input validation seam for graph requests."""
+"""Fail-closed validation seam for graph request input."""
 
 from __future__ import annotations
+
+from typing import cast
 
 from agente.grafo.estado import Estado
 from agente.utils.logger import log_error, log_event
@@ -58,4 +60,4 @@ def _validate_question_field(estado: Estado, *, field: str, step: str) -> Estado
         length=len(validada),
     )
     verbose_step("prompt_injection", "Entrada validada")
-    return {field: validada, "error": None}
+    return cast(Estado, {field: validada, "error": None})

@@ -21,7 +21,7 @@ from agente.normalizador.silabos.analista_tecnico import (
     CatalogoTecnico,
     cargar_catalogo_hab_tec,
     construir_contexto_tecnico,
-    habilidad_mencionada,
+    evidencia_tecnica_valida,
     validar_habilidad_catalogo,
 )
 from agente.normalizador.silabos.entrada import es_todas_carreras
@@ -236,6 +236,15 @@ def construir_salidas_tecnicas(
         blockers.append("PENDING_TECHNICAL_APPROVAL")
     if cuarentena:
         blockers.append("UNLINKED_SOURCE_OUTCOME")
+    sin_habilidad = (
+        resumen.get("silabos_sin_habilidad", [])
+        if analisis_tecnico is not None
+        and analisis_tecnico.get("politica_habilidades")
+        in {"catalogo_min_1", "catalogo_min_1_max_1"}
+        else []
+    )
+    if sin_habilidad:
+        blockers.append("SYLLABUS_WITHOUT_SKILL")
     gate: dict[str, object] = {
         "version": "curricular-release-gate/v1",
         "decision": "ALLOW_IMPORT" if not blockers else "BLOCK_IMPORT",
@@ -270,6 +279,10 @@ def construir_salidas_tecnicas(
                     if cuarentena
                     else "All source learning outcomes have a competency relation."
                 ),
+            },
+            "skills_per_syllabus": {
+                "ok": not sin_habilidad,
+                "missing_syllabus_ids": sin_habilidad,
             },
         },
         "observability": {
@@ -350,7 +363,6 @@ def construir_catalogos_curriculares(
     competencias_por_silabo_codigo: dict[tuple[str, str], str] = {}
     logros_por_silabo: dict[str, dict[str, str]] = {}
     carrera_por_silabo: dict[str, str] = {}
-    contextos_por_silabo: dict[str, dict[str, object]] = {}
 
     for registro in registros:
         datos = registro.get("datos")
@@ -361,7 +373,6 @@ def construir_catalogos_curriculares(
         carrera_registro = _texto(registro.get("carrera"))
         id_carrera = _hash_id("CAR", carrera_registro)
         carrera_por_silabo[id_silabo] = carrera_registro
-        contextos_por_silabo[id_silabo] = construir_contexto_tecnico(registro)
         codigo_curso = _texto(datos.get("codigo_curso"))
         if not id_curso or not id_silabo:
             raise ValueError("Todo registro debe incluir id_curso e id_silabo")
@@ -484,7 +495,7 @@ def construir_catalogos_curriculares(
     inferencias: list[dict[str, object]] = []
     curso_por_silabo = {fila["id_silabo"]: fila["id_curso"] for fila in silabos.values()}
     catalogos_cerrados: dict[str, CatalogoTecnico] = {}
-    habilidad_por_silabo: dict[str, str] = {}
+    silabos_con_habilidad: set[str] = set()
     for tecnica in competencias_tecnicas:
         if tecnica.get("estado_aprobacion") != "APROBADA":
             raise ValueError(
@@ -507,17 +518,9 @@ def construir_catalogos_curriculares(
         carrera_tecnica = carrera_por_silabo[id_silabo]
         id_carrera = _hash_id("CAR", carrera_tecnica)
         candidato = validar_habilidad_catalogo(tecnica, carrera_tecnica, catalogo)
-        if catalogo.id_catalogo and not habilidad_mencionada(
-            candidato, contextos_por_silabo[id_silabo]
-        ):
-            raise ValueError(
-                "La habilidad técnica debe estar mencionada explícitamente en el sílabo"
-            )
         nombre, descripcion = candidato.nombre, candidato.descripcion
         id_habilidad = candidato.referencia
-        anterior = habilidad_por_silabo.setdefault(id_silabo, id_habilidad)
-        if anterior != id_habilidad:
-            raise ValueError("Solo se permite una habilidad técnica por sílabo")
+        silabos_con_habilidad.add(id_silabo)
         # Legacy COMP catalogs are accepted only when explicitly supplied offline.
         if not catalogo.id_catalogo:
             coincidencia = re.fullmatch(r"COMP_TEC_(\d{4})", id_habilidad)
@@ -570,9 +573,16 @@ def construir_catalogos_curriculares(
                 referencias_logro.append(id_logro_resuelto)
         ids_logro = list(dict.fromkeys(referencias_logro))
         if not ids_logro:
-            raise ValueError(
-                f"La competencia técnica aprobada debe referenciar un logro de {id_silabo}"
-            )
+            registro_fuente = next(r for r in registros if _texto(r.get("id_silabo")) == id_silabo)
+            if not evidencia_tecnica_valida(
+                tecnica.get("evidencia"), construir_contexto_tecnico(registro_fuente)
+            ):
+                raise ValueError(
+                    f"La competencia técnica aprobada debe referenciar un logro de {id_silabo} "
+                    "o evidencia literal del sílabo"
+                )
+            # La habilidad queda relacionada al sílabo sin inventar un logro fuente.
+            ids_logro = [""]
         for id_logro in ids_logro:
             fila = _cobertura(id_curso, id_silabo, "", id_habilidad, id_logro)
             coberturas[fila["id_cobertura_curricular"]] = fila
@@ -637,6 +647,7 @@ def construir_catalogos_curriculares(
 
     return {
         "archivos": {nombre: len(filas_por_archivo[nombre]) for nombre, _ in ARCHIVOS_CATALOGO},
+        "silabos_sin_habilidad": sorted(set(silabos) - silabos_con_habilidad),
         "inferencias_tecnicas": len(inferencias),
         "carrera": carrera,
         "carreras": sorted(set(carrera_por_silabo.values())),

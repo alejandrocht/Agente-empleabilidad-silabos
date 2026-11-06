@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "pages": {
+    "/openwiki/architecture/langgraph-agent.md": {
+      "pageVersion": "sha256:e574033314f757c2ee1a50900b97d6f25d5ad1eef3836ef4dca9920712abbf65",
+      "completedBy": "codex",
+      "completedRunId": "dcc438c5-52ba-4238-bc5f-4729884c836e",
+      "gitHead": "c2bc753488be82e12aa149fd10f5faad8742770b",
+      "sourceFingerprint": "sha256:ef69312aac8e93cf53039e3af49f0edfd51629448b0d2c88f71ddff994497282"
+    },
+    "/openwiki/architecture/neo4j-security.md": {
+      "pageVersion": "sha256:f78feb0de15485b093056209fcb8b5666a391b63eb80b263170dd5023eac55d9",
+      "completedBy": "codex",
+      "completedRunId": "dcc438c5-52ba-4238-bc5f-4729884c836e",
+      "gitHead": "c2bc753488be82e12aa149fd10f5faad8742770b",
+      "sourceFingerprint": "sha256:ef69312aac8e93cf53039e3af49f0edfd51629448b0d2c88f71ddff994497282"
+    },
+    "/openwiki/frontend/overview.md": {
+      "pageVersion": "sha256:e28b4104202c72cd1392c4be7002efbdbcc4345cddc6cf7efa72bedf14589aa3",
+      "completedBy": "codex",
+      "completedRunId": "dcc438c5-52ba-4238-bc5f-4729884c836e",
+      "gitHead": "c2bc753488be82e12aa149fd10f5faad8742770b",
+      "sourceFingerprint": "sha256:ef69312aac8e93cf53039e3af49f0edfd51629448b0d2c88f71ddff994497282"
+    },
+    "/openwiki/pipeline/normalizador-curricular.md": {
+      "pageVersion": "sha256:d3fdf387a12925b3281713a1bb2a11c5b746382575e508c69d7107ab273182cb",
+      "completedBy": "codex",
+      "completedRunId": "dcc438c5-52ba-4238-bc5f-4729884c836e",
+      "gitHead": "c2bc753488be82e12aa149fd10f5faad8742770b",
+      "sourceFingerprint": "sha256:ef69312aac8e93cf53039e3af49f0edfd51629448b0d2c88f71ddff994497282"
+    },
+    "/openwiki/quickstart.md": {
+      "pageVersion": "sha256:d4b34e552ab3e327aeef3bf37431fb9088b04b7d4db94da234d85aff087c789b",
+      "completedBy": "codex",
+      "completedRunId": "dcc438c5-52ba-4238-bc5f-4729884c836e",
+      "gitHead": "c2bc753488be82e12aa149fd10f5faad8742770b",
+      "sourceFingerprint": "sha256:ef69312aac8e93cf53039e3af49f0edfd51629448b0d2c88f71ddff994497282"
+    },
+    "/openwiki/services/api-and-dashboard.md": {
+      "pageVersion": "sha256:89d723ee403f930079cdb85d495f6b9f777eb6e8eeb88ada1a96eee132207767",
+      "completedBy": "codex",
+      "completedRunId": "dcc438c5-52ba-4238-bc5f-4729884c836e",
+      "gitHead": "c2bc753488be82e12aa149fd10f5faad8742770b",
+      "sourceFingerprint": "sha256:ef69312aac8e93cf53039e3af49f0edfd51629448b0d2c88f71ddff994497282"
+    }
+  }
+}

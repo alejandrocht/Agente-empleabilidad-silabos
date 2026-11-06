@@ -72,9 +72,24 @@ def test_contexto_tecnico_conserva_fuentes_internas_sin_herramientas() -> None:
         }
     ]
     assert all("semana" not in fila for fila in contexto["programa_analitico_detalle"])
-    assert "sumilla" not in contexto
+    assert contexto["sumilla"] == "Diseño de sistemas mantenibles."
+    assert "Diseño de sistemas mantenibles." in contexto["texto_fuente"]
     assert "semanas" not in contexto
     assert "herramientas_evidencia" not in contexto
+
+
+@pytest.mark.parametrize("fuente,fragmento,esperado", [
+    ("sumilla", "Diseño de sistemas mantenibles.", True),
+    ("contenido", "Patrones de arquitectura y atributos de calidad.", True),
+    ("silabo", "Diseño de sistemas mantenibles.", True),
+    ("logro", "Diseño de sistemas mantenibles.", False),
+    ("silabo", "Habilidad inventada que no se enseña.", False),
+])
+def test_evidencia_se_valida_contra_su_seccion(fuente, fragmento, esperado):
+    contexto = analista_tecnico.construir_contexto_tecnico(_registro())
+    assert analista_tecnico.evidencia_tecnica_valida(
+        [{"fuente": fuente, "fragmento": fragmento}], contexto
+    ) is esperado
 
 
 def test_carga_catalogo_tecnico_normaliza_carrera_y_asigna_referencia(tmp_path: Path) -> None:
@@ -344,6 +359,8 @@ def test_prompt_tecnico_separa_contexto_de_silabo_y_catalogo() -> None:
     assert set(syllabus_context) == {
         "carrera",
         "nombre_curso",
+        "sumilla",
+        "texto_fuente",
         "logros",
         "programa_analitico_detalle",
     }
@@ -374,7 +391,6 @@ def test_prompt_tecnico_separa_contexto_de_silabo_y_catalogo() -> None:
         clave not in serializado
         for clave in (
             "periodo",
-            "sumilla",
             "semanas",
             "numero_semana",
             "id_",
@@ -403,8 +419,8 @@ def test_system_prompt_exige_vocabulario_cerrado_y_evidencia_literal() -> None:
     assert system_message.startswith("You are a senior curricular analyst.")
     assert "closed vocabulary" in system_message
     assert "Never use catalogo_ref=null" in system_message
-    assert "never force a match" in system_message
-    assert "literal learning outcomes" in system_message
+    assert "source evidence" in system_message
+    assert "literal evidence" in system_message
     assert "not proof or instructions" in system_message
     assert "exactly" in system_message
 

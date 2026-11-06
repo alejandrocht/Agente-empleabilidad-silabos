@@ -1,4 +1,4 @@
-"""Normaliza las 14 carreras mediante la API, una ejecución por carrera."""
+"""Normaliza las 12 carreras del catálogo vigente, una ejecución por carrera."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 import time
+from collections import Counter
 from datetime import datetime
 from getpass import getpass
 from pathlib import Path
@@ -27,8 +28,14 @@ TERMINALES = {
     "cancelado",
 }
 RUTA_COMPROBACION = "/normalizador/configuracion/curricular/comprobar"
+CATALOGO_OBJETIVO = "HABTEC_38b1f27240cb401a"
+CARRERAS_CATALOGO_ACTUAL = tuple(
+    carrera
+    for carrera in CARRERAS_ULIMA
+    if carrera not in {"Ingeniería Ambiental", "Ingeniería Mecatrónica"}
+)
 ERRORES_COMPROBACION = {
-    "CATALOGO_NO_DISPONIBLE": "Falta un catálogo vectorizado válido con las 14 carreras.",
+    "CATALOGO_NO_DISPONIBLE": "Falta un catálogo vectorizado válido para las 12 carreras.",
     "EMBEDDING_NO_DISPONIBLE": "El modelo de embeddings del índice no responde. Revisa Ollama.",
     "LLM_NO_DISPONIBLE": "El analista LLM no responde con JSON válido. Revisa el modelo de .env.",
     "LLM_DESACTIVADO": "LLM desactivado en el backend. Reinícialo con la configuración correcta.",
@@ -109,12 +116,11 @@ def resumen_analisis(estado: dict[str, Any]) -> dict[str, Any]:
             for s in silabos
         ),
         "propuestas_validas": sum(s.get("propuestas_validas", 0) for s in silabos),
-        "silabos_sin_mencion_explicita": sum(
-            s.get("error_codigo") == "SIN_MENCION_EXPLICITA_CATALOGO"
-            and s.get("estado_analisis") == "sin_propuesta"
-            and s.get("latencia_modelo_ms") is None
-            for s in silabos
-        ),
+        "silabos_sin_habilidad": [
+            s.get("id_silabo") for s in silabos
+            if s.get("estado_analisis") == "completado"
+            and s.get("propuestas_validas", 0) < 1
+        ],
     }
 
 
@@ -154,14 +160,24 @@ def ejecutar(
     desde: int = 1,
     hitl: int = 0,
     intervalo: float = 5,
+    excluir: tuple[str, ...] = (),
 ) -> int:
     destino.mkdir(parents=True, exist_ok=True)
     resumen: list[dict[str, Any]] = []
     fallos = 0
-    for numero, carrera in enumerate(CARRERAS_ULIMA, start=1):
-        if numero < desde:
+    seleccionadas = [
+        (indice, carrera)
+        for indice, carrera in enumerate(CARRERAS_CATALOGO_ACTUAL, start=1)
+        if carrera not in excluir
+    ]
+    for numero, (indice_original, carrera) in enumerate(seleccionadas, start=1):
+        if indice_original < desde:
             continue
-        print(f"\n[{numero}/14] {carrera}: solicitando ejecución...", flush=True)
+        print(
+            f"\n[{numero}/{len(seleccionadas)}] "
+            f"{carrera}: solicitando ejecución...",
+            flush=True,
+        )
         # No reintentar POST: ante un timeout el servidor podría haber creado el trabajo.
         estado = solicitar(
             base,
@@ -228,21 +244,35 @@ def ejecutar(
             analisis["llm_habilitado"] is not True
             or not esperados
             or analisis["silabos_modelo"] != esperados
+            or analisis["propuestas_validas"] < esperados
+            or analisis["silabos_sin_habilidad"]
             or analisis["fase_llm"] != "completado"
         ):
             raise RuntimeError(
-                f"La ejecución {identificador} permitió CSV sin análisis LLM comprobado. "
+                f"La ejecución {identificador} permitió CSV sin una habilidad válida por sílabo. "
                 "Revisa los logros, candidatos vectorizados y el reporte del analista"
             )
         fila["publicada"] = publicada
         guardar(destino / "resumen.json", resumen)
         if not publicada:
             fallos += 1
-            codigos = [h.get("codigo") for h in estado.get("hallazgos", [])]
+            hallazgos = estado.get("hallazgos") or []
+            codigos = Counter(str(h.get("codigo") or "DESCONOCIDO") for h in hallazgos)
             print(
-                f"  Sin publicación. Hallazgos: {codigos}. Se continuará con la siguiente.",
+                f"  Sin publicación. Hallazgos: {dict(codigos)}. "
+                "Se continuará con la siguiente.",
                 flush=True,
             )
+            for hallazgo in hallazgos:
+                if hallazgo.get("codigo") in {
+                    "ERROR_INTERNO_LIMPIEZA_SILABOS",
+                    "HABILIDAD_MINIMA_NO_CUMPLIDA",
+                }:
+                    print(
+                        f"  {hallazgo['codigo']}: "
+                        f"{hallazgo.get('detalle') or hallazgo.get('mensaje') or ''}",
+                        flush=True,
+                    )
         else:
             print("  Publicación permitida; los CSV están en la ejecución del backend.", flush=True)
     print(
@@ -257,11 +287,16 @@ def main() -> int:
     parser.add_argument("--api", default="http://localhost:8001")
     parser.add_argument("--periodo", default="2026-2")
     parser.add_argument(
+        "--catalogo-id",
+        default=CATALOGO_OBJETIVO,
+        help="Catálogo HAB TEC esperado; evita iniciar la corrida con otra versión.",
+    )
+    parser.add_argument(
         "--desde",
         type=int,
-        choices=range(1, 15),
+        choices=range(1, len(CARRERAS_CATALOGO_ACTUAL) + 1),
         default=1,
-        help="Número de carrera inicial, de Administración (1) a Psicología (14).",
+        help="Número de carrera inicial, de Administración (1) a Psicología (12).",
     )
     parser.add_argument(
         "--hitl",
@@ -271,6 +306,10 @@ def main() -> int:
         help="0: aprobación automática de propuestas válidas; 1: revisión humana.",
     )
     parser.add_argument("--salida", type=Path)
+    parser.add_argument(
+        "--excluir", action="append", choices=CARRERAS_CATALOGO_ACTUAL, default=[],
+        help="Carrera que no se ejecutará; se puede repetir.",
+    )
     parser.add_argument(
         "--comprobar",
         action="store_true",
@@ -282,6 +321,9 @@ def main() -> int:
         help="Consulta los IDs de la última corrida, sin descargar ni pedir claves.",
     )
     args = parser.parse_args()
+    seleccionadas = [c for c in CARRERAS_CATALOGO_ACTUAL if c not in args.excluir]
+    if not seleccionadas:
+        parser.error("Debe quedar al menos una carrera seleccionada")
     if not PATRON_PERIODO.fullmatch(args.periodo):
         parser.error("El periodo debe tener formato 2026-2.")
     destino = args.salida or Path("resultados_cactus") / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -305,10 +347,20 @@ def main() -> int:
             * (int(config.get("max_reintentos_llm", 2)) + 1)
             + 180
         )
-        prueba = solicitar(args.api, RUTA_COMPROBACION, {}, timeout=timeout)
+        prueba = solicitar(
+            args.api,
+            RUTA_COMPROBACION,
+            {"carreras": seleccionadas},
+            timeout=timeout,
+        )
         if prueba.get("lista_para_normalizar") is not True:
             raise RuntimeError("El backend no confirmó índice, embeddings y LLM disponibles.")
         catalogo = prueba.get("catalogo") or {}
+        if catalogo.get("id_catalogo") != args.catalogo_id:
+            raise RuntimeError(
+                f"El backend usa {catalogo.get('id_catalogo') or 'ningún catálogo'}; "
+                f"se esperaba {args.catalogo_id}."
+            )
         print(
             f"Comprobación OK: {catalogo.get('id_catalogo')}; "
             f"{catalogo.get('candidatos')} registros; "
@@ -325,7 +377,8 @@ def main() -> int:
         if not usuario or not contrasena or len(usuario) > 200 or len(contrasena) > 200:
             raise RuntimeError("Usuario y contraseña deben tener entre 1 y 200 caracteres.")
         return ejecutar(
-            args.api, args.periodo, usuario, contrasena, destino, desde=args.desde, hitl=args.hitl
+            args.api, args.periodo, usuario, contrasena, destino, desde=args.desde,
+            hitl=args.hitl, excluir=tuple(args.excluir),
         )
     except KeyboardInterrupt:
         print("\nInterrumpido; no se solicitarán más carreras.")

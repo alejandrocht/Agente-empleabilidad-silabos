@@ -30,14 +30,14 @@ def test_no_da_exito_a_csv_permitidos_sin_analista(monkeypatch, tmp_path, habili
         }
 
     monkeypatch.setattr(cli, "solicitar", solicitar)
-    with pytest.raises(RuntimeError, match="LLM"):
+    with pytest.raises(RuntimeError, match="LLM|habilidad"):
         cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path)
-    assert len(pedidos) == 1  # No repetir el problema en las otras 13 carreras.
+    assert len(pedidos) == 1  # No repetir el problema en las otras 11 carreras.
     resumen = json.loads((tmp_path / "resumen.json").read_text())
     assert resumen[0]["publicada"] is False
 
 
-def test_llm_real_sin_coincidencias_es_valido_sin_forzar_habilidades(monkeypatch, tmp_path):
+def test_llm_real_sin_habilidades_no_publica(monkeypatch, tmp_path):
     def solicitar(_base, _ruta, datos=None):
         return {
             "id_ejecucion": "NOR_0000000000000001",
@@ -57,7 +57,29 @@ def test_llm_real_sin_coincidencias_es_valido_sin_forzar_habilidades(monkeypatch
         }
 
     monkeypatch.setattr(cli, "solicitar", solicitar)
-    assert cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=14) == 0
+    with pytest.raises(RuntimeError, match="habilidad válida por sílabo"):
+        cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=12)
+
+
+def test_cli_muestra_detalle_de_error_interno_sin_repetir_hallazgos(
+    monkeypatch, tmp_path, capsys
+):
+    estado = {
+        "id_ejecucion": "NOR_0000000000000001",
+        "estado": "error",
+        "configuracion_curricular": {"usar_llm": True},
+        "release_gate": {"decision": "BLOCK_IMPORT"},
+        "hallazgos": [
+            {"codigo": "ERROR_INTERNO_LIMPIEZA_SILABOS", "detalle": "TypeError: prueba"},
+            {"codigo": "LOGRO_SIN_COMPETENCIA"},
+            {"codigo": "LOGRO_SIN_COMPETENCIA"},
+        ],
+    }
+    monkeypatch.setattr(cli, "solicitar", lambda *_args, **_kwargs: estado)
+    assert cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=12) == 1
+    salida = capsys.readouterr().out
+    assert "'LOGRO_SIN_COMPETENCIA': 2" in salida
+    assert "ERROR_INTERNO_LIMPIEZA_SILABOS: TypeError: prueba" in salida
 
 
 def test_preflight_usa_config_real_del_backend_sin_descargar_o_pedir_secretos(monkeypatch):
@@ -102,14 +124,14 @@ def test_diagnostico_consulta_ids_existentes_sin_post(monkeypatch, tmp_path, cap
     assert "Administración" in capsys.readouterr().out
 
 
-def test_sin_menciones_explicitas_exige_llm_sin_forzar_habilidades(monkeypatch, tmp_path):
+def test_sin_habilidad_exige_reintento_del_backend(monkeypatch, tmp_path):
     def solicitar(*_args):
         return {
             "id_ejecucion": "NOR_0000000000000001",
             "estado": "limpiado",
             "configuracion_curricular": {
                 "usar_llm": True,
-                "politica_habilidades": "extraccion_explicita_max_1",
+                "politica_habilidades": "catalogo_min_1",
             },
             "release_gate": {"decision": "ALLOW_IMPORT"},
             "progreso_llm": {
@@ -119,15 +141,15 @@ def test_sin_menciones_explicitas_exige_llm_sin_forzar_habilidades(monkeypatch, 
                     {
                         "estado_analisis": "sin_propuesta",
                         "latencia_modelo_ms": None,
-                        "error_codigo": "SIN_MENCION_EXPLICITA_CATALOGO",
+                        "error_codigo": "HABILIDAD_NO_VALIDA_REINTENTO",
                     }
                 ],
             },
         }
 
     monkeypatch.setattr(cli, "solicitar", solicitar)
-    with pytest.raises(RuntimeError, match="LLM"):
-        cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=14)
+    with pytest.raises(RuntimeError, match="habilidad"):
+        cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=12)
 
 
 def test_no_basta_analizar_solo_un_silabo_de_la_carrera(monkeypatch, tmp_path):
@@ -148,8 +170,8 @@ def test_no_basta_analizar_solo_un_silabo_de_la_carrera(monkeypatch, tmp_path):
         }
 
     monkeypatch.setattr(cli, "solicitar", solicitar)
-    with pytest.raises(RuntimeError, match="LLM"):
-        cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=14)
+    with pytest.raises(RuntimeError, match="habilidad"):
+        cli.ejecutar("http://localhost", "2026-2", "u", "p", tmp_path, desde=12)
 
 
 @pytest.mark.parametrize("correcta", [False, True])
@@ -163,12 +185,17 @@ def test_comprobacion_real_antes_de_credenciales_y_descargas(monkeypatch, correc
             return {}
         if ruta == "/normalizador/configuracion/curricular":
             return {"usar_llm": True, "timeout_llm_seconds": 600, "max_reintentos_llm": 2}
-        assert ruta == cli.RUTA_COMPROBACION and datos == {} and timeout == 1980
+        assert ruta == cli.RUTA_COMPROBACION
+        assert datos == {"carreras": list(cli.CARRERAS_CATALOGO_ACTUAL)}
+        assert timeout == 1980
         if not correcta:
             raise RuntimeError("El analista LLM no responde")
         return {
             "lista_para_normalizar": True,
-            "catalogo": {"id_catalogo": "HABTEC_prueba", "modelo_embedding": "modelo-vector"},
+            "catalogo": {
+                "id_catalogo": cli.CATALOGO_OBJETIVO,
+                "modelo_embedding": "modelo-vector",
+            },
             "prueba_llm": {"latencia_modelo_ms": 5.0},
         }
 
