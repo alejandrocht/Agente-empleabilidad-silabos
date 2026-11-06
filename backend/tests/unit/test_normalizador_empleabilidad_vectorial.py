@@ -6,6 +6,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+from agente.normalizador.empleabilidad.analista_habilidades import HabilidadSustentada
 from agente.normalizador.empleabilidad.pipeline import normalizar_staging
 from agente.normalizador.modelos import ResultadoValidacionEntrada
 
@@ -14,7 +17,9 @@ class _RetrieverFalso:
     modelo = "qwen3-embedding:0.6b"
     documentos = (object(),)
 
-    def buscar(self, _texto: str, carrera: str):
+    def buscar(self, _texto: str, carrera: str, *, sin_limite=False):
+        assert sin_limite
+        assert "inherentes" not in _texto.lower()
         return (
             SimpleNamespace(
                 id_habilidad="HAB_TEC_1",
@@ -26,7 +31,21 @@ class _RetrieverFalso:
         )
 
 
-def test_normaliza_oferta_con_vecino_hab_tec_sin_catalogos_chh(tmp_path: Path) -> None:
+class _AnalistaFalso:
+    def seleccionar(self, funciones, carrera, candidatos):
+        return tuple(HabilidadSustentada(c, "Analizar estados financieros") for c in candidatos)
+
+
+@pytest.mark.parametrize(
+    "funciones",
+    [
+        "Analizar estados financieros",
+        "Analizar estados financieros. Otras funciones inherentes al puesto.",
+    ],
+)
+def test_normaliza_oferta_con_vecino_hab_tec_sin_catalogos_chh(
+    tmp_path: Path, funciones: str
+) -> None:
     (tmp_path / "limpios").mkdir()
     registro = {
         "id_registro": "pub_1",
@@ -39,7 +58,7 @@ def test_normaliza_oferta_con_vecino_hab_tec_sin_catalogos_chh(tmp_path: Path) -
             "cargo": "Analista",
             "posicion_a_publicar": "Analista financiero",
             "area": "Finanzas",
-            "funciones": "Analizar estados financieros",
+            "funciones": funciones,
         },
     }
     (tmp_path / "limpios" / "publicaciones.jsonl").write_text(
@@ -51,6 +70,7 @@ def test_normaliza_oferta_con_vecino_hab_tec_sin_catalogos_chh(tmp_path: Path) -
         tmp_path,
         ResultadoValidacionEntrada("fuente.xlsx", "hash", True, (), ()),
         hab_tec_retriever=_RetrieverFalso(),
+        analista_habilidades=_AnalistaFalso(),
     )
 
     assert resultado.publicable is True
@@ -62,4 +82,4 @@ def test_normaliza_oferta_con_vecino_hab_tec_sin_catalogos_chh(tmp_path: Path) -
     resumen = json.loads(
         (tmp_path / "salidas" / "reportes" / "resumen.json").read_text(encoding="utf-8")
     )
-    assert resumen["motor_habilidades"] == "hab_tec_qwen_vectorial"
+    assert resumen["motor_habilidades"] == "hab_tec_funciones_clef"

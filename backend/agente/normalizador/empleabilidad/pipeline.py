@@ -6,19 +6,26 @@ import csv
 import hashlib
 import json
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
+from agente.normalizador.empleabilidad.analista_habilidades import (
+    ErrorAnalisisHabilidades,
+    SelectorHabilidades,
+)
 from agente.normalizador.empleabilidad.catalogo import CatalogoCHH, ConceptoCHH, cargar_catalogo
+from agente.normalizador.empleabilidad.clasificador_clef import ClasificadorClef
 from agente.normalizador.empleabilidad.extractor import (
     CadenaCHH,
     ResultadoExtraccion,
     extraer,
     extraer_informe,
 )
+from agente.normalizador.empleabilidad.funciones import funciones_concretas
 from agente.normalizador.empleabilidad.hab_tec_retriever import (
     ErrorHabTecRetriever,
+    HabTecMatch,
     HabTecRetriever,
 )
 from agente.normalizador.identidad import hashed
@@ -110,9 +117,7 @@ def _texto_vectorial(datos: dict[str, object]) -> str:
 
     ignorar = {"ruc", "identificacion", "fecha_de_publicacion", "fecha_de_finalizacion"}
     return " ".join(
-        _texto(valor)
-        for clave, valor in datos.items()
-        if clave not in ignorar and _texto(valor)
+        _texto(valor) for clave, valor in datos.items() if clave not in ignorar and _texto(valor)
     )
 
 
@@ -147,6 +152,53 @@ def _resultado_hab_tec(
         for coincidencia in coincidencias
     )
     return ResultadoExtraccion(cadenas, (), ())
+
+
+def _resultado_oferta_hab_tec(
+    retriever: HabTecRetriever,
+    analista: SelectorHabilidades,
+    funciones_originales: str,
+    carrera: str,
+) -> ResultadoExtraccion:
+    """Busca por función y conserva todas las habilidades verificadas, sin duplicados."""
+    candidatos: dict[tuple[str, str], HabTecMatch] = {}
+    fragmentos = re.split(
+        r"[\n\r;•●▪]+|(?<=[.!?])\s+|(?=\(\d+\))", funciones_originales
+    )
+    funciones = funciones_concretas(funciones_originales)
+    for fragmento in fragmentos:
+        funcion = funciones_concretas(fragmento)
+        if not funcion:
+            continue
+        for candidato in retriever.buscar(funcion, carrera, sin_limite=True):
+            clave = (candidato.id_habilidad, candidato.carrera)
+            anterior = candidatos.get(clave)
+            if anterior is None or candidato.similitud > anterior.similitud:
+                candidatos[clave] = candidato
+    sustentadas = analista.seleccionar(funciones, carrera, tuple(candidatos.values()))
+    vacia = ConceptoCHH("", "", "", "")
+    return ResultadoExtraccion(
+        tuple(
+            CadenaCHH(
+                competencia=vacia,
+                habilidad=ConceptoCHH(
+                    s.candidato.id_habilidad,
+                    s.candidato.nombre,
+                    s.candidato.descripcion,
+                    "tecnica",
+                ),
+                herramienta=None,
+                tipo="exige",
+                evidencia=s.evidencia,
+                confianza=(s.probabilidad if s.probabilidad is not None else s.candidato.similitud),
+                metodo="hab_tec_funciones_clef",
+                regla="HAB_TEC_CLEF_DIRECTO_1",
+            )
+            for s in sustentadas
+        ),
+        (),
+        (),
+    )
 
 
 def _resolver_empresa(
@@ -212,6 +264,11 @@ def _huella(ruta: Path) -> str:
         for bloque in iter(lambda: archivo.read(1024 * 1024), b""):
             digest.update(bloque)
     return digest.hexdigest()
+
+
+def _anexar_auditoria(ruta: Path, registro: dict[str, object]) -> None:
+    with ruta.open("a", encoding="utf-8", newline="\n") as archivo:
+        archivo.write(json.dumps(registro, ensure_ascii=False) + "\n")
 
 
 def _output(ruta: Path, tipo: str, registros: int) -> dict[str, object]:
@@ -306,6 +363,8 @@ def normalizar_staging(
     validacion: ResultadoValidacionEntrada,
     catalogo: CatalogoCHH | None = None,
     hab_tec_retriever: HabTecRetriever | None = None,
+    analista_habilidades: SelectorHabilidades | None = None,
+    verificar_cancelacion: Callable[[], None] | None = None,
 ) -> ResultadoNormalizacion:
     """Genera paquete candidato, cuarentena y gate de publicación."""
 
@@ -332,6 +391,12 @@ def normalizar_staging(
     conceptos_hab: dict[str, ConceptoCHH] = {}
     conceptos_herr: dict[str, ConceptoCHH] = {}
     procesados: dict[str, int] = {}
+    analista = analista_habilidades
+    auditoria_ofertas = reportes / "auditoria_ofertas.jsonl"
+    auditoria_ofertas.write_text("", encoding="utf-8")
+    auditoria_clef = reportes / "clasificacion_clef.jsonl"
+    auditoria_clef.write_text("", encoding="utf-8")
+    clasificaciones_registradas = 0
 
     def registrar_cuarentena(
         registro: dict[str, Any],
@@ -364,12 +429,29 @@ def normalizar_staging(
             else "warning"
         )
         hallazgos.append(_hallazgo_fila(codigo, severidad, mensaje, registro, detalle))
+        if registro.get("universo") == "publicaciones":
+            datos_auditoria = registro.get("datos", {})
+            _anexar_auditoria(auditoria_ofertas, {
+                "identificacion": str(datos_auditoria.get("identificacion", "")),
+                "origen": registro.get("origen", {}),
+                "estado": "cuarentena",
+                "codigo": codigo,
+                "detalle": detalle,
+                "habilidades": [],
+            })
 
     for universo in ("publicaciones", "informes"):
         ruta = directorio_ejecucion / "limpios" / f"{universo}.jsonl"
         cantidad = 0
         for registro in _registro_jsonl(ruta):
+            if verificar_cancelacion is not None:
+                verificar_cancelacion()
             cantidad += 1
+            (reportes / "progreso_empleabilidad.json").write_text(
+                json.dumps({"universo": universo, "registro_actual": cantidad,
+                            "relaciones": len(relaciones), "cuarentena": len(cuarentena)}),
+                encoding="utf-8",
+            )
             datos_objeto = registro.get("datos", {})
             datos = datos_objeto if isinstance(datos_objeto, dict) else {}
             id_empresa, _, error_empresa = _resolver_empresa(datos, empresas)
@@ -404,32 +486,64 @@ def normalizar_staging(
                     )
                     continue
                 id_puesto = hashed("PUE", id_oferta, nombre_puesto)
-                texto = " ".join(
-                    _texto(datos.get(campo, ""))
-                    for campo in (
-                        "posicion_a_publicar",
-                        "cargo_especifico",
-                        "cargo",
-                        "area",
-                        "area_especifica",
-                        "funciones",
+                funciones = funciones_concretas(datos.get("funciones"))
+                if not funciones:
+                    registrar_cuarentena(
+                        registro,
+                        "OFERTA_SIN_FUNCIONES_CONCRETAS",
+                        "La oferta no describe funciones concretas.",
+                        "El cargo y el área no sustituyen la evidencia funcional; "
+                        "no se consultó el modelo ni se generaron requerimientos.",
                     )
+                    continue
+                texto = (
+                    " ".join(
+                        _texto(datos.get(campo, ""))
+                        for campo in (
+                            "posicion_a_publicar",
+                            "cargo_especifico",
+                            "cargo",
+                            "area",
+                            "area_especifica",
+                        )
+                    )
+                    + " "
+                    + funciones
                 )
                 if hab_tec_retriever is not None:
                     try:
-                        resultado = _resultado_hab_tec(
+                        if analista is None:
+                            analista = ClasificadorClef(
+                                directorio_ejecucion.parent / "cache_clasificacion_clef"
+                            )
+                        if isinstance(analista, ClasificadorClef):
+                            analista.ultima_auditoria = []
+                        resultado = _resultado_oferta_hab_tec(
                             hab_tec_retriever,
-                            texto,
+                            analista,
+                            str(datos.get("funciones", "")),
                             _primer_valor(datos, ("carrera_resumen", "carrera")),
                         )
-                    except ErrorHabTecRetriever as exc:
+                    except (ErrorHabTecRetriever, ErrorAnalisisHabilidades) as exc:
                         registrar_cuarentena(
                             registro,
-                            "HAB_TEC_VECTOR_ERROR",
-                            "No se pudo consultar el índice vectorial HAB_TEC.",
+                            "HAB_TEC_ANALISIS_ERROR",
+                            "No se completó la extracción sustentada de habilidades.",
                             str(exc),
                         )
                         continue
+                    finally:
+                        if isinstance(analista, ClasificadorClef):
+                            traza = {
+                                "id_ofe_laboral": id_oferta,
+                                "origen": registro.get("origen"),
+                                "funciones": funciones,
+                                "configuracion": analista.configuracion(),
+                                "lotes": analista.ultima_auditoria,
+                            }
+                            with auditoria_clef.open("a", encoding="utf-8") as archivo:
+                                archivo.write(json.dumps(traza, ensure_ascii=False) + "\n")
+                            clasificaciones_registradas += 1
                 else:
                     if catalogo is None:
                         raise RuntimeError(
@@ -505,7 +619,7 @@ def normalizar_staging(
                     registro,
                     codigo,
                     (
-                        "No se obtuvo una coincidencia HAB_TEC para la carrera indicada."
+                        "No se obtuvo una habilidad HAB_TEC sustentada para la carrera indicada."
                         if vectorial
                         else (
                             "No se obtuvo una cadena Competencia-Habilidad con evidencia "
@@ -545,6 +659,18 @@ def normalizar_staging(
                 relaciones[negocio] = fila
                 ids_reqs.append(fila["id_req_laboral"])
             _agregar_evidencias(evidencias, registro, resultado, ids_reqs)
+            if universo == "publicaciones":
+                _anexar_auditoria(auditoria_ofertas, {
+                    "id_ofe_laboral": id_oferta,
+                    "origen": registro.get("origen", {}),
+                    "estado": "analizada",
+                    "habilidades": [
+                        {"id_habilidad": c.habilidad.id, "nombre_habilidad": c.habilidad.nombre,
+                         "descripcion_habilidad": c.habilidad.descripcion,
+                         "evidencia": c.evidencia}
+                        for c in resultado.cadenas
+                    ],
+                })
 
             if universo == "informes":
                 evaluaciones.append(
@@ -629,7 +755,10 @@ def normalizar_staging(
             }
         ),
         "motor_habilidades": (
-            "hab_tec_qwen_vectorial" if hab_tec_retriever is not None else "chh_lexical"
+            "hab_tec_funciones_clef" if hab_tec_retriever is not None else "chh_lexical"
+        ),
+        "clasificador_habilidades": (
+            analista.configuracion() if isinstance(analista, ClasificadorClef) else None
         ),
         "reglas_chh": "empleabilidad-chh-0.1.0",
         "hallazgos": [hallazgo.a_dict() for hallazgo in hallazgos],
@@ -652,6 +781,8 @@ def normalizar_staging(
         (reportes / "evidencias_chh.jsonl", "reporte", len(evidencias)),
         (reportes / "propuestas_herramienta.jsonl", "reporte", len(propuestas)),
         (reportes / "resumen.json", "reporte", len(hallazgos)),
+        (auditoria_ofertas, "reporte", procesados.get("publicaciones", 0)),
+        (auditoria_clef, "reporte", clasificaciones_registradas),
     ]
     outputs = tuple(_output(ruta, tipo, cantidad) for ruta, tipo, cantidad in archivos)
     return ResultadoNormalizacion(

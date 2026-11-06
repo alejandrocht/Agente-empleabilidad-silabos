@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import NormalizadorPanel from "./NormalizadorPanel";
 import {
+  iniciarEmpleabilidadDesdeHoja,
+  inspeccionarNormalizadorEmpleabilidad,
   iniciarNormalizadorSilabos,
   iniciarNormalizadorSilabosCactus,
   listarEjecucionesNormalizador,
@@ -16,6 +18,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("../api/normalizador", () => ({
+  iniciarEmpleabilidadDesdeHoja: vi.fn(),
+  inspeccionarNormalizadorEmpleabilidad: vi.fn(),
   iniciarNormalizadorSilabos: vi.fn(),
   iniciarNormalizadorSilabosCactus: vi.fn(),
   listarEjecucionesNormalizador: vi.fn(),
@@ -65,6 +69,30 @@ describe("panel del normalizador", () => {
     vi.clearAllMocks();
     listarEjecucionesNormalizador.mockResolvedValue({ ejecuciones: [] });
     obtenerEjecucionNormalizador.mockResolvedValue(activa());
+  });
+
+  it.each([0, 15])("procesa la primera hoja compatible con límite %s", async (limite) => {
+    inspeccionarNormalizadorEmpleabilidad.mockResolvedValue({
+      id_ejecucion: "NOR_empleo12345678",
+      validacion: { hojas: [
+        { nombre: "2025", rol: "publicaciones", encabezado_fila: 1 },
+        { nombre: "2024", rol: "publicaciones", encabezado_fila: 1 },
+      ] },
+    });
+    iniciarEmpleabilidadDesdeHoja.mockResolvedValue({
+      ...activa("NOR_empleo12345678"), tipo: "empleabilidad",
+    });
+    const { container } = await renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: /Empleabilidad/ }));
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: String(limite) } });
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: { files: [new File(["xlsx"], "fuente.xlsx")] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Normalizar con vectores HAB_TEC" }));
+    await waitFor(() => expect(iniciarEmpleabilidadDesdeHoja).toHaveBeenCalledWith(
+      "NOR_empleo12345678", "2025", limite,
+    ));
+    expect(navigation.push).toHaveBeenCalledWith("/NOR_empleo12345678");
   });
 
   it("mantiene el formulario Cactus/manual y aplica HITL seleccionado al iniciar", async () => {

@@ -4,6 +4,45 @@ The active backend lives in `backend/agente`. It uses LangGraph, OpenAI, and Neo
 answer Spanish questions about the CIAR academic and employment graph. Domain queries
 are read-only and pass through the current Cypher guard and Neo4j `READ` gateway.
 
+## Habilidades de ofertas laborales
+
+El normalizador usa Qwen Embedding para comparar cada función concreta con todas
+las habilidades de las carreras declaradas. Las carreras solo filtran documentos:
+no se añaden al texto vectorizado. Se conservan todos los candidatos que superan
+`NORMALIZADOR_HAB_TEC_RETRIEVAL_MIN_SIMILARITY`; las ofertas no aplican top-k.
+Sílabos y otros consumos conservan sus límites propios.
+
+Clef-flash clasifica directamente cada candidato mediante `/v1/systemone`, sin
+selección o verificación con Qwen3 8B. Puede aceptar cero, una o muchas habilidades.
+`NORMALIZADOR_EMPLEABILIDAD_CLEF_ENDPOINT` apunta a Ollama >= 0.35.1;
+`NORMALIZADOR_EMPLEABILIDAD_CLEF_MODEL` elige el modelo. En el entorno local actual
+el runtime compatible escucha en `http://127.0.0.1:11435/v1/systemone`.
+Puede iniciarse de nuevo con `powershell -File scripts/iniciar_clef_local.ps1`;
+el script también admite `-Runtime` para otra instalación compatible de Ollama.
+En este equipo embeddings y clasificación usan ese mismo servidor para administrar
+la memoria de GPU en un único runtime.
+`NORMALIZADOR_EMPLEABILIDAD_CLEF_THRESHOLD=0.5` es el umbral inicial, pendiente de
+calibración con más referencias. `NORMALIZADOR_EMPLEABILIDAD_CLEF_BATCH_SIZE=24`
+limita preguntas por llamada, no habilidades finales. Los bloques que exceden
+el presupuesto de bytes se dividen; las funciones no se truncan.
+
+Los IDs, nombres y descripciones se copian del catálogo y se eliminan IDs repetidos.
+Si varias carreras comparten un ID, se conserva el contexto aprobado con mayor
+probabilidad. La evidencia conserva el conjunto literal de funciones evaluadas,
+no una cita específica generada por el clasificador. La confianza de la relación
+corresponde a la probabilidad de Clef, no a la similitud vectorial.
+Un error de transporte, respuesta incompleta o probabilidad inválida deja la oferta
+en cuarentena, sin aprobar vecinos por defecto ni recurrir a otro modelo.
+
+La caché `cache_clasificacion_clef` conserva entradas y respuestas completas con
+modelo, endpoint, umbral y versión propios, separada del analista anterior.
+`clasificacion_clef.jsonl` registra candidatos aprobados y descartados, probabilidades,
+carrera, similitud y origen de caché por oferta. Los reportes conservan
+la evidencia por requerimiento y el progreso local en `progreso_empleabilidad.json`.
+`auditoria_ofertas.jsonl` registra cada oferta terminada, incluso durante el procesamiento.
+En la web, **Registros a procesar** permite una muestra de 1 a 100 filas; 0
+procesa toda la primera hoja de publicaciones compatible.
+
 ## Install
 
 From the repository root:

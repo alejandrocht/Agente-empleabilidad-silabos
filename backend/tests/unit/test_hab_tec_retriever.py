@@ -21,7 +21,13 @@ def test_recuperador_filtra_por_carrera_y_aplica_top_k(monkeypatch) -> None:
         similitud_minima=0.5,
         limite=1,
     )
-    monkeypatch.setattr(HabTecRetriever, "_embedding", lambda self, texto: (1.0, 0.0))
+    consultas: list[str] = []
+
+    def embedding(self, texto):
+        consultas.append(texto)
+        return (1.0, 0.0)
+
+    monkeypatch.setattr(HabTecRetriever, "_embedding", embedding)
 
     encontrados = recuperador.buscar("analizar campañas", "marketing")
 
@@ -32,3 +38,8 @@ def test_recuperador_filtra_por_carrera_y_aplica_top_k(monkeypatch) -> None:
     assert compuesto[0].id_habilidad == "HAB_1"
     assert recuperador.buscar("analizar campañas", "") == ()
     assert recuperador.buscar("analizar campañas", "Carrera inexistente") == ()
+    assert consultas == ["analizar campañas", "analizar campañas"]
+    todos = recuperador.buscar("analizar campañas", "Marketing", sin_limite=True)
+    assert [c.id_habilidad for c in todos] == ["HAB_1", "HAB_2"]
+    assert recuperador.buscar("   ", "Marketing") == ()
+    assert consultas == ["analizar campañas"] * 3

@@ -642,7 +642,11 @@ class GestorEjecuciones:
             ejecucion.actualizada_en = _ahora()
             self._persistir(ejecucion)
 
-            retriever = cargar_retriever_hab_tec()
+            retriever = cargar_retriever_hab_tec(
+                limite=max(
+                    1, min(entero("NORMALIZADOR_EMPLEABILIDAD_CANDIDATOS_POR_FUNCION", 8), 20)
+                )
+            )
             if retriever is None and booleano("NORMALIZADOR_HAB_TEC_RETRIEVAL_REQUIRED", True):
                 raise ErrorHabTecRetriever(
                     "No hay un índice HAB_TEC vectorial disponible. "
@@ -682,6 +686,7 @@ class GestorEjecuciones:
                 ejecucion.directorio,
                 resultado,
                 hab_tec_retriever=retriever,
+                verificar_cancelacion=lambda: self._verificar_cancelacion(ejecucion),
             )
             ejecucion.normalizacion = normalizacion
             ejecucion.hallazgos = ejecucion.hallazgos + list(normalizacion.hallazgos)

@@ -75,12 +75,14 @@ class HabTecRetriever:
             self._por_carrera.setdefault(clave, ())
             self._por_carrera[clave] += (documento,)
 
-    def buscar(self, texto_consulta: str, carrera: str = "") -> tuple[HabTecMatch, ...]:
+    def buscar(
+        self, texto_consulta: str, carrera: str = "", *, sin_limite: bool = False
+    ) -> tuple[HabTecMatch, ...]:
         """Devuelve los candidatos por carrera y similitud coseno."""
 
-        consulta = " ".join(
-            parte for parte in (f"Carrera: {carrera}" if carrera else "", texto_consulta) if parte
-        ).strip()
+        # Las carreras restringen los documentos elegibles; no deben competir
+        # con la actividad funcional dentro del embedding de la consulta.
+        consulta = texto_consulta.strip()
         if not consulta:
             return ()
         # El catálogo es contextual por carrera. Sin ese contexto no debemos
@@ -105,7 +107,7 @@ class HabTecRetriever:
                 descripcion=documento.descripcion,
                 similitud=puntuacion,
             )
-            for puntuacion, documento in puntuados[: self.limite]
+            for puntuacion, documento in (puntuados if sin_limite else puntuados[: self.limite])
         )
 
     def _candidatos_por_carrera(self, carrera: str) -> tuple[_Documento, ...]:

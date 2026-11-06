@@ -119,6 +119,7 @@ export default function NormalizadorPanel() {
   const restauracionRef = useRef(0);
   const [archivo, setArchivo] = useState(null);
   const [modo, setModo] = useState("silabos");
+  const [limiteEmpleabilidad, setLimiteEmpleabilidad] = useState(0);
   const [fuenteSilabos, setFuenteSilabos] = useState("cactus");
   const [hitl, setHitl] = useState(1);
   const [carrera, setCarrera] = useState("");
@@ -258,6 +259,7 @@ export default function NormalizadorPanel() {
       const datos = await iniciarEmpleabilidadDesdeHoja(
         inspeccion.id_ejecucion,
         hojas[0].nombre,
+        limiteEmpleabilidad,
       );
       setEjecucion(datos);
       router.push(`/${encodeURIComponent(datos.id_ejecucion)}`);
@@ -368,6 +370,19 @@ export default function NormalizadorPanel() {
                   <span className="mt-3 max-w-full truncate text-sm font-extrabold">{archivo ? archivo.name : "Seleccionar Excel de empleabilidad"}</span>
                   <span className="mt-1 text-xs leading-5 text-muted">Se usará la primera hoja de publicaciones compatible.</span>
                   <input ref={inputRef} disabled={controlesBloqueados} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={seleccionarArchivo} />
+                </label>
+                <label className="mt-4 block text-sm font-bold text-ink">
+                  Registros a procesar
+                  <input
+                    type="number" min="0" max="100" step="1"
+                    value={limiteEmpleabilidad}
+                    onChange={(event) => setLimiteEmpleabilidad(Number(event.target.value))}
+                    disabled={controlesBloqueados}
+                    className="mt-2 block w-32 rounded-lg border border-line bg-paper px-3 py-2 font-normal"
+                  />
+                  <span className="mt-1 block text-xs font-normal text-muted">
+                    0 procesa toda la hoja. De 1 a 100 procesa los primeros registros como muestra.
+                  </span>
                 </label>
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <button type="submit" disabled={!archivo || controlesBloqueados} className="inline-flex items-center gap-2 rounded-xl bg-ulima px-4 py-2.5 text-sm font-extrabold text-white shadow-sm transition hover:-translate-y-px focus:outline-none focus:ring-2 focus:ring-ulima/40 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none">
